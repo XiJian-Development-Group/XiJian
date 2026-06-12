@@ -1,0 +1,14 @@
+Metadata-Version: 2.4
+Name: xijian-api
+Version: 0.1.0
+Summary: 隙间 (XiJian) local Flask API server — core skeleton.
+Requires-Python: >=3.11
+Requires-Dist: flask>=3.0
+Requires-Dist: flask-sock>=0.7
+Requires-Dist: simple-websocket>=1.0
+Requires-Dist: waitress>=3.0
+Provides-Extra: test
+Requires-Dist: pytest>=8; extra == "test"
+Requires-Dist: pytest-cov; extra == "test"
+Requires-Dist: httpx>=0.27; extra == "test"
+Requires-Dist: websocket-client>=1.7; extra == "test"
