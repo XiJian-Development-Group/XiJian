@@ -1,6 +1,6 @@
 """Stub OAI fine-tuning jobs."""
 
-from __future__ import importlib  # noqa: F401  (intentionally empty for now)
+from __future__ import annotations
 
 from xijian_api.utils.time import now_ts
 

@@ -111,6 +111,20 @@ def register_routes(app: Flask, *, optional_modules: Iterable[str] | None = None
                 exc,
             )
             continue
+
+        # Some modules (notably the WebSocket handler) need an explicit
+        # ``init_app`` step to attach their routes to a Sock instance.
+        init_app_fn = getattr(module, "init_app", None)
+        if callable(init_app_fn):
+            try:
+                init_app_fn(app)
+            except Exception as exc:  # noqa: BLE001
+                _LOGGER.warning(
+                    "optional route module %s init_app failed (%s): %s",
+                    module_name,
+                    type(exc).__name__,
+                    exc,
+                )
         _LOGGER.info("registered blueprint: %s", module_name)
 
 

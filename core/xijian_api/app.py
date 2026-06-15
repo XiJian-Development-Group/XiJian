@@ -61,6 +61,12 @@ def create_app(*, testing: bool = False, config: Config | None = None) -> Flask:
     # in test mode).
     auth.setup_token(config)
 
+    # Seed in-memory stub state so endpoints that expect default
+    # records (Yuki, world_modern_tokyo, ...) have something to return.
+    from xijian_api.stubs import seed_all
+
+    seed_all()
+
     # Middleware first: request-id / trace-id / auth / idempotency.
     install_middleware(app)
 
