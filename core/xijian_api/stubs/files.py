@@ -12,6 +12,18 @@ _FILE_DIR = Path(tempfile.gettempdir()) / "xijian_files"
 _FILE_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def _public_record(record: dict) -> dict:
+    """Return a JSON-safe view of ``record`` (no raw bytes, no path)."""
+    return {
+        "id": record.get("id"),
+        "object": "file",
+        "bytes": record.get("bytes_count", len(record.get("bytes") or b"")),
+        "created_at": record.get("created_at"),
+        "filename": record.get("filename"),
+        "purpose": record.get("purpose"),
+    }
+
+
 def persist(file_id: str, payload: bytes, *, purpose: str, filename: str) -> dict:
     """Write ``payload`` to disk and create a state record."""
     target = _FILE_DIR / file_id
@@ -55,4 +67,17 @@ def content(file_id: str) -> bytes | None:
     return None
 
 
-__all__ = ["persist", "delete", "content"]
+def public_view(file_id: str) -> dict | None:
+    """Return a JSON-safe dict for ``file_id`` or ``None``."""
+    record = state.files.get(file_id)
+    if record is None:
+        return None
+    return _public_record(record)
+
+
+def list_public() -> list[dict]:
+    """Return a JSON-safe list of every file record."""
+    return [_public_record(r) for r in state.files.values()]
+
+
+__all__ = ["persist", "delete", "content", "public_view", "list_public"]

@@ -70,6 +70,11 @@ def reset_for_testing() -> None:
     Each call clears the underlying objects in-place so that other
     modules that imported references (e.g. ``from xijian_api.stubs
     import state``) keep pointing at the same (now empty) containers.
+
+    The reset is also followed by a re-seed via :func:`xijian_api.stubs.seed_all`
+    so tests that depend on ``char_yuki`` / ``world_modern_tokyo`` /
+    default memory entries have them in place.  Lazy import to avoid
+    a circular import at module-load time.
     """
     characters.clear()
     interactions.clear()
@@ -89,6 +94,10 @@ def reset_for_testing() -> None:
     videos.clear()
     models.clear()
     audits.clear()
+
+    # Re-seed defaults so each test starts from a known state.
+    from xijian_api.stubs import seed_all
+    seed_all()
 
 
 __all__ = [

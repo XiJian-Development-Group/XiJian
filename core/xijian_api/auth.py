@@ -127,6 +127,16 @@ def _is_healthz() -> bool:
     return request.path == "/healthz" and request.method == "GET"
 
 
+def _is_ws_endpoint() -> bool:
+    """Return ``True`` if the current request targets ``/v1/ws``.
+
+    The WebSocket endpoint has its own auth gate (subprotocol or first
+    frame ``auth`` envelope) and must not be blocked by the HTTP
+    bearer check before the protocol upgrade completes.
+    """
+    return request.path == "/v1/ws"
+
+
 def verify_bearer() -> str:
     """Validate the request's ``Authorization`` header.
 
@@ -136,7 +146,7 @@ def verify_bearer() -> str:
     The ``/healthz`` endpoint always passes — it is the handshake
     probe that runs before any token is available.
     """
-    if _is_healthz():
+    if _is_healthz() or _is_ws_endpoint():
         return _TOKEN or ""
 
     if _TOKEN is None:

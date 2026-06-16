@@ -39,6 +39,12 @@ def seed_all() -> None:
     memory.seed_default()
     protection.seed_default()
     settings.seed_default()
+    # ``models`` lives in the routes layer (it has an import-time seed
+    # side effect that runs the first time the module is imported).
+    # After ``state.reset_for_testing`` the bucket is empty, so re-seed
+    # by calling the explicit helper exposed by the route module.
+    from xijian_api.routes.models import seed_default_models
+    seed_default_models()
 
 
 __all__ = [
