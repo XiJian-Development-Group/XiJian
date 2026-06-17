@@ -164,17 +164,29 @@ def ws_endpoint(ws):
     _register(sub)
 
     try:
-        # Auth gate — subprotocol first.
-        if _check_bearer_header():
-            sub.authed = True
+        # Parse the offered subprotocols once.
+        offered = (request.headers.get("Sec-WebSocket-Protocol") or "").split(",")
+        offered = [s.strip() for s in offered]
+        has_xijian_v1 = "xijian.v1" in offered
+
+        if not has_xijian_v1:
+            # Refuse the upgrade: missing required subprotocol.
+            _send(ws, _envelope("hello", {"server_version": "0.1.0"}))
+            _send(ws, _envelope("auth.failed", {"reason": "missing_subprotocol"}))
+            return
 
         # Greet.
         _send(ws, _envelope("hello", {"server_version": "0.1.0"}))
 
-        if not sub.authed:
-            # Allow first-frame auth fallback.
+        # Try subprotocol-based auth first.
+        if _check_bearer_header():
+            sub.authed = True
+            _send(ws, _envelope("auth.ok"))
+        else:
+            # No subprotocol auth → wait briefly for a first-frame
+            # ``{"type": "auth", "token": "..."}`` envelope.
             try:
-                first = ws.receive(timeout=5)
+                first = ws.receive(timeout=2)
             except Exception:  # noqa: BLE001
                 first = None
             if isinstance(first, str):
@@ -184,11 +196,11 @@ def ws_endpoint(ws):
                     msg = {}
                 if msg.get("type") == "auth" and msg.get("token") == auth.get_token():
                     sub.authed = True
-            if sub.authed:
-                _send(ws, _envelope("auth.ok"))
-            else:
-                _send(ws, _envelope("auth.failed", {"reason": "invalid_token"}))
-                return
+                    _send(ws, _envelope("auth.ok"))
+
+        if not sub.authed:
+            _send(ws, _envelope("auth.failed", {"reason": "invalid_token"}))
+            return
 
         last_ping = time.time()
         # Schedule the dev proactive message.
@@ -253,6 +265,11 @@ def ws_endpoint(ws):
 
 def init_app(app) -> None:
     """Attach the Sock routes to ``app`` (called from register_routes)."""
+    # Advertise ``xijian.v1`` as the subprotocol we accept.  Without
+    # this, simple_websocket's ``choose_subprotocol`` returns ``None``
+    # and the handshake response omits ``Sec-WebSocket-Protocol``,
+    # which strict WS clients (e.g. ``websocket-client``) reject.
+    app.config.setdefault("SOCK_SERVER_OPTIONS", {"subprotocols": ["xijian.v1"]})
     sock.init_app(app)
 
 

@@ -6,7 +6,7 @@ import json
 
 
 def test_ws_hello_then_auth_ok(app, auth_headers, token):
-    """Connect with a valid Bearer subprotocol → receive ``hello``."""
+    """Connect with a valid Bearer subprotocol → receive ``hello`` then ``auth.ok``."""
     import threading
 
     from werkzeug.serving import make_server
@@ -26,7 +26,9 @@ def test_ws_hello_then_auth_ok(app, auth_headers, token):
         try:
             hello = json.loads(ws.recv())
             assert hello["type"] == "hello"
-            # Subprotocol auth → no separate auth frame.
+            auth_ok = json.loads(ws.recv())
+            assert auth_ok["type"] == "auth.ok"
+            # After auth, ping → pong.
             ws.send(json.dumps({"type": "ping"}))
             pong = json.loads(ws.recv())
             assert pong["type"] == "pong"
