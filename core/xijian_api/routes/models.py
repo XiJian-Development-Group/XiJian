@@ -1,9 +1,22 @@
 """Model management routes — ``/v1/models`` family.
 
 Implements the OAI-compatible model endpoints plus a XiJian ``load``
-progress URL.  In this stub build, ``load`` flips the record to
-``loaded=true`` after a short delay, and the matching
-``/v1/models/operations/<op_id>`` endpoint surfaces the state.
+progress URL.
+
+Model population
+----------------
+
+At start-up :func:`init_app` is called by the route registrar and
+seeds :data:`xijian_api.stubs.state.models` from
+``app.config["XIJIAN_CONFIG"].models`` (the ``[[models]]`` block in
+``config.toml``).  Nothing is hardcoded: if the config has no models
+the bucket starts empty and operators register them with
+``POST /v1/models/<id>/load`` once the checkpoint is on disk.
+
+The ``seed_default_models`` helper remains a no-op when the bucket is
+already populated — tests that manually clear the bucket can call it
+to re-populate from the active Flask app's config without depending on
+the route module's import-time side effects.
 """
 
 from __future__ import annotations
@@ -11,8 +24,9 @@ from __future__ import annotations
 import threading
 import time
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 
+from xijian_api.config import Config, ModelEntry
 from xijian_api.errors import ApiError
 from xijian_api.stubs import state
 from xijian_api.utils.ids import gen_load_op_id, gen_unload_op_id
@@ -22,68 +36,53 @@ from xijian_api.utils.time import now_ts
 bp = Blueprint("models", __name__)
 
 
-def _seed_models() -> None:
+def _entry_to_oai_record(entry: ModelEntry) -> dict:
+    """Render a :class:`ModelEntry` into the OAI-compatible record shape."""
+    return {
+        "id": entry.id,
+        "object": "model",
+        "created": now_ts(),
+        "owned_by": "xijian",
+        "xijian": entry.to_oai_metadata(),
+    }
+
+
+def _seed_models_from_config(config: Config) -> None:
+    """Populate :data:`state.models` from ``config.models``.
+
+    No-op when the bucket is already non-empty so manual registrations
+    (or models added at runtime) aren't overwritten.  When the config
+    has no ``[[models]]`` entries the bucket stays empty — no demo data
+    is added.
+    """
     if state.models:
         return
-    state.models["qwen2.5-7b-mlx-4bit"] = {
-        "id": "qwen2.5-7b-mlx-4bit",
-        "object": "model",
-        "created": 1718000000,
-        "owned_by": "xijian",
-        "xijian": {
-            "backend": "mlx",
-            "family": "qwen2.5",
-            "size_b": 7.0,
-            "quant": "4bit",
-            "context_length": 32768,
-            "min_ram_gb": 8,
-            "loaded": True,
-        },
-    }
-    state.models["qwen2.5-14b-mlx-4bit"] = {
-        "id": "qwen2.5-14b-mlx-4bit",
-        "object": "model",
-        "created": 1718000000,
-        "owned_by": "xijian",
-        "xijian": {
-            "backend": "mlx",
-            "family": "qwen2.5",
-            "size_b": 14.0,
-            "quant": "4bit",
-            "context_length": 32768,
-            "min_ram_gb": 16,
-            "loaded": False,
-        },
-    }
-    state.models["qwen2.5-7b-gguf-q4km"] = {
-        "id": "qwen2.5-7b-gguf-q4km",
-        "object": "model",
-        "created": 1718000000,
-        "owned_by": "xijian",
-        "xijian": {
-            "backend": "gguf",
-            "family": "qwen2.5",
-            "size_b": 7.0,
-            "quant": "q4_k_m",
-            "context_length": 8192,
-            "min_ram_gb": 8,
-            "loaded": False,
-        },
-    }
+    for entry in config.models:
+        state.models[entry.id] = _entry_to_oai_record(entry)
 
 
 def seed_default_models() -> None:
-    """Re-seed the models bucket.
+    """Re-seed the models bucket from the active Flask app's config.
 
     Public helper so the test reset path (which clears ``state.models``)
     can re-populate it without depending on the route module's import
     side effects.
     """
-    _seed_models()
+    try:
+        config = current_app.config.get("XIJIAN_CONFIG")
+    except RuntimeError:
+        # No application context (e.g. imported from a script).  Skip.
+        return
+    if config is None:
+        return
+    _seed_models_from_config(config)
 
 
-# Seed at import-time so the routes are always ready.
-_seed_models()
+def init_app(app) -> None:
+    """Populate the model bucket from the app's :class:`Config`."""
+    config = app.config.get("XIJIAN_CONFIG")
+    if config is not None:
+        _seed_models_from_config(config)
 
 
 @bp.get("/v1/models")
@@ -163,4 +162,4 @@ def get_operation(op_id: str):
     return jsonify(record)
 
 
-__all__ = ["bp", "seed_default_models"]
+__all__ = ["bp", "seed_default_models", "init_app"]

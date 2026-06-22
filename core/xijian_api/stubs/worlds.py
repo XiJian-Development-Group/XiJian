@@ -1,4 +1,7 @@
-"""Stub world service — preset ``world_modern_tokyo``."""
+"""Stub world service — empty by design.
+
+Worlds are operator-created resources; the store starts empty.
+"""
 
 from __future__ import annotations
 
@@ -7,24 +10,8 @@ from xijian_api.utils.time import now_ts
 
 
 def seed_default() -> None:
-    if state.worlds:
-        return
-    state.worlds["world_modern_tokyo"] = {
-        "id": "world_modern_tokyo",
-        "object": "world",
-        "name": "现代东京",
-        "state": {
-            "economy": 80,
-            "health": 90,
-            "diet": 70,
-            "stamina": 85,
-            "mentality": 75,
-        },
-        "location": "home",
-        "events": [],
-        "created_at": now_ts(),
-        "updated_at": now_ts(),
-    }
+    """No-op — the store starts empty by design."""
+    return None
 
 
 def list_all() -> list[dict]:

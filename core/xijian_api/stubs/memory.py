@@ -1,4 +1,8 @@
-"""Stub memory service — entries CRUD + simple keyword search + async ops."""
+"""Stub memory service — entries CRUD + simple keyword search + async ops.
+
+The memory store starts empty.  Entries are added through the API
+(``POST /v1/xijian/memory/entries``) — no preset entries are seeded.
+"""
 
 from __future__ import annotations
 
@@ -11,38 +15,14 @@ from xijian_api.utils.ids import gen_memory_id
 from xijian_api.utils.time import now_ts
 
 
-_DEFAULT_ENTRIES = (
-    {
-        "content": "用户喜欢草莓味的冰淇淋",
-        "tags": ["food", "ice_cream"],
-        "importance": "high",
-        "decay": "never",
-        "category": "preference",
-    },
-    {
-        "content": "用户怕打雷",
-        "tags": ["fear"],
-        "importance": "medium",
-        "decay": "slow",
-        "category": "preference",
-    },
-    {
-        "content": "用户早上喜欢跑步",
-        "tags": ["habit", "morning"],
-        "importance": "low",
-        "decay": "normal",
-        "category": "habit",
-    },
-)
+def seed_default(character_id: str | None = None) -> None:
+    """No-op — the store starts empty by design.
 
-
-def seed_default(character_id: str = "char_yuki") -> None:
-    if state.memory:
-        return
-    for entry in _DEFAULT_ENTRIES:
-        record = _new_entry(entry)
-        record["character_id"] = character_id
-        state.memory[record["id"]] = record
+    ``character_id`` is accepted (and ignored) for backwards
+    compatibility with prior seed signatures.
+    """
+    _ = character_id
+    return None
 
 
 def _new_entry(payload: dict) -> dict:

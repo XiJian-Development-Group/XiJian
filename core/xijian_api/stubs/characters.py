@@ -1,4 +1,8 @@
-"""Stub character service — in-memory CRUD with seeded Yuki."""
+"""Stub character service — in-memory CRUD.
+
+The store starts empty.  Operators register characters explicitly via
+``POST /v1/xijian/characters``; no demo data is pre-seeded.
+"""
 
 from __future__ import annotations
 
@@ -7,32 +11,14 @@ from xijian_api.utils.ids import gen_character_id
 from xijian_api.utils.time import now_ts
 
 
-_DEFAULT_PERSONA = (
-    "雪 (Yuki) 是一位温柔的二次元少女，"
-    "性格略带傲娇，喜欢草莓味的冰淇淋，"
-    "在东京的现代都市背景下生活。"
-)
-
-
 def seed_default() -> None:
-    """Insert ``char_yuki`` if the store is empty."""
-    if state.characters:
-        return
-    yuki_id = "char_yuki"
-    state.characters[yuki_id] = {
-        "id": yuki_id,
-        "object": "character",
-        "name": "雪",
-        "display_name": "Yuki",
-        "persona_doc": _DEFAULT_PERSONA,
-        "voice_profile": "voice_ref_yuki",
-        "live2d_model": "models/yuki/runtime.moc3",
-        "default_emotion": "neutral",
-        "tags": ["tsundere", "student"],
-        "loaded": False,
-        "created_at": now_ts(),
-        "updated_at": now_ts(),
-    }
+    """No-op — the store starts empty by design.
+
+    Kept as a callable so :func:`xijian_api.stubs.seed_all` (called at
+    app start-up) remains a single, uniform entry point regardless of
+    whether the operator wants any pre-populated data.
+    """
+    return None
 
 
 def create(payload: dict) -> dict:

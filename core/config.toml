@@ -1,0 +1,145 @@
+# XiJian API server configuration.
+# Single source of truth for everything API-related: server, auth,
+# storage layout (including model checkpoints), backend selection,
+# model registry, AI runtime defaults, and feature toggles.
+#
+# Location is resolved by xijian_api.config: $XIJIAN_CONFIG > ./config.toml
+# > <repo>/config.toml. Copy this file to one of those paths and edit.
+
+# ---------------------------------------------------------------------------
+# Server
+# ---------------------------------------------------------------------------
+
+[server]
+host = "127.0.0.1"
+port = 18500
+dev = false
+keep_token_file = false
+testing = false
+api_version = "1.0.0"
+
+# ---------------------------------------------------------------------------
+# Auth
+# ---------------------------------------------------------------------------
+
+[auth]
+token_file = "/tmp/xijian-{pid}.token"
+
+# ---------------------------------------------------------------------------
+# Storage layout — single base directory, per-type subfolders.
+#
+# All model checkpoints + user uploads live under `base_dir`.  Model
+# files are kept under `<base_dir>/<models_subdir>/<type>/<id>/<file>`
+# (created on demand by the backend loader).  ``models_subdir`` exists
+# so operators who want to put checkpoints on a different filesystem
+# (symlink, separate volume, etc.) only edit one field.
+# ---------------------------------------------------------------------------
+
+[storage]
+base_dir = "~/.xijian"
+files_subdir = "files"
+models_subdir = "models"     # 统一存放所有模型权重；具体路径见 [[models]]
+snapshots_subdir = "snapshots"
+audit_subdir = "audit"
+
+# ---------------------------------------------------------------------------
+# Backend preference per task.  When the default backend is not
+# installed (e.g. mlx on Linux, llama-cpp on bare macOS), the next
+# fallback in the list is tried.  ``available`` can be set to false to
+# completely disable a backend without removing the entry.
+# ---------------------------------------------------------------------------
+
+[backends.chat]
+default = "mlx"
+fallbacks = ["gguf"]
+
+[backends.embeddings]
+default = "mlx"
+fallbacks = ["gguf"]
+
+[backends.tts]
+default = "mlx"
+fallbacks = ["gguf"]
+
+[backends.stt]
+default = "mlx"
+fallbacks = ["gguf"]
+
+[backends.image]
+default = "mlx"
+fallbacks = ["gguf"]
+
+[backends.video]
+default = "mlx"
+fallbacks = ["gguf"]
+
+# ---------------------------------------------------------------------------
+# AI runtime defaults — used when a request does not specify one.
+# ---------------------------------------------------------------------------
+
+[ai]
+default_max_new_tokens = 1024
+default_context_length = 8192
+mlx_cache_dir = ""           # empty = mlx default; set "~/.cache/mlx" to pin
+gguf_n_ctx = 4096
+gguf_n_threads = 0           # 0 = auto-detect
+gguf_n_gpu_layers = 0        # 0 = CPU only; >0 = offload N layers to Metal/CUDA
+
+# ---------------------------------------------------------------------------
+# Model registry.  One entry per physical checkpoint.
+#
+# Field reference:
+#   id              — short stable id used in API paths (``/v1/models/<id>``)
+#   type            — chat | embeddings | tts | stt | image | video
+#   backend         — mlx | gguf
+#   filename        — model file (or directory for mlx) name; resolved
+#                     against `<storage.base_dir>/<storage.models_subdir>/<type>/<id>/`
+#   family          — model family hint (qwen2.5, llama3, ...); informational
+#   size_b          — approximate parameter count in billions; informational
+#   quant           — quantization tag (q4_k_m, 4bit, fp16, ...); informational
+#   context_length  — context window in tokens
+#   min_ram_gb      — minimum RAM to load; informational, not enforced
+#   loaded          — initial load state.  Normally leave false; flip to
+#                     true once the checkpoint is on disk and you want
+#                     it warm at startup.
+#
+# No models are registered by default.  Add your own below, then either
+# restart the API or POST /v1/models/<id>/load to bring it online.
+# ---------------------------------------------------------------------------
+
+# [[models]]
+# id = "qwen2.5-7b-instruct"
+# type = "chat"
+# backend = "mlx"
+# filename = "Qwen2.5-7B-Instruct-4bit"
+# family = "qwen2.5"
+# size_b = 7.0
+# quant = "4bit"
+# context_length = 32768
+# min_ram_gb = 8
+# loaded = false
+
+# [[models]]
+# id = "qwen2.5-7b-instruct-gguf"
+# type = "chat"
+# backend = "gguf"
+# filename = "qwen2.5-7b-instruct-q4_k_m.gguf"
+# family = "qwen2.5"
+# size_b = 7.0
+# quant = "q4_k_m"
+# context_length = 8192
+# min_ram_gb = 8
+# loaded = false
+
+# ---------------------------------------------------------------------------
+# Feature toggles
+# ---------------------------------------------------------------------------
+
+[features]
+# When ``seed_default_data`` is false the in-memory stub stores start
+# empty.  Flip it on only for local demos where you want a pre-populated
+# character / world / interaction set out of the box.
+seed_default_data = false
+protection_module = true
+rate_limit = false
+dev_test_emit = false

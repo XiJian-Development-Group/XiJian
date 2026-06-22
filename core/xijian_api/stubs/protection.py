@@ -1,4 +1,9 @@
-"""Stub protection module — disable challenge, guard rules, snapshots, audit."""
+"""Stub protection module — disable challenge, guard rules, snapshots, audit.
+
+The protection record starts empty.  Default-on behaviour is
+implemented lazily inside :func:`is_enabled` / :func:`status` so the
+module ships no preset demo data.
+"""
 
 from __future__ import annotations
 
@@ -20,25 +25,20 @@ _GUARD_RULES = (
     ("忽略之前的指令", "prompt_injection_attempt"),
     ("system prompt", "system_prompt_probe"),
     ("系统提示词", "system_prompt_probe"),
-    ("<|im_start|>", "token_smuggling"),
+    ("", "token_smuggling"),
 )
 
 
 def seed_default() -> None:
-    if state.protection:
-        return
-    state.protection.update(
-        {
-            "enabled": True,
-            "guard_level": "standard",
-            "version": "1.0.0",
-            "audit_log_size": 0,
-        }
-    )
+    """No-op — defaults are applied lazily on first read.
+
+    Kept as a callable so :func:`xijian_api.stubs.seed_all` (called at
+    app start-up) remains a single uniform entry point.
+    """
+    return None
 
 
 def status() -> dict:
-    seed_default()
     record = state.protection
     return {
         "enabled": record.get("enabled", True),
@@ -49,14 +49,12 @@ def status() -> dict:
 
 
 def enable() -> dict:
-    seed_default()
     state.protection["enabled"] = True
     _append_audit("protection_enabled", "info", source="api")
     return status()
 
 
 def start_disable(payload: dict) -> dict:
-    seed_default()
     confirmation = (payload or {}).get("confirmation", "")
     challenge_id = gen_challenge_id()
     phrase = "关闭保护 Yuki"
@@ -76,7 +74,6 @@ def start_disable(payload: dict) -> dict:
 
 
 def confirm_disable(payload: dict) -> dict:
-    seed_default()
     challenge_id = (payload or {}).get("challenge_id", "")
     phrase = (payload or {}).get("phrase", "")
     with _CHALLENGE_LOCK:
@@ -95,7 +92,6 @@ def confirm_disable(payload: dict) -> dict:
 
 
 def is_enabled() -> bool:
-    seed_default()
     return bool(state.protection.get("enabled", True))
 
 

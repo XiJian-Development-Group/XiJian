@@ -8,9 +8,13 @@ Sections:
 
 * ``[server]`` — host, port, dev flags.
 * ``[auth]`` — token-file template.
-* ``[storage]`` — base directory plus per-type subfolders.
+* ``[storage]`` — base directory plus per-type subfolders (including
+  the unified ``models_subdir`` for all model checkpoints).
 * ``[backends.<kind>]`` — per-task default/fallback backends.
-* ``[[models]]`` — one row per registered model.
+* ``[ai]`` — runtime defaults shared by every backend (max tokens,
+  context length, GGUF tuning, MLX cache location).
+* ``[[models]]`` — one row per registered model.  ``filename`` is
+  resolved against ``<storage.base_dir>/<storage.models_subdir>/<type>/<id>/``.
 * ``[features]`` — optional subsystem toggles.
 """
 
@@ -80,10 +84,17 @@ class StorageConfig:
 
     All files live under one ``base_dir``; per-type subfolders keep
     things tidy without forcing operators to configure each one.
+
+    Model checkpoints are rooted at ``<base>/<models_subdir>``; each
+    ``[[models]]`` entry resolves to
+    ``<base>/<models_subdir>/<type>/<id>/<filename>``.  This is the
+    single place operators edit to move all weights to a different
+    filesystem (symlink, separate volume, etc.).
     """
 
     base_dir: str = "~/.xijian"
     files_subdir: str = "files"
+    models_subdir: str = "models"
     snapshots_subdir: str = "snapshots"
     audit_subdir: str = "audit"
 
@@ -94,6 +105,11 @@ class StorageConfig:
     @property
     def files_path(self) -> Path:
         return self.base_path / self.files_subdir
+
+    @property
+    def models_path(self) -> Path:
+        """Single root for every model checkpoint on disk."""
+        return self.base_path / self.models_subdir
 
     @property
     def snapshots_path(self) -> Path:
@@ -109,8 +125,8 @@ class StorageConfig:
         return self.base_path
 
     def model_dir(self, model_type: str, model_id: str) -> Path:
-        """Resolve ``<base>/<type>/<model_id>`` (and create it)."""
-        path = self.base_path / model_type / model_id
+        """Resolve ``<base>/<models_subdir>/<type>/<id>`` (and create it)."""
+        path = self.models_path / model_type / model_id
         path.mkdir(parents=True, exist_ok=True)
         return path
 
@@ -138,7 +154,7 @@ class ModelEntry:
     id: str
     type: str             # chat | embeddings | tts | stt | image | video
     backend: str          # mlx | gguf
-    path: str             # absolute or relative-to-base_dir
+    filename: str         # file or directory name under model_dir(type, id)
     family: str = ""
     size_b: float = 0.0
     quant: str = ""
@@ -148,10 +164,13 @@ class ModelEntry:
     extra: dict = field(default_factory=dict)
 
     def absolute_path(self, storage: StorageConfig) -> Path:
-        p = Path(os.path.expanduser(self.path))
-        if not p.is_absolute():
-            p = storage.base_path / p
-        return p
+        """Resolve to ``<storage.models_path>/<type>/<id>/<filename>``.
+
+        Falls back to the file/directory name under
+        ``storage.models_path`` when ``type``/``id`` is unknown, so the
+        helper is still useful for ad-hoc lookups.
+        """
+        return storage.model_dir(self.type, self.id) / self.filename
 
     def to_oai_metadata(self) -> dict:
         """Render the ``xijian`` extension block returned by /v1/models."""
@@ -164,10 +183,28 @@ class ModelEntry:
             "min_ram_gb": self.min_ram_gb,
             "loaded": self.loaded,
             "type": self.type,
-            "path": self.path,
+            "filename": self.filename,
         }
         meta.update(self.extra)
         return meta
+
+
+@dataclass(frozen=True)
+class AIConfig:
+    """Cross-backend runtime defaults.
+
+    Backends consult these values when a request does not pass them
+    explicitly.  ``mlx_cache_dir`` is the one backend-specific knob we
+    expose; the ``gguf_*`` fields are read by the GGUF backend at load
+    time.
+    """
+
+    default_max_new_tokens: int = 1024
+    default_context_length: int = 8192
+    mlx_cache_dir: str = ""
+    gguf_n_ctx: int = 4096
+    gguf_n_threads: int = 0
+    gguf_n_gpu_layers: int = 0
 
 
 @dataclass(frozen=True)
@@ -184,6 +221,7 @@ class Config:
     auth: AuthConfig = field(default_factory=AuthConfig)
     storage: StorageConfig = field(default_factory=StorageConfig)
     backends: BackendsConfig = field(default_factory=BackendsConfig)
+    ai: AIConfig = field(default_factory=AIConfig)
     models: tuple[ModelEntry, ...] = field(default_factory=tuple)
     features: FeaturesConfig = field(default_factory=FeaturesConfig)
     source_path: str | None = None
@@ -272,8 +310,12 @@ def _build_config(
     source_path: str | None = None,
 ) -> Config:
     server_data = dict(data.get("server", {}))
-    if testing:
-        server_data.setdefault("testing", True)
+    # The ``testing`` flag passed in by the caller (e.g. pytest)
+    # always overrides whatever the on-disk TOML says.  Previously we
+    # used ``setdefault`` which silently lost the override when the
+    # file already had ``testing = false`` — that broke the test-suite
+    # bootstrap.
+    server_data["testing"] = bool(testing)
     server = ServerConfig(
         host=server_data.get("host", DEFAULT_HOST),
         port=int(server_data.get("port", DEFAULT_PORT)),
@@ -289,11 +331,14 @@ def _build_config(
     storage = StorageConfig(
         base_dir=storage_data.get("base_dir", "~/.xijian"),
         files_subdir=storage_data.get("files_subdir", "files"),
+        models_subdir=storage_data.get("models_subdir", "models"),
         snapshots_subdir=storage_data.get("snapshots_subdir", "snapshots"),
         audit_subdir=storage_data.get("audit_subdir", "audit"),
     )
 
     backends = _build_backends(data.get("backends", {}))
+
+    ai = _build_ai(data.get("ai", {}))
 
     models = _build_models(data.get("models", []))
 
@@ -316,6 +361,7 @@ def _build_config(
         auth=auth,
         storage=storage,
         backends=backends,
+        ai=ai,
         models=models,
         features=features,
         source_path=source_path,
@@ -333,15 +379,41 @@ def _build_backends(data: dict[str, Any]) -> BackendsConfig:
     return BackendsConfig(**kwargs)
 
 
+def _build_ai(data: dict[str, Any]) -> AIConfig:
+    data = dict(data or {})
+    return AIConfig(
+        default_max_new_tokens=int(data.get("default_max_new_tokens", 1024)),
+        default_context_length=int(data.get("default_context_length", 8192)),
+        mlx_cache_dir=str(data.get("mlx_cache_dir", "") or ""),
+        gguf_n_ctx=int(data.get("gguf_n_ctx", 4096)),
+        gguf_n_threads=int(data.get("gguf_n_threads", 0)),
+        gguf_n_gpu_layers=int(data.get("gguf_n_gpu_layers", 0)),
+    )
+
+
 def _build_models(items: list[Any]) -> tuple[ModelEntry, ...]:
+    """Build :class:`ModelEntry` records from the ``[[models]]`` array.
+
+    Each entry must declare ``id``, ``type``, and ``backend``.  The
+    on-disk location is taken from ``filename`` (preferred) — resolved
+    against ``<storage.models_path>/<type>/<id>/<filename>`` — or from
+    the legacy ``path`` field when only that is present.
+    """
     out: list[ModelEntry] = []
     for item in items:
         if not isinstance(item, dict):
             continue
         if not {"id", "type", "backend"}.issubset(item):
             continue
+        # Resolve the on-disk name.  Prefer ``filename``; fall back to
+        # the legacy ``path`` field for older configs.
+        filename = str(
+            item.get("filename")
+            or item.get("path")
+            or item["id"]
+        )
         known = {
-            "id", "type", "backend", "path",
+            "id", "type", "backend", "filename", "path",
             "family", "size_b", "quant",
             "context_length", "min_ram_gb", "loaded",
         }
@@ -351,7 +423,7 @@ def _build_models(items: list[Any]) -> tuple[ModelEntry, ...]:
                 id=str(item["id"]),
                 type=str(item["type"]),
                 backend=str(item["backend"]),
-                path=str(item.get("path") or item["id"]),
+                filename=filename,
                 family=str(item.get("family", "")),
                 size_b=float(item.get("size_b", 0.0) or 0.0),
                 quant=str(item.get("quant", "")),
@@ -390,6 +462,7 @@ __all__ = [
     "BackendConfig",
     "BackendsConfig",
     "ModelEntry",
+    "AIConfig",
     "FeaturesConfig",
     "Config",
     "token_file_path",

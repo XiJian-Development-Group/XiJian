@@ -1,4 +1,9 @@
-"""Stub interaction service — 3 preset interactions with cooldown + NSFW gating."""
+"""Stub interaction service — empty by design.
+
+Interactions are operator-defined and registered explicitly via
+``POST /v1/xijian/interactions``.  Cooldown + NSFW gating still apply
+to whatever records end up in the store.
+"""
 
 from __future__ import annotations
 
@@ -13,41 +18,8 @@ _COOLDOWN_LOCK = threading.Lock()
 
 
 def seed_default() -> None:
-    if state.interactions:
-        return
-    state.interactions["int_hug"] = {
-        "id": "int_hug",
-        "object": "interaction",
-        "name": "拥抱",
-        "nsfw_level": "safe",
-        "category": "affection",
-        "cooldown_seconds": 60,
-        "requires_state": {"intimacy": {"min": 0}},
-        "responses": ["轻轻地拥抱了你。", "犹豫了一下，但还是张开了双臂。"],
-        "animation": "hug_01",
-    }
-    state.interactions["int_pet"] = {
-        "id": "int_pet",
-        "object": "interaction",
-        "name": "摸头",
-        "nsfw_level": "safe",
-        "category": "affection",
-        "cooldown_seconds": 30,
-        "requires_state": {"intimacy": {"min": 0}},
-        "responses": ["微微低下头，让你摸她的头发。", "嘟囔着'别弄乱了'，但没有躲开。"],
-        "animation": "pet_head_01",
-    }
-    state.interactions["int_kiss"] = {
-        "id": "int_kiss",
-        "object": "interaction",
-        "name": "亲吻",
-        "nsfw_level": "soft",
-        "category": "intimacy",
-        "cooldown_seconds": 120,
-        "requires_state": {"intimacy": {"min": 20}},
-        "responses": ["脸颊泛起红晕，轻轻踮起脚尖。"],
-        "animation": "kiss_01",
-    }
+    """No-op — the store starts empty by design."""
+    return None
 
 
 def list_all() -> list[dict]:

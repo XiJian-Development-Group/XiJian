@@ -1,4 +1,9 @@
-"""Stub settings service — global user-tunable prefs + permissions."""
+"""Stub settings service — global user-tunable prefs + permissions.
+
+Settings container is created lazily on first read/write so the
+service ships with no pre-populated demo values.  Operators configure
+defaults through ``PATCH /v1/xijian/settings``.
+"""
 
 from __future__ import annotations
 
@@ -6,39 +11,35 @@ from xijian_api.stubs import state
 from xijian_api.utils.time import now_ts
 
 
-_DEFAULT_SETTINGS = {
-    "language": "zh_CN",
-    "nsfw_allowed": False,
-    "rate_limit": {"enabled": False, "requests_per_minute": 60},
-    "guard_level": "standard",
-    "memory_top_k": 5,
-    "auto_remember": True,
-}
-
-_DEFAULT_PERMISSIONS = (
-    {"key": "notifications", "granted": True, "granted_at": None},
-    {"key": "microphone", "granted": False, "granted_at": None},
-    {"key": "camera", "granted": False, "granted_at": None},
-    {"key": "files", "granted": True, "granted_at": None},
-    {"key": "accessibility", "granted": False, "granted_at": None},
+# Permissions are a fixed OS-level catalogue — not user data — so they
+# are returned as the static catalogue every call.  Granted state is
+# reflected via ``granted_at`` being non-null only after the user
+# actually grants a permission through the system.
+_DEFAULT_PERMISSIONS: tuple[str, ...] = (
+    "notifications",
+    "microphone",
+    "camera",
+    "files",
+    "accessibility",
 )
 
 
 def seed_default() -> None:
-    if state.protection.get("__settings_seeded__"):
-        return
-    state.protection.setdefault("settings", dict(_DEFAULT_SETTINGS))
-    state.protection["__settings_seeded__"] = True
+    """No-op — settings container is created lazily on first read/write."""
+    return None
+
+
+def _settings_bucket() -> dict:
+    """Return the settings dict, creating an empty one on first use."""
+    return state.protection.setdefault("settings", {})
 
 
 def get_settings() -> dict:
-    seed_default()
-    return dict(state.protection["settings"])
+    return dict(_settings_bucket())
 
 
 def patch_settings(patch: dict) -> dict:
-    seed_default()
-    settings = state.protection["settings"]
+    settings = _settings_bucket()
     for key, value in patch.items():
         settings[key] = value
     settings["updated_at"] = now_ts()
@@ -46,14 +47,13 @@ def patch_settings(patch: dict) -> dict:
 
 
 def list_permissions() -> list[dict]:
-    seed_default()
     items = []
-    for perm in _DEFAULT_PERMISSIONS:
+    for key in _DEFAULT_PERMISSIONS:
         items.append(
             {
-                "key": perm["key"],
-                "granted": perm["granted"],
-                "granted_at": perm["granted_at"] or now_ts() if perm["granted"] else None,
+                "key": key,
+                "granted": False,
+                "granted_at": None,
             }
         )
     return items
