@@ -11,6 +11,11 @@ through :func:`xijian_api.ai.registry.get_chat_backend` and friends.
 """
 
 from xijian_api.ai import base, types
+from xijian_api.ai.model_registry import (
+    LoadedModel,
+    ModelRegistry,
+    get_registry,
+)
 from xijian_api.ai.registry import (
     get_chat_backend,
     get_embedding_backend,
@@ -28,6 +33,7 @@ from xijian_api.ai.registry import (
 
 __all__ = [
     "base", "types",
+    "LoadedModel", "ModelRegistry", "get_registry",
     "get_chat_backend", "get_embedding_backend", "get_tts_backend",
     "get_stt_backend", "get_image_backend", "get_video_backend",
     "register_chat", "register_embedding", "register_tts",
