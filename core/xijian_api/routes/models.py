@@ -13,6 +13,18 @@ seeds :data:`xijian_api.stubs.state.models` from
 the bucket starts empty and operators register them with
 ``POST /v1/models/<id>/load`` once the checkpoint is on disk.
 
+Load semantics
+--------------
+
+``POST /v1/models/<id>/load`` returns immediately with ``202`` and a
+progress URL; the actual load runs in a background thread that calls
+:func:`xijian_api.ai.get_registry().load`.  The op transitions to
+``status="loaded"`` on success or ``status="failed"`` on error; in
+the failure case the ``error`` field is populated with the underlying
+``message`` and ``code`` from the AI layer's
+:class:`xijian_api.ai.base.BackendError` /
+:class:`xijian_api.ai.base.ModelNotFound`.
+
 The ``seed_default_models`` helper remains a no-op when the bucket is
 already populated — tests that manually clear the bucket can call it
 to re-populate from the active Flask app's config without depending on
@@ -22,10 +34,11 @@ the route module's import-time side effects.
 from __future__ import annotations
 
 import threading
-import time
 
 from flask import Blueprint, current_app, jsonify, request
 
+from xijian_api.ai import get_registry
+from xijian_api.ai.base import BackendError, ModelNotFound
 from xijian_api.config import Config, ModelEntry
 from xijian_api.errors import ApiError
 from xijian_api.stubs import state
@@ -106,12 +119,28 @@ def get_model(model_id: str):
 
 @bp.post("/v1/models/<model_id>/load")
 def load_model(model_id: str):
+    """Kick off a background load for ``model_id`` and return 202 with a progress URL.
+
+    The actual load runs in a daemon thread that delegates to
+    :func:`xijian_api.ai.get_registry`.  The op transitions to
+    ``status="loaded"`` on success or ``status="failed"`` on any
+    AI-layer error; the failure case populates ``error`` with
+    ``message`` and ``code`` so clients can surface a useful
+    diagnostic.  ``record["xijian"]["loaded"]`` tracks the registry's
+    state in the public OAI listing.
+    """
     record = state.models.get(model_id)
     if record is None:
         raise ApiError(404, f"model not found: {model_id}", "not_found_error", code="model_not_found")
+    config: Config | None = current_app.config.get("XIJIAN_CONFIG")
+    if config is None:
+        # ``XIJIAN_CONFIG`` is always set by the app factory; guard
+        # here so a future refactor that drops the config doesn't
+        # crash the load thread with an opaque traceback.
+        raise ApiError(500, "server config not initialised", "server_error", code="config_missing")
     payload = request.get_json(silent=True) or {}
     op_id = gen_load_op_id()
-    state.models[op_id] = {
+    op = {
         "id": op_id,
         "object": "model.load",
         "status": "loading",
@@ -120,18 +149,47 @@ def load_model(model_id: str):
         "kwargs": payload,
         "created_at": now_ts(),
     }
+    state.models[op_id] = op
 
-    def _flip():
-        time.sleep(0.05)
-        op = state.models.get(op_id)
-        if op is None:
+    def _run() -> None:
+        # The registry is a process-wide singleton; calling ``load``
+        # here is safe even when many requests race for the same
+        # ``model_id`` — :meth:`ModelRegistry._lock_for` serialises
+        # the actual work and the second call returns the cached
+        # ``LoadedModel`` cheaply.
+        registry = get_registry()
+        try:
+            registry.load(model_id, config=config, **payload)
+        except ModelNotFound as exc:
+            op["status"] = "failed"
+            op["error"] = {"message": str(exc), "code": exc.code}
+            op["finished_at"] = now_ts()
+            record["xijian"]["loaded"] = False
+            return
+        except BackendError as exc:
+            op["status"] = "failed"
+            op["error"] = {
+                "message": str(exc),
+                "code": getattr(exc, "code", "backend_error"),
+            }
+            op["finished_at"] = now_ts()
+            record["xijian"]["loaded"] = False
+            return
+        except Exception as exc:  # pragma: no cover - defensive
+            op["status"] = "failed"
+            op["error"] = {
+                "message": f"unexpected error: {exc}",
+                "code": "internal_error",
+            }
+            op["finished_at"] = now_ts()
+            record["xijian"]["loaded"] = False
             return
         op["status"] = "loaded"
         op["finished_at"] = now_ts()
         record["xijian"]["loaded"] = True
 
-    threading.Thread(target=_flip, daemon=True).start()
-    response = jsonify(state.models[op_id])
+    threading.Thread(target=_run, daemon=True).start()
+    response = jsonify(op)
     response.status_code = 202
     return response
 
