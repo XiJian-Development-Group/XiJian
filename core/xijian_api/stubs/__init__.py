@@ -11,12 +11,14 @@ from xijian_api.stubs import (
     batches,
     characters,
     chat,
+    citations,
     embedding,
     files,
     fine_tuning,
     image,
     interactions,
     memory,
+    memory_config,
     protection,
     resources,
     sessions,
@@ -37,8 +39,13 @@ def seed_all() -> None:
     interactions.seed_default()
     worlds.seed_default()
     memory.seed_default()
+    memory_config.seed_default()  # type: ignore[attr-defined]
     protection.seed_default()
     settings.seed_default()
+    # citations module holds no state of its own but exposes its
+    # helpers on the package for the chat pipeline to import via
+    # ``from xijian_api.stubs import citations``.
+    _ = citations
     # ``models`` lives in the routes layer (it has an import-time seed
     # side effect that runs the first time the module is imported).
     # After ``state.reset_for_testing`` the bucket is empty, so re-seed
@@ -54,12 +61,14 @@ __all__ = [
     "batches",
     "characters",
     "chat",
+    "citations",
     "embedding",
     "files",
     "fine_tuning",
     "image",
     "interactions",
     "memory",
+    "memory_config",
     "protection",
     "resources",
     "sessions",

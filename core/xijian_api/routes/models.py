@@ -189,7 +189,12 @@ def load_model(model_id: str):
         record["xijian"]["loaded"] = True
 
     threading.Thread(target=_run, daemon=True).start()
-    response = jsonify(op)
+    # Snapshot the op for the response so the background thread can't
+    # mutate it mid-serialise.  Mocks load in microseconds and were
+    # racing jsonify, flipping ``status`` from ``"loading"`` to
+    # ``"loaded"`` before the test could observe the queued state.
+    snapshot = dict(op)
+    response = jsonify(snapshot)
     response.status_code = 202
     return response
 

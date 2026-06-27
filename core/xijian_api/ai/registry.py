@@ -114,6 +114,9 @@ _BUILTIN_IMPORTS: dict[str, dict[str, str]] = {
     "chat": {
         "mlx": "xijian_api.ai.backends.mlx.chat",
         "gguf": "xijian_api.ai.backends.gguf.chat",
+        # The mock backend is for tests and local development only; it
+        # never loads real weights and is always ``is_available()``.
+        "mock": "xijian_api.ai.backends.mock.chat",
     },
     "embeddings": {
         "mlx": "xijian_api.ai.backends.mlx.embedding",

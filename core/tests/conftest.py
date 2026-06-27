@@ -58,10 +58,21 @@ def _register_test_routes(application) -> None:
 
 
 @pytest.fixture(autouse=True)
-def _reset_state():
-    """Clear idempotency cache + stub state between tests."""
+def _reset_state(app):
+    """Clear idempotency cache + stub state between tests.
+
+    ``stubs_state.reset_for_testing`` re-seeds defaults via
+    ``seed_all()``, which in turn calls
+    :func:`xijian_api.routes.models.seed_default_models` — that helper
+    needs an active Flask ``app_context`` so it can read
+    ``current_app.config["XIJIAN_CONFIG"]``.  We push the session
+    app's context here so the re-seed sees the real config (and
+    therefore registers the ``[[models]]`` entries that the model
+    tests assert on).
+    """
     reset_idempotency_cache_for_testing()
-    stubs_state.reset_for_testing()
+    with app.app_context():
+        stubs_state.reset_for_testing()
     yield
 
 

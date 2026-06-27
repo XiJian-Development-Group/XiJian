@@ -44,6 +44,7 @@ characters: dict = {}
 interactions: dict = {}
 worlds: dict = {}
 memory: dict = {}
+memory_configs: dict = {}
 protection: dict = {}
 sessions: dict = {}
 snapshots: dict = {}
@@ -80,6 +81,7 @@ def reset_for_testing() -> None:
     interactions.clear()
     worlds.clear()
     memory.clear()
+    memory_configs.clear()
     protection.clear()
     sessions.clear()
     snapshots.clear()
@@ -105,6 +107,7 @@ __all__ = [
     "interactions",
     "worlds",
     "memory",
+    "memory_configs",
     "protection",
     "sessions",
     "snapshots",

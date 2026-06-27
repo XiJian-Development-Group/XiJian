@@ -7,6 +7,7 @@ from flask import Blueprint, jsonify, request
 from xijian_api.errors import ApiError
 from xijian_api.pagination import paginate
 from xijian_api.stubs import memory as memory_stub
+from xijian_api.stubs import memory_config as memory_config_stub
 from xijian_api.utils.ids import gen_audit_id
 
 
@@ -92,6 +93,30 @@ def forget():
         decay=payload.get("decay"),
     )
     return jsonify(result)
+
+
+# --- per-character config (A1.2 §character_memory_config) --------------------
+
+
+@bp.get("/v1/xijian/memory/config/<character_id>")
+def get_config(character_id: str):
+    return jsonify(memory_config_stub.get(character_id))
+
+
+@bp.put("/v1/xijian/memory/config/<character_id>")
+def upsert_config(character_id: str):
+    payload = request.get_json(silent=True) or {}
+    record = memory_config_stub.upsert(character_id, payload)
+    return jsonify(record)
+
+
+@bp.delete("/v1/xijian/memory/config/<character_id>")
+def delete_config(character_id: str):
+    if not memory_config_stub.delete(character_id):
+        # Idempotent — deleting a config that doesn't exist returns
+        # the default in :func:`get`, so we mirror that here too.
+        return jsonify(memory_config_stub.get(character_id))
+    return ("", 204)
 
 
 __all__ = ["bp"]

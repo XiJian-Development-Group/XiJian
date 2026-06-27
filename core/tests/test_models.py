@@ -21,7 +21,12 @@ def test_model_get_returns_one(client, auth_headers):
     assert response.status_code == 200
     body = response.get_json()
     assert body["id"] == "qwen2.5-7b-mlx-4bit"
-    assert body["xijian"]["backend"] == "mlx"
+    # The dev/test config.toml registers the model with ``backend =
+    # "mock"`` so the load route can run on any host without mlx or
+    # llama_cpp installed.  The field is still surfaced verbatim
+    # under ``xijian.backend`` — production deploys flip it back to
+    # ``"mlx"`` / ``"gguf"``.
+    assert body["xijian"]["backend"] == "mock"
 
 
 def test_model_get_unknown_returns_404(client, auth_headers):

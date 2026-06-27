@@ -107,29 +107,49 @@ gguf_n_gpu_layers = 0        # 0 = CPU only; >0 = offload N layers to Metal/CUDA
 # restart the API or POST /v1/models/<id>/load to bring it online.
 # ---------------------------------------------------------------------------
 
-# [[models]]
-# id = "qwen2.5-7b-instruct"
-# type = "chat"
-# backend = "mlx"
-# filename = "Qwen2.5-7B-Instruct-4bit"
-# family = "qwen2.5"
-# size_b = 7.0
-# quant = "4bit"
-# context_length = 32768
-# min_ram_gb = 8
-# loaded = false
+# Test/dev fixtures.  These three entries back the in-tree test suite
+# (tests/test_models.py expects them by id) and any local ``curl``
+# exercise of the load/chat routes.  All three use the ``mock`` chat
+# backend so they run on any host without mlx/llama_cpp installed and
+# without real weights on disk — production deployments must replace
+# ``backend = "mock"`` with ``"mlx"`` or ``"gguf"`` and point
+# ``filename`` at the actual checkpoint.
 
-# [[models]]
-# id = "qwen2.5-7b-instruct-gguf"
-# type = "chat"
-# backend = "gguf"
-# filename = "qwen2.5-7b-instruct-q4_k_m.gguf"
-# family = "qwen2.5"
-# size_b = 7.0
-# quant = "q4_k_m"
-# context_length = 8192
-# min_ram_gb = 8
-# loaded = false
+[[models]]
+id = "qwen2.5-7b-mlx-4bit"
+type = "chat"
+backend = "mock"
+filename = "Qwen2.5-7B-Instruct-4bit"
+family = "qwen2.5"
+size_b = 7.0
+quant = "4bit"
+context_length = 32768
+min_ram_gb = 8
+loaded = false
+
+[[models]]
+id = "qwen2.5-14b-mlx-4bit"
+type = "chat"
+backend = "mock"
+filename = "Qwen2.5-14B-Instruct-4bit"
+family = "qwen2.5"
+size_b = 14.0
+quant = "4bit"
+context_length = 32768
+min_ram_gb = 16
+loaded = false
+
+[[models]]
+id = "qwen2.5-7b-gguf-q4km"
+type = "chat"
+backend = "mock"
+filename = "qwen2.5-7b-instruct-q4_k_m.gguf"
+family = "qwen2.5"
+size_b = 7.0
+quant = "q4_k_m"
+context_length = 8192
+min_ram_gb = 8
+loaded = false
 
 # ---------------------------------------------------------------------------
 # Feature toggles
