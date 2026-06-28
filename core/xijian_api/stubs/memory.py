@@ -551,6 +551,286 @@ def seed_default(character_id: str | None = None) -> None:
         state.memory[record["id"]] = record
 
 
+# ---------------------------------------------------------------------------
+# load_context — A1.2 §技术视角 → 自动记忆载入
+# ---------------------------------------------------------------------------
+#
+# Mermaid step 1 from the spec:
+#
+#   S->>M: loadContext(character_id, budget_tokens)
+#   M->>M: 1) 读取 character_memory_config
+#   M->>M: 2) 选取长期记忆（按 importance + tags + recency 排序，取 top N）
+#   M->>M: 3) 选取短期记忆（按 decay_score ≥ 阈值，取 top K）
+#   M->>M: 4) 拼接为 system prompt + history
+#   M-->>S: 返回 context 包
+#
+# Edge case from the spec:
+#
+#   上下文窗口剩余空间 < 配置的 10% → 触发"按重要性裁剪"而非全量注入。
+#
+# Implementation contract:
+#
+# * Pure function — no side effects on the memory store beyond bumping
+#   ``access_count`` / ``last_access_at`` for the entries that actually
+#   make it into the context.  That mirrors the recall-pipeline's
+#   "successful read counts as access" behaviour so the promotion
+#   heuristic stays accurate.
+# * The returned ``system_message`` is a Markdown block designed to be
+#   prepended to a chat as a ``system``-role message.
+# * The returned envelope includes diagnostics (counts, ids, tokens,
+#   ``trimmed`` flag) so callers can log / assert without re-counting.
+
+
+from xijian_api.stubs import memory_config as memory_config_stub  # noqa: E402
+
+
+#: Rough heuristic for token estimation when we don't have a real
+#: tokenizer on hand.  Most chat models hover around 3–4 chars per
+#: token for CJK text; 4 is a safe upper bound.  We add 8 tokens per
+#: entry for the bullet / header overhead.
+_CHARS_PER_TOKEN = 4
+_TOKENS_PER_ENTRY_OVERHEAD = 8
+
+
+def _estimate_tokens(text: str) -> int:
+    """Best-effort token estimate for ``text``.
+
+    Used by :func:`load_context` to decide whether the assembled context
+    fits in the budget without invoking a real tokenizer.  The estimate
+    is intentionally conservative (rounded up) so we don't blow the
+    budget when an exact counter would have allowed one more entry.
+    """
+    if not text:
+        return 0
+    return max(1, -(-len(text) // _CHARS_PER_TOKEN))
+
+
+def _format_long_term_block(entries: list[dict]) -> str:
+    """Render the long-term-memory Markdown block."""
+    if not entries:
+        return ""
+    lines = [f"## 长期记忆（共 {len(entries)} 条）"]
+    for entry in entries:
+        importance = float(entry.get("importance", 0.0) or 0.0)
+        lines.append(
+            f"- (importance={importance:.2f}) {entry.get('content', '')}"
+        )
+    return "\n".join(lines)
+
+
+def _format_short_term_block(entries: list[dict]) -> str:
+    """Render the short-term-memory Markdown block with live decay scores."""
+    if not entries:
+        return ""
+    lines = [f"## 短期记忆（共 {len(entries)} 条）"]
+    now = now_ts()
+    for entry in entries:
+        importance = float(entry.get("importance", 0.0) or 0.0)
+        decay = compute_decay_score(entry, now=now)
+        lines.append(
+            f"- (importance={importance:.2f}, decay={decay:.2f}) "
+            f"{entry.get('content', '')}"
+        )
+    return "\n".join(lines)
+
+
+def load_context(
+    character_id: str | None,
+    *,
+    budget_tokens: int | None = None,
+    now: int | None = None,
+    bump_access: bool = True,
+) -> dict[str, Any]:
+    """Assemble the per-character memory context for a new dialogue.
+
+    Parameters
+    ----------
+    character_id:
+        The character to load context for.  When ``None`` the function
+        returns an empty envelope — useful for the "no character set"
+        case so callers don't have to special-case the path.
+    budget_tokens:
+        Token budget for the assembled context.  When ``None`` we
+        derive it from the character's :class:`character_memory_config`
+        as ``max_context_tokens - reserve_tokens_for_reply``.  Pass an
+        explicit value to override (e.g. for tests or when the caller
+        knows the model window is smaller).
+    now:
+        Override the clock (epoch ms) used for decay computation.  Tests
+        use this to make decay deterministic.
+    bump_access:
+        When ``True`` (default), entries that survive the trim step
+        have their ``access_count`` incremented and ``last_access_at``
+        updated.  Disable for read-only introspection.
+
+    Returns
+    -------
+    dict
+        Envelope with the following keys:
+
+        ``system_message``
+            Markdown block ready to inject as a ``system``-role chat
+            message.  Empty when no entries are selected.
+        ``long_term_count`` / ``short_term_count``
+            Number of entries that made it through trim.
+        ``long_term_ids`` / ``short_term_ids``
+            Entry ids, in the same order as the rendered Markdown.
+        ``estimated_tokens``
+            Token estimate for the assembled system_message.
+        ``budget_tokens``
+            Effective budget used (the resolved value, not the
+            caller-supplied override if any).
+        ``trimmed``
+            ``True`` when the importance-based trim step kicked in.
+        ``used_config``
+            The :class:`character_memory_config` snapshot that drove
+            the assembly — handy for debugging and assertions.
+        ``empty``
+            ``True`` when no character_id was supplied or no entries
+            matched the configured filters.
+    """
+    if character_id is None:
+        return {
+            "system_message": "",
+            "long_term_count": 0,
+            "short_term_count": 0,
+            "long_term_ids": [],
+            "short_term_ids": [],
+            "estimated_tokens": 0,
+            "budget_tokens": int(budget_tokens or 0),
+            "trimmed": False,
+            "used_config": {},
+            "empty": True,
+        }
+
+    cfg = memory_config_stub.get(character_id)
+    # ``reserve_tokens_for_reply`` is *already excluded* from the budget:
+    # the chat pipeline guarantees room for the model's response.
+    resolved_budget = int(
+        budget_tokens
+        if budget_tokens is not None
+        else max(0, cfg["max_context_tokens"] - cfg["reserve_tokens_for_reply"])
+    )
+
+    # ---- 1. Long-term selection ------------------------------------------
+    long_pool = [
+        entry
+        for entry in state.memory.values()
+        if (entry.get("character_id") == character_id
+            and (entry.get("type") or "short") == "long"
+            and float(entry.get("importance", 0.0) or 0.0)
+            >= float(cfg["long_term_importance_min"]))
+    ]
+    long_pool.sort(
+        key=lambda e: (
+            float(e.get("importance", 0.0) or 0.0),
+            int(e.get("created_at") or 0),
+        ),
+        reverse=True,
+    )
+    long_top = long_pool[: int(cfg["max_long_term"])]
+
+    # ---- 2. Short-term selection -----------------------------------------
+    short_pool: list[tuple[dict, float]] = []
+    threshold = float(cfg["short_term_importance_min"])
+    decay_rate = float(cfg["short_term_decay_rate"])
+    for entry in state.memory.values():
+        if entry.get("character_id") != character_id:
+            continue
+        if (entry.get("type") or "short") != "short":
+            continue
+        importance = float(entry.get("importance", 0.0) or 0.0)
+        if importance < threshold:
+            continue
+        live_decay = compute_decay_score(entry, now=now, rate=decay_rate)
+        if live_decay < threshold:
+            continue
+        short_pool.append((entry, live_decay))
+    # Score = decay × importance.  Tie-break by created_at so the
+    # selection is stable across calls within the same instant.
+    short_pool.sort(
+        key=lambda pair: (
+            pair[1] * float(pair[0].get("importance", 0.0) or 0.0),
+            int(pair[0].get("created_at") or 0),
+        ),
+        reverse=True,
+    )
+    short_top = [pair[0] for pair in short_pool[: int(cfg["max_short_term"])]]
+    short_decay = {pair[0]["id"]: pair[1] for pair in short_pool[: int(cfg["max_short_term"])]}
+
+    # ---- 3. Assemble + estimate tokens ----------------------------------
+    long_block = _format_long_term_block(long_top)
+    short_block = _format_short_term_block(short_top)
+    blocks = [b for b in (long_block, short_block) if b]
+    system_message = "\n\n".join(blocks)
+    estimated = (
+        _estimate_tokens(system_message)
+        + _TOKENS_PER_ENTRY_OVERHEAD * (len(long_top) + len(short_top))
+    )
+
+    # ---- 4. Importance-based trim if over budget ------------------------
+    trimmed = False
+    if estimated > resolved_budget:
+        trimmed = True
+        # Re-score every selected entry by importance (long) or
+        # decay × importance (short).  Walk greedily from most
+        # important down; stop when the next entry would push us
+        # past the budget.  Long-term entries still get priority on
+        # tie because of the tuple sort key.
+        candidates: list[tuple[float, int, dict, str]] = []
+        for entry in long_top:
+            score = float(entry.get("importance", 0.0) or 0.0)
+            candidates.append((score, 1, entry, "long"))
+        for entry in short_top:
+            score = short_decay[entry["id"]] * float(entry.get("importance", 0.0) or 0.0)
+            candidates.append((score, 0, entry, "short"))
+        candidates.sort(key=lambda c: (c[0], c[1]), reverse=True)
+
+        kept_long: list[dict] = []
+        kept_short: list[dict] = []
+        used = _TOKENS_PER_ENTRY_OVERHEAD  # budget for headers
+        for score, _, entry, kind in candidates:
+            cost = _estimate_tokens(entry.get("content", "")) + _TOKENS_PER_ENTRY_OVERHEAD
+            if used + cost > resolved_budget:
+                continue
+            if kind == "long":
+                kept_long.append(entry)
+            else:
+                kept_short.append(entry)
+            used += cost
+        long_top = kept_long
+        short_top = kept_short
+
+        long_block = _format_long_term_block(long_top)
+        short_block = _format_short_term_block(short_top)
+        blocks = [b for b in (long_block, short_block) if b]
+        system_message = "\n\n".join(blocks)
+        estimated = used
+
+    # ---- 5. Bookkeeping -------------------------------------------------
+    if bump_access:
+        ts = now if now is not None else now_ts()
+        for entry in long_top:
+            entry["access_count"] = int(entry.get("access_count", 0) or 0) + 1
+            entry["last_access_at"] = ts
+        for entry in short_top:
+            entry["access_count"] = int(entry.get("access_count", 0) or 0) + 1
+            entry["last_access_at"] = ts
+
+    return {
+        "system_message": system_message,
+        "long_term_count": len(long_top),
+        "short_term_count": len(short_top),
+        "long_term_ids": [e["id"] for e in long_top],
+        "short_term_ids": [e["id"] for e in short_top],
+        "estimated_tokens": estimated,
+        "budget_tokens": resolved_budget,
+        "trimmed": trimmed,
+        "used_config": dict(cfg),
+        "empty": not long_top and not short_top,
+    }
+
+
 __all__ = [
     "DEFAULT_SHORT_TERM_DECAY_RATE",
     "DEFAULT_SHORT_TERM_IMPORTANCE_MIN",
@@ -559,6 +839,7 @@ __all__ = [
     "should_promote_to_long",
     "promote_to_long",
     "recall_search",
+    "load_context",
     "seed_default",
     "create",
     "list_all",

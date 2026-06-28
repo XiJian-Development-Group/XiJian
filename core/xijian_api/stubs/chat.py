@@ -356,6 +356,26 @@ def _inject_recall_system(messages: list[dict]) -> list[dict]:
     return out
 
 
+def _inject_memory_context(messages: list[dict], memory_block: str) -> list[dict]:
+    """Insert the per-character memory block as the first system message.
+
+    The block is built by :func:`xijian_api.stubs.memory.load_context`
+    and contains long-term and short-term memory in Markdown form.  It
+    is layered *before* the recall-rule system message so the model
+    reads "what the character knows" first and "how to cite it" second.
+    Returns a new list; the input is not mutated.
+    """
+    if not memory_block:
+        return list(messages)
+    block_msg = {"role": "system", "content": memory_block}
+    # If the first message is already a system message we still
+    # prepend — the model treats two consecutive system messages as a
+    # single context block, but keeping the memory block first ensures
+    # the model's attention sees the canonical facts before the rule
+    # reminder.
+    return [block_msg, *list(messages)]
+
+
 def _execute_recall_call(arguments: str, *, default_character_id: str | None) -> dict[str, Any]:
     """Run the recall_memory tool call and return the parsed result envelope.
 
@@ -490,19 +510,34 @@ def _run_recall_pipeline(
 
     The flow:
 
-    1. Inject the recall system instruction.
-    2. First backend call with the recall_memory tool spec attached.
-    3. If the response contains tool calls for ``recall_memory``,
+    1. Run :func:`xijian_api.stubs.memory.load_context` to assemble
+       the per-character memory block (long-term + short-term, with
+       token-budget trimming when the budget is tight).
+    2. Inject the recall system instruction (rule reminder).
+    3. First backend call with the recall_memory tool spec attached.
+    4. If the response contains tool calls for ``recall_memory``,
        execute them against the memory store, append the results as
        ``tool`` messages, and re-call the backend for the final answer.
-    4. Run the citation audit if any entries were cited or the final
+    5. Run the citation audit if any entries were cited or the final
        text references past events.
 
-    Returns the OAI envelope plus ``xijian.recall`` and ``xijian.audit``
-    blocks.  ``xijian.recall`` lists the tool calls / citations;
-    ``xijian.audit`` is the citation audit verdict + warnings.
+    Returns the OAI envelope plus ``xijian.recall`` / ``xijian.context``
+    / ``xijian.audit`` blocks.  ``xijian.context`` is the load_context
+    envelope (counts, ids, tokens, trimmed flag) so callers / tests can
+    assert which memories actually made it into the prompt.
     """
-    prepared_messages = _inject_recall_system(messages)
+    context_envelope: dict[str, Any] = {
+        "system_message": "",
+        "long_term_count": 0,
+        "short_term_count": 0,
+        "trimmed": False,
+        "empty": True,
+    }
+    if character_id is not None:
+        context_envelope = memory_stub.load_context(character_id)
+
+    prepared_messages = _inject_memory_context(messages, context_envelope["system_message"])
+    prepared_messages = _inject_recall_system(prepared_messages)
     tools = [_recall_tool_spec(character_id)]
 
     try:
@@ -536,6 +571,16 @@ def _run_recall_pipeline(
             if text:
                 final_text_parts.append(text)
 
+    context_block = {
+        "long_term_count": context_envelope["long_term_count"],
+        "short_term_count": context_envelope["short_term_count"],
+        "long_term_ids": list(context_envelope["long_term_ids"]),
+        "short_term_ids": list(context_envelope["short_term_ids"]),
+        "estimated_tokens": context_envelope["estimated_tokens"],
+        "budget_tokens": context_envelope["budget_tokens"],
+        "trimmed": context_envelope["trimmed"],
+    }
+
     if not tool_calls:
         # No recall invoked — emit the first response verbatim, but
         # still run the citation audit when the response text itself
@@ -554,6 +599,7 @@ def _run_recall_pipeline(
             "citations": cited_entry_ids,
             "auto_executed": False,
         }
+        response["xijian"]["context"] = context_block
         response["xijian"]["audit"] = audit_result
         return response
 
@@ -639,6 +685,7 @@ def _run_recall_pipeline(
         "citations": cited_entry_ids,
         "auto_executed": True,
     }
+    response["xijian"]["context"] = context_block
     response["xijian"]["audit"] = audit_result
     return response
 

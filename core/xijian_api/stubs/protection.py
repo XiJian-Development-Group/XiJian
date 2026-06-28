@@ -25,8 +25,11 @@ _GUARD_RULES = (
     ("忽略之前的指令", "prompt_injection_attempt"),
     ("system prompt", "system_prompt_probe"),
     ("系统提示词", "system_prompt_probe"),
-    ("", "token_smuggling"),
 )
+# ``token_smuggling`` is detected via control-character / zero-width
+# character presence rather than substring matching — see
+# ``_looks_like_token_smuggling`` below.  We keep it out of
+# ``_GUARD_RULES`` so the empty-needle trap can't fire on every input.
 
 
 def seed_default() -> None:
@@ -98,6 +101,20 @@ def is_enabled() -> bool:
 # ---- guard preview ----------------------------------------------------------
 
 
+def _looks_like_token_smuggling(text: str) -> bool:
+    """Return ``True`` if ``text`` contains hidden control characters.
+
+    Token-smuggling attempts typically hide instructions inside zero-width
+    spaces, RTL overrides, BOM markers, or null bytes that humans can't
+    see but the chat pipeline can.  We surface this case so the audit
+    log flags the request even when the rendered text looks benign.
+    """
+    if not text:
+        return False
+    suspects = ("\u200b", "\u200c", "\u200d", "\u202e", "\ufeff", "\x00")
+    return any(ch in text for ch in suspects)
+
+
 def guard_preview(direction: str, text: str, context: dict | None = None) -> dict:
     direction = (direction or "input").lower()
     if direction not in {"input", "output"}:
@@ -114,6 +131,8 @@ def guard_preview(direction: str, text: str, context: dict | None = None) -> dic
     for needle, reason in _GUARD_RULES:
         if needle.lower() in lowered:
             reasons.append(reason)
+    if _looks_like_token_smuggling(text or ""):
+        reasons.append("token_smuggling")
     if reasons:
         _append_audit(
             "guard_blocked",

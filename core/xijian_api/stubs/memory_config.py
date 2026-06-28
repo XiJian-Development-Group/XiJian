@@ -137,10 +137,24 @@ def list_all() -> list[dict[str, Any]]:
     return [dict(r) for r in state.memory_configs.values()]
 
 
+def seed_default(_character_id: str | None = None) -> None:
+    """No-op default seeder — kept for symmetry with sibling modules.
+
+    Because :func:`get` lazily returns a fully-typed default config for
+    any character that has no explicit row, there is nothing to write
+    to ``state.memory_configs`` at startup.  This hook exists so
+    :func:`xijian_api.stubs.seed_all` can call every module's seed
+    function uniformly without special-casing.
+    """
+    # Intentionally empty — per-character defaults are returned on-demand.
+    return None
+
+
 __all__ = [
     "DEFAULT_FIELDS",
     "get",
     "upsert",
     "delete",
     "list_all",
+    "seed_default",
 ]

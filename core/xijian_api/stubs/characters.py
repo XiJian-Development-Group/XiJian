@@ -1,7 +1,10 @@
 """Stub character service — in-memory CRUD.
 
-The store starts empty.  Operators register characters explicitly via
-``POST /v1/xijian/characters``; no demo data is pre-seeded.
+The store starts with one demo character (``char_yuki``) so endpoints
+that exercise the canonical scenario (load/unload, state, interactions,
+…) have a known id to work with.  Operators add their own characters
+via ``POST /v1/xijian/characters``; the demo record is intentionally
+*not* removed automatically so dev workflows can rely on it.
 """
 
 from __future__ import annotations
@@ -11,14 +14,37 @@ from xijian_api.utils.ids import gen_character_id
 from xijian_api.utils.time import now_ts
 
 
-def seed_default() -> None:
-    """No-op — the store starts empty by design.
+#: Canonical demo character id used across the spec / docs / tests.
+DEFAULT_CHARACTER_ID = "char_yuki"
 
-    Kept as a callable so :func:`xijian_api.stubs.seed_all` (called at
-    app start-up) remains a single, uniform entry point regardless of
-    whether the operator wants any pre-populated data.
+
+def seed_default() -> None:
+    """Populate the canonical demo character ``char_yuki``.
+
+    Idempotent: if a record already exists under ``char_yuki`` we leave
+    it untouched.  Any user-created characters are likewise preserved.
     """
-    return None
+    if DEFAULT_CHARACTER_ID in state.characters:
+        return
+    now = now_ts()
+    record = {
+        "id": DEFAULT_CHARACTER_ID,
+        "object": "character",
+        "name": "Yuki",
+        "display_name": "Yuki",
+        "persona_doc": (
+            "Yuki 是主人的 AI 助手，性格温和、细心，喜欢猫和安静的氛围。"
+            "她会用轻柔的语气回应主人的日常点滴，偶尔主动问候。"
+        ),
+        "voice_profile": "melo_zh_female_warm_v1",
+        "live2d_model": None,
+        "default_emotion": "neutral",
+        "tags": ["demo", "default", "ai-companion"],
+        "loaded": False,
+        "created_at": now,
+        "updated_at": now,
+    }
+    state.characters[DEFAULT_CHARACTER_ID] = record
 
 
 def create(payload: dict) -> dict:
@@ -107,6 +133,7 @@ def update_state(character_id: str, patch: dict, *, protection_enabled: bool) ->
 
 
 __all__ = [
+    "DEFAULT_CHARACTER_ID",
     "seed_default", "create", "list_all", "get",
     "update", "delete", "set_loaded", "get_state", "update_state",
 ]
