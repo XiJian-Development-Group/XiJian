@@ -398,3 +398,5 @@ cython_debug/
 
 # Agent
 .mavis
+/docs/md2pdf/Dev. Function List功能清单v2.pdf.md5
+/docs/md2pdf/Dev. 角色制作队列.pdf.md5
