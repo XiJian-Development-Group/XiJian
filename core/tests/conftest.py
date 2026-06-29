@@ -18,6 +18,9 @@ import pytest
 # the env hygiene is still nice to have.
 os.environ.pop("XIJIAN_DEV", None)
 os.environ.pop("XIJIAN_DEV_TOKEN_FILE", None)
+# The overload monitor thread races test assertions; keep it off
+# unless the specific test opts in by re-setting the env var.
+os.environ.setdefault("XIJIAN_OVERLOAD_MONITOR", "0")
 
 from xijian_api import auth  # noqa: E402  (import after env setup)
 from xijian_api.app import create_app  # noqa: E402
@@ -69,10 +72,16 @@ def _reset_state(app):
     app's context here so the re-seed sees the real config (and
     therefore registers the ``[[models]]`` entries that the model
     tests assert on).
+
+    The overload module keeps its sliding window in module-level
+    ``deque`` instances that survive ``state.reset_for_testing``; we
+    reset those explicitly below.
     """
     reset_idempotency_cache_for_testing()
     with app.app_context():
         stubs_state.reset_for_testing()
+        from xijian_api.stubs import overload as ov_stub
+        ov_stub.reset_for_testing()
     yield
 
 

@@ -163,3 +163,22 @@ seed_default_data = false
 protection_module = true
 rate_limit = false
 dev_test_emit = false
+
+# ---------------------------------------------------------------------------
+# System overload protection (A5.4)
+#
+# ``overload_monitor`` flips the background 1-Hz sampler on / off.
+# It defaults to true so production deployments run the guard; the
+# test suite and CI set ``XIJIAN_OVERLOAD_MONITOR=0`` instead of
+# editing this file.
+#
+# ``overload_tier`` is the *recommended default* at first boot.  The
+# user can change it at runtime via PATCH /v1/xijian/overload/tier.
+# Per the function list v2.1, ``medium`` is right for Mac mini /
+# Mac Studio and most MacBook Pros; ``strict`` is right for MacBook
+# Air (fan-less).
+# ---------------------------------------------------------------------------
+
+[overload]
+monitor = true
+tier = "medium"

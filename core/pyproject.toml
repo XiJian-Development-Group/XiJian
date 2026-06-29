@@ -6,6 +6,7 @@ requires-python = ">=3.11"
 dependencies = [
   "flask>=3.0",
   "flask-sock>=0.7",
+  "psutil>=5.9",
   "simple-websocket>=1.0",
   "waitress>=3.0",
 ]

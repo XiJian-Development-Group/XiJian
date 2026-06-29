@@ -49,6 +49,11 @@ protection: dict = {}
 sessions: dict = {}
 snapshots: dict = {}
 import_jobs: dict = {}
+# Overload protection: persistent state only (event log, recovery
+# state, last trigger info).  Sliding-window samples live inside the
+# ``stubs.overload`` module because they are short-lived and not
+# meaningful to persist between process restarts.
+overload: dict = {}
 
 # OAI-compatible resources.
 files: dict = {}
@@ -86,6 +91,7 @@ def reset_for_testing() -> None:
     sessions.clear()
     snapshots.clear()
     import_jobs.clear()
+    overload.clear()
     files.clear()
     batches.clear()
     fine_tuning_jobs.clear()
@@ -112,6 +118,7 @@ __all__ = [
     "sessions",
     "snapshots",
     "import_jobs",
+    "overload",
     "files",
     "batches",
     "fine_tuning_jobs",

@@ -19,6 +19,7 @@ from xijian_api.stubs import (
     interactions,
     memory,
     memory_config,
+    overload,
     protection,
     resources,
     sessions,
@@ -42,6 +43,7 @@ def seed_all() -> None:
     memory_config.seed_default()  # type: ignore[attr-defined]
     protection.seed_default()
     settings.seed_default()
+    overload.seed_default()
     # citations module holds no state of its own but exposes its
     # helpers on the package for the chat pipeline to import via
     # ``from xijian_api.stubs import citations``.
@@ -69,6 +71,7 @@ __all__ = [
     "interactions",
     "memory",
     "memory_config",
+    "overload",
     "protection",
     "resources",
     "sessions",

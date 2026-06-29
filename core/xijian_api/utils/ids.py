@@ -174,6 +174,11 @@ def gen_unload_op_id() -> str:
     return gen_id("unload_op_", _SHORT_HEX_LEN)
 
 
+def gen_overload_event_id() -> str:
+    """Return an overload event id (``overload_<12 hex>``)."""
+    return gen_id("overload_", _SHORT_HEX_LEN)
+
+
 def gen_snapshot_id(now: _dt.datetime | None = None) -> str:
     """Return a snapshot id (``snap_<YYYYMMDD>_<6 hex>``).
 

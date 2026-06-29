@@ -34,6 +34,7 @@ from xijian_api.utils.ids import (
     gen_import_job_id,
     gen_load_op_id,
     gen_unload_op_id,
+    gen_overload_event_id,
 )
 
 from xijian_api.utils.time import now_ts, iso_now
@@ -62,6 +63,7 @@ __all__ = [
     "gen_import_job_id",
     "gen_load_op_id",
     "gen_unload_op_id",
+    "gen_overload_event_id",
     "now_ts",
     "iso_now",
 ]
