@@ -42,11 +42,13 @@ shell on top.
 from __future__ import annotations
 
 import logging
+import math
 import os
 import platform
 import threading
 import time
 from collections import deque
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Iterable
 
@@ -181,6 +183,92 @@ _GENERATION: int = 0
 
 
 # ---------------------------------------------------------------------------
+# Action handler registry
+# ---------------------------------------------------------------------------
+#
+# The overload module is intentionally "headless" — it observes and
+# records system metrics, decides when to fire, and tells the rest of
+# the codebase *which* action to run.  It does **not** own the side
+# effects (chat-pipeline truncation, TTS degradation, memory
+# compression, NPC tick suspension).  Each of those subsystems owns
+# its own machinery; this registry is the meeting point.
+#
+# Handlers are callables with signature
+# ``handler(event: dict) -> None``.
+# Multiple handlers may register for the same action; they run in
+# registration order.  Handler exceptions are logged but never
+# raised — a faulty handler must not turn a confirmed overload into
+# a process crash.
+
+#: Action label → list of handler callables.  Held under a lock so
+#: concurrent registration from the chat-pipeline / TTS modules at
+#: import time is safe.
+_ACTION_HANDLERS: dict[str, list[Callable[[dict], None]]] = {
+    ACTION_SUSPEND_IDLE_NPCS: [],
+    ACTION_DEGRADE_TTS: [],
+    ACTION_COMPRESS_MEMORY: [],
+    ACTION_EMERGENCY_DUMP: [],
+}
+_ACTION_HANDLER_LOCK = threading.Lock()
+
+
+def register_action_handler(
+    action: str,
+    handler: Callable[[dict], None],
+) -> dict:
+    """Register ``handler`` to fire whenever ``action`` trips.
+
+    ``handler`` will be invoked with the trigger event dict (same
+    shape that lands in :func:`list_events` and the ``last_event``
+    slot of :func:`status`).  It must be idempotent for a given
+    event id — the registry may invoke the same handler twice if an
+    operator re-uses :func:`simulate_overload` against the same
+    metric while a recovery is still pending.
+
+    Returns a small status dict so callers can log the registration.
+    """
+    if action not in _ACTION_HANDLERS:
+        raise ValueError(f"unknown action: {action!r}")
+    with _ACTION_HANDLER_LOCK:
+        _ACTION_HANDLERS[action].append(handler)
+    return {"action": action, "handlers": len(_ACTION_HANDLERS[action])}
+
+
+def unregister_action_handler(
+    action: str,
+    handler: Callable[[dict], None],
+) -> dict:
+    """Remove a previously-registered handler.
+
+    Safe to call even when ``handler`` wasn't registered; in that
+    case the call is a silent no-op so hot-reload / test reload paths
+    don't have to special-case it.
+    """
+    if action not in _ACTION_HANDLERS:
+        raise ValueError(f"unknown action: {action!r}")
+    with _ACTION_HANDLER_LOCK:
+        try:
+            _ACTION_HANDLERS[action].remove(handler)
+        except ValueError:
+            return {"action": action, "removed": False}
+    return {"action": action, "removed": True}
+
+
+def list_action_handlers() -> dict[str, list[str]]:
+    """Return a debug-friendly view of registered handlers.
+
+    Each list contains the ``repr`` of the registered callable so
+    tests / operators can verify that the chat-pipeline module wired
+    itself in correctly without having to grep module globals.
+    """
+    out: dict[str, list[str]] = {}
+    with _ACTION_HANDLER_LOCK:
+        for action, handlers in _ACTION_HANDLERS.items():
+            out[action] = [repr(h) for h in handlers]
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Pure helpers — easy to unit test
 # ---------------------------------------------------------------------------
 
@@ -259,11 +347,18 @@ def _any_over_threshold(
 
 
 def select_most_severe_action(actions: Iterable[str]) -> str | None:
-    """Return the most-severe action label, or None if ``actions`` is empty."""
+    """Return the most-severe action label, or None if ``actions`` is empty.
+
+    Unknown action labels are ignored rather than treated as
+    zero-severity fall-throughs; a caller that accidentally pulls a
+    typo into the registry shouldn't see it returned as the "winner".
+    """
     best: str | None = None
     best_sev = -1
     for action in actions:
-        sev = _ACTION_SEVERITY.get(action, 0)
+        if action not in _ACTION_SEVERITY:
+            continue
+        sev = _ACTION_SEVERITY[action]
         if sev > best_sev:
             best_sev = sev
             best = action
@@ -508,6 +603,7 @@ def status() -> dict:
         "recovery": recovery,
         "recent_samples": [_sample_to_dict(s) for s in recent],
         "platform": platform.platform(),
+        "action_handlers": list_action_handlers(),
     }
 
 
@@ -558,12 +654,17 @@ def simulate_overload(metric: str, *, duration_s: float | None = None) -> dict:
     freshly built sample list so callers (and tests) don't have to
     wait for the 60-100 s sliding windows to elapse in real time.
 
-    Side effects:
+    Unlike :func:`evaluate_metrics` / :func:`inject_sample`, this
+    helper drives the **complete trigger pipeline** — it pushes the
+    newest synthetic sample through :func:`inject_sample` so that any
+    associated side-effects (snapshot, WS broadcast, action handlers,
+    recovery handshake) all fire on top of the synthetic window.  This
+    is exactly what tests / dev mode need: replay an overload event
+    without waiting for a real sliding window to fill.
 
-    * Replaces the current sliding window with the synthetic samples
-      so subsequent :func:`status` calls see the simulated state.
-    * If the synthetic window trips an action, records a trigger
-      event and starts the recovery handshake.
+    Returns the per-call evaluation result.  Downstream callers may
+    inspect :func:`status` afterwards to read the ``last_event``,
+    ``events`` log, and active ``recovery`` record.
     """
     duration_s = duration_s if duration_s is not None else 5.0
     tier = current_tier()
@@ -576,9 +677,12 @@ def simulate_overload(metric: str, *, duration_s: float | None = None) -> dict:
     elif metric == METRIC_GPU:
         window_s = float(thresholds["gpu_ane_window_s"] or 0.0)
         value = float(thresholds["gpu_ane_pct"] or 0.0) + 1.0
-    elif metric in {METRIC_MEM, METRIC_SOC}:
+    elif metric == METRIC_MEM:
         window_s = 1.0
         value = float(thresholds["mem_pct"] or 0.0) + 1.0
+    elif metric == METRIC_SOC:
+        window_s = 1.0
+        value = float(thresholds["soc_celsius"] or 0.0) + 1.0
     else:
         raise ValueError(f"unknown metric: {metric!r}")
     count = max(int(window_s / SAMPLE_INTERVAL_SECONDS) + 1, 2)
@@ -596,7 +700,11 @@ def simulate_overload(metric: str, *, duration_s: float | None = None) -> dict:
         _SAMPLES.clear()
         for s in samples:
             _SAMPLES.append(s)
-    return evaluate_metrics(samples, tier)
+    # Drive the *newest* synthetic sample through the normal pipeline
+    # so snapshot, audit, WS broadcast, action handlers, and the
+    # recovery handshake all run identically to a real monitor tick.
+    latest = samples[-1]
+    return inject_sample(latest)
 
 
 def _synthetic_sample(metric: str, value: float, *, ts: float) -> Sample:
@@ -611,16 +719,33 @@ def _synthetic_sample(metric: str, value: float, *, ts: float) -> Sample:
     )
 
 
-def _synthetic_sample(metric: str, value: float, *, ts: float) -> Sample:
-    """Build a sample that only ``metric`` is high; the rest are calm."""
-    low = 5.0
-    return Sample(
-        ts=ts,
-        cpu_pct=value if metric == METRIC_CPU else low,
-        mem_pct=value if metric == METRIC_MEM else low,
-        soc_celsius=value if metric == METRIC_SOC else None,
-        gpu_ane_pct=value if metric == METRIC_GPU else low,
-    )
+def _invoke_action_handlers(action: str, event: dict) -> int:
+    """Run every handler registered for ``action``.
+
+    Each handler is called inside its own ``try`` so one buggy
+    handler (e.g. a chat-pipeline hook raising :class:`RuntimeError`
+    because the LLM backend was already shutting down) doesn't stop
+    the others.  The number of handlers that actually ran is
+    returned so :func:`_record_trigger` can log it for observability.
+    """
+    if not action:
+        return 0
+    with _ACTION_HANDLER_LOCK:
+        handlers = list(_ACTION_HANDLERS.get(action, []))
+    if not handlers:
+        return 0
+    ran = 0
+    for handler in handlers:
+        try:
+            handler(event)
+        except Exception as exc:  # noqa: BLE001 — handler errors must not crash the guard
+            _LOGGER.warning(
+                "overload action handler %r for %s failed: %s",
+                handler, action, exc,
+            )
+            continue
+        ran += 1
+    return ran
 
 
 # ---------------------------------------------------------------------------
@@ -645,6 +770,7 @@ def start_recovery(event: dict) -> dict:
         "earliest_confirm_at": earliest,
         "first_confirmed_at": None,
         "status": "waiting",
+        "recoverable": True,
     }
     state.overload["recovery"] = record
     return record
@@ -659,7 +785,7 @@ def recovery_window() -> dict:
     remaining = max(0.0, float(record["earliest_confirm_at"]) - now)
     return {
         "active": True,
-        "remaining_seconds": int(remaining) + (1 if remaining % 1 else 0),
+        "remaining_seconds": int(math.ceil(remaining)),
         "can_finalize": remaining <= 0 and record.get("status") == "first_confirmed",
         "status": record.get("status"),
     }
@@ -675,7 +801,7 @@ def first_confirm() -> dict:
         return {
             "ok": False,
             "error": "too_early",
-            "remaining_seconds": int(float(record["earliest_confirm_at"]) - now) + 1,
+            "remaining_seconds": math.ceil(float(record["earliest_confirm_at"]) - now),
         }
     record["first_confirmed_at"] = now
     record["status"] = "first_confirmed"
@@ -694,7 +820,7 @@ def finalize_recovery() -> dict:
         return {
             "ok": False,
             "error": "too_early",
-            "remaining_seconds": int(float(record["earliest_confirm_at"]) - now) + 1,
+            "remaining_seconds": math.ceil(float(record["earliest_confirm_at"]) - now),
         }
     record["status"] = "finalized"
     record["finalized_at"] = now
@@ -769,6 +895,18 @@ def _record_trigger(result: dict, sample: Sample, tier: str) -> None:
         _LOGGER.warning("overload snapshot failed: %s", exc)
     # Begin the recovery handshake — the 20 s wait + double confirm.
     start_recovery(event)
+    # Fan out to subsystem-specific handlers.  This is where the
+    # chat pipeline truncates its stream, TTS picks a lower-quality
+    # voice, memory compressor runs, and NPCs suspend ticks.  The
+    # registry decoupling means each subsystem wires itself in at
+    # module import time — the overload module never references them
+    # by name.
+    try:
+        ran = _invoke_action_handlers(event["action"], event)
+        if ran:
+            event["handlers_invoked"] = ran
+    except Exception as exc:  # noqa: BLE001
+        _LOGGER.warning("overload action handler dispatch failed: %s", exc)
     # Try to publish a WS event so the UI can show the prompt.
     try:
         from xijian_api.routes.ws_routes import publish_event
@@ -853,6 +991,9 @@ def reset_for_testing() -> None:
         global _TIER, _GENERATION
         _TIER = "medium"
         _GENERATION += 1
+    with _ACTION_HANDLER_LOCK:
+        for action in _ACTION_HANDLERS:
+            _ACTION_HANDLERS[action].clear()
     state.overload.clear()
 
 
@@ -929,4 +1070,8 @@ __all__ = [
     "collect_sample",
     "seed_default",
     "reset_for_testing",
+    # action handlers
+    "register_action_handler",
+    "unregister_action_handler",
+    "list_action_handlers",
 ]
