@@ -9,6 +9,7 @@ from xijian_api.stubs import (
     assistants,
     audio,
     batches,
+    character_state,
     characters,
     chat,
     citations,
@@ -44,6 +45,7 @@ def seed_all() -> None:
     protection.seed_default()
     settings.seed_default()
     overload.seed_default()
+    character_state.seed_default()
     # citations module holds no state of its own but exposes its
     # helpers on the package for the chat pipeline to import via
     # ``from xijian_api.stubs import citations``.
@@ -61,6 +63,7 @@ __all__ = [
     "assistants",
     "audio",
     "batches",
+    "character_state",
     "characters",
     "chat",
     "citations",

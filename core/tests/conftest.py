@@ -21,6 +21,9 @@ os.environ.pop("XIJIAN_DEV_TOKEN_FILE", None)
 # The overload monitor thread races test assertions; keep it off
 # unless the specific test opts in by re-setting the env var.
 os.environ.setdefault("XIJIAN_OVERLOAD_MONITOR", "0")
+# The character-state tick thread is the A3.2 equivalent — keep it
+# off by default; individual tests opt in via ``monkeypatch``.
+os.environ.setdefault("XIJIAN_STATE_TICK", "0")
 
 from xijian_api import auth  # noqa: E402  (import after env setup)
 from xijian_api.app import create_app  # noqa: E402
@@ -82,6 +85,8 @@ def _reset_state(app):
         stubs_state.reset_for_testing()
         from xijian_api.stubs import overload as ov_stub
         ov_stub.reset_for_testing()
+        from xijian_api.stubs import character_state as cs_stub
+        cs_stub.reset_for_testing()
     yield
 
 

@@ -49,6 +49,24 @@ protection: dict = {}
 sessions: dict = {}
 snapshots: dict = {}
 import_jobs: dict = {}
+# A3.2 character state system.  Three buckets mirror the SQL schema in
+# the function list v2:
+#   character_states      — {character_id: {hunger, thirst, health,
+#                                            mood, max_*, last_updated,
+#                                            status, status_changed_at}}
+#   character_state_configs — {character_id: {*_decay_per_hour,
+#                                             low_*_threshold,
+#                                             transition_*_seconds,
+#                                             behavior_bindings,
+#                                             modifiers}}
+#   character_state_log   — {log_id: {character_id, field, old_value,
+#                                     new_value, reason, ref_id,
+#                                     created_at}}
+# Append-only log gets bounded inside the stub so the in-memory store
+# never grows without bound.
+character_states: dict = {}
+character_state_configs: dict = {}
+character_state_log: dict = {}
 # Overload protection: persistent state only (event log, recovery
 # state, last trigger info).  Sliding-window samples live inside the
 # ``stubs.overload`` module because they are short-lived and not
@@ -91,6 +109,9 @@ def reset_for_testing() -> None:
     sessions.clear()
     snapshots.clear()
     import_jobs.clear()
+    character_states.clear()
+    character_state_configs.clear()
+    character_state_log.clear()
     overload.clear()
     files.clear()
     batches.clear()
@@ -118,6 +139,9 @@ __all__ = [
     "sessions",
     "snapshots",
     "import_jobs",
+    "character_states",
+    "character_state_configs",
+    "character_state_log",
     "overload",
     "files",
     "batches",

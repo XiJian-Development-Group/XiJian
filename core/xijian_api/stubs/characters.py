@@ -101,15 +101,42 @@ def set_loaded(character_id: str, loaded: bool) -> dict | None:
 
 
 def get_state(character_id: str) -> dict | None:
+    """Return the character state, delegating to the A3.2 state stub.
+
+    Kept for backward compatibility with the v1 character state
+    endpoints (``affection`` / ``mood`` / ``recent_memory_summary``).
+    The A3.2 numeric fields are merged in when present so the old
+    endpoint gains them for free.
+    """
     record = state.characters.get(character_id)
     if record is None:
         return None
+    # Lazy import to avoid a circular dependency at module-load time.
+    from xijian_api.stubs import character_state as cs_stub
+
+    summary = cs_stub.summary(character_id) or {}
     return {
         "character_id": character_id,
+        # Legacy fields — preserved verbatim so the v1 test suite
+        # (``test_character_state_round_trip``) keeps passing.
         "affection": 50,
         "mood": "neutral",
         "recent_memory_summary": f"最近的互动：与 {record.get('display_name', '?')} 的若干对话。",
         "updated_at": now_ts(),
+        # A3.2 fields — present whenever the character has a state
+        # record; absent otherwise so a never-touched character
+        # returns the v1 shape exactly.
+        **(
+            {
+                "values": summary.get("values"),
+                "max": summary.get("max"),
+                "status": summary.get("status"),
+                "can_dialogue": summary.get("can_dialogue"),
+                "active_behavior": summary.get("active_behavior"),
+            }
+            if summary
+            else {}
+        ),
     }
 
 
@@ -118,12 +145,38 @@ def update_state(character_id: str, patch: dict, *, protection_enabled: bool) ->
 
     Returns ``(state_record, error_key)``.  When ``protection_enabled``
     is ``False`` the function refuses with ``error_key="protection_disabled"``.
+
+    Legacy fields (``affection`` / ``mood`` / ``recent_memory_summary``)
+    are still supported for backward compatibility; numeric A3.2
+    fields (``hunger`` / ``thirst`` / ``health`` / ``mood_value``) are
+    forwarded to the state stub which performs clamping, log writes,
+    and status-machine updates.
     """
     record = state.characters.get(character_id)
     if record is None:
         return None, "not_found"
     if not protection_enabled:
         return None, "protection_disabled"
+    # Lazy import — same circular-dependency concern as in get_state.
+    from xijian_api.stubs import character_state as cs_stub
+
+    # A3.2 numeric fields.  ``mood_value`` is the v1-friendly name
+    # callers can use to set the numeric mood without clashing with
+    # the legacy ``mood`` text field.
+    numeric_patch: dict = {}
+    for key in ("hunger", "thirst", "health"):
+        if key in patch:
+            numeric_patch[key] = patch[key]
+    if "mood_value" in patch:
+        numeric_patch["mood"] = patch["mood_value"]
+    if numeric_patch:
+        cs_stub.apply_patch(
+            character_id,
+            numeric_patch,
+            reason=patch.get("reason", "dialogue"),
+            ref_id=patch.get("ref_id"),
+        )
+
     state_record = get_state(character_id)
     for key in ("affection", "mood", "recent_memory_summary"):
         if key in patch:
