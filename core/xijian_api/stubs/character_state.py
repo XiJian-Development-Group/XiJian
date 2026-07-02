@@ -466,8 +466,10 @@ def _default_state_record(character_id: str, *, now: float | None = None) -> dic
         "status": STATUS_HEALTHY,
         "status_changed_at": moment,
         "last_updated": moment,
-        # Runtime snapshot of the active modifiers (read by tick_character).
-        "activity_modifier": 1.0,
+        # Note: time / activity / world modifiers live on the config
+        # record (``cfg['modifiers']``), not here.  ``tick_character``
+        # reads them from the config so a single modifier change
+        # affects every subsequent tick without touching the state.
     }
 
 
@@ -928,8 +930,19 @@ def _current_interval() -> float:
 
 
 def _tick_loop(stop_event: threading.Event, generation: int) -> None:
-    """Main loop: tick every ``interval`` seconds until stopped."""
+    """Main loop: tick every ``interval`` seconds until stopped.
+
+    ``generation`` is a monotonic counter bumped on every
+    :func:`start_tick` / :func:`reset_for_testing`.  When the
+    generation drifts the loop exits immediately rather than
+    racing against the fresh instance — this is what lets a test
+    suite (or a re-entrant ``seed_all``) install a new tick thread
+    without leaving the old one spinning until the next interval.
+    """
     while not stop_event.is_set():
+        with _TICK_LOCK:
+            if _TICK_GENERATION != generation:
+                return
         try:
             tick_all()
         except Exception as exc:  # noqa: BLE001

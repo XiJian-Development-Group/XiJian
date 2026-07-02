@@ -1302,29 +1302,31 @@
 
 ## C. Development Kit(Only Windows/Linux/macOS)
 
-> 基于网页技术 + Pywebview 实现的开发者套件。所有 C1/C2/C3/C5 的产出物最终通过 C5 上传到私有服务器，审核通过后正式上架。
+> **独立的 Pywebview 应用**——与主 API 服务器**完全隔离**，单独进程启动，通过 `pywebview` 的 JS API 直接调用本地 Python 模块。所有 C1/C2/C3 的产出物最终通过 C5 打包为 7Z 固实归档并通过 SMTP 邮件提交至开发者组邮箱，审核通过后正式上架。**不依赖任何私有服务器，也**不**依赖主 API**。
 
 ### C0. 开发工具总览
 
-- **入口**：隙间主程序 → 我的 → 开发者工具
-- **权限**：必须通过 C5 认证
-- **运行模式**：本地 webview + 后端 HTTP 服务
+- **入口**：隙间主程序 → 我的 → 开发者工具 → 打开独立窗口
+- **运行模式**：**独立 Pywebview 进程**（与主 API 不在同一进程，不共享端口）
+- **JS ↔ Python 桥接**：通过 `pywebview`'s `js_api` 暴露 `DevKitApi` 类的方法
 - **C4 介入**：几乎所有步骤都可由 AI 辅助完成（详见 C4）
 
 - **整体流程**
 
   ```mermaid
   flowchart LR
-      A[登录 C5] --> B[C1 创建世界]
+      A[进入开发工具] --> B[C1 创建世界]
       B --> C[C2 创建角色]
       C --> D[C3 创建剧情]
       D --> E[本地预览与测试]
       E --> F{通过?}
       F -- 否 --> Fix[回炉修改]
       Fix --> E
-      F -- 是 --> Upload[上传服务器]
-      Upload --> Audit[质量审核]
-      Audit --> Live[上架角色库]
+      F -- 是 --> Pack[7Z 固实打包]
+      Pack --> Mail[通过 SMTP 发邮件]
+      Mail --> Review[开发者组人工审核]
+      Review -- 通过 --> Live[上架角色库]
+      Review -- 拒绝 --> Notif[邮件回复开发者 + 原因]
   ```
 
 ### C1. 世界创建
@@ -1654,93 +1656,198 @@
 
 ---
 
-### C5. 开发者认证
+### C5. 提交与上架（基于 7Z 打包 + 邮件投递）
+
+> **v2.2 决策**：开发者工具**不依赖任何私有服务器**——所有产出物在本地打包为 7Z 固实归档，通过 SMTP 邮件投递至开发组硬编码邮箱。审核结果同样以邮件回复开发者。
 
 **产品视角**
 
-- US-C5-01：作为开发者，我通过开发者 ID + 密码登录才能使用开发工具。
-- US-C5-02：作为开发者，我的认证信息通过加密传输到开发组私有服务器。
-- US-C5-03：作为开发者，我可以上传作品；通过质量审核后正式上架角色库。
-- 验收标准
-  - AC-1：密码错误 5 次锁定账号 30 分钟
-  - AC-2：传输使用 TLS 1.3 + 双向证书
-  - AC-3：上架前必须经过质量审核（详见下文）
+- **用户故事**
+  - US-C5-01：作为开发者，我在本地完成世界/角色/剧情的制作后，点击「提交」即可上传至开发者组。
+  - US-C5-02：作为开发者，提交包自动包含开发者 ID、提交时间，无需我手动填写。
+  - US-C5-03：作为开发者，开发者组审核通过后会邮件通知我，作品正式上架角色库。
+  - US-C5-04：作为开发者，提交频率与体积有硬性限制，避免误操作造成服务器/邮箱压力。
+- **功能清单**
+  - 本地 7Z 固实打包（高压缩率）
+  - 通过 SMTP 发送邮件至开发者组硬编码邮箱
+  - 自动附加开发者 ID 与提交时间（邮件正文 + 附件元数据）
+  - 频次限制：每个开发者 ID **每个小时至多提交 1 次**
+  - 体积限制：单次提交附件 **不超过 1200 MB**（按 macOS 默认 1000 MB = 1 GB、1000 KB = 1 MB 计算，即 1 200 000 000 bytes）
+- **验收标准**
+  - AC-1：压缩包必须为 7Z 固实模式（`py7zr.SevenZipFile(mode='w'`）且文件名包含开发者 ID 与 ISO 8601 时间戳
+  - AC-2：1 小时内重复提交必须返回 `429 rate_limited`
+  - AC-3：附件大小 > 1200 MB 必须返回 `413 payload_too_large` 并附带实际体积
+  - AC-4：SMTP 失败必须返回 `502 smtp_error` 并附带错误类别（auth / connection / tls / other）
+  - AC-5：SMTP 凭据、SMTP 服务器、目标邮箱全部为**硬编码常量**（参见 `stubs/devkit.py` 顶部），部署前替换
 
 **技术视角**
 
-- **认证流程**
+- **运行时架构（v2.2 独立 Pywebview 应用）**
+
+  ```mermaid
+  flowchart LR
+      subgraph 独立 Pywebview 进程（与主 API 不在同一进程）
+        UI[Webview UI HTML/JS]
+        JSAPI[DevKitApi<br/>pywebview.js_api]
+        DK[stubs/devkit.py<br/>纯逻辑模块]
+      end
+      FS[本地文件系统]
+      SMTP[SMTP 服务器]
+      Mailbox[开发者组邮箱]
+
+      UI -- window.pywebview.api.submit(...) --> JSAPI
+      JSAPI --> DK
+      DK --> FS
+      DK --> SMTP
+      SMTP --> Mailbox
+  ```
+
+  > **关键约束**：DevKit 不通过 HTTP 调用主 API server；UI 与 Python 之间通过 `pywebview.js_api` 直接桥接。打包 / SMTP / 限流 / 大小校验全部在 `xijian_api.stubs.devkit` 内完成。
+
+- **提交流程**
 
   ```mermaid
   sequenceDiagram
       autonumber
       participant D as 开发者
-      participant App as 开发工具
-      participant Auth as 认证服务（私有）
-      participant DB as 用户库
-      D->>App: 输入 ID + 密码
-      App->>Auth: 加密传输
-      Auth->>DB: 校验
-      alt 成功
-          Auth-->>App: 短期 token
-          App-->>D: 进入开发工具
-      else 失败
-          Auth-->>App: 401 + 剩余尝试次数
-          App-->>D: 提示
-      end
+      participant UI as DevKit UI (Pywebview)
+      participant API as DevKitApi.js_api
+      participant DK as stubs/devkit.py
+      participant FS as 本地文件系统
+      participant SMTP as SMTP 服务器
+      participant Mailbox as 开发者组邮箱
+      D->>UI: 点击「提交」
+      UI->>API: window.pywebview.api.submit(developer_id, target_kind, target_id, file_entries)
+      API->>DK: devkit.submit(...)
+      DK->>DK: 校验频次（每个开发者 ID 每小时 ≤ 1 次）
+      DK->>DK: 校验体积（≤ 1200 MB）
+      DK->>FS: 打包为 7Z 固实归档（含 manifest.json）
+      DK->>DK: 校验压缩包体积（≤ 1200 MB）
+      DK->>SMTP: 发送邮件（目标硬编码）
+      SMTP-->>DK: 250 OK
+      DK-->>API: 提交记录 dict
+      API-->>UI: 序列化 JSON
+      UI-->>D: 「提交成功，预计 X 个工作日内审核完毕」
   ```
 
-- **密码修改**：联系管理员（[邮箱](mailto:panmofan@icloud)）
+- **Pywebview JS API（`xijian_api.devkit.api.DevKitApi`）**
 
-- **质量审核流程**
+  JS 通过 `window.pywebview.api.<method>(...)` 调用的方法集合：
+
+  | 方法 | 入参 | 返回 |
+  |---|---|---|
+  | `submit` | `developer_id`, `target_kind`, `target_id`, `file_entries`, `payload?` | `{submission_id, archive_size_bytes, smtp_status, ...}` |
+  | `get_submission` | `submission_id` | 记录 dict 或 `null` |
+  | `list_submissions` | `limit?` | 记录数组 |
+  | `last_submit_for` | `developer_id` | 记录 dict 或 `null` |
+  | `get_status` | — | `{smtp_host, smtp_port, max_attachment_bytes, cooldown_seconds}` |
+  | `delete_local_archive` | `submission_id` | `bool` |
+
+  > 错误：限流返回 `{error: "rate_limited", retry_after_seconds: N}`；超限返回 `{error: "payload_too_large", size_bytes, max_bytes}`；SMTP 失败返回 `{error: "smtp_error", category, response}`。前端根据 `error` 字段决定是否弹窗。
+
+- **硬编码配置**（`stubs/devkit.py` 顶部常量）
+
+  | 常量 | 含义 | 默认占位 |
+  |---|---|---|
+  | `DEV_SUBMIT_SMTP_HOST` | SMTP 服务器 | `"smtp.example.com"` |
+  | `DEV_SUBMIT_SMTP_PORT` | SMTP 端口 | `587` |
+  | `DEV_SUBMIT_SMTP_USE_TLS` | 是否启用 STARTTLS | `True` |
+  | `DEV_SUBMIT_SMTP_USER` | SMTP 登录用户 | `"xijian-dev@example.com"` |
+  | `DEV_SUBMIT_SMTP_PASSWORD` | SMTP 登录密码 | `"REPLACE_BEFORE_DEPLOY"` |
+  | `DEV_SUBMIT_RECIPIENT` | 开发者组收件邮箱 | `"xijian-submissions@example.com"` |
+  | `DEV_SUBMIT_FROM_ADDR` | 发件邮箱（通常同 user） | `"xijian-dev@example.com"` |
+  | `DEV_SUBMIT_MAX_ATTACHMENT_BYTES` | 单次提交上限 | `1_200_000_000` |
+  | `DEV_SUBMIT_COOLDOWN_SECONDS` | 频次冷却时间 | `3600` |
+
+  > **安全提醒**：上述常量在仓库里以占位符形式提交，**部署时必须替换**。可被同名环境变量覆盖（`XIJIAN_DEV_SMTP_HOST` 等），便于本地调试和 CI 注入。
+
+- **打包格式**
+
+  ```
+  <developer_id>__<iso8601_utc>.7z   (固实模式)
+    ├── manifest.json                (developer_id / submitted_at / target_kind / target_id / ai_ratio / 文件清单)
+    ├── world.md / character.json / plot.json  (C1/C2/C3 产出物)
+    ├── persona.md                   (人设文档)
+    ├── audio/                       (C2.1 声音样本，可选)
+    ├── model/                       (C2.8 VRM/FBX/GLB)
+    ├── motion/                      (C2.9 BVH/FBX)
+    └── README.md                    (开发者自填说明)
+  ```
+
+- **邮件正文模板**
+
+  ```
+  Subject: [XiJian Submission] <developer_id> / <target_kind>:<target_id>
+
+  developer_id:    <id>
+  submitted_at:    <ISO 8601 UTC>
+  target_kind:     world | character | plot
+  target_id:       <id>
+  ai_ratio:        0.00 ~ 1.00
+  attachment:      <developer_id>__<iso8601_utc>.7z (<size> bytes, <size_mb> MB)
+  content_sha256:  <hex>
+
+  — 自动由隙间开发工具生成
+  ```
+
+- **频次限流**
+
+  ```python
+  # 每个 developer_id 独立计数。状态写入内存 state.dev_submissions。
+  if (now - last_submit_at[developer_id]) < DEV_SUBMIT_COOLDOWN_SECONDS:
+      raise ApiError(429, "rate limited — wait <N> seconds",
+                     "rate_limited", code="rate_limited",
+                     details={"retry_after_seconds": N})
+  ```
+
+- **体积校验（macOS 默认单位制）**
+
+  ```python
+  # 1000 KB = 1 MB，1000 MB = 1 GB；1200 MB = 1 200 000 000 bytes
+  if attachment_size_bytes > 1_200_000_000:
+      raise ApiError(413, "attachment too large",
+                     "payload_too_large", code="payload_too_large",
+                     details={"size_bytes": ..., "max_bytes": 1_200_000_000})
+  ```
+
+- **数据模型（仅本地状态，**无服务器**）**
+
+  ```sql
+  CREATE TABLE dev_submissions (
+    id              TEXT PRIMARY KEY,         -- sub_<uuid>
+    developer_id    TEXT NOT NULL,
+    target_kind     TEXT NOT NULL,            -- 'world' | 'character' | 'plot'
+    target_id       TEXT NOT NULL,
+    archive_path    TEXT NOT NULL,            -- 本地 7Z 路径
+    archive_size    INTEGER NOT NULL,         -- bytes
+    content_sha256  TEXT NOT NULL,
+    ai_ratio        REAL NOT NULL DEFAULT 0,
+    smtp_status     TEXT NOT NULL,            -- 'sent' | 'auth_failed' | 'connection_failed' | 'tls_failed' | 'other'
+    smtp_response   TEXT,
+    submitted_at    INTEGER NOT NULL,
+    email_subject   TEXT NOT NULL
+  );
+  ```
+
+- **审核流程**（开发组侧，邮件手动处理）
 
   ```mermaid
   flowchart LR
-      Upload[上传] --> Hash[生成内容 hash + diff]
-      Hash --> Ratio[计算 ai_ratio]
+      Mail[开发者组邮箱收件] --> Open[下载附件 + 校验 manifest.json + sha256]
+      Open --> Ratio[计算 ai_ratio]
       Ratio --> Need{需审核?}
       Need -- 否 --> Fast[快速上架]
-      Need -- 是 --> Queue[进审核队列]
-      Queue --> Review[人工 + AI 双重审核]
-      Review -- 通过 --> Live[上架]
-      Review -- 拒绝 --> Notif[通知开发者 + 原因]
+      Need -- 是 --> Queue[进人工审核队列]
+      Queue --> Review[开发者组审核]
+      Review -- 通过 --> Live[上架 + 邮件回复「已上架」]
+      Review -- 拒绝 --> Notif[邮件回复开发者 + 原因]
   ```
 
-- **数据模型**
+- **依赖**：
+  - `py7zr`（pip 包，BSD-3-Clause）—— 7Z 固实归档
+  - Python 标准库 `smtplib` + `email.mime.multipart.MimeMultipart` —— SMTP 投递
 
-  ```sql
-  CREATE TABLE developers (
-    id              TEXT PRIMARY KEY,
-    username        TEXT NOT NULL UNIQUE,
-    password_hash   TEXT NOT NULL,
-    cert_fp         TEXT, -- 客户端证书指纹
-    failed_count    INTEGER NOT NULL DEFAULT 0,
-    locked_until    INTEGER,
-    created_at      INTEGER NOT NULL
-  );
-  
-  CREATE TABLE dev_uploads (
-    id              TEXT PRIMARY KEY,
-    developer_id    TEXT NOT NULL,
-    target_kind     TEXT NOT NULL, -- 'world' | 'character' | 'plot'
-    target_id       TEXT NOT NULL,
-    content_hash    TEXT NOT NULL,
-    ai_ratio        REAL NOT NULL DEFAULT 0,
-    audit_required  INTEGER NOT NULL DEFAULT 0,
-    status          TEXT NOT NULL DEFAULT 'pending', -- 'pending' | 'in_review' | 'live' | 'rejected'
-    submitted_at    INTEGER NOT NULL,
-    reviewed_at     INTEGER,
-    reviewer_id     TEXT
-  );
-  
-  CREATE TABLE dev_audit_results (
-    id              TEXT PRIMARY KEY,
-    upload_id       TEXT NOT NULL,
-    verdict         TEXT NOT NULL, -- 'pass' | 'reject'
-    issues_json     TEXT,
-    reviewed_by     TEXT, -- 'human' | 'ai' | 'human+ai'
-    created_at      INTEGER NOT NULL
-  );
-  ```
+  > 注：`py7zr` 未在当前 `core/requirements.txt` 中，安装命令：`pip install py7zr`。如果不可用，DevKit stub 应**降级为 zip**（v2.2 备选方案），通过 `DEV_SUBMIT_ARCHIVE_FORMAT=zip` 切换。
 
 ---
 
@@ -1766,7 +1873,7 @@
 | `desktop_pets` / `dynamic_wallpapers` / `pet_action_log` | A8 | 桌宠/壁纸 |
 | `safety_audit_log` / `safety_rules` | A5.1 | 输出审查 |
 | `safety_snapshots` / `backup_policies` | A5.3 / A5.4 | 备份 |
-| `developers` / `dev_uploads` / `dev_audit_results` / `dev_ai_assist_log` | C5 / C4 | 开发者 |
+| `developers` / `dev_submissions` / `dev_ai_assist_log` | C5 / C4 | 开发者（v2.2 起不再依赖服务器，`dev_submissions` 仅本地记录；`developers` 改为本地轻量注册表） |
 
 ---
 
@@ -1819,6 +1926,7 @@ flowchart TB
 | v1 | （原文档） | 仅有功能点列表 |
 | v2.0 草稿 | 2026-06-24 | 重写为产品+技术混合文档，补充 SQLite 表、接口、流程图、状态机；B 章占位；C4 重写为横切 AI 辅助 |
 | **v2.1** | 2026-06-25 | **引擎选型锁定**：移除 Live2D（统一 3D/VRM）、TTS=**MeloTTS**、歌声=**DiffSinger**、嵌入=**bge-m3**、主对话=**Qwen2.5-7B Q4_K_M**。**配角算力**：单世界 50 角色上限、活跃档 `high_active`=3 / `low_active`=10 二选一、总预算 50k tokens/min。**过载档位**：移除宽松档，仅保留严格/适中两档（CPU 93/95%、SoC 95°C、内存 90%、GPU 75/80% 持续 45/80s，swap 不限制）。**对话延迟基线**：A2 流式 800ms→1200ms / 2s→3s；A6 语音 1s→1.5s（为多角色并发让出余量）。新增 `npc_scheduling_log`、`world_compute_config` 表。 |
+| **v2.2** | 2026-07-02 | **C5 重写为本地提交流程**：移除私有服务器 / TLS 双向证书 / 质量审核队列，改为本地 7Z 固实打包 + SMTP 邮件投递至开发者组硬编码邮箱。频次：每个开发者 ID 每小时至多 1 次；体积：单次 ≤ 1200 MB（macOS 单位制 1000 KB=1 MB / 1000 MB=1 GB，即 1 200 000 000 bytes）。移除表 `dev_uploads` / `dev_audit_results`，新增 `dev_submissions`（仅本地记录）。A3.2 `DEFAULT_TICK_INTERVAL_SECONDS=60` 与 `cfg["modifiers"]` 三件套已实装，原 `[TODO]` 摘除（详见 docs/notes.md）。 |
 
 ---
 

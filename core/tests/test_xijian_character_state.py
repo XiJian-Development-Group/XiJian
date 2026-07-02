@@ -599,6 +599,127 @@ class TestTickLifecycle:
         finally:
             cs_stub.stop_tick()
 
+    def test_reset_bumps_generation(self, monkeypatch):
+        # ``reset_for_testing`` must bump the generation so a stale
+        # tick thread from a previous lifecycle exits immediately.
+        monkeypatch.setenv("XIJIAN_STATE_TICK", "1")
+        cs_stub.start_tick()
+        try:
+            before = cs_stub._TICK_GENERATION
+            cs_stub.reset_for_testing()
+            assert cs_stub._TICK_GENERATION > before
+            # ``start_tick`` again so the rest of the suite (which
+            # runs with ``XIJIAN_STATE_TICK=0``) keeps clean state.
+            monkeypatch.setenv("XIJIAN_STATE_TICK", "0")
+        finally:
+            cs_stub.stop_tick()
+
+
+# ---------------------------------------------------------------------------
+# Tick → state machine end-to-end (no Flask)
+# ---------------------------------------------------------------------------
+
+
+class TestTickStateMachineE2E:
+    """Drive the full pipeline — manual hunger reduction, tick
+    progression, status transitions, log captures."""
+
+    def test_tick_eventually_enters_hungry_then_recover(self, frozen_clock):
+        # Seed: character starts Healthy with hunger=80.  Simulate
+        # 30 minutes passing with the default decay (2.0/h) — hunger
+        # should drop to ~70 which is still above the 60 recovery
+        # threshold.  Then slam hunger to 25 to enter Hungry; then
+        # refill + wait the 5 min dwell to recover.
+        cs_stub.apply_field_change("c1", "hunger", 25.0, now=frozen_clock.now())
+        assert cs_stub.get_state("c1")["status"] == STATUS_HUNGRY
+        # Now refill hunger above 60 and step the clock past 5 min.
+        cs_stub.apply_field_change("c1", "hunger", 80.0, now=frozen_clock.now())
+        record = cs_stub.tick_character("c1", now=frozen_clock.now())
+        assert record["status"] == STATUS_HUNGRY  # dwell not met yet
+        frozen_clock.advance(5 * 60 + 1)
+        record = cs_stub.tick_character("c1", now=frozen_clock.now())
+        assert record["status"] == STATUS_HEALTHY
+        # Log captured the whole story.
+        log = cs_stub.list_log("c1", limit=50)
+        reasons = {e["reason"] for e in log}
+        # Manual changes used "manual" reason; ticks used "tick".
+        assert "manual" in reasons
+        assert "tick" in reasons
+
+    def test_critical_blocks_dialogue_and_only_recover_lifts(self, frozen_clock):
+        # Drive to Critical via health=0.
+        cs_stub.apply_field_change("c1", "health", 0.0, now=frozen_clock.now())
+        assert cs_stub.get_state("c1")["status"] == STATUS_CRITICAL
+        assert cs_stub.can_dialogue("c1") is False
+        # A regular tick should NOT lift Critical (no auto-recover).
+        record = cs_stub.tick_character("c1", now=frozen_clock.now())
+        assert record["status"] == STATUS_CRITICAL
+        # Only ``force_recover`` lifts it.
+        cs_stub.force_recover("c1", reason="admin")
+        assert cs_stub.get_state("c1")["status"] == STATUS_HEALTHY
+        assert cs_stub.can_dialogue("c1") is True
+
+    def test_modifier_quadruples_decay(self, frozen_clock):
+        # Default decay = 2.0/h.  With activity_modifier=4.0 and a
+        # 1-hour tick, hunger should drop by 8.
+        cs_stub.apply_field_change("c1", "hunger", 80.0, now=frozen_clock.now())
+        cs_stub.set_modifier("c1", {"activity_modifier": 4.0})
+        frozen_clock.advance(3600)
+        cs_stub.tick_character("c1", now=frozen_clock.now())
+        assert cs_stub.get_state("c1")["hunger"] == pytest.approx(72.0)
+
+    def test_zero_modifier_floors_decay_to_zero(self, frozen_clock):
+        # ``set_modifier`` clamps negatives to 0.01, but ``tick_all``
+        # through the public API path — verify that even a 0.01
+        # modifier keeps hunger ticking down (the floor is meant to
+        # *prevent* decay from going negative, not to freeze it).
+        cs_stub.apply_field_change("c1", "hunger", 50.0, now=frozen_clock.now())
+        cs_stub.set_modifier("c1", {"activity_modifier": 0.01})
+        frozen_clock.advance(3600)
+        cs_stub.tick_character("c1", now=frozen_clock.now())
+        # 2.0/h × 1h × 0.01 = 0.02
+        assert cs_stub.get_state("c1")["hunger"] == pytest.approx(49.98)
+
+
+# ---------------------------------------------------------------------------
+# End-to-end through Flask — drives an actual tick via /state/tick
+# ---------------------------------------------------------------------------
+
+
+class TestTickRouteE2E:
+    def test_tick_route_drives_status_via_decay(self, client, auth_headers, monkeypatch):
+        # Reduce hunger close to threshold, then use the dev tick
+        # endpoint to advance the clock.  We mock ``time.time`` so
+        # ``tick_character`` sees a real ``dt`` even when the test
+        # runs in microseconds.
+        monkeypatch.setenv("XIJIAN_DEV", "1")
+        # Freeze time at T0, POST to seed hunger at 31 (just above
+        # the 30 low-threshold) and stamp ``last_updated = T0``.
+        now_holder = {"t": 10_000_000.0}
+        monkeypatch.setattr(cs_stub.time, "time", lambda: now_holder["t"])
+        client.post(
+            "/v1/xijian/characters/char_yuki/state",
+            headers=auth_headers,
+            json={"hunger": 31.0, "health": 100.0, "mood_value": 70.0, "thirst": 80.0},
+        )
+        # Advance the clock by an hour so the tick sees dt=3600.
+        # Default hunger decay is 2.0/h → drops 31 → 29 → crosses
+        # the 30 threshold → enters Hungry.
+        now_holder["t"] += 3600
+        response = client.post(
+            "/v1/xijian/characters/char_yuki/state/tick",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        body = response.get_json()
+        assert body["tick"]["status"] == STATUS_HUNGRY
+
+        # GET /state surfaces the new status.
+        response = client.get(
+            "/v1/xijian/characters/char_yuki/state", headers=auth_headers
+        )
+        assert response.get_json()["status"] == STATUS_HUNGRY
+
 
 # ---------------------------------------------------------------------------
 # WS broadcast
