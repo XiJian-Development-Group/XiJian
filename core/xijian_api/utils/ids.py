@@ -184,6 +184,16 @@ def gen_state_log_id() -> str:
     return gen_id("cstate_", _SHORT_HEX_LEN)
 
 
+def gen_submission_id() -> str:
+    """Return a Developer-Kit submission id (``sub_<12 hex>``).
+
+    Used by :mod:`xijian_api.devkit` — every archive / SMTP submission
+    gets its own short id so it can be referenced from the receiving
+    side without leaking sensitive content into the local logs.
+    """
+    return gen_id("sub_", _SHORT_HEX_LEN)
+
+
 def gen_snapshot_id(now: _dt.datetime | None = None) -> str:
     """Return a snapshot id (``snap_<YYYYMMDD>_<6 hex>``).
 

@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="zh-Hans">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=1024, initial-scale=1" />
+    <title>隙间 · 开发者工具</title>
+    <link rel="stylesheet" href="devkit.css" />
+  </head>
+  <body>
+    <header class="app-header">
+      <div class="app-header__brand">
+        <h1>隙间 · 开发者工具</h1>
+        <p class="app-header__subtitle">
+          本地打包 → SMTP 邮件投递 · 与主 API 完全隔离
+        </p>
+      </div>
+      <div class="app-header__meta">
+        <div id="recipient-chip" class="chip chip--ghost" title="接收方邮箱（硬编码）">
+          <span class="chip__label">收件</span>
+          <span id="recipient-chip-value">…</span>
+        </div>
+        <div id="developer-chip" class="chip chip--ghost">
+          <span class="chip__label">当前开发者</span>
+          <span id="developer-chip-value">未登录</span>
+        </div>
+        <button id="logout-btn" class="btn btn--ghost" type="button" hidden>退出</button>
+      </div>
+    </header>
+
+    <main class="app-main">
+      <!-- 左侧：登录 + 提交表单 -->
+      <section class="card" id="login-card">
+        <header class="card__header">
+          <h2>1. 登录</h2>
+          <p class="card__hint">把开发者 ID 填进去，后续步骤会用它做限流与归档命名。</p>
+        </header>
+        <div class="card__body">
+          <label class="field">
+            <span class="field__label">开发者 ID</span>
+            <input
+              id="developer-id"
+              class="field__input"
+              type="text"
+              placeholder="例如：alice-32a1"
+              autocomplete="off"
+              spellcheck="false"
+            />
+          </label>
+          <div class="row row--end">
+            <button id="login-btn" class="btn btn--primary" type="button">登录</button>
+          </div>
+          <p id="login-status" class="status status--idle" role="status"></p>
+        </div>
+      </section>
+
+      <section class="card" id="target-card">
+        <header class="card__header">
+          <h2>2. 选择产出物</h2>
+          <p class="card__hint">世界 / 角色 / 剧情 · ID 是你在主 API 里用的那个。</p>
+        </header>
+        <div class="card__body">
+          <div class="grid grid--2">
+            <label class="field">
+              <span class="field__label">类型 (target_kind)</span>
+              <select id="target-kind" class="field__input"></select>
+            </label>
+            <label class="field">
+              <span class="field__label">目标 ID (target_id)</span>
+              <input
+                id="target-id"
+                class="field__input"
+                type="text"
+                placeholder="例如：char_yuki"
+                autocomplete="off"
+                spellcheck="false"
+              />
+            </label>
+          </div>
+          <label class="field">
+            <span class="field__label">AI 协助占比 (0–1)</span>
+            <input
+              id="ai-ratio"
+              class="field__input"
+              type="number"
+              min="0"
+              max="1"
+              step="0.05"
+              value="0"
+            />
+          </label>
+          <label class="field">
+            <span class="field__label">开发者自填说明 (notes, 可选)</span>
+            <textarea
+              id="notes"
+              class="field__input"
+              rows="3"
+              placeholder="本次提交的额外说明，会写到归档 manifest 与邮件正文"
+            ></textarea>
+          </label>
+        </div>
+      </section>
+
+      <section class="card" id="files-card">
+        <header class="card__header">
+          <h2>3. 选择打包文件</h2>
+          <p class="card__hint">
+            单次提交附件≤ <span id="files-card-max">…</span>；每个开发者 ID 每
+            <span id="files-card-cooldown">…</span> 至多 1 次。
+          </p>
+        </header>
+        <div class="card__body">
+          <div class="row row--gap">
+            <button id="pick-files-btn" class="btn btn--secondary" type="button">
+              选择文件…
+            </button>
+            <button id="clear-files-btn" class="btn btn--ghost" type="button">
+              清空
+            </button>
+            <span id="files-summary" class="files-summary">尚未选择文件</span>
+          </div>
+          <ul id="files-list" class="files-list"></ul>
+          <p id="files-status" class="status status--idle" role="status"></p>
+        </div>
+      </section>
+
+      <section class="card" id="submit-card">
+        <header class="card__header">
+          <h2>4. 提交</h2>
+          <p class="card__hint">
+            点击后 DevKit 会离线打包、sha256、连接 SMTP 投递，全程不调用主 API。
+          </p>
+        </header>
+        <div class="card__body">
+          <div class="row row--end">
+            <button
+              id="submit-btn"
+              class="btn btn--primary btn--danger"
+              type="button"
+              disabled
+            >
+              提交
+            </button>
+          </div>
+          <p id="submit-status" class="status status--idle" role="status"></p>
+        </div>
+      </section>
+
+      <!-- 右侧：历史 + 配置 -->
+      <aside class="sidebar">
+        <section class="card" id="history-card">
+          <header class="card__header">
+            <h2>历史提交</h2>
+            <p class="card__hint">
+              <span id="cooldown-indicator">冷却空闲，可随时提交</span>
+            </p>
+          </header>
+          <div class="card__body">
+            <button id="refresh-history-btn" class="btn btn--ghost" type="button">
+              刷新
+            </button>
+            <ol id="history-list" class="history-list"></ol>
+          </div>
+        </section>
+
+        <section class="card" id="config-card">
+          <header class="card__header">
+            <h2>运行配置</h2>
+            <p class="card__hint">只读，部署前替换。</p>
+          </header>
+          <div class="card__body">
+            <dl class="kv">
+              <dt>API 版本</dt><dd id="cfg-api-version">…</dd>
+              <dt>归档格式</dt><dd id="cfg-archive-format">…</dd>
+              <dt>体积上限</dt><dd id="cfg-max-bytes">…</dd>
+              <dt>SMTP 服务器</dt><dd id="cfg-smtp-host">…</dd>
+              <dt>SMTP 端口</dt><dd id="cfg-smtp-port">…</dd>
+              <dt>SMTP STARTTLS</dt><dd id="cfg-smtp-tls">…</dd>
+              <dt>SMTP 用户</dt><dd id="cfg-smtp-user">…</dd>
+            </dl>
+          </div>
+        </section>
+      </aside>
+    </main>
+
+    <footer class="app-footer">
+      <small id="status-bar">就绪</small>
+    </footer>
+
+    <script src="devkit.js"></script>
+  </body>
+</html>

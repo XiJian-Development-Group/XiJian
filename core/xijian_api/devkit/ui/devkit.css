@@ -1,0 +1,517 @@
+/* ============================================================
+ * 隙间 · 开发者工具 — UI 样式
+ * 色彩：隙间主色（琥珀 + 深石板），与 macOS 原生窗口融合
+ * ============================================================ */
+
+:root {
+  --bg: #1c1f26;
+  --bg-elev: #242833;
+  --bg-elev-2: #2c3140;
+  --bg-card: #2a2e3b;
+  --fg: #e8e9ee;
+  --fg-muted: #9aa0b1;
+  --fg-dim: #6e7383;
+  --accent: #f0a85a;
+  --accent-strong: #e89a3d;
+  --accent-on: #1c1f26;
+  --success: #6acf90;
+  --warn: #f0c14a;
+  --danger: #e86d6d;
+  --danger-strong: #d45656;
+  --border: #3a3f4f;
+  --focus: 0 0 0 2px rgba(240, 168, 90, 0.45);
+  --radius: 8px;
+  --shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+  --transition: 120ms ease;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: #f5f6fa;
+    --bg-elev: #ffffff;
+    --bg-elev-2: #f0f1f5;
+    --bg-card: #ffffff;
+    --fg: #1a1d24;
+    --fg-muted: #4f5666;
+    --fg-dim: #8c93a3;
+    --border: #d8dbe4;
+    --shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue",
+    "PingFang SC", "Microsoft Yahei", sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+/* === Header ============================================= */
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  background: var(--bg-elev);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.app-header__brand h1 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.app-header__subtitle {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: var(--fg-muted);
+}
+
+.app-header__meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--bg-elev-2);
+  font-size: 11px;
+  color: var(--fg-muted);
+  border: 1px solid transparent;
+}
+
+.chip__label {
+  color: var(--fg-dim);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.chip--ghost {
+  background: transparent;
+  border-color: var(--border);
+}
+
+/* === Main layout ======================================= */
+
+.app-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 20px;
+  padding: 20px;
+  max-width: 1320px;
+  margin: 0 auto;
+}
+
+.app-main > section.card,
+.app-main > aside.sidebar > section.card {
+  margin-bottom: 16px;
+}
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+@media (max-width: 980px) {
+  .app-main {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* === Cards ============================================= */
+
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.card__header {
+  padding: 14px 16px 8px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elev-2);
+}
+
+.card__header h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.4px;
+}
+
+.card__hint {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--fg-muted);
+}
+
+.card__body {
+  padding: 14px 16px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* === Form fields ======================================= */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field__label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--fg-dim);
+  font-weight: 600;
+}
+
+.field__input {
+  width: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+
+.field__input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--focus);
+}
+
+textarea.field__input {
+  resize: vertical;
+  min-height: 60px;
+}
+
+.grid {
+  display: grid;
+  gap: 12px;
+}
+
+.grid--2 {
+  grid-template-columns: 1fr 1fr;
+}
+
+/* === Buttons =========================================== */
+
+.btn {
+  appearance: none;
+  border: 1px solid var(--border);
+  background: var(--bg-elev-2);
+  color: var(--fg);
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--transition), border-color var(--transition),
+    transform var(--transition);
+}
+
+.btn:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+.btn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn--primary {
+  background: var(--accent);
+  color: var(--accent-on);
+  border-color: var(--accent-strong);
+}
+
+.btn--primary:hover:not(:disabled) {
+  background: var(--accent-strong);
+  border-color: var(--accent-strong);
+}
+
+.btn--danger {
+  background: var(--danger);
+  color: white;
+  border-color: var(--danger-strong);
+}
+
+.btn--danger:hover:not(:disabled) {
+  background: var(--danger-strong);
+}
+
+.btn--secondary {
+  background: transparent;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.btn--ghost {
+  background: transparent;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.row--end {
+  justify-content: flex-end;
+}
+
+.row--gap {
+  justify-content: space-between;
+}
+
+/* === Status / logs ===================================== */
+
+.status {
+  font-size: 12px;
+  margin: 4px 0 0;
+  min-height: 16px;
+}
+
+.status--idle {
+  color: var(--fg-dim);
+}
+
+.status--ok {
+  color: var(--success);
+}
+
+.status--warn {
+  color: var(--warn);
+}
+
+.status--err {
+  color: var(--danger);
+}
+
+/* === Files list ======================================== */
+
+.files-summary {
+  font-size: 11px;
+  color: var(--fg-muted);
+}
+
+.files-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--bg);
+}
+
+.files-list:empty::before {
+  content: "未选择文件";
+  display: block;
+  padding: 12px;
+  color: var(--fg-dim);
+  text-align: center;
+  font-size: 11px;
+}
+
+.files-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.files-list li:last-child {
+  border-bottom: none;
+}
+
+.files-list li__name {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  word-break: break-all;
+}
+
+.files-list li__size {
+  color: var(--fg-muted);
+  font-size: 11px;
+  white-space: nowrap;
+  margin-left: 8px;
+}
+
+/* === History ========================================== */
+
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.history-list:empty::before {
+  content: "暂无提交记录";
+  display: block;
+  padding: 16px 8px;
+  color: var(--fg-dim);
+  font-size: 11px;
+  text-align: center;
+}
+
+.history-list li {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  font-size: 11px;
+}
+
+.history-list li__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.history-list li__title {
+  font-weight: 600;
+  color: var(--fg);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+}
+
+.history-list li__meta {
+  color: var(--fg-muted);
+  font-size: 10px;
+}
+
+.history-list li__sha {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 10px;
+  color: var(--fg-dim);
+  word-break: break-all;
+  margin-top: 4px;
+}
+
+.history-list li--ok {
+  border-left: 3px solid var(--success);
+}
+
+.history-list li--err {
+  border-left: 3px solid var(--danger);
+}
+
+/* === Config KV table =================================== */
+
+.kv {
+  display: grid;
+  grid-template-columns: minmax(110px, max-content) 1fr;
+  gap: 4px 12px;
+  margin: 0;
+}
+
+.kv dt {
+  color: var(--fg-dim);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+}
+
+.kv dd {
+  margin: 0;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+  color: var(--fg-muted);
+  word-break: break-all;
+}
+
+/* === Footer ============================================ */
+
+.app-footer {
+  padding: 10px 20px;
+  border-top: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--fg-dim);
+  text-align: center;
+  font-size: 11px;
+}
+
+/* === Toast ============================================= */
+
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 10px 16px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  box-shadow: var(--shadow);
+  z-index: 100;
+  animation: toast-in 200ms ease-out;
+}
+
+.toast--ok {
+  border-color: var(--success);
+}
+
+.toast--err {
+  border-color: var(--danger);
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 8px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}

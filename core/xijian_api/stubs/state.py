@@ -73,22 +73,10 @@ character_state_log: dict = {}
 # meaningful to persist between process restarts.
 overload: dict = {}
 
-# Developer Kit (C5).  Lives in this process — the DevKit is a
-# stand-alone Pywebview application that does not share a Flask
-# server with the main API, so its state is local-only.
-#
-#   dev_submissions      — {submission_id: {developer_id, target_kind,
-#                                          target_id, archive_path,
-#                                          archive_size, archive_format,
-#                                          content_sha256, ai_ratio,
-#                                          smtp_status, smtp_code,
-#                                          smtp_response, submitted_at,
-#                                          email_subject, notes}}
-#   dev_last_submit_at   — {developer_id: iso8601_string}  (rate-limit window)
-#   dev_local_archives   — {submission_id: archive_path}    (for cleanup)
-dev_submissions: dict = {}
-dev_last_submit_at: dict = {}
-dev_local_archives: dict = {}
+# Developer Kit (C5) state lives in ``xijian_api.devkit.state`` — the
+# DevKit is a stand-alone Pywebview application that does not share a
+# Flask server with the main API, so its buckets are intentionally
+# kept out of this module.
 
 # OAI-compatible resources.
 files: dict = {}
@@ -130,9 +118,6 @@ def reset_for_testing() -> None:
     character_state_configs.clear()
     character_state_log.clear()
     overload.clear()
-    dev_submissions.clear()
-    dev_last_submit_at.clear()
-    dev_local_archives.clear()
     files.clear()
     batches.clear()
     fine_tuning_jobs.clear()
@@ -163,9 +148,6 @@ __all__ = [
     "character_state_configs",
     "character_state_log",
     "overload",
-    "dev_submissions",
-    "dev_last_submit_at",
-    "dev_local_archives",
     "files",
     "batches",
     "fine_tuning_jobs",
