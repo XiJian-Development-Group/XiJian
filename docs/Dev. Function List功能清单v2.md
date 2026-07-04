@@ -1674,11 +1674,11 @@
   - 频次限制：每个开发者 ID **每个小时至多提交 1 次**
   - 体积限制：单次提交附件 **不超过 1200 MB**（按 macOS 默认 1000 MB = 1 GB、1000 KB = 1 MB 计算，即 1 200 000 000 bytes）
 - **验收标准**
-  - AC-1：压缩包必须为 7Z 固实模式（`py7zr.SevenZipFile(mode='w'`）且文件名包含开发者 ID 与 ISO 8601 时间戳
+  - AC-1：压缩包必须为 7Z 固实模式（`py7zr.SevenZipFile(mode='solid')`）且文件名包含开发者 ID 与 ISO 8601 时间戳
   - AC-2：1 小时内重复提交必须返回 `429 rate_limited`
   - AC-3：附件大小 > 1200 MB 必须返回 `413 payload_too_large` 并附带实际体积
   - AC-4：SMTP 失败必须返回 `502 smtp_error` 并附带错误类别（auth / connection / tls / other）
-  - AC-5：SMTP 凭据、SMTP 服务器、目标邮箱全部为**硬编码常量**（参见 `stubs/devkit.py` 顶部），部署前替换
+  - AC-5：SMTP 凭据、SMTP 服务器、目标邮箱全部为**硬编码常量**（参见 `xijian_api/devkit/__init__.py` 顶部），部署前替换
 
 **技术视角**
 
@@ -1689,7 +1689,7 @@
       subgraph 独立 Pywebview 进程（与主 API 不在同一进程）
         UI[Webview UI HTML/JS]
         JSAPI[DevKitApi<br/>pywebview.js_api]
-        DK[stubs/devkit.py<br/>纯逻辑模块]
+        DK[xijian_api/devkit/<br/>纯逻辑子包]
       end
       FS[本地文件系统]
       SMTP[SMTP 服务器]
@@ -1702,7 +1702,7 @@
       SMTP --> Mailbox
   ```
 
-  > **关键约束**：DevKit 不通过 HTTP 调用主 API server；UI 与 Python 之间通过 `pywebview.js_api` 直接桥接。打包 / SMTP / 限流 / 大小校验全部在 `xijian_api.stubs.devkit` 内完成。
+  > **关键约束**：DevKit 不通过 HTTP 调用主 API server；UI 与 Python 之间通过 `pywebview.js_api` 直接桥接。打包 / SMTP / 限流 / 大小校验全部在 `xijian_api.devkit` 子包内完成（`__init__.py` 是核心，`api.py` 是 js_api 桥接，`state.py` 是进程内 JSON 状态）。
 
 - **提交流程**
 
@@ -1712,7 +1712,7 @@
       participant D as 开发者
       participant UI as DevKit UI (Pywebview)
       participant API as DevKitApi.js_api
-      participant DK as stubs/devkit.py
+      participant DK as xijian_api/devkit
       participant FS as 本地文件系统
       participant SMTP as SMTP 服务器
       participant Mailbox as 开发者组邮箱
@@ -1742,10 +1742,12 @@
   | `last_submit_for` | `developer_id` | 记录 dict 或 `null` |
   | `get_status` | — | `{smtp_host, smtp_port, max_attachment_bytes, cooldown_seconds}` |
   | `delete_local_archive` | `submission_id` | `bool` |
+  | `login` / `logout` | `developer_id?` | `{active_developer}` / `{active_developer: null}` |
+  | `preview_size` | `file_entries` | `{total_bytes, max_bytes, ok, message}` |
 
   > 错误：限流返回 `{error: "rate_limited", retry_after_seconds: N}`；超限返回 `{error: "payload_too_large", size_bytes, max_bytes}`；SMTP 失败返回 `{error: "smtp_error", category, response}`。前端根据 `error` 字段决定是否弹窗。
 
-- **硬编码配置**（`stubs/devkit.py` 顶部常量）
+- **硬编码配置**（`xijian_api/devkit/__init__.py` 顶部常量）
 
   | 常量 | 含义 | 默认占位 |
   |---|---|---|
@@ -1847,7 +1849,7 @@
   - `py7zr`（pip 包，BSD-3-Clause）—— 7Z 固实归档
   - Python 标准库 `smtplib` + `email.mime.multipart.MimeMultipart` —— SMTP 投递
 
-  > 注：`py7zr` 未在当前 `core/requirements.txt` 中，安装命令：`pip install py7zr`。如果不可用，DevKit stub 应**降级为 zip**（v2.2 备选方案），通过 `DEV_SUBMIT_ARCHIVE_FORMAT=zip` 切换。
+  > 注：`py7zr` 与 `pywebview` 已纳入 `core/pyproject.toml` 的 `devkit` optional-dependencies（`pip install xijian-api[devkit]`）。运行时若 `py7zr` 不可用，DevKit 会**自动降级为 zip** 并写 WARNING（不静默走错格式）；未来若想强制指定，可加 `DEV_SUBMIT_ARCHIVE_FORMAT` 开关（当前未实现，按自动探测走）。
 
 ---
 
@@ -1927,6 +1929,7 @@ flowchart TB
 | v2.0 草稿 | 2026-06-24 | 重写为产品+技术混合文档，补充 SQLite 表、接口、流程图、状态机；B 章占位；C4 重写为横切 AI 辅助 |
 | **v2.1** | 2026-06-25 | **引擎选型锁定**：移除 Live2D（统一 3D/VRM）、TTS=**MeloTTS**、歌声=**DiffSinger**、嵌入=**bge-m3**、主对话=**Qwen2.5-7B Q4_K_M**。**配角算力**：单世界 50 角色上限、活跃档 `high_active`=3 / `low_active`=10 二选一、总预算 50k tokens/min。**过载档位**：移除宽松档，仅保留严格/适中两档（CPU 93/95%、SoC 95°C、内存 90%、GPU 75/80% 持续 45/80s，swap 不限制）。**对话延迟基线**：A2 流式 800ms→1200ms / 2s→3s；A6 语音 1s→1.5s（为多角色并发让出余量）。新增 `npc_scheduling_log`、`world_compute_config` 表。 |
 | **v2.2** | 2026-07-02 | **C5 重写为本地提交流程**：移除私有服务器 / TLS 双向证书 / 质量审核队列，改为本地 7Z 固实打包 + SMTP 邮件投递至开发者组硬编码邮箱。频次：每个开发者 ID 每小时至多 1 次；体积：单次 ≤ 1200 MB（macOS 单位制 1000 KB=1 MB / 1000 MB=1 GB，即 1 200 000 000 bytes）。移除表 `dev_uploads` / `dev_audit_results`，新增 `dev_submissions`（仅本地记录）。A3.2 `DEFAULT_TICK_INTERVAL_SECONDS=60` 与 `cfg["modifiers"]` 三件套已实装，原 `[TODO]` 摘除（详见 docs/notes.md）。 |
+| **v2.3** | 2026-07-04 | **C5 实现落地**：开发者工具作为独立子包 `xijian_api/devkit/`（不挂主路由），由 `xijian-devkit` CLI 启动独立 Pywebview 窗口；Pywebview 依赖 `py7zr>=0.21` + `pywebview>=5.0`（`pip install xijian-api[devkit]`）。JS API（`xijian_api.devkit.api.DevKitApi`）新增 `login` / `logout` / `preview_size`。`check_archive_size` 用严格 `>`（pure），UI 层 `preview_size_payload` 用 `>=`（含 manifest 余量）。本轮 82 个 devkit 测试通过、core 全套 388 测试通过 0 回归。实现细节、未做项与原因、跨章节联动见 `docs/notes.md` 2026-07-04 条目。 |
 
 ---
 

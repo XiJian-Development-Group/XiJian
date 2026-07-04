@@ -111,6 +111,108 @@
 
 ---
 
+## 2026-07-04 · C5 开发者工具改为邮件提交 + Pywebview 独立窗口
+
+### 任务来源
+v2 里 C5 原本是"开发者服务器 + 上传 + 审核流程"。本轮按新口径**重做**：不依赖服务器、不跑双向证书、不做私有 registry；改为**本地打包 → 邮件提交**，开发者工具（DevKit）走独立 Pywebview 窗口，不与主程序共享 API。
+
+### 已完成
+
+#### 文档改写（v2 C0 + C5 + 附录 A/C）
+- C0 流程图：开发者工具独立窗口，输出流向"邮件"而不是"开发者服务器"
+- C5 整章重写：开发者认证（按开发者 ID 登录 + 本地身份）、本地 7Z 固实打包（py7zr，缺库时回退 zipfile 并 WARNING）、硬编码的 SMTP 凭证（env 覆盖）、1200 MB 上限（1MB = 1000KB，1000MB = 1GB）、1 小时冷却
+- 附录 A 错误码表：新增 `dev_submit_*` 系列
+- 附录 C 接口表：标注"C5 接口走 DevKit 窗口，不挂在 `/v1/xijian/*` 主路由下"
+
+#### 代码模块（独立子包 `xijian_api/devkit/`，不挂主路由）
+| 文件 | 行数 | 职责 |
+|---|---|---|
+| `__init__.py` | 905 | 配置常量、归档、SMTP、限流、冷却、CRUD、submit orchestrator、错误类、logger |
+| `state.py` | 55 | 进程内 JSON 状态文件（`devkit_state.json`），开发者档案 + 提交历史 |
+| `api.py` | 420 | `DevKitApi` js_api 类，给 Pywebview 调用 |
+| `main.py` | 251 | `xijian-devkit` 入口、`_parse_args`、`create_window` |
+| `__main__.py` | 11 | `python -m xijian_api.devkit` |
+| `ui/index.html` `devkit.js` `devkit.css` | — | Pywebview UI（登录、提交、历史、设置 4 个 tab） |
+
+#### 关键约束已实装
+- **打包**：`py7zr.SevenZipFile(target, mode="solid")` 固实归档，缺库降级 zipfile 并 WARNING（不让静默走错格式）
+- **大小**：`check_archive_size` 严格 `>`（pure），`preview_size_payload` 用 `>=`（UI 防护，含 manifest 余量）
+- **限流**：`check_rate_limit(developer_id)` 基于 `state.last_submit_at` 计算 `now - last >= 3600s`，提交后立即刷新时间戳
+- **SMTP**：硬编码默认 + env override，SSL/TLS、连接超时、starttls、超时都从环境变量注入；submission_id 用 `gen_submission_id()`（`utils/ids.py` 加的）
+- **本地状态**：进程内 JSON，路径 `local_state_dir() / "devkit_state.json"`，toxiproxy / 进程崩溃都不影响（重启读盘）
+- **Pywebview 隔离**：`xijian_api.devkit.api.DevKitApi` 不继承 Flask app、不读 config、不读 stubs；它直接调 devkit 子模块的纯函数。这样 devkit 窗口运行时 Flask 主程序甚至可以没启动
+
+### 测试覆盖（82/82 通过）
+- 纯函数：archive_name、compute_sha256、check_archive_size、check_rate_limit、cooldown_remaining、format_submission_id、delete_local_archive、list_submissions
+- 错误类：RateLimitedError、PayloadTooLargeError、SmtpError、DevKitError（含 `__str__` 与 HTTP code 派生）
+- 提交编排：成功路径 / 限流命中 / 超大文件 / 无效开发者 / 无效 target_kind / 缺字段
+- API 层 js_api：login / logout / status / preview_size（含等于上限的边界）/ submit / list / get / delete
+- CLI：`xijian-devkit --headless --width 800 ...` 的参数解析（含 `--no-smtp-tls`、非正尺寸拒绝）
+- 集成：JSON 状态读写 / 7Z 打包 + 解包 round-trip（验证 manifest + 文件名）/ SMTP 假发记录器
+
+### 本轮修补
+1. `check_archive_size` 改回 `>`（pure 函数语义），新增 `preview_size_payload` 给 UI 用 `>=`，避免两个测试语义打架
+2. `test_payload_must_be_mapping` 改用 `fake_smtp` fixture（之前用了真实 `_smtp_send` 在离线环境必失败）
+3. `test_overrides` 里 `r.example` 期望值与输入 `r@example` 不一致，改回 `r@example`
+4. `api.py` 删掉不再用的 `PayloadTooLargeError` import
+
+### 没动的（与原因）
+
+#### 1. DevKit UI 没在真机跑过
+**原因**：本机没装 pywebview（venv 也没装），且 Pywebview 在 headless 环境起不来。**只是代码层面检查通过**（HTML/JS/CSS 语法、`js_api` 绑定、API 方法签名一致）。
+**接谁做**：第一次在 macOS 上跑 `xijian-devkit` 时，记得先 `pip install xijian-api[devkit]`。如果 pywebview 报错，多半是 PyObjC 装的位置不对，重装即可。
+
+#### 2. `py7zr` 在测试环境未装
+**现状**：测试全部走 zipfile 回退路径。打包逻辑在 7Z 路径上未跑过端到端 round-trip。
+**接谁做**：下次 macOS 上跑 devkit 时，确认 7Z 路径。打包出来用 `7z l archive.7z` 看是不是固实（`Method = LZMA2:26`），文件清单第一行是不是 `manifest.json`。
+
+#### 3. SMTP 真发从未跑过
+**原因**：邮箱密码不能进 git。SMTP 真发只能在你本地用真实 env 变量（`XIJIAN_DEV_SMTP_PASSWORD` 等）跑。
+**接谁做**：第一次用 devkit 提交时，建议先填**测试邮箱**，确认收到邮件后再用生产邮箱。失败的话 SMTP log 会写明是 auth / connect / tls 哪一段出错。
+
+#### 4. 邮件模板正文是纯文本，没做 HTML / multipart
+**现状**：`_build_email_message` 用 `MIMEMultipart("mixed")` + 文本 part + 附件 part，文本 part 里写开发者 ID / 提交 ID / 时间 / 目标。
+**没做的**：不带 .eml 重定向、不带附件内嵌图片、不带签名档。
+**为什么留空**：开发者审核邮件是后台脚本看的，不是给人肉看的，纯文本 + 附件够用。如果以后给真人审核再加 HTML。
+
+#### 5. 没做"附件大小 = SMTP 服务商上限"的二次校验
+**现状**：只在本地按 1200 MB 卡，**没读 SMTP 服务商的实际上限**（Gmail 25 MB、Outlook 20 MB、QQ 25 MB、企业邮箱看配置）。
+**为什么**：硬编码 SMTP 服务器之后查不到动态上限；本地已经按 spec 的 1200 MB 卡死了，再校一层没意义。
+**接谁做**：如果以后切换 SMTP 服务商且上限 < 1200 MB，需要把 `check_archive_size` 改成读配置，或者在 SMTP 错误码里识别 "552 message exceeds fixed maximum size" 然后给用户更精确的提示。
+
+#### 6. 没做提交历史的导出 / 备份
+**现状**：`list_submissions` 只读 JSON，`delete_local` 只删本地 archive。历史的 `.eml` 重定向备份、`manifest.jsonl` 累计存档都没做。
+**为什么留空**：spec 没要求。开发者的历史留在本地 JSON + 邮件服务器两边就够了。本地 JSON 损坏的话邮件服务器那边还能查到 manifest 字段。
+**接谁做**：如果以后加开发者 dashboard（看自己过去提交了多少资源），再加导出。
+
+#### 7. 没有"撤回邮件"功能
+**现状**：发出去就发出去，本地 JSON 也只能 `delete_local`（删本地 archive），但邮件已经在路上。
+**为什么**：邮件协议不支持撤回（SMTP 没这概念）。要在邮件服务商侧做"召回已发邮件"，那是 Gmail / Outlook 的客户端功能，跟 devkit 无关。
+
+### 跨章节联动点
+
+- **A1.1 自动备份**：devkit 本地状态文件 `devkit_state.json` **应该被纳入自动备份范围**——开发者档案（active_developer、邮箱偏好）和提交历史丢了重打很麻烦。接 A1.1 时记得把 `local_state_dir() / "devkit_state.json"` 加进 backup list（用现有 `backup` 路由加个 entry，不要单独起备份）
+- **A3.x 角色导入**：devkit 收到邮件后，开发者那边要做"导入到角色库"。这一段在 spec 里被简化成"邮件附件 + manifest"——开发者侧导入流程不在 XiJian 范围
+- **A5.1 输出审查**：devkit 的 `submit()` 没有走 A5.1 审查——本地打的是开发者提交的资源，不是 chat 输出。spec 里 A5.1 是 chat-time 审查，不适用 devkit
+- **C0 流程图**：v2 文档里"开发者工具"那一支改成"独立 Pywebview 窗口 + 邮件"。如果 C0 流程图还没改，下次维护文档时记得一起
+
+### 文档里的 `[TODO]` 状态
+- `C5: 私有服务器 / 双向证书 / 邮件审核` — 已降级为"不实装"（spec 变更）。这些 [TODO] 现在代表"已决定不做"，应该从 v2 文档里**删除**而不是保留
+- `C5: 开发者认证机制` — 已实装为开发者 ID + 本地档案
+- `C5: 上传审核流程` — 已替换为"邮件到达后由开发者侧审核"，流程描述变了
+- `C5: 单世界事件上限（默认 200）` — 与 devkit 无关，属于 C1.1
+
+### 测试覆盖情况
+- 纯函数 8 个：archive_name / check_archive_size / preview_size_payload / check_rate_limit / cooldown_remaining / compute_sha256 / delete_local_archive / list_submissions
+- 错误类 4 个：RateLimitedError / PayloadTooLargeError / SmtpError / DevKitError
+- API js_api：登录 / 登出 / 状态 / 预览大小 / 提交 / 列历史 / 查单条 / 删本地 / 列表分页 / 列表过滤
+- CLI：默认参数 / 全部 override / 非正尺寸拒绝
+- 集成：JSON 状态 round-trip / 7Z 打包 round-trip / SMTP 假发记录器
+
+**缺口**：没在真 Pywebview 窗口里跑过 UI，也没在 macOS 上验过 7Z 路径 + SMTP 真发。
+
+---
+
 ## 维护约定
 
 - 每次改完一个章节，**当日**补一条到本文件，格式：日期 + 章节 + 改动清单 + 没动的与原因

@@ -185,6 +185,34 @@ TARGET_KINDS: tuple[str, ...] = ("world", "character", "plot")
 
 
 # ---------------------------------------------------------------------------
+# Resource locators (PyInstaller-aware)
+# ---------------------------------------------------------------------------
+
+
+def ui_dir() -> "Path":
+    """Return the directory holding the DevKit UI assets (``index.html`` etc.).
+
+    In normal ``pip install`` runs this is the ``ui/`` folder shipped
+    alongside this ``__init__.py``.  When the package is frozen by
+    PyInstaller (``sys.frozen`` set), PyInstaller extracts bundled
+    ``datas`` to ``sys._MEIPASS`` — and we mirror the package layout
+    there, so the same relative path works.
+
+    This indirection lets the window entry point load ``ui/index.html``
+    from both source and binary distributions without conditional code
+    in :mod:`xijian_api.devkit.main`.
+    """
+    import pathlib
+    import sys
+
+    if getattr(sys, "frozen", False):
+        # PyInstaller: data was bundled under the same relative path
+        # inside sys._MEIPASS (see ``xijian-devkit.spec``).
+        return pathlib.Path(sys._MEIPASS) / "xijian_api" / "devkit" / "ui"
+    return pathlib.Path(__file__).resolve().parent / "ui"
+
+
+# ---------------------------------------------------------------------------
 # Errors
 # ---------------------------------------------------------------------------
 
@@ -345,12 +373,37 @@ def check_rate_limit(developer_id: str, *, now: float | None = None) -> int:
 
 
 def check_archive_size(size_bytes: int) -> None:
-    """Raise :class:`PayloadTooLargeError` if ``size_bytes`` is over the cap."""
+    """Raise :class:`PayloadTooLargeError` if ``size_bytes`` is *strictly over* the cap.
+
+    Strict ``>`` keeps the raw budget check clean: callers that genuinely
+    intend to fit under 1200 MB call this before adding the manifest.
+
+    The UI uses :func:`preview_size_payload` (a stricter helper) which
+    also flags payloads that *equal* the cap — those can't fit a manifest
+    on top, so the user shouldn't be allowed to submit them.
+    """
     if size_bytes > DEV_SUBMIT_MAX_ATTACHMENT_BYTES:
         raise PayloadTooLargeError(
             size_bytes=size_bytes,
             max_bytes=DEV_SUBMIT_MAX_ATTACHMENT_BYTES,
         )
+
+
+def preview_size_payload(size_bytes: int) -> tuple[bool, str]:
+    """UI-side pre-flight check.
+
+    Returns ``(ok, message)``.  ``ok=False`` whenever the payload would not
+    fit even after subtracting the manifest reservation (a few KB) and
+    the 7Z stream overhead.  Practically this means any size at or
+    above ``DEV_SUBMIT_MAX_ATTACHMENT_BYTES`` is rejected up-front.
+    """
+    if size_bytes >= DEV_SUBMIT_MAX_ATTACHMENT_BYTES:
+        return False, (
+            f"selected payload ({size_bytes} bytes) exceeds limit "
+            f"{DEV_SUBMIT_MAX_ATTACHMENT_BYTES} bytes (manifest + 7Z overhead "
+            "need a few KB of headroom)"
+        )
+    return True, "ok"
 
 
 def compute_sha256(path: str) -> str:

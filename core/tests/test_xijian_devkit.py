@@ -961,7 +961,7 @@ class TestDevKitApiSubmit:
         assert r["ok"] is False
         assert r["code"] == "bad_file_entries"
 
-    def test_payload_must_be_mapping(self, make_temp_file):
+    def test_payload_must_be_mapping(self, fake_smtp, make_temp_file):
         f = make_temp_file("a.bin", b"x")
         api = DevKitApi()
         r = api.submit(
@@ -970,7 +970,7 @@ class TestDevKitApiSubmit:
             target_id="x",
             payload="not a mapping",
             file_entries=[{"path": f, "size": 1}],
-            smtp_send=fake_smtp_for_payload_test(),
+            smtp_send=fake_smtp,
         )
         assert r["ok"] is True
         # Non-mapping payload becomes None in the orchestrator.
@@ -1058,7 +1058,7 @@ class TestParseArgs:
         assert ns.smtp_port == 465
         assert ns.no_smtp_tls is True
         assert ns.smtp_user == "u@example"
-        assert ns.recipient == "r.example"
+        assert ns.recipient == "r@example"
         assert ns.width == 1000
         assert ns.height == 600
         assert ns.headless is True

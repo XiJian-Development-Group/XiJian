@@ -55,6 +55,7 @@ from xijian_api.devkit import (
     DEV_SUBMIT_SMTP_PORT,
     DEV_SUBMIT_SMTP_USE_TLS,
     DEV_SUBMIT_SMTP_USER,
+    ui_dir,
 )
 
 
@@ -161,10 +162,11 @@ def _ui_url() -> str:
     pywebview's ``create_window`` accepts either a URL or a local
     path; we hand it a ``file://`` URL pointing at ``ui/index.html``
     inside the package so the DevKit ships as a single wheel.
-    """
-    import pathlib
 
-    here = pathlib.Path(__file__).resolve().parent / "ui" / "index.html"
+    When the package is frozen by PyInstaller, :func:`ui_dir` resolves
+    to ``sys._MEIPASS`` automatically — no special-casing here.
+    """
+    here = ui_dir() / "index.html"
     if not here.is_file():  # pragma: no cover — packaging sanity
         raise RuntimeError(f"DevKit ui/index.html not found at {here!s}")
     # pywebview's load_url wants a file:// URL it can read.

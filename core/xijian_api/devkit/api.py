@@ -73,12 +73,12 @@ from xijian_api.devkit import (
     DevKitError,
     DEV_SUBMIT_COOLDOWN_SECONDS,
     DEV_SUBMIT_MAX_ATTACHMENT_BYTES,
+    preview_size_payload,
     DEV_SUBMIT_RECIPIENT,
     DEV_SUBMIT_SMTP_HOST,
     DEV_SUBMIT_SMTP_PORT,
     DEV_SUBMIT_SMTP_USE_TLS,
     DEV_SUBMIT_SMTP_USER,
-    PayloadTooLargeError,
     archive_name,
     check_archive_size,
     check_rate_limit,
@@ -304,6 +304,13 @@ class DevKitApi:
 
         Used by the UI to display "选定文件 X / 1200 MB" without
         round-tripping through the orchestrator on every selection.
+
+        Note: the data-level ``ok`` flag here is *stricter* than the raw
+        :func:`check_archive_size` helper — it returns ``False`` as soon
+        as the payload reaches the cap, because the manifest + 7Z stream
+        overhead would still push the archive over the SMTP attachment
+        limit.  This is the safe behaviour the UI should surface to the
+        user.
         """
         if not isinstance(file_entries, list):
             raise DevKitError(
@@ -318,13 +325,7 @@ class DevKitApi:
                     total += int(entry.get("size") or 0)
                 except (TypeError, ValueError):
                     continue
-        try:
-            check_archive_size(total)
-            ok = True
-            message = "ok"
-        except PayloadTooLargeError as exc:
-            ok = False
-            message = exc.message
+        ok, message = preview_size_payload(int(total))
         return {
             "total_bytes": int(total),
             "total_mb": round(int(total) / 1_000_000, 3),
