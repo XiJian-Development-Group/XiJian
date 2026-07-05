@@ -10,12 +10,10 @@
     <header class="app-header">
       <div class="app-header__brand">
         <h1>隙间 · 开发者工具</h1>
-        <p class="app-header__subtitle">
-          本地打包 → SMTP 邮件投递 · 与主 API 完全隔离
-        </p>
+        <p class="app-header__subtitle">本地打包并提交你的创作内容</p>
       </div>
       <div class="app-header__meta">
-        <div id="recipient-chip" class="chip chip--ghost" title="接收方邮箱（硬编码）">
+        <div id="recipient-chip" class="chip chip--ghost" title="本次提交将发送到此邮箱">
           <span class="chip__label">收件</span>
           <span id="recipient-chip-value">…</span>
         </div>
@@ -32,7 +30,7 @@
       <section class="card" id="login-card">
         <header class="card__header">
           <h2>1. 登录</h2>
-          <p class="card__hint">把开发者 ID 填进去，后续步骤会用它做限流与归档命名。</p>
+          <p class="card__hint">填一个便于识别的标识，我们会用它来记录这次提交。</p>
         </header>
         <div class="card__body">
           <label class="field">
@@ -56,16 +54,16 @@
       <section class="card" id="target-card">
         <header class="card__header">
           <h2>2. 选择产出物</h2>
-          <p class="card__hint">世界 / 角色 / 剧情 · ID 是你在主 API 里用的那个。</p>
+          <p class="card__hint">选择提交类型，并填上对应的标识。</p>
         </header>
         <div class="card__body">
           <div class="grid grid--2">
             <label class="field">
-              <span class="field__label">类型 (target_kind)</span>
+              <span class="field__label">类型</span>
               <select id="target-kind" class="field__input"></select>
             </label>
             <label class="field">
-              <span class="field__label">目标 ID (target_id)</span>
+              <span class="field__label">标识</span>
               <input
                 id="target-id"
                 class="field__input"
@@ -89,12 +87,12 @@
             />
           </label>
           <label class="field">
-            <span class="field__label">开发者自填说明 (notes, 可选)</span>
+            <span class="field__label">补充说明（可选）</span>
             <textarea
               id="notes"
               class="field__input"
               rows="3"
-              placeholder="本次提交的额外说明，会写到归档 manifest 与邮件正文"
+              placeholder="本次提交的额外说明，会随内容一起发送"
             ></textarea>
           </label>
         </div>
@@ -127,7 +125,7 @@
         <header class="card__header">
           <h2>4. 提交</h2>
           <p class="card__hint">
-            点击后 DevKit 会离线打包、sha256、连接 SMTP 投递，全程不调用主 API。
+            点击后会开始打包并发送，过程通常需要几秒到一分钟。
           </p>
         </header>
         <div class="card__body">
@@ -165,7 +163,7 @@
         <section class="card" id="config-card">
           <header class="card__header">
             <h2>运行配置</h2>
-            <p class="card__hint">只读，部署前替换。</p>
+            <p class="card__hint">本次提交使用的设置</p>
           </header>
           <div class="card__body">
             <dl class="kv">

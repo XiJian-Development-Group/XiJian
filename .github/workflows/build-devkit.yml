@@ -1,0 +1,128 @@
+# build-devkit.yml — 跨平台构建独立的「隙间开发者工具」
+#
+# 触发：
+#   * tag v*                 — 发布正式产物
+#   * workflow_dispatch      — 手动跑
+#   * push main 上改动 devkit/ — 跑 smoke build（不发布）
+#
+# 矩阵：macOS arm64 + Windows（pywebview 用的 webview 跟系统绑定，
+#       跨编译暂时不做；Linux 因为需要 gtk 系依赖先不开）
+
+name: build-devkit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "devkit/**"
+      - ".github/workflows/build-devkit.yml"
+  pull_request:
+    paths:
+      - "devkit/**"
+      - ".github/workflows/build-devkit.yml"
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "build target (all | dir | app)"
+        required: false
+        default: all
+        type: choice
+        options:
+          - all
+          - dir
+          - app
+  release:
+    types: [published]
+
+permissions:
+  contents: write  # 发布到 release 需要写权限
+
+jobs:
+  build:
+    name: build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            target: all
+            artifact_name: xijian-devkit-macos-arm64
+          - os: windows-latest
+            target: dir
+            artifact_name: xijian-devkit-windows-x64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache PyInstaller work tree
+        uses: actions/cache@v4
+        with:
+          path: |
+            devkit/.venv
+            devkit/build
+            devkit/dist
+          key: ${{ runner.os }}-pyinstaller-${{ hashFiles('devkit/requirements.txt', 'devkit/pyproject.toml', 'devkit/xijian-devkit.spec') }}
+          restore-keys: |
+            ${{ runner.os }}-pyinstaller-
+
+      - name: Build (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          cd devkit
+          chmod +x build-devkit.sh
+          ./build-devkit.sh --target=${{ matrix.target }}
+
+      - name: Build (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          cd devkit
+          chmod +x build-devkit.sh
+          ./build-devkit.sh --target=${{ matrix.target }}
+
+      - name: List artifacts
+        shell: bash
+        run: |
+          echo "==> dist contents:"
+          ls -la devkit/dist 2>&1 || true
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: |
+            devkit/dist/xijian-devkit
+            devkit/dist/xijian-devkit.exe
+            devkit/dist/隙间开发者工具.app
+          if-no-files-found: warn
+          retention-days: 14
+
+  release:
+    name: attach to release
+    if: github.event_name == 'release'
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Show downloaded artifacts
+        run: ls -laR artifacts
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            artifacts/**/xijian-devkit
+            artifacts/**/xijian-devkit.exe
+            artifacts/**/隙间开发者工具.app
+          fail_on_unmatched_files: false
