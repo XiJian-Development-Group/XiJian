@@ -2,7 +2,7 @@
 
 The DevKit is **deliberately standalone** — it does not share state with
 the main Flask API server.  This module owns its own three buckets,
-unrelated to :mod:`xijian_api.stubs.state`:
+unrelated to the main API's ``xijian_api.stubs.state``:
 
 =========== ============================================================
 Key         Shape

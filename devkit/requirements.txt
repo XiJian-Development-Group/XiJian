@@ -1,0 +1,12 @@
+# Runtime dependencies for the standalone Developer Kit (DevKit).
+#
+# These are the ONLY third-party packages the frozen binary needs.
+# Everything else the DevKit uses (the ApiError base, the submission-id
+# generator, the time helpers) is vendored dependency-free in
+# devkit/_vendor.py so the binary never pulls in xijian_api or Flask.
+#
+# Install:  pip install -r requirements.txt
+# (build-devkit.sh does this for you inside devkit/.venv)
+
+pywebview>=5.0      # native webview window (WKWebView / WebView2 / webkitgtk)
+py7zr>=0.21         # 7Z solid archive (zip fallback if absent — see __init__.py)

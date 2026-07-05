@@ -2,7 +2,7 @@
 
 Run with::
 
-    python -m xijian_api.devkit                       # open the window
+    python -m devkit                                  # open the window
     xijian-devkit                                     # same, via console_scripts
 
 CLI flags::
@@ -16,10 +16,11 @@ CLI flags::
     --height N           window height (default 820)
     --headless           skip start(); just print the resolved config and exit
 
-The DevKit is intentionally *standalone* — it never opens a Flask
-server, never imports ``xijian_api.app``, and never reads the main
-``Config`` object.  The window you get here is the only thing that
-runs.
+The DevKit is intentionally *standalone* — it is its own top-level
+``devkit`` package, does not import ``xijian_api`` at all, never opens
+a Flask server, and never reads the main ``Config`` object.  The window
+you get here is the only thing that runs, which is what lets it ship as
+a self-contained PyInstaller binary (function list v2.3, C5).
 
 Why pywebview rather than a Flask blueprint
 ------------------------------------------
@@ -48,8 +49,8 @@ import os
 import sys
 from typing import Any, Sequence
 
-from xijian_api.devkit.api import DevKitApi
-from xijian_api.devkit import (
+from devkit.api import DevKitApi
+from devkit import (
     DEV_SUBMIT_RECIPIENT,
     DEV_SUBMIT_SMTP_HOST,
     DEV_SUBMIT_SMTP_PORT,
@@ -59,7 +60,7 @@ from xijian_api.devkit import (
 )
 
 
-_LOGGER = logging.getLogger("xijian_api.devkit.main")
+_LOGGER = logging.getLogger("devkit.main")
 
 
 #: Default window geometry.  Picked to fit a 13" laptop screen with
@@ -88,27 +89,27 @@ def run(argv: Sequence[str] | None = None) -> int:
     # UI is constructed, so :func:`DevKitApi.whoami` returns them.
     if args.smtp_host:
         os.environ["XIJIAN_DEV_SMTP_HOST"] = args.smtp_host
-        from xijian_api import devkit as _devkit_mod
+        import devkit as _devkit_mod
 
         _devkit_mod.DEV_SUBMIT_SMTP_HOST = args.smtp_host
     if args.smtp_port is not None:
         os.environ["XIJIAN_DEV_SMTP_PORT"] = str(args.smtp_port)
-        from xijian_api import devkit as _devkit_mod
+        import devkit as _devkit_mod
 
         _devkit_mod.DEV_SUBMIT_SMTP_PORT = args.smtp_port
     if args.no_smtp_tls:
         os.environ["XIJIAN_DEV_SMTP_USE_TLS"] = "0"
-        from xijian_api import devkit as _devkit_mod
+        import devkit as _devkit_mod
 
         _devkit_mod.DEV_SUBMIT_SMTP_USE_TLS = False
     if args.smtp_user:
         os.environ["XIJIAN_DEV_SMTP_USER"] = args.smtp_user
-        from xijian_api import devkit as _devkit_mod
+        import devkit as _devkit_mod
 
         _devkit_mod.DEV_SUBMIT_SMTP_USER = args.smtp_user
     if args.recipient:
         os.environ["XIJIAN_DEV_RECIPIENT"] = args.recipient
-        from xijian_api import devkit as _devkit_mod
+        import devkit as _devkit_mod
 
         _devkit_mod.DEV_SUBMIT_RECIPIENT = args.recipient
 

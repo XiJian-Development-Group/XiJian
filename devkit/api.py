@@ -23,9 +23,9 @@ Design contract
   can ``await api.submit(...)`` and get either a success record or
   a structured error object.
 
-* Errors that surface from the orchestrator (:mod:`xijian_api.devkit`)
-  all derive from :class:`xijian_api.devkit.DevKitError` (which
-  derives from :class:`xijian_api.errors.ApiError`).  They carry the
+* Errors that surface from the orchestrator (:mod:`devkit`)
+  all derive from :class:`devkit.DevKitError` (which
+  derives from :class:`devkit._vendor.ApiError`).  They carry the
   OAI-style ``status``/``type_``/``code`` triple and any extra
   kwargs; :func:`serialize_error` flattens them so JS can display a
   friendly message without learning the Python exception hierarchy.
@@ -67,7 +67,7 @@ import threading
 from collections.abc import Mapping
 from typing import Any
 
-from xijian_api.devkit import (
+from devkit import (
     ARCHIVE_FORMAT_7Z,
     TARGET_KINDS,
     DevKitError,
@@ -91,7 +91,7 @@ from xijian_api.devkit import (
 )
 
 
-_LOGGER = logging.getLogger("xijian_api.devkit.api")
+_LOGGER = logging.getLogger("devkit.api")
 _API_VERSION = "xijian.devkit.api/v1"
 
 
@@ -178,7 +178,7 @@ class DevKitApi:
     that runs at most once per hour.
 
     Configuration knobs are read **once** at import time from
-    :mod:`xijian_api.devkit` module-level constants; tests can
+    :mod:`devkit` module-level constants; tests can
     monkeypatch them before constructing the API.
     """
 
@@ -411,7 +411,7 @@ class DevKitApi:
     # --- helpers not exposed via js_api --------------------------------
 
     def archive_name(self, developer_id: str, *, now=None) -> str:
-        """Expose :func:`xijian_api.devkit.archive_name` (for tests)."""
+        """Expose :func:`devkit.archive_name` (for tests)."""
         return archive_name(developer_id, now=now)
 
 

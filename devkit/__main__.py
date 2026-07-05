@@ -1,10 +1,10 @@
-"""``python -m xijian_api.devkit`` entry point."""
+"""``python -m devkit`` entry point."""
 
 from __future__ import annotations
 
 import sys
 
-from xijian_api.devkit.main import main as _main
+from devkit.main import main as _main
 
 
 if __name__ == "__main__":

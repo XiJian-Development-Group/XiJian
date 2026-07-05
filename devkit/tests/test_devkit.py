@@ -1,5 +1,5 @@
-"""Tests for the Developer-Kit standalone subpackage
-(``xijian_api.devkit`` + ``xijian_api.devkit.api``).
+"""Tests for the Developer-Kit standalone package
+(``devkit`` + ``devkit.api``).
 
 The DevKit intentionally has **no** Flask or HTTP wiring — these
 tests cover the *Python* side of the pywebview ``js_api`` bridge:
@@ -34,7 +34,7 @@ import zipfile
 
 import pytest
 
-from xijian_api.devkit import (
+from devkit import (
     ARCHIVE_FORMAT_7Z,
     ARCHIVE_FORMAT_ZIP,
     DEV_SUBMIT_COOLDOWN_SECONDS,
@@ -70,8 +70,8 @@ from xijian_api.devkit import (
     seed_default,
     submit,
 )
-from xijian_api.devkit import state as devkit_state
-from xijian_api.devkit.api import DevKitApi, serialize_error
+from devkit import state as devkit_state
+from devkit.api import DevKitApi, serialize_error
 
 
 # ---------------------------------------------------------------------------
@@ -93,7 +93,7 @@ def _clean_devkit_state(tmp_path, monkeypatch):
     """
     monkeypatch.setenv("XIJIAN_DEV_LOCAL_DIR", str(tmp_path))
     monkeypatch.setattr(
-        "xijian_api.devkit._DEV_SUBMIT_LOCAL_DIR", str(tmp_path)
+        "devkit._DEV_SUBMIT_LOCAL_DIR", str(tmp_path)
     )
     reset_for_testing()
     yield
@@ -319,7 +319,7 @@ class TestLocalArchiveDir:
         # Wipe any override so we test the default behaviour.
         monkeypatch.delenv("XIJIAN_DEV_LOCAL_DIR", raising=False)
         monkeypatch.setattr(
-            "xijian_api.devkit._DEV_SUBMIT_LOCAL_DIR", None
+            "devkit._DEV_SUBMIT_LOCAL_DIR", None
         )
         d = local_archive_dir()
         assert d.endswith("xijian_devkit")
@@ -981,7 +981,7 @@ def fake_smtp_for_payload_test():
     """Return a callable compatible with ``smtp_send=`` that does
     nothing — used in a couple of happy-path tests.
     """
-    from xijian_api.devkit import _smtp_send
+    from devkit import _smtp_send
 
     return _smtp_send
 
@@ -1021,7 +1021,7 @@ class TestDevKitApiDelete:
 
 class TestParseArgs:
     def test_defaults(self):
-        from xijian_api.devkit.main import _parse_args
+        from devkit.main import _parse_args
 
         ns = _parse_args([])
         assert ns.smtp_host is None
@@ -1034,7 +1034,7 @@ class TestParseArgs:
         assert ns.headless is False
 
     def test_overrides(self):
-        from xijian_api.devkit.main import _parse_args
+        from devkit.main import _parse_args
 
         ns = _parse_args(
             [
@@ -1064,7 +1064,7 @@ class TestParseArgs:
         assert ns.headless is True
 
     def test_rejects_non_positive_dimensions(self):
-        from xijian_api.devkit.main import _parse_args
+        from devkit.main import _parse_args
 
         with pytest.raises(SystemExit):
             _parse_args(["--width", "0"])
@@ -1077,7 +1077,7 @@ class TestMainHeadless:
     def test_headless_does_not_open_window(self, capsys, monkeypatch):
         # ``_print_config`` writes JSON to stdout.  If ``webview``
         # were imported, the test would hang trying to open a window.
-        from xijian_api.devkit import main as devkit_main
+        from devkit import main as devkit_main
 
         rc = devkit_main.run(["--headless"])
         assert rc == 0
@@ -1098,7 +1098,7 @@ class TestMainHeadless:
             return real_import(name, *args, **kw)
 
         monkeypatch.setattr(builtins, "__import__", _block)
-        from xijian_api.devkit import main as devkit_main
+        from devkit import main as devkit_main
 
         with pytest.raises(RuntimeError) as ei:
             devkit_main.run([])
@@ -1110,11 +1110,14 @@ class TestMainHeadless:
 # ---------------------------------------------------------------------------
 
 
-def test_submodule_does_not_depend_on_flask():
+def test_package_does_not_depend_on_flask():
     """The DevKit must remain importable even when Flask is broken.
 
-    We force a ModuleNotFoundError on flask and re-import to confirm
-    no submodule pulls it in.  Skipped if Flask is genuinely missing.
+    The DevKit is a standalone package that never imports Flask (the
+    only borrowed pieces are vendored dependency-free in
+    :mod:`devkit._vendor`).  We force a ModuleNotFoundError on flask and
+    re-import to confirm nothing pulls it in.  Skipped if Flask is
+    genuinely missing (e.g. the standalone build env).
     """
     try:
         import flask  # noqa: F401
@@ -1124,24 +1127,63 @@ def test_submodule_does_not_depend_on_flask():
 
     sys.modules["flask"] = None  # simulate the module being absent
     for mod in list(sys.modules):
-        if mod.startswith("xijian_api.devkit"):
+        if mod == "devkit" or mod.startswith("devkit."):
             sys.modules.pop(mod, None)
     try:
-        import xijian_api.devkit  # noqa: F401
-        import xijian_api.devkit.api  # noqa: F401
-        import xijian_api.devkit.main  # noqa: F401
+        import devkit  # noqa: F401
+        import devkit.api  # noqa: F401
+        import devkit.main  # noqa: F401
     finally:
         del sys.modules["flask"]
-    # If the imports above raised ImportError they''d bubble — the
-    # devkit subpackage doesn''t import flask anywhere.
+    # If the imports above raised ImportError they'd bubble — the
+    # devkit package doesn't import flask anywhere.
     assert True
 
 
-def test_state_module_is_separate_from_main_api_state():
-    """The DevKit's state module is NOT the same object as
-    ``xijian_api.stubs.state``."""
-    import xijian_api.devkit.state as ds
-    import xijian_api.stubs.state as ss
+def test_package_does_not_depend_on_xijian_api():
+    """The DevKit must import with **no** ``xijian_api`` on the path.
 
-    assert ds is not ss
-    assert ds.submissions is not getattr(ss, "dev_submissions", None)
+    This is the structural guarantee behind the C5 packaging split: the
+    PyInstaller binary bundles only ``devkit`` (+ pywebview / py7zr),
+    never the API package.  We simulate ``xijian_api`` being absent and
+    re-import every DevKit module.
+    """
+    import sys
+
+    saved = {
+        name: mod
+        for name, mod in list(sys.modules.items())
+        if name == "xijian_api" or name.startswith("xijian_api.")
+    }
+    for name in saved:
+        sys.modules[name] = None  # simulate absence
+    for mod in list(sys.modules):
+        if mod == "devkit" or mod.startswith("devkit."):
+            sys.modules.pop(mod, None)
+    try:
+        import devkit  # noqa: F401
+        import devkit.api  # noqa: F401
+        import devkit.main  # noqa: F401
+        import devkit.state  # noqa: F401
+        import devkit._vendor  # noqa: F401
+    finally:
+        for name, mod in saved.items():
+            if mod is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = mod
+    assert True
+
+
+def test_state_module_owns_independent_buckets():
+    """The DevKit's state module owns its own three in-memory buckets,
+    separate from any main-API state (the packages no longer share code)."""
+    import devkit.state as ds
+
+    assert isinstance(ds.submissions, dict)
+    assert isinstance(ds.last_submit_at, dict)
+    assert isinstance(ds.local_archives, dict)
+    # The three buckets are distinct objects.
+    assert ds.submissions is not ds.last_submit_at
+    assert ds.submissions is not ds.local_archives
+

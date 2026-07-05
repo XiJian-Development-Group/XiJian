@@ -1,0 +1,18 @@
+# devkit/pyproject.toml — tooling config for the standalone Developer Kit.
+#
+# The DevKit is NOT distributed as a wheel — it ships as a PyInstaller
+# binary (see xijian-devkit.spec + build-devkit.sh).  This file therefore
+# carries no [build-system] / [project] packaging metadata; it exists so
+# `pytest` (run from this directory) can locate the sibling top-level
+# `devkit` package that lives at the repo root.
+#
+# Runtime deps:  ../devkit/requirements.txt   (pywebview, py7zr)
+# Build tool:    pyinstaller                  (installed by build-devkit.sh)
+
+[tool.pytest.ini_options]
+# rootdir is this directory (devkit/).  Add the repo root (..) to the
+# import path so `import devkit` resolves to the sibling package rather
+# than requiring an editable install.
+pythonpath = [".."]
+testpaths = ["tests"]
+addopts = "-ra"

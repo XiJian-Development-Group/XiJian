@@ -9,10 +9,10 @@ intentionally server-less:
 The DevKit is a **standalone** Pywebview app — it does not share a
 Flask server with the main API and never makes an HTTP call against
 it.  UI <-> Python talks happen through ``pywebview.js_api`` (see
-:mod:`xijian_api.devkit.api`).
+:mod:`devkit.api`).
 
 This package owns three in-memory buckets (mirrored in
-:mod:`xijian_api.devkit.state`):
+:mod:`devkit.state`):
 
 * ``submissions``        — per-submission record, keyed by id.
 * ``last_submit_at``     — per-developer last-submit timestamp
@@ -90,7 +90,7 @@ can drive them with ``monkeypatch``:
 * :func:`reset_for_testing`
 
 Production callers route through the Pywebview ``js_api`` exposed
-by :class:`xijian_api.devkit.api.DevKitApi`.
+by :class:`devkit.api.DevKitApi`.
 """
 
 from __future__ import annotations
@@ -111,13 +111,11 @@ from email.mime.text import MIMEText
 from email.utils import format_datetime
 from typing import Any
 
-from xijian_api.devkit import state
-from xijian_api.errors import ApiError
-from xijian_api.utils.ids import gen_submission_id
-from xijian_api.utils.time import iso_now, now_ts
+from devkit import state
+from devkit._vendor import ApiError, gen_submission_id, iso_now, now_ts
 
 
-_LOGGER = logging.getLogger("xijian_api.devkit")
+_LOGGER = logging.getLogger("devkit")
 
 
 # ---------------------------------------------------------------------------
@@ -200,15 +198,16 @@ def ui_dir() -> "Path":
 
     This indirection lets the window entry point load ``ui/index.html``
     from both source and binary distributions without conditional code
-    in :mod:`xijian_api.devkit.main`.
+    in :mod:`devkit.main`.
     """
     import pathlib
     import sys
 
     if getattr(sys, "frozen", False):
-        # PyInstaller: data was bundled under the same relative path
-        # inside sys._MEIPASS (see ``xijian-devkit.spec``).
-        return pathlib.Path(sys._MEIPASS) / "xijian_api" / "devkit" / "ui"
+        # PyInstaller: the ``ui/`` folder is bundled under the same
+        # relative path (``devkit/ui``) inside sys._MEIPASS — see the
+        # ``datas`` entry in ``devkit/xijian-devkit.spec``.
+        return pathlib.Path(sys._MEIPASS) / "devkit" / "ui"
     return pathlib.Path(__file__).resolve().parent / "ui"
 
 
@@ -220,10 +219,11 @@ def ui_dir() -> "Path":
 class DevKitError(ApiError):
     """Base for DevKit-specific errors.
 
-    Inherits :class:`xijian_api.errors.ApiError` so the JSON-API
-    contract is consistent across the project, even though the DevKit
-    itself never emits HTTP envelopes — the UI receives the error as
-    a plain dict via :func:`xijian_api.devkit.api.serialize_error`.
+    Inherits :class:`devkit._vendor.ApiError` (a Flask-free copy of
+    ``xijian_api.errors.ApiError``) so the JSON-API contract is
+    consistent across the project, even though the DevKit itself never
+    emits HTTP envelopes — the UI receives the error as a plain dict via
+    :func:`devkit.api.serialize_error`.
     """
 
     def __init__(self, status: int, message: str, code: str, **extra: Any) -> None:
