@@ -117,6 +117,7 @@ from devkit.model_viewer import (
     register_model as _mv_register,
     unregister_model as _mv_unregister,
     get_model_info as _mv_info,
+    read_model_bytes as _mv_read,
 )
 from devkit.voice_cloner import (
     list_voices as _vc_list,
@@ -711,6 +712,19 @@ class DevKitApi:
             raise DevKitError(400, "模型 ID 不能为空", code="missing_model_id")
         return _mv_info(self._work_dir(), model_id)
 
+    @_serialize_call
+    def read_model_bytes(self, model_id: Any) -> dict[str, Any] | None:
+        """Return the model's file bytes (base64) + MIME for the 3D viewer.
+
+        pywebview's WKWebView will not ``fetch()`` a ``file://`` URL,
+        so the JS previewer asks Python to hand it the bytes instead
+        of trying to load the file path directly.  Returns ``null``
+        if the model id is unknown or the file vanished.
+        """
+        if not isinstance(model_id, str) or not model_id:
+            raise DevKitError(400, "模型 ID 不能为空", code="missing_model_id")
+        return _mv_read(self._work_dir(), model_id)
+
     # --- voice clone ---------------------------------------------------
 
     @_serialize_call
@@ -740,16 +754,74 @@ class DevKitApi:
         name: Any = None,
         sample_path: Any = None,
         engine: Any = None,
+        audio_data_b64: Any = None,
     ) -> dict[str, Any]:
+        """Create or update a voice sample.
+
+        Two ways to supply the audio source:
+
+        * ``sample_path`` — path to an existing audio file on disk
+          (used by the "选择文件" button, which resolves to a real path
+          via pywebview's file dialog).
+        * ``audio_data_b64`` — base64-encoded raw bytes from an in-page
+          recording (``MediaRecorder`` blob → ``FileReader.readAsDataURL``
+          → strip the prefix).  Required for the "录制样本" button since
+          the browser has no file-system path to hand to us.
+
+        Exactly one of the two must be provided.  ``engine`` defaults to
+        ``"melo-tts"`` if omitted.
+        """
         if not isinstance(character_id, str) or not character_id:
             raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
         if not isinstance(name, str) or not name:
             raise DevKitError(400, "声音名称不能为空", code="missing_name")
+
+        # Validate the audio source — exactly one of the two.
+        has_path = isinstance(sample_path, str) and bool(sample_path)
+        has_data = isinstance(audio_data_b64, str) and bool(audio_data_b64)
+        if has_path and has_data:
+            raise DevKitError(
+                400,
+                "sample_path 与 audio_data_b64 二选一，不要同时传",
+                code="ambiguous_audio_source",
+            )
+        if not has_path and not has_data:
+            raise DevKitError(
+                400,
+                "需要 sample_path（文件路径）或 audio_data_b64（录制数据）之一",
+                code="missing_audio_source",
+            )
+
+        # Decode the recording.  The UI may pass either a raw base64
+        # string or a full data URL (``data:audio/webm;base64,XXXXX``)
+        # because FileReader.readAsDataURL includes the prefix.
+        audio_bytes: bytes | None = None
+        if has_data:
+            assert isinstance(audio_data_b64, str)
+            raw = audio_data_b64
+            # Strip the data-URL prefix if present.
+            if raw.startswith("data:") and ";base64," in raw:
+                raw = raw.split(",", 1)[1]
+            import base64
+            try:
+                audio_bytes = base64.b64decode(raw, validate=False)
+            except Exception as exc:
+                raise DevKitError(
+                    400,
+                    f"audio_data_b64 不是有效的 base64：{exc}",
+                    code="bad_audio_base64",
+                ) from exc
+            if not audio_bytes:
+                raise DevKitError(
+                    400, "录制数据为空", code="empty_audio_data",
+                )
+
         return _vc_save(
             self._work_dir(),
             character_id,
             name,
-            sample_path=sample_path if isinstance(sample_path, str) else None,
+            sample_path=sample_path if has_path else None,
+            audio_data=audio_bytes,
             engine=engine if isinstance(engine, str) else "melo-tts",
         )
 

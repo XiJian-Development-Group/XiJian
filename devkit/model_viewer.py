@@ -87,3 +87,44 @@ def get_model_info(work_dir: str, model_id: str) -> dict[str, Any] | None:
         if entry.get("id") == model_id:
             return dict(entry)
     return None
+
+
+#: MIME types for the 3D formats the UI's three.js loader handles.
+_FORMAT_MIMES = {
+    ".vrm": "model/gltf-binary",   # VRM 0.x / 1.0 are GLB with extras
+    ".glb": "model/gltf-binary",
+    ".gltf": "model/gltf+json",
+}
+
+
+def read_model_bytes(work_dir: str, model_id: str) -> dict[str, Any] | None:
+    """Return the raw file bytes + MIME for a registered model.
+
+    The JS previewer calls this to dodge the ``file://`` CORS wall —
+    pywebview's WKWebView will not ``fetch()`` a local file path, so
+    we hand it base64 over the ``js_api`` bridge and let it build an
+    object URL.
+
+    Returns ``None`` if the model id is unknown.  The caller is
+    expected to surface a clean error; we do not raise here because
+    the UI treats "model vanished" as a soft failure (re-list).
+    """
+    info = get_model_info(work_dir, model_id)
+    if not info:
+        return None
+    path = info.get("path", "")
+    if not path or not os.path.isfile(path):
+        return None
+    ext = os.path.splitext(path)[1].lower()
+    with open(path, "rb") as f:
+        raw = f.read()
+    import base64
+    return {
+        "id": model_id,
+        "name": info.get("name", ""),
+        "format": info.get("format", ext.lstrip(".")),
+        "path": path,
+        "size_bytes": len(raw),
+        "mime": _FORMAT_MIMES.get(ext, "application/octet-stream"),
+        "data_b64": base64.b64encode(raw).decode("ascii"),
+    }

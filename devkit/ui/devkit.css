@@ -264,6 +264,26 @@ body {
   align-items: center;
   justify-content: center;
   padding: 20px;
+  position: relative;
+  overflow: hidden;
+}
+
+.model-viewer canvas {
+  display: block;
+  width: 100% !important;
+  height: auto !important;
+}
+
+.model-viewer__tag {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  background: rgba(0, 0, 0, 0.55);
+  color: var(--accent, #7eb6ff);
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  pointer-events: none;
 }
 
 .model-info {

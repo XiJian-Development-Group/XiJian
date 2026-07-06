@@ -256,8 +256,10 @@
 
   const renderCooldown = (seconds) => {
     const el = $("#cooldown-indicator");
-    if (seconds <= 0) el.textContent = "冷却空闲，可随时提交";
-    else { const m = Math.floor(seconds / 60); const s = seconds % 60; el.textContent = m > 0 ? `  ${m}  ${s} ` : `  ${s} `; }
+    if (seconds <= 0) { el.textContent = "冷却空闲，可随时提交"; return; }
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    el.textContent = m > 0 ? `还需等待 ${m} 分 ${s} 秒` : `还需等待 ${s} 秒`;
   };
 
   const refreshHistory = async () => {
@@ -410,9 +412,16 @@
   const onCharExport = async () => {
     if (!_selectedCharId) return;
     const resp = await callApi("export_character", _selectedCharId);
-    if (!resp.ok) { toast("导出失败", "err"); return; }
-    toast("导出成功，可前往创作提交标签页提交", "ok");
-    setStatus("#char-status", "已导出，前往创作提交标签页提交", "ok");
+    if (!resp.ok) { toast(`导出失败：${resp.message}`, "err"); return; }
+    // Refresh the submit-tab packages list and pre-tick this character
+    // so the developer only needs to click "提交" once they arrive.
+    await loadPackages();
+    state.selectedPackages.add(`char:${_selectedCharId}`);
+    renderPackages();
+    refreshSubmitBtn();
+    switchTab("submit");
+    toast("已跳转创作提交，角色包已自动勾选", "ok");
+    setStatus("#char-status", "已导出并跳转到创作提交", "ok");
   };
 
   const onCharImportPersona = async () => {
@@ -552,9 +561,14 @@
     const charId = $("#mem-char").value.trim() || $("#mem-char-id").value.trim();
     if (!charId) { toast("请填写角色 ID", "err"); return; }
     const resp = await callApi("export_memory_entries", charId);
-    if (!resp.ok) { toast("导出失败", "err"); return; }
-    toast("记忆包导出成功，可前往创作提交标签页提交", "ok");
-    setStatus("#mem-status", "已导出，前往创作提交标签页提交", "ok");
+    if (!resp.ok) { toast(`导出失败：${resp.message}`, "err"); return; }
+    await loadPackages();
+    state.selectedPackages.add(`memory:${charId}`);
+    renderPackages();
+    refreshSubmitBtn();
+    switchTab("submit");
+    toast("已跳转创作提交，记忆包已自动勾选", "ok");
+    setStatus("#mem-status", "已导出并跳转到创作提交", "ok");
   };
 
   // --------------------------------------------------------------
@@ -628,9 +642,14 @@
   const onWorldExport = async () => {
     if (!_selectedWorldId) return;
     const resp = await callApi("export_world", _selectedWorldId);
-    if (!resp.ok) { toast("导出失败", "err"); return; }
-    toast("世界观导出成功，可前往创作提交标签页提交", "ok");
-    setStatus("#world-status", "已导出，前往创作提交标签页提交", "ok");
+    if (!resp.ok) { toast(`导出失败：${resp.message}`, "err"); return; }
+    await loadPackages();
+    state.selectedPackages.add(`world:${_selectedWorldId}`);
+    renderPackages();
+    refreshSubmitBtn();
+    switchTab("submit");
+    toast("已跳转创作提交，世界观已自动勾选", "ok");
+    setStatus("#world-status", "已导出并跳转到创作提交", "ok");
   };
 
   // --------------------------------------------------------------
@@ -659,7 +678,36 @@
     $("#model-info-size").textContent = fmtBytes(model.size_bytes);
     $("#model-editor-hint").textContent = model.name;
     $("#model-info").hidden = false;
-    $("#model-viewer-container").innerHTML = `<p class="status status--ok">已加载: ${escHtml(model.name)}<br/><small>路径: ${escHtml(model.path)}</small></p>`;
+    // Trigger the real 3D preview.  We first fetch the file bytes via
+    // the Python bridge (WKWebView can't fetch file:// URLs), then
+    // hand them to the three-loader module.
+    const container = $("#model-viewer-container");
+    container.innerHTML = '<p class="status status--idle">加载预览…</p>';
+    (async () => {
+      const resp = await callApi("read_model_bytes", model.id);
+      if (!resp.ok) {
+        container.innerHTML = `<p class="status status--err">读取失败：${escHtml(resp.message || "")}</p>`;
+        setStatus("#model-status", `读取失败：${resp.message || ""}`, "err");
+        return;
+      }
+      if (!resp.data) {
+        container.innerHTML = `<p class="status status--err">模型文件不可访问，请重新添加。</p>`;
+        setStatus("#model-status", "模型文件不可访问", "err");
+        return;
+      }
+      const info = resp.data;
+      if (!window.DevKitThreeViewer) {
+        container.innerHTML = `<p class="status status--err">three-loader.js 未加载，无法预览 3D 模型</p>`;
+        return;
+      }
+      try {
+        await window.DevKitThreeViewer.renderModel(container, info);
+        setStatus("#model-status", `已加载 ${info.name}（${fmtBytes(info.size_bytes)}）`, "ok");
+      } catch (err) {
+        container.innerHTML = `<p class="status status--err">预览失败：${escHtml(err.message || String(err))}</p>`;
+        setStatus("#model-status", `预览失败：${err.message || ""}`, "err");
+      }
+    })();
   };
 
   const onModelAdd = async () => {
@@ -737,6 +785,7 @@
     $("#voice-engine").value = "melo-tts";
     $("#voice-sample-path").value = "";
     $("#voice-editor-hint").textContent = "";
+    clearVoiceRecording();
     refreshVoiceButtons();
   };
 
@@ -745,12 +794,20 @@
     const name = $("#voice-name").value.trim();
     const engine = $("#voice-engine").value;
     const samplePath = $("#voice-sample-path").value.trim() || null;
+    const recordedB64 = $("#voice-recorded-b64").value.trim() || null;
     if (!charId) { toast("请填写角色 ID", "err"); return; }
     if (!name) { toast("请填写声音名称", "err"); return; }
-    const resp = await callApi("save_voice", charId, name, samplePath, engine);
+    if (!samplePath && !recordedB64) {
+      toast("请选择音频文件，或先录制一段样本", "err");
+      return;
+    }
+    const resp = await callApi("save_voice", charId, name, samplePath, engine, recordedB64);
     if (!resp.ok) { setStatus("#voice-status", `保存失败：${resp.message}`, "err"); return; }
     toast("声音已保存", "ok");
     setStatus("#voice-status", `已保存：${resp.data.id}`, "ok");
+    // Save succeeded — wipe the recording buffer so the next save
+    // doesn't accidentally re-upload the same clip.
+    clearVoiceRecording();
     await renderVoiceList();
   };
 
@@ -770,6 +827,138 @@
     catch { toast("文件选择失败", "err"); return; }
     if (!picked || picked.length === 0) return;
     $("#voice-sample-path").value = picked;
+    // Clear any prior recording so the form doesn't try to upload
+    // both at once.
+    clearVoiceRecording();
+  };
+
+  // --------------------------------------------------------------
+  // Voice recording (MediaRecorder)
+  // --------------------------------------------------------------
+
+  let _mediaRecorder = null;
+  let _recordingChunks = [];
+  let _recordingUrl = null;
+
+  const setRecordingUi = (state) => {
+    const recBtn = $("#voice-record-btn");
+    const stopBtn = $("#voice-stop-btn");
+    const useBtn = $("#voice-use-recording-btn");
+    const hint = $("#voice-record-hint");
+    const playback = $("#voice-playback");
+    if (state === "idle") {
+      recBtn.disabled = false;
+      stopBtn.disabled = true;
+      useBtn.disabled = !playback.src;
+      hint.textContent = "直接通过麦克风录制参考样本。录制后试听，再点「使用此录音」填入。";
+    } else if (state === "recording") {
+      recBtn.disabled = true;
+      stopBtn.disabled = false;
+      useBtn.disabled = true;
+      hint.textContent = "正在录音……点击「停止」结束。";
+    } else if (state === "ready") {
+      recBtn.disabled = false;
+      stopBtn.disabled = true;
+      useBtn.disabled = !playback.src;
+      hint.textContent = "录音完成。点击播放试听，或点「使用此录音」将数据填入保存表单。";
+    }
+  };
+
+  const clearVoiceRecording = () => {
+    const playback = $("#voice-playback");
+    if (playback.src && _recordingUrl) {
+      URL.revokeObjectURL(_recordingUrl);
+      _recordingUrl = null;
+    }
+    playback.removeAttribute("src");
+    playback.hidden = true;
+    playback.load();
+    $("#voice-recorded-b64").value = "";
+    _recordingChunks = [];
+    setRecordingUi("idle");
+  };
+
+  const onVoiceRecord = async () => {
+    if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function") {
+      toast("当前 webview 不支持麦克风录制（缺少 navigator.mediaDevices）", "err");
+      return;
+    }
+    // Prefer a webm/opus mime if the browser offers it — small files,
+    // good for short voice samples.
+    const mimeCandidates = [
+      "audio/webm;codecs=opus",
+      "audio/webm",
+      "audio/ogg;codecs=opus",
+      "audio/mp4",
+    ];
+    let mimeType = "";
+    for (const m of mimeCandidates) {
+      if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(m)) {
+        mimeType = m; break;
+      }
+    }
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (err) {
+      toast(`麦克风权限被拒绝：${err.message || err}`, "err");
+      return;
+    }
+    try {
+      _mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+    } catch (err) {
+      toast(`MediaRecorder 初始化失败：${err.message || err}`, "err");
+      stream.getTracks().forEach((t) => t.stop());
+      return;
+    }
+    _recordingChunks = [];
+    clearVoiceRecording();
+    _mediaRecorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) _recordingChunks.push(e.data);
+    };
+    _mediaRecorder.onstop = async () => {
+      stream.getTracks().forEach((t) => t.stop());
+      if (_recordingChunks.length === 0) { setRecordingUi("idle"); return; }
+      const blob = new Blob(_recordingChunks, { type: mimeType || "audio/webm" });
+      _recordingUrl = URL.createObjectURL(blob);
+      const playback = $("#voice-playback");
+      playback.src = _recordingUrl;
+      playback.hidden = false;
+      // Base64-encode for the Python bridge.  FileReader is the most
+      // portable across WKWebView / WebView2 / webkitgtk; we keep the
+      // data-URL prefix so the server knows the mime.
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = typeof reader.result === "string" ? reader.result : "";
+        $("#voice-recorded-b64").value = result;
+        // Using a recording invalidates any prior sample_path.
+        $("#voice-sample-path").value = "";
+        setRecordingUi("ready");
+        toast("录音完成", "ok");
+      };
+      reader.onerror = () => {
+        toast(`读取录音失败：${reader.error?.message || "未知错误"}`, "err");
+        setRecordingUi("idle");
+      };
+      reader.readAsDataURL(blob);
+    };
+    _mediaRecorder.start();
+    setRecordingUi("recording");
+  };
+
+  const onVoiceStop = () => {
+    if (_mediaRecorder && _mediaRecorder.state !== "inactive") {
+      _mediaRecorder.stop();
+    }
+  };
+
+  const onVoiceUseRecording = () => {
+    const b64 = $("#voice-recorded-b64").value.trim();
+    if (!b64) { toast("暂无录音", "err"); return; }
+    // The hidden b64 field is what gets uploaded by onVoiceSave —
+    // nothing else to do here besides visual confirmation.
+    $("#voice-sample-path").value = "";  // path is no longer the source
+    toast("录音已填入，点保存上传", "ok");
   };
 
   // --------------------------------------------------------------
@@ -971,7 +1160,17 @@
     $("#voice-save-btn").addEventListener("click", onVoiceSave);
     $("#voice-delete-btn").addEventListener("click", onVoiceDelete);
     $("#voice-pick-btn").addEventListener("click", onVoicePickFile);
-    $("#voice-char-id").addEventListener("change", renderVoiceList);
+    $("#voice-record-btn").addEventListener("click", onVoiceRecord);
+    $("#voice-stop-btn").addEventListener("click", onVoiceStop);
+    $("#voice-use-recording-btn").addEventListener("click", onVoiceUseRecording);
+    $("#voice-char-id").addEventListener("change", async () => {
+      await renderVoiceList();
+      // Keep the character's "assigned_voice_pack" dropdown in sync
+      // — so that if the user types a brand-new char id here first
+      // and then switches to the character tab, it shows up as a
+      // selectable option without an extra manual refresh.
+      await populateCharDropdowns();
+    });
     $("#voice-list").addEventListener("click", async (e) => {
       const li = e.target.closest(".item-list__item");
       if (li && li.dataset.id) {

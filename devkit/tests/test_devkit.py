@@ -1187,3 +1187,277 @@ def test_state_module_owns_independent_buckets():
     assert ds.submissions is not ds.last_submit_at
     assert ds.submissions is not ds.local_archives
 
+
+# ---------------------------------------------------------------------------
+# Voice cloner (audio_data + sample_path flows)
+# ---------------------------------------------------------------------------
+
+
+class TestVoiceCloner:
+    """Cover ``devkit.voice_cloner.save_voice`` for both audio sources
+    (a file path *or* raw bytes) and the delete-with-sample-file path.
+
+    The recording flow on the UI side wraps the bytes in base64 and
+    forwards them as ``audio_data``; this is the same code path the
+    file picker uses with ``sample_path``.
+    """
+
+    def test_save_with_sample_path_copies_file(self, tmp_path, make_temp_file):
+        from devkit.voice_cloner import save_voice, list_voices
+
+        src = make_temp_file("ref.wav", b"RIFF\x00\x00\x00\x00WAVE")
+        rec = save_voice(str(tmp_path), "char_a", "default", sample_path=src)
+        assert rec["name"] == "default"
+        assert rec["sample_path"].endswith(".wav")
+        assert os.path.isfile(rec["sample_path"])
+        listed = list_voices(str(tmp_path), "char_a")
+        assert len(listed) == 1
+        assert listed[0]["id"] == rec["id"]
+
+    def test_save_with_audio_data_writes_wav(self, tmp_path):
+        from devkit.voice_cloner import save_voice, get_voice
+
+        rec = save_voice(
+            str(tmp_path), "char_b", "whisper",
+            audio_data=b"ID3\x03\x00\x00\x00\x00\x00\x21",
+        )
+        assert rec["name"] == "whisper"
+        assert rec["sample_path"].endswith(".wav")
+        # Bytes should land verbatim on disk.
+        with open(rec["sample_path"], "rb") as f:
+            assert f.read() == b"ID3\x03\x00\x00\x00\x00\x00\x21"
+        # And be findable by id across the work_dir.
+        loaded = get_voice(str(tmp_path), rec["id"])
+        assert loaded is not None
+        assert loaded["name"] == "whisper"
+
+    def test_save_with_same_name_overwrites(self, tmp_path):
+        """Re-saving under the same character+name replaces the entry
+        rather than creating a duplicate (matches the UI's "edit" flow).
+        """
+        from devkit.voice_cloner import save_voice, list_voices
+
+        save_voice(str(tmp_path), "char_c", "default", audio_data=b"v1")
+        save_voice(str(tmp_path), "char_c", "default", audio_data=b"v2")
+        listed = list_voices(str(tmp_path), "char_c")
+        assert len(listed) == 1
+        with open(listed[0]["sample_path"], "rb") as f:
+            assert f.read() == b"v2"
+
+    def test_delete_voice_removes_sample_file(self, tmp_path):
+        from devkit.voice_cloner import delete_voice, save_voice
+
+        rec = save_voice(str(tmp_path), "char_d", "default", audio_data=b"x" * 64)
+        sample = rec["sample_path"]
+        assert os.path.isfile(sample)
+        ok = delete_voice(str(tmp_path), rec["id"])
+        assert ok is True
+        assert not os.path.isfile(sample)
+
+    def test_unsupported_audio_format_raises(self, tmp_path, make_temp_file):
+        from devkit.voice_cloner import save_voice
+
+        src = make_temp_file("ref.xyz", b"junk")
+        with pytest.raises(DevKitError) as ei:
+            save_voice(str(tmp_path), "char_e", "default", sample_path=src)
+        assert ei.value.code == "bad_audio_format"
+
+    def test_list_engines_includes_melo_tts(self):
+        from devkit.voice_cloner import list_engines
+
+        engines = list_engines()
+        assert "melo-tts" in engines
+        assert isinstance(engines, list)
+
+
+# ---------------------------------------------------------------------------
+# Voice save_voice js_api bridge — audio_data_b64 path
+# ---------------------------------------------------------------------------
+
+
+class TestDevKitApiSaveVoiceRecording:
+    """End-to-end test for the ``audio_data_b64`` parameter on
+    :meth:`DevKitApi.save_voice`.  This is what the JS recording
+    button sends.
+    """
+
+    def _work_dir(self, tmp_path):
+        return str(tmp_path / "work")
+
+    def test_audio_data_b64_pure_string(self, tmp_path):
+        import base64
+        api = DevKitApi()
+        raw = b"RIFF\x10\x00\x00\x00WAVEfmt "
+        resp = api.save_voice(
+            character_id="char_z",
+            name="default",
+            audio_data_b64=base64.b64encode(raw).decode("ascii"),
+        )
+        assert resp["ok"] is True
+        rec = resp["data"]
+        with open(rec["sample_path"], "rb") as f:
+            assert f.read() == raw
+
+    def test_audio_data_b64_with_data_url_prefix(self, tmp_path):
+        """``FileReader.readAsDataURL`` returns ``data:audio/webm;base64,XXX``.
+        The server should strip the prefix before decoding.
+        """
+        import base64
+        api = DevKitApi()
+        raw = b"\x1aE\xdf\xa3" * 4
+        b64 = base64.b64encode(raw).decode("ascii")
+        prefixed = f"data:audio/webm;codecs=opus;base64,{b64}"
+        resp = api.save_voice(
+            character_id="char_y",
+            name="whisper",
+            audio_data_b64=prefixed,
+        )
+        assert resp["ok"] is True
+        with open(resp["data"]["sample_path"], "rb") as f:
+            assert f.read() == raw
+
+    def test_both_sources_rejected(self, tmp_path, make_temp_file):
+        """Sending both ``sample_path`` and ``audio_data_b64`` is
+        ambiguous; the API must refuse with a clean 400."""
+        api = DevKitApi()
+        src = make_temp_file("ref.wav", b"x")
+        resp = api.save_voice(
+            character_id="char_x",
+            name="default",
+            sample_path=src,
+            audio_data_b64="AAAA",
+        )
+        assert resp["ok"] is False
+        assert resp["code"] == "ambiguous_audio_source"
+
+    def test_no_source_rejected(self, tmp_path):
+        api = DevKitApi()
+        resp = api.save_voice(
+            character_id="char_w",
+            name="default",
+        )
+        assert resp["ok"] is False
+        assert resp["code"] == "missing_audio_source"
+
+    def test_bad_base64_rejected(self, tmp_path):
+        api = DevKitApi()
+        resp = api.save_voice(
+            character_id="char_v",
+            name="default",
+            audio_data_b64="!!!not-base64@@@",
+        )
+        assert resp["ok"] is False
+        assert resp["code"] == "bad_audio_base64"
+
+    def test_empty_recording_rejected(self, tmp_path):
+        api = DevKitApi()
+        resp = api.save_voice(
+            character_id="char_u",
+            name="default",
+            audio_data_b64="",
+        )
+        assert resp["ok"] is False
+        assert resp["code"] == "missing_audio_source"
+
+
+# ---------------------------------------------------------------------------
+# 3D model viewer — file registration + bytes bridge
+# ---------------------------------------------------------------------------
+
+
+class TestModelViewer:
+    def test_register_glb_creates_entry(self, tmp_path, make_temp_file):
+        from devkit.model_viewer import (
+            list_models, register_model, read_model_bytes,
+            get_model_info, unregister_model,
+        )
+        src = make_temp_file("yuki.glb", b"glTF\x02\x00\x00\x00")
+        rec = register_model(str(tmp_path), src)
+        assert rec["format"] == "glb"
+        assert rec["size_bytes"] == len(b"glTF\x02\x00\x00\x00")
+        listed = list_models(str(tmp_path))
+        assert len(listed) == 1 and listed[0]["id"] == rec["id"]
+
+        info = get_model_info(str(tmp_path), rec["id"])
+        assert info is not None and info["path"] == src
+
+        raw = read_model_bytes(str(tmp_path), rec["id"])
+        assert raw is not None
+        assert raw["format"] == "glb"
+        assert raw["mime"] == "model/gltf-binary"
+        import base64
+        assert base64.b64decode(raw["data_b64"]) == b"glTF\x02\x00\x00\x00"
+
+        assert unregister_model(str(tmp_path), rec["id"]) is True
+        assert list_models(str(tmp_path)) == []
+        # Reading an unregistered model returns None.
+        assert read_model_bytes(str(tmp_path), rec["id"]) is None
+
+    def test_register_vrm_records_vrm_format(self, tmp_path, make_temp_file):
+        from devkit.model_viewer import read_model_bytes, register_model
+
+        src = make_temp_file("hero.vrm", b"glTF\x02\x00\x00\x00VRM")
+        rec = register_model(str(tmp_path), src)
+        assert rec["format"] == "vrm"
+        raw = read_model_bytes(str(tmp_path), rec["id"])
+        assert raw["mime"] == "model/gltf-binary"  # VRM is GLB-shaped
+
+    def test_register_unsupported_format_rejected(self, tmp_path, make_temp_file):
+        from devkit.model_viewer import register_model
+
+        src = make_temp_file("bad.obj", b"v 0 0 0")
+        with pytest.raises(DevKitError) as ei:
+            register_model(str(tmp_path), src)
+        assert ei.value.code == "bad_format"
+
+    def test_register_missing_file_rejected(self, tmp_path):
+        from devkit.model_viewer import register_model
+
+        with pytest.raises(DevKitError) as ei:
+            register_model(str(tmp_path), str(tmp_path / "nope.glb"))
+        assert ei.value.code == "file_not_found"
+
+    def test_register_duplicate_path_returns_existing(self, tmp_path, make_temp_file):
+        """Re-registering the same file path returns the existing entry
+        (so the UI doesn't accumulate duplicates if the user clicks
+        'add' twice in a row)."""
+        from devkit.model_viewer import list_models, register_model
+
+        src = make_temp_file("dup.glb", b"glTF")
+        first = register_model(str(tmp_path), src)
+        second = register_model(str(tmp_path), src)
+        assert first["id"] == second["id"]
+        assert len(list_models(str(tmp_path))) == 1
+
+
+# ---------------------------------------------------------------------------
+# 3D model read_model_bytes js_api bridge
+# ---------------------------------------------------------------------------
+
+
+class TestDevKitApiModelBytes:
+    def test_returns_null_for_unknown_id(self, tmp_path):
+        api = DevKitApi()
+        resp = api.read_model_bytes("model_does_not_exist")
+        # ``read_model_bytes`` returns None when the id is unknown, so
+        # the success envelope is ``{"ok": True, "data": None}``.
+        assert resp["ok"] is True
+        assert resp["data"] is None
+
+    def test_returns_envelope_for_known_model(self, tmp_path, make_temp_file, monkeypatch):
+        import base64
+        from devkit.model_viewer import register_model
+
+        # The api's ``_work_dir`` reads ``XIJIAN_DEV_WORK_DIR`` from
+        # the environment; point it at ``tmp_path`` so the registered
+        # model is visible to ``api.read_model_bytes``.
+        monkeypatch.setenv("XIJIAN_DEV_WORK_DIR", str(tmp_path))
+        src = make_temp_file("yuki.glb", b"glTF" + b"\x00" * 60)
+        rec = register_model(str(tmp_path), src)
+        api = DevKitApi()
+        resp = api.read_model_bytes(rec["id"])
+        assert resp["ok"] is True
+        assert resp["data"]["id"] == rec["id"]
+        assert resp["data"]["mime"] == "model/gltf-binary"
+        assert base64.b64decode(resp["data"]["data_b64"]) == b"glTF" + b"\x00" * 60
+
