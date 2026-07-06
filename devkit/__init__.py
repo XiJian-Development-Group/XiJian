@@ -127,7 +127,7 @@ DEV_SUBMIT_SMTP_HOST: str = os.environ.get("XIJIAN_DEV_SMTP_HOST", "smtp.qq.com"
 #: SMTP server port.  465 = SSL submission port.
 DEV_SUBMIT_SMTP_PORT: int = int(os.environ.get("XIJIAN_DEV_SMTP_PORT", "465") or "465")
 #: Whether to use STARTTLS on the SMTP connection.
-DEV_SUBMIT_SMTP_USE_TLS: bool = os.environ.get("XIJIAN_DEV_SMTP_USE_TLS", "0") not in (
+DEV_SUBMIT_SMTP_USE_TLS: bool = os.environ.get("XIJIAN_DEV_SMTP_USE_TLS", "0") in (
     "1",
     "true",
     "yes",
@@ -568,7 +568,7 @@ def _smtp_send(
         except (OSError, smtplib.SMTPConnectError) as exc:
             raise SmtpError("connection_failed", str(exc)) from exc
         try:
-            if isinstance(smtp, smtplib.SMTP) and use_tls:
+            if not isinstance(smtp, smtplib.SMTP_SSL) and use_tls:
                 try:
                     smtp.starttls(context=ssl.create_default_context())
                 except (smtplib.SMTPException, ssl.SSLError, OSError) as exc:
