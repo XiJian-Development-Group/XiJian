@@ -570,7 +570,7 @@ class DevKitApi:
         import os
         return os.environ.get(
             "XIJIAN_DEV_WORK_DIR",
-            os.path.join(os.path.expanduser("~"), "隙间Dev"),
+            os.path.join(os.path.expanduser("~"), "Library", "Application Support", "XiJian", "DevKit"),
         )
 
     # --- character editor ----------------------------------------------
