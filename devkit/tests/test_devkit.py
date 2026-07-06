@@ -461,7 +461,7 @@ class TestBuildEmailMessage:
             archive_path=f,
             archive_format=ARCHIVE_FORMAT_7Z,
         )
-        assert msg["Subject"] == "[XiJian Submission] alice / character:char_yuki"
+        assert msg["Subject"] == "[XiJian DevKit Package Submit] alice"
         assert msg["From"] == DEV_SUBMIT_SMTP_USER
         assert msg["To"] == DEV_SUBMIT_RECIPIENT
         # Two parts: text body + attachment.

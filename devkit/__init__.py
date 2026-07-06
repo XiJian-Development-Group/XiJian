@@ -122,31 +122,31 @@ _LOGGER = logging.getLogger("devkit")
 # Hard-coded configuration (replace before deploy)
 # ---------------------------------------------------------------------------
 
-#: SMTP server host.  Placeholder — **must be replaced before deploy**.
-DEV_SUBMIT_SMTP_HOST: str = os.environ.get("XIJIAN_DEV_SMTP_HOST", "smtp.example.com")
-#: SMTP server port.  587 = STARTTLS submission port.
-DEV_SUBMIT_SMTP_PORT: int = int(os.environ.get("XIJIAN_DEV_SMTP_PORT", "587") or "587")
+#: SMTP server host.
+DEV_SUBMIT_SMTP_HOST: str = os.environ.get("XIJIAN_DEV_SMTP_HOST", "smtp.qq.com")
+#: SMTP server port.  465 = SSL submission port.
+DEV_SUBMIT_SMTP_PORT: int = int(os.environ.get("XIJIAN_DEV_SMTP_PORT", "465") or "465")
 #: Whether to use STARTTLS on the SMTP connection.
-DEV_SUBMIT_SMTP_USE_TLS: bool = os.environ.get("XIJIAN_DEV_SMTP_USE_TLS", "1") not in (
-    "0",
-    "false",
-    "no",
+DEV_SUBMIT_SMTP_USE_TLS: bool = os.environ.get("XIJIAN_DEV_SMTP_USE_TLS", "0") not in (
+    "1",
+    "true",
+    "yes",
 )
 #: SMTP authentication user.
 DEV_SUBMIT_SMTP_USER: str = os.environ.get(
-    "XIJIAN_DEV_SMTP_USER", "xijian-dev@example.com"
+    "XIJIAN_DEV_SMTP_USER", "2500693887@qq.com"
 )
-#: SMTP authentication password.  **Replace before deploy.**
+#: SMTP authentication password.
 DEV_SUBMIT_SMTP_PASSWORD: str = os.environ.get(
-    "XIJIAN_DEV_SMTP_PASSWORD", "REPLACE_BEFORE_DEPLOY"
+    "XIJIAN_DEV_SMTP_PASSWORD", "evcqxdqiiovtebie"
 )
-#: Hard-coded developer-group recipient (no server, no discovery).
+#: Developer-group recipient.
 DEV_SUBMIT_RECIPIENT: str = os.environ.get(
-    "XIJIAN_DEV_RECIPIENT", "xijian-submissions@example.com"
+    "XIJIAN_DEV_RECIPIENT", "panmofan@icloud.com"
 )
-#: From address on the outgoing email (usually same as SMTP user).
+#: From address on the outgoing email.
 DEV_SUBMIT_FROM_ADDR: str = os.environ.get(
-    "XIJIAN_DEV_FROM_ADDR", DEV_SUBMIT_SMTP_USER
+    "XIJIAN_DEV_FROM_ADDR", "2500693887@qq.com"
 )
 
 #: Hard limit on attachment size in bytes.  1200 MB by macOS
@@ -558,14 +558,17 @@ def _smtp_send(
     import smtplib
     import ssl
 
-    smtp: smtplib.SMTP | None = None
+    smtp: smtplib.SMTP | smtplib.SMTP_SSL | None = None
     try:
         try:
-            smtp = smtplib.SMTP(host, port, timeout=30)
+            if port == 465:
+                smtp = smtplib.SMTP_SSL(host, port, timeout=30, context=ssl.create_default_context())
+            else:
+                smtp = smtplib.SMTP(host, port, timeout=30)
         except (OSError, smtplib.SMTPConnectError) as exc:
             raise SmtpError("connection_failed", str(exc)) from exc
         try:
-            if use_tls:
+            if isinstance(smtp, smtplib.SMTP) and use_tls:
                 try:
                     smtp.starttls(context=ssl.create_default_context())
                 except (smtplib.SMTPException, ssl.SSLError, OSError) as exc:
@@ -610,23 +613,24 @@ def build_email_message(
 ) -> MIMEMultipart:
     """Build the multipart MIME message sent to the developer group."""
     msg = MIMEMultipart("mixed")
-    msg["Subject"] = f"[XiJian Submission] {developer_id} / {target_kind}:{target_id}"
+    msg["Subject"] = f"[XiJian DevKit Package Submit] {developer_id}"
     msg["From"] = DEV_SUBMIT_FROM_ADDR
     msg["To"] = DEV_SUBMIT_RECIPIENT
     msg["Date"] = format_datetime(_dt.datetime.now(_dt.timezone.utc))
 
     body_lines = [
-        "developer_id:    " + developer_id,
-        "submitted_at:    " + submitted_at,
-        "target_kind:     " + target_kind,
-        "target_id:       " + target_id,
-        "ai_ratio:        " + f"{ai_ratio:.2f}",
-        "archive_format:  " + archive_format,
-        f"attachment:      {archive_filename} ({archive_size_bytes} bytes, "
-        f"~{archive_size_bytes / 1_000_000:.2f} MB)",
-        "content_sha256:  " + content_sha256,
+        "提交者 ID:    " + developer_id,
         "",
-        "— 自动由隙间开发工具生成",
+        "提交时间:    " + submitted_at,
+        "目标类型:     " + target_kind,
+        "目标 ID:       " + target_id,
+        "AI 协助占比: " + f"{ai_ratio:.2f}",
+        "归档格式:  " + archive_format,
+        f"附件:      {archive_filename} ({archive_size_bytes} bytes, "
+        f"~{archive_size_bytes / 1_000_000:.2f} MB)",
+        "内容 SHA256:  " + content_sha256,
+        "",
+        "— 自动由隙间开发者工具生成",
     ]
     msg.attach(MIMEText("\n".join(body_lines), "plain", "utf-8"))
 

@@ -95,6 +95,7 @@ from devkit.character_editor import (
     save_character as _ce_save,
     delete_character as _ce_delete,
     export_character_for_submit as _ce_export,
+    import_persona as _ce_import_persona,
 )
 from devkit.memory_editor import (
     list_entries as _me_list,
@@ -123,6 +124,7 @@ from devkit.voice_cloner import (
     get_voice as _vc_get,
     save_voice as _vc_save,
     delete_voice as _vc_delete,
+    list_engines as _vc_engines,
 )
 
 
@@ -380,6 +382,7 @@ class DevKitApi:
         target_id: Any = None,
         payload: Any = None,
         file_entries: Any = None,
+        package_ids: Any = None,
         smtp_send: Any = None,  # noqa: ARG002 — exposed for tests only
         archive_path: Any = None,  # noqa: ARG002 — exposed for tests only
     ) -> dict[str, Any]:
@@ -387,6 +390,11 @@ class DevKitApi:
 
         ``developer_id`` defaults to the active one if omitted,
         matching the UI's "I'm logged in as someone" flow.
+
+        Accepts either ``file_entries`` (legacy) or ``package_ids``
+        (new flow).  When ``package_ids`` is provided, each package
+        is resolved to its file entries via the editor export
+        functions and aggregated into a single submission.
 
         Returns the new submission record on success, or a structured
         error dict (see :func:`serialize_error`).
@@ -400,20 +408,36 @@ class DevKitApi:
                 "`developer_id` is required (or call api.login first)",
                 code="missing_developer_id",
             )
-        if not isinstance(target_kind, str) or not target_kind:
-            raise DevKitError(
-                400, "`target_kind` is required", code="missing_target_kind"
-            )
-        if not isinstance(target_id, str) or not target_id:
-            raise DevKitError(
-                400, "`target_id` is required", code="missing_target_id"
-            )
-        if file_entries is not None and not isinstance(file_entries, list):
-            raise DevKitError(
-                400,
-                "`file_entries` must be a list when provided",
-                code="bad_file_entries",
-            )
+
+        # --- resolve package_ids → file_entries + target_kind/target_id ---
+        if package_ids is not None:
+            if not isinstance(package_ids, list):
+                raise DevKitError(
+                    400,
+                    "`package_ids` must be a list of strings",
+                    code="bad_package_ids",
+                )
+            resolved_all = self._resolve_packages(package_ids)
+            target_kind = resolved_all["target_kind"]
+            target_id = resolved_all["target_id"]
+            file_entries = resolved_all["file_entries"]
+            payload = payload or resolved_all["payload"]
+        else:
+            if not isinstance(target_kind, str) or not target_kind:
+                raise DevKitError(
+                    400, "`target_kind` is required", code="missing_target_kind"
+                )
+            if not isinstance(target_id, str) or not target_id:
+                raise DevKitError(
+                    400, "`target_id` is required", code="missing_target_id"
+                )
+            if file_entries is not None and not isinstance(file_entries, list):
+                raise DevKitError(
+                    400,
+                    "`file_entries` must be a list when provided",
+                    code="bad_file_entries",
+                )
+
         # Pre-flight rate-limit; raises RateLimitedError → serialize_error.
         check_rate_limit(developer_id)
 
@@ -430,6 +454,103 @@ class DevKitApi:
             smtp_send=smtp_send if callable(smtp_send) else None,
             archive_path=archive_path if isinstance(archive_path, str) else None,
         )
+
+    def _resolve_packages(
+        self, package_ids: list[str]
+    ) -> dict[str, Any]:
+        """Resolve package IDs to file entries and derive submission metadata."""
+        all_files: list[dict[str, Any]] = []
+        notes_parts: list[str] = []
+        first_kind: str | None = None
+        first_id: str | None = None
+        payload_files: list[str] = []
+
+        for pkg_id in package_ids:
+            if not isinstance(pkg_id, str) or ":" not in pkg_id:
+                raise DevKitError(
+                    400, f"无效的包 ID: {pkg_id}", code="bad_package_id"
+                )
+            ptype, pid = pkg_id.split(":", 1)
+            if not pid:
+                raise DevKitError(
+                    400, f"无效的包 ID: {pkg_id}", code="bad_package_id"
+                )
+
+            if ptype == "char":
+                export = _ce_export(self._work_dir(), pid)
+            elif ptype == "memory":
+                export = _me_export(self._work_dir(), pid)
+            elif ptype == "world":
+                export = _we_export(self._work_dir(), pid)
+            else:
+                raise DevKitError(
+                    400, f"未知的包类型: {ptype}", code="unknown_package_type"
+                )
+
+            if first_kind is None:
+                first_kind = export["target_kind"]
+                first_id = pid
+            all_files.extend(export.get("files", []))
+            notes_parts.append(export.get("payload", {}).get("notes", ""))
+            payload_files.extend(export.get("payload", {}).get("files", []))
+
+        return {
+            "target_kind": first_kind or "character",
+            "target_id": first_id or "",
+            "file_entries": all_files,
+            "payload": {
+                "notes": " | ".join(notes_parts) if notes_parts else "",
+                "files": payload_files,
+            },
+        }
+
+    @_serialize_call
+    def list_submit_packages(self) -> list[dict[str, Any]]:
+        """Return all exportable items (characters, memory packs, worlds)
+        as selectable packages for submission."""
+        work_dir = self._work_dir()
+        packages: list[dict[str, Any]] = []
+
+        # Characters
+        for char in _ce_list(work_dir):
+            char_id = char.get("id", "")
+            name = char.get("display_name") or char.get("name", "?")
+            packages.append({
+                "package_id": f"char:{char_id}",
+                "package_type": "character",
+                "target_kind": "character",
+                "target_id": char_id,
+                "name": name,
+                "description": f"角色: {name}",
+            })
+
+        # Memory packs (one per character that has entries)
+        for char_id in _me_chars(work_dir):
+            char = _ce_get(work_dir, char_id) or {}
+            name = char.get("display_name") or char.get("name", char_id)
+            packages.append({
+                "package_id": f"memory:{char_id}",
+                "package_type": "memory_pack",
+                "target_kind": "character",
+                "target_id": char_id,
+                "name": f"{name} 的记忆包",
+                "description": f"记忆条目: {char_id}",
+            })
+
+        # Worlds
+        for world in _we_list(work_dir):
+            world_id = world.get("id", "")
+            name = world.get("name", "?")
+            packages.append({
+                "package_id": f"world:{world_id}",
+                "package_type": "world",
+                "target_kind": "world",
+                "target_id": world_id,
+                "name": name,
+                "description": f"世界观: {name}",
+            })
+
+        return packages
 
     @_serialize_call
     def delete_local(self, submission_id: Any) -> dict[str, Any]:
@@ -482,6 +603,15 @@ class DevKitApi:
         if not isinstance(char_id, str) or not char_id:
             raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
         return _ce_export(self._work_dir(), char_id)
+
+    @_serialize_call
+    def import_persona(self, char_id: Any, file_path: Any) -> dict[str, Any]:
+        if not isinstance(char_id, str) or not char_id:
+            raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
+        if not isinstance(file_path, str) or not file_path:
+            raise DevKitError(400, "文件路径不能为空", code="missing_file_path")
+        result = _ce_import_persona(self._work_dir(), char_id, file_path)
+        return {"imported": True, "message": result}
 
     # --- memory editor -------------------------------------------------
 
@@ -577,6 +707,10 @@ class DevKitApi:
         return _mv_info(self._work_dir(), model_id)
 
     # --- voice clone ---------------------------------------------------
+
+    @_serialize_call
+    def list_voice_engines(self) -> list[str]:
+        return list(_vc_engines())
 
     @_serialize_call
     def list_voices(self, character_id: Any) -> list[dict[str, Any]]:

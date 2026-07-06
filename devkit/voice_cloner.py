@@ -19,6 +19,18 @@ _VOICES_SUBDIR = "voices"
 
 _SUPPORTED_AUDIO_EXTENSIONS = {".wav", ".mp3", ".m4a", ".ogg", ".flac"}
 
+# Available TTS / voice-clone engines.
+AVAILABLE_ENGINES: tuple[str, ...] = (
+    "melo-tts",
+    "cosyvoice",
+    "gpt-sovits",
+    "fish-speech",
+    "chat-tts",
+    "bert-vits2",
+    "vall-e",
+    "openai-tts",
+)
+
 
 def _gen_id() -> str:
     return f"voice_{secrets.token_hex(8)}"
@@ -53,6 +65,10 @@ def _save_meta(work_dir: str, character_id: str, meta: list[dict[str, Any]]) -> 
     fpath = _meta_path(work_dir, character_id)
     with open(fpath, "w", encoding="utf-8") as f:
         json.dump(meta, f, ensure_ascii=False, indent=2)
+
+
+def list_engines() -> list[str]:
+    return list(AVAILABLE_ENGINES)
 
 
 def list_voices(work_dir: str, character_id: str) -> list[dict[str, Any]]:
