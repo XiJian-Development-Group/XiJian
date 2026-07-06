@@ -109,9 +109,9 @@ fi
 
 if [[ "${SKIP_INSTALL}" != "1" && ( "${NEED_INSTALL}" == "1" || "${PYI_BIN}" == "" ) ]]; then
     echo "==> installing runtime deps + pyinstaller"
-    "${PIP}" install --quiet --upgrade pip
-    "${PIP}" install --quiet -r "${DEVKIT_DIR}/requirements.txt"
-    "${PIP}" install --quiet "pyinstaller>=6.0"
+    "${PY}" -m pip install --quiet --upgrade pip
+    "${PY}" -m pip install --quiet -r "${DEVKIT_DIR}/requirements.txt"
+    "${PY}" -m pip install --quiet "pyinstaller>=6.0"
 fi
 
 # --- locate pyinstaller ---------------------------------------------------
