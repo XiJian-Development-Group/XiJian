@@ -145,3 +145,7 @@ for f in "${DEVKIT_DIR}/dist/xijian-devkit" "${DEVKIT_DIR}/dist/xijian-devkit.ex
          "${DEVKIT_DIR}/dist/隙间开发者工具" "${DEVKIT_DIR}/dist/隙间开发者工具.app"; do
     [[ -e "$f" ]] && echo "    $f"
 done
+
+# Always exit 0 — the for loop above may leave a nonzero exit code when
+# platform-specific artifacts (e.g. .app bundle) don't exist.
+exit 0
