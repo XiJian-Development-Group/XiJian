@@ -66,7 +66,7 @@
     $("#cfg-max-bytes").textContent = `${fmtBytes(cfg.max_attachment_bytes)} (${cfg.max_attachment_mb} MB)`;
     $("#cfg-smtp-host").textContent = cfg.smtp_host ?? "";
     $("#cfg-smtp-port").textContent = String(cfg.smtp_port ?? "");
-    $("#cfg-smtp-tls").textContent = cfg.smtp_use_tls ? "" : "";
+    $("#cfg-smtp-tls").textContent = cfg.smtp_use_tls ? "是" : "否";
     $("#cfg-smtp-user").textContent = cfg.smtp_user ?? "";
     $("#recipient-chip-value").textContent = cfg.recipient ?? "";
   };
@@ -157,8 +157,8 @@
   // --------------------------------------------------------------
 
   const onSubmit = async () => {
-    if (!state.activeDeveloper) { toast("", "err"); return; }
-    if (state.selectedPackages.size === 0) { toast("", "err"); return; }
+    if (!state.activeDeveloper) { toast("请先登录", "err"); return; }
+    if (state.selectedPackages.size === 0) { toast("请勾选要提交的内容包", "err"); return; }
     const packageIds = Array.from(state.selectedPackages);
     const aiRatio = parseFloat($("#ai-ratio").value || "0");
     const notes = $("#notes").value.trim();
@@ -210,7 +210,7 @@
 
   const renderCooldown = (seconds) => {
     const el = $("#cooldown-indicator");
-    if (seconds <= 0) el.textContent = "";
+    if (seconds <= 0) el.textContent = "冷却空闲，可随时提交";
     else { const m = Math.floor(seconds / 60); const s = seconds % 60; el.textContent = m > 0 ? `  ${m}  ${s} ` : `  ${s} `; }
   };
 
@@ -342,10 +342,10 @@
         force_recall_on_history: $("#char-mc-force-recall").value === "true",
       },
     };
-    if (!data.name) { toast("", "err"); return; }
+    if (!data.name) { toast("请填写角色名称", "err"); return; }
     const resp = await callApi("save_character", data);
     if (!resp.ok) { setStatus("#char-status", `保存失败：${resp.message}`, "err"); return; }
-    toast("", "ok");
+    toast("角色已保存", "ok");
     setStatus("#char-status", `已保存：${resp.data.id}`, "ok");
     await renderCharList();
     _selectedCharId = resp.data.id;
@@ -355,8 +355,8 @@
   const onCharDelete = async () => {
     if (!_selectedCharId) return;
     const resp = await callApi("delete_character", _selectedCharId);
-    if (!resp.ok) { toast("", "err"); return; }
-    toast("", "ok");
+    if (!resp.ok) { toast("删除失败", "err"); return; }
+    toast("角色已删除", "ok");
     resetCharEditor();
     await renderCharList();
   };
@@ -364,15 +364,15 @@
   const onCharExport = async () => {
     if (!_selectedCharId) return;
     const resp = await callApi("export_character", _selectedCharId);
-    if (!resp.ok) { toast("", "err"); return; }
-    toast("", "ok");
-    setStatus("#char-status", "", "ok");
+    if (!resp.ok) { toast("导出失败", "err"); return; }
+    toast("导出成功，可前往创作提交标签页提交", "ok");
+    setStatus("#char-status", "已导出，前往创作提交标签页提交", "ok");
   };
 
   const onCharImportPersona = async () => {
-    if (!_selectedCharId) { toast("", "err"); return; }
+    if (!_selectedCharId) { toast("请先选择一个角色", "err"); return; }
     if (!window.pywebview || !window.pywebview.create_file_dialog) {
-      toast("pywebview ", "err");
+      toast("pywebview 文件对话框未就绪", "err");
       return;
     }
     let picked;
@@ -381,13 +381,13 @@
         window.pywebview.types.OPEN,
         { file_types: ["md", "markdown", "txt"] }
       );
-    } catch { toast("", "err"); return; }
+    } catch { toast("文件选择失败", "err"); return; }
     if (!picked || picked.length === 0) return;
     const resp = await callApi("import_persona", _selectedCharId, picked);
     if (!resp.ok) { toast(`导入失败：${resp.message}`, "err"); return; }
     $("#char-persona").value = resp.data.message;
-    toast("", "ok");
-    setStatus("#char-status", "", "ok");
+    toast("人设导入成功", "ok");
+    setStatus("#char-status", "人设已导入", "ok");
   };
 
   // --------------------------------------------------------------
@@ -439,7 +439,7 @@
     const resp = await callApi("list_memory_entries", charId);
     if (!resp.ok) { renderItemList("mem-list", [], () => ""); return; }
     renderItemList("mem-list", resp.data || [], (e) =>
-      `<strong>[${e.type === "long" ? "" : ""}]</strong> ${escHtml(e.content.slice(0, 60))}${e.content.length > 60 ? "" : ""}<br/><small>: ${e.importance}  ${(e.tags || []).join(", ")}</small>`
+      `<strong>[${e.type === "long" ? "长期" : "短期"}]</strong> ${escHtml(e.content.slice(0, 60))}${e.content.length > 60 ? "…" : ""}<br/><small>重要性: ${e.importance} · ${(e.tags || []).join(", ")}</small>`
     );
     refreshMemButtons();
   };
@@ -484,11 +484,11 @@
       tags,
       content: $("#mem-content").value,
     };
-    if (!data.character_id) { toast("", "err"); return; }
-    if (!data.content) { toast("", "err"); return; }
+    if (!data.character_id) { toast("请填写角色 ID", "err"); return; }
+    if (!data.content) { toast("请填写记忆内容", "err"); return; }
     const resp = await callApi("save_memory_entry", data);
     if (!resp.ok) { setStatus("#mem-status", `保存失败：${resp.message}`, "err"); return; }
-    toast("", "ok");
+    toast("记忆已保存", "ok");
     setStatus("#mem-status", `已保存：${resp.data.id}`, "ok");
     await renderMemList();
   };
@@ -496,19 +496,19 @@
   const onMemDelete = async () => {
     if (!_selectedMemId) return;
     const resp = await callApi("delete_memory_entry", _selectedMemId);
-    if (!resp.ok) { toast("", "err"); return; }
-    toast("", "ok");
+    if (!resp.ok) { toast("删除失败", "err"); return; }
+    toast("记忆已删除", "ok");
     resetMemEditor();
     await renderMemList();
   };
 
   const onMemExport = async () => {
     const charId = $("#mem-char").value.trim() || $("#mem-char-id").value.trim();
-    if (!charId) { toast("", "err"); return; }
+    if (!charId) { toast("请填写角色 ID", "err"); return; }
     const resp = await callApi("export_memory_entries", charId);
-    if (!resp.ok) { toast("", "err"); return; }
-    toast("", "ok");
-    setStatus("#mem-status", "", "ok");
+    if (!resp.ok) { toast("导出失败", "err"); return; }
+    toast("记忆包导出成功，可前往创作提交标签页提交", "ok");
+    setStatus("#mem-status", "已导出，前往创作提交标签页提交", "ok");
   };
 
   // --------------------------------------------------------------
@@ -555,17 +555,17 @@
   const onWorldSave = async () => {
     let config = {};
     try { const raw = $("#world-config").value.trim(); if (raw) config = JSON.parse(raw); }
-    catch { toast("JSON ", "err"); return; }
+    catch { toast("JSON 格式错误", "err"); return; }
     const data = {
       id: $("#world-editing-id").value || undefined,
       name: $("#world-name").value.trim(),
       config,
       world_doc: $("#world-doc").value,
     };
-    if (!data.name) { toast("", "err"); return; }
+    if (!data.name) { toast("请填写世界观名称", "err"); return; }
     const resp = await callApi("save_world", data);
     if (!resp.ok) { setStatus("#world-status", `保存失败：${resp.message}`, "err"); return; }
-    toast("", "ok");
+    toast("世界观已保存", "ok");
     setStatus("#world-status", `已保存：${resp.data.id}`, "ok");
     await renderWorldList();
   };
@@ -573,8 +573,8 @@
   const onWorldDelete = async () => {
     if (!_selectedWorldId) return;
     const resp = await callApi("delete_world", _selectedWorldId);
-    if (!resp.ok) { toast("", "err"); return; }
-    toast("", "ok");
+    if (!resp.ok) { toast("删除失败", "err"); return; }
+    toast("世界观已删除", "ok");
     resetWorldEditor();
     await renderWorldList();
   };
@@ -582,9 +582,9 @@
   const onWorldExport = async () => {
     if (!_selectedWorldId) return;
     const resp = await callApi("export_world", _selectedWorldId);
-    if (!resp.ok) { toast("", "err"); return; }
-    toast("", "ok");
-    setStatus("#world-status", "", "ok");
+    if (!resp.ok) { toast("导出失败", "err"); return; }
+    toast("世界观导出成功，可前往创作提交标签页提交", "ok");
+    setStatus("#world-status", "已导出，前往创作提交标签页提交", "ok");
   };
 
   // --------------------------------------------------------------
@@ -604,7 +604,7 @@
   const showModelInfo = (model) => {
     if (!model) {
       $("#model-info").hidden = true;
-      $("#model-viewer-container").innerHTML = '<p class="status status--idle"></p>';
+      $("#model-viewer-container").innerHTML = '<p class="status status--idle">请从左侧列表选择一个模型</p>';
       return;
     }
     _selectedModelId = model.id;
@@ -613,26 +613,26 @@
     $("#model-info-size").textContent = fmtBytes(model.size_bytes);
     $("#model-editor-hint").textContent = model.name;
     $("#model-info").hidden = false;
-    $("#model-viewer-container").innerHTML = `<p class="status status--ok">: ${escHtml(model.name)}<br/><small>: ${escHtml(model.path)}</small></p>`;
+    $("#model-viewer-container").innerHTML = `<p class="status status--ok">已加载: ${escHtml(model.name)}<br/><small>路径: ${escHtml(model.path)}</small></p>`;
   };
 
   const onModelAdd = async () => {
-    if (!window.pywebview || !window.pywebview.create_file_dialog) { toast("pywebview ", "err"); return; }
+    if (!window.pywebview || !window.pywebview.create_file_dialog) { toast("pywebview 文件对话框未就绪", "err"); return; }
     let picked;
     try { picked = await window.pywebview.create_file_dialog(window.pywebview.types.OPEN, { file_types: ["vrm", "glb", "gltf"] }); }
-    catch { toast("", "err"); return; }
+    catch { toast("文件选择失败", "err"); return; }
     if (!picked || picked.length === 0) return;
     const resp = await callApi("register_model", picked);
     if (!resp.ok) { toast(`添加失败：${resp.message}`, "err"); return; }
-    toast("", "ok");
+    toast("模型已添加", "ok");
     await renderModelList();
   };
 
   const onModelUnregister = async () => {
     if (!_selectedModelId) return;
     const resp = await callApi("unregister_model", _selectedModelId);
-    if (!resp.ok) { toast("", "err"); return; }
-    toast("", "ok");
+    if (!resp.ok) { toast("移除失败", "err"); return; }
+    toast("模型已移除", "ok");
     _selectedModelId = null;
     showModelInfo(null);
     await renderModelList();
@@ -663,7 +663,7 @@
     const resp = await callApi("list_voices", charId);
     if (!resp.ok) { renderItemList("voice-list", [], () => ""); return; }
     renderItemList("voice-list", resp.data || [], (v) =>
-      `<strong>${escHtml(v.name)}</strong><br/><small>${escHtml(v.engine)}  ${v.sample_path ? "" : ""}</small>`
+      `<strong>${escHtml(v.name)}</strong><br/><small>${escHtml(v.engine)} · ${v.sample_path ? "有样本文件" : "无样本"}</small>`
     );
     refreshVoiceButtons();
   };
@@ -699,11 +699,11 @@
     const name = $("#voice-name").value.trim();
     const engine = $("#voice-engine").value;
     const samplePath = $("#voice-sample-path").value.trim() || null;
-    if (!charId) { toast("", "err"); return; }
-    if (!name) { toast("", "err"); return; }
+    if (!charId) { toast("请填写角色 ID", "err"); return; }
+    if (!name) { toast("请填写声音名称", "err"); return; }
     const resp = await callApi("save_voice", charId, name, samplePath, engine);
     if (!resp.ok) { setStatus("#voice-status", `保存失败：${resp.message}`, "err"); return; }
-    toast("", "ok");
+    toast("声音已保存", "ok");
     setStatus("#voice-status", `已保存：${resp.data.id}`, "ok");
     await renderVoiceList();
   };
@@ -711,17 +711,17 @@
   const onVoiceDelete = async () => {
     if (!_selectedVoiceId) return;
     const resp = await callApi("delete_voice", _selectedVoiceId);
-    if (!resp.ok) { toast("", "err"); return; }
-    toast("", "ok");
+    if (!resp.ok) { toast("删除失败", "err"); return; }
+    toast("声音已删除", "ok");
     resetVoiceEditor();
     await renderVoiceList();
   };
 
   const onVoicePickFile = async () => {
-    if (!window.pywebview || !window.pywebview.create_file_dialog) { toast("pywebview ", "err"); return; }
+    if (!window.pywebview || !window.pywebview.create_file_dialog) { toast("pywebview 文件对话框未就绪", "err"); return; }
     let picked;
     try { picked = await window.pywebview.create_file_dialog(window.pywebview.types.OPEN, { file_types: ["wav", "mp3", "m4a", "ogg", "flac"] }); }
-    catch { toast("", "err"); return; }
+    catch { toast("文件选择失败", "err"); return; }
     if (!picked || picked.length === 0) return;
     $("#voice-sample-path").value = picked;
   };
@@ -798,8 +798,8 @@
       await refreshHistory();
       await refreshCooldown();
       await loadPackages();
-      setStatus("#login-status", "", "ok");
-      $("#status-bar").textContent = "";
+      setStatus("#login-status", "就绪", "ok");
+      $("#status-bar").textContent = "就绪";
       await populateCharDropdowns();
       await populateVoiceEngines();
     } catch (err) {
@@ -815,7 +815,7 @@
 
   const onLogin = async () => {
     const id = $("#developer-id").value.trim();
-    if (!id) { setStatus("#login-status", "", "warn"); return; }
+    if (!id) { setStatus("#login-status", "请输入开发者 ID", "warn"); return; }
     const resp = await callApi("login", id);
     if (!resp.ok) { setStatus("#login-status", `登录失败：${resp.message}`, "err"); return; }
     state.activeDeveloper = resp.data.developer_id;
@@ -824,14 +824,14 @@
     await refreshHistory();
     await refreshCooldown();
     refreshSubmitBtn();
-    toast("", "ok");
+    toast("登录成功", "ok");
   };
 
   const onLogout = async () => {
     await callApi("logout");
     state.activeDeveloper = null;
     renderDeveloperChip();
-    setStatus("#login-status", "", "ok");
+    setStatus("#login-status", "已退出", "ok");
     await refreshCooldown();
     refreshSubmitBtn();
   };
