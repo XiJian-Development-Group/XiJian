@@ -1,31 +1,16 @@
-/* ============================================================
- * 隙间 · 开发者工具 — UI 客户端
- *
- * 单纯调用 window.pywebview.api.*, 不发起任何 HTTP 请求。
- * ============================================================ */
-
 (() => {
   "use strict";
 
-  // --------------------------------------------------------------
-  // 状态
-  // --------------------------------------------------------------
-
-  /** @typedef {{path: string, size: number, name: string}} FileEntry */
-
   const state = {
-    files: [],
+    packages: [],
+    selectedPackages: new Set(),
     config: null,
     targetKinds: null,
     activeDeveloper: null,
   };
 
-  // --------------------------------------------------------------
-  // Utilities
-  // --------------------------------------------------------------
-
   const fmtBytes = (bytes) => {
-    if (!Number.isFinite(bytes) || bytes < 0) return "—";
+    if (!Number.isFinite(bytes) || bytes < 0) return "";
     if (bytes < 1000) return `${bytes} B`;
     if (bytes < 1_000_000) return `${(bytes / 1000).toFixed(2)} KB`;
     if (bytes < 1_000_000_000) return `${(bytes / 1_000_000).toFixed(2)} MB`;
@@ -33,18 +18,12 @@
   };
 
   const fmtTime = (iso) => {
-    if (!iso) return "—";
-    try {
-      const d = new Date(iso);
-      if (Number.isNaN(d.getTime())) return iso;
-      return d.toLocaleString();
-    } catch {
-      return iso;
-    }
+    if (!iso) return "";
+    try { const d = new Date(iso); return Number.isNaN(d.getTime()) ? iso : d.toLocaleString(); }
+    catch { return iso; }
   };
 
-  const shortSha = (hex) =>
-    !hex ? "—" : `${hex.slice(0, 8)}…${hex.slice(-6)}`;
+  const shortSha = (hex) => !hex ? "" : `${hex.slice(0, 8)}${hex.slice(-6)}`;
 
   let toastTimer = 0;
   const toast = (msg, kind = "ok") => {
@@ -61,19 +40,11 @@
   const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
   const callApi = async (method, ...args) => {
-    if (!window.pywebview || !window.pywebview.api) {
-      throw new Error("pywebview js_api not ready");
-    }
+    if (!window.pywebview || !window.pywebview.api) throw new Error("pywebview js_api not ready");
     const fn = window.pywebview.api[method];
-    if (typeof fn !== "function") {
-      throw new Error(`DevKitApi.${method} is not a function`);
-    }
+    if (typeof fn !== "function") throw new Error(`DevKitApi.${method} is not a function`);
     return fn(...args);
   };
-
-  // --------------------------------------------------------------
-  // Tab 切换
-  // --------------------------------------------------------------
 
   const switchTab = (tabName) => {
     $$(".tab-nav__btn").forEach((btn) => {
@@ -85,34 +56,19 @@
   };
 
   // --------------------------------------------------------------
-  // 提交 Tab 渲染
+  // Config / header
   // --------------------------------------------------------------
 
   const renderConfig = (cfg) => {
     state.config = cfg;
-    $("#cfg-api-version").textContent = cfg.api_version ?? "—";
-    $("#cfg-archive-format").textContent = cfg.preferred_archive_format ?? "—";
+    $("#cfg-api-version").textContent = cfg.api_version ?? "";
+    $("#cfg-archive-format").textContent = cfg.preferred_archive_format ?? "";
     $("#cfg-max-bytes").textContent = `${fmtBytes(cfg.max_attachment_bytes)} (${cfg.max_attachment_mb} MB)`;
-    $("#cfg-smtp-host").textContent = cfg.smtp_host ?? "—";
-    $("#cfg-smtp-port").textContent = String(cfg.smtp_port ?? "—");
-    $("#cfg-smtp-tls").textContent = cfg.smtp_use_tls ? "✅" : "❌";
-    $("#cfg-smtp-user").textContent = cfg.smtp_user ?? "—";
-    $("#recipient-chip-value").textContent = cfg.recipient ?? "—";
-    $("#files-card-max").textContent = cfg.max_attachment_mb ? `${cfg.max_attachment_mb} MB` : "—";
-    const cdMin = Math.floor((cfg.cooldown_seconds || 0) / 60);
-    $("#files-card-cooldown").textContent = cdMin ? `${cdMin} 分钟` : `${cfg.cooldown_seconds ?? 0} 秒`;
-  };
-
-  const renderTargetKinds = (kinds) => {
-    state.targetKinds = kinds;
-    const select = $("#target-kind");
-    select.innerHTML = "";
-    for (const k of kinds) {
-      const opt = document.createElement("option");
-      opt.value = k;
-      opt.textContent = k;
-      select.appendChild(opt);
-    }
+    $("#cfg-smtp-host").textContent = cfg.smtp_host ?? "";
+    $("#cfg-smtp-port").textContent = String(cfg.smtp_port ?? "");
+    $("#cfg-smtp-tls").textContent = cfg.smtp_use_tls ? "" : "";
+    $("#cfg-smtp-user").textContent = cfg.smtp_user ?? "";
+    $("#recipient-chip-value").textContent = cfg.recipient ?? "";
   };
 
   const renderDeveloperChip = () => {
@@ -122,49 +78,117 @@
       chip.textContent = state.activeDeveloper;
       logoutBtn.hidden = false;
     } else {
-      chip.textContent = "未登录";
+      chip.textContent = "";
       logoutBtn.hidden = true;
     }
   };
 
-  const renderFiles = () => {
-    const list = $("#files-list");
-    list.innerHTML = "";
-    for (const f of state.files) {
-      const li = document.createElement("li");
-      const name = document.createElement("span");
-      name.className = "files-list li__name";
-      name.textContent = f.path;
-      const size = document.createElement("span");
-      size.className = "files-list li__size";
-      size.textContent = fmtBytes(f.size);
-      li.appendChild(name);
-      li.appendChild(size);
-      list.appendChild(li);
-    }
-    const total = state.files.reduce((acc, f) => acc + (f.size || 0), 0);
-    const limit = state.config?.max_attachment_bytes ?? 0;
-    const summary = $("#files-summary");
-    if (state.files.length === 0) {
-      summary.textContent = "尚未选择文件";
-    } else {
-      summary.textContent = `共 ${state.files.length} 个 · ${fmtBytes(total)} / ${fmtBytes(limit)}`;
-    }
-    refreshSubmitButton();
-  };
-
-  const refreshSubmitButton = () => {
-    const btn = $("#submit-btn");
-    const ready = state.activeDeveloper && $("#target-id").value.trim() && state.files.length > 0;
-    btn.disabled = !ready;
-  };
-
   const setStatus = (selector, text, kind = "idle") => {
-    const el = document.querySelector(selector);
+    const el = $(selector);
     if (!el) return;
     el.textContent = text;
     el.className = `status status--${kind}`;
   };
+
+  // --------------------------------------------------------------
+  // Submit tab — packages
+  // --------------------------------------------------------------
+
+  const loadPackages = async () => {
+    const resp = await callApi("list_submit_packages");
+    if (!resp.ok) { setStatus("#packages-status", "加载失败", "err"); return; }
+    state.packages = resp.data || [];
+    renderPackages();
+    setStatus("#packages-status", `共 ${state.packages.length} 个可提交内容`, "ok");
+    refreshSubmitBtn();
+  };
+
+  const renderPackages = () => {
+    const container = $("#packages-list");
+    container.innerHTML = "";
+    for (const pkg of state.packages) {
+      const checked = state.selectedPackages.has(pkg.package_id);
+      const div = document.createElement("div");
+      div.className = `package-item${checked ? " package-item--checked" : ""}`;
+      div.dataset.packageId = pkg.package_id;
+      div.innerHTML = `
+        <input type="checkbox" ${checked ? "checked" : ""} />
+        <div class="package-item__info">
+          <div class="package-item__name">${escHtml(pkg.name)}</div>
+          <div class="package-item__desc">${escHtml(pkg.description)}</div>
+        </div>
+        <span class="package-item__type">${escHtml(pkg.package_type)}</span>
+      `;
+      div.addEventListener("click", (e) => {
+        if (e.target.tagName === "INPUT") return;
+        const cb = div.querySelector("input[type=checkbox]");
+        cb.checked = !cb.checked;
+        cb.dispatchEvent(new Event("change"));
+      });
+      const cb = div.querySelector("input[type=checkbox]");
+      cb.addEventListener("change", () => {
+        if (cb.checked) {
+          state.selectedPackages.add(pkg.package_id);
+          div.classList.add("package-item--checked");
+        } else {
+          state.selectedPackages.delete(pkg.package_id);
+          div.classList.remove("package-item--checked");
+        }
+        refreshSubmitBtn();
+      });
+      container.appendChild(div);
+    }
+  };
+
+  const escHtml = (s) => {
+    if (!s) return "";
+    const d = document.createElement("div");
+    d.textContent = s;
+    return d.innerHTML;
+  };
+
+  const refreshSubmitBtn = () => {
+    const btn = $("#submit-btn");
+    btn.disabled = !state.activeDeveloper || state.selectedPackages.size === 0;
+  };
+
+  // --------------------------------------------------------------
+  // Submit tab — submit
+  // --------------------------------------------------------------
+
+  const onSubmit = async () => {
+    if (!state.activeDeveloper) { toast("", "err"); return; }
+    if (state.selectedPackages.size === 0) { toast("", "err"); return; }
+    const packageIds = Array.from(state.selectedPackages);
+    const aiRatio = parseFloat($("#ai-ratio").value || "0");
+    const notes = $("#notes").value.trim();
+    const payload = { notes, ai_ratio: Number.isFinite(aiRatio) ? aiRatio : 0 };
+
+    setStatus("#submit-status", "", "warn");
+    $("#submit-btn").disabled = true;
+    const resp = await callApi("submit", state.activeDeveloper, null, null, payload, null, packageIds);
+    if (!resp.ok) {
+      setStatus("#submit-status", `提交失败：${resp.message} (${resp.code || resp.status || ""})`, "err");
+      toast(`提交失败：${resp.message}`, "err");
+      $("#submit-btn").disabled = false;
+      refreshSubmitBtn();
+      return;
+    }
+    const r = resp.data;
+    setStatus("#submit-status", `提交成功：${r.id}  ${fmtBytes(r.archive_size)}  sha256 ${shortSha(r.content_sha256)}  smtp ${r.smtp_status} ${r.smtp_code}`, "ok");
+    toast(`已发送：${r.id}`, "ok");
+    $("#status-bar").textContent = `上次提交 ${r.submitted_at}`;
+    await refreshHistory();
+    await refreshCooldown();
+    state.selectedPackages.clear();
+    renderPackages();
+    $("#submit-btn").disabled = false;
+    refreshSubmitBtn();
+  };
+
+  // --------------------------------------------------------------
+  // Submit tab — history & cooldown
+  // --------------------------------------------------------------
 
   const renderHistory = (records) => {
     const list = $("#history-list");
@@ -172,69 +196,39 @@
     for (const r of records) {
       const li = document.createElement("li");
       li.className = r.smtp_status === "sent" ? "history-list li--ok" : "history-list li--err";
-      const row = document.createElement("div");
-      row.className = "history-list li__row";
-      const title = document.createElement("span");
-      title.className = "history-list li__title";
-      title.textContent = `${r.target_kind}:${r.target_id}`;
-      const meta = document.createElement("span");
-      meta.className = "history-list li__meta";
-      meta.textContent = fmtTime(r.submitted_at);
-      row.appendChild(title);
-      row.appendChild(meta);
-      const meta2 = document.createElement("div");
-      meta2.className = "history-list li__meta";
-      meta2.textContent = `${r.developer_id} · ${fmtBytes(r.archive_size)} · ${r.archive_format} · ${r.smtp_status}${r.smtp_code ? ` (${r.smtp_code})` : ""}`;
-      const sha = document.createElement("div");
-      sha.className = "history-list li__sha";
-      sha.textContent = `sha256: ${shortSha(r.content_sha256)}`;
-      li.appendChild(row);
-      li.appendChild(meta2);
-      li.appendChild(sha);
+      li.innerHTML = `
+        <div class="history-list li__row">
+          <span class="history-list li__title">${escHtml(r.target_kind)}:${escHtml(r.target_id)}</span>
+          <span class="history-list li__meta">${fmtTime(r.submitted_at)}</span>
+        </div>
+        <div class="history-list li__meta">${escHtml(r.developer_id)}  ${fmtBytes(r.archive_size)}  ${escHtml(r.archive_format)}  ${escHtml(r.smtp_status)}${r.smtp_code ? ` (${escHtml(r.smtp_code)})` : ""}</div>
+        <div class="history-list li__sha">sha256: ${shortSha(r.content_sha256)}</div>
+      `;
       list.appendChild(li);
     }
   };
 
   const renderCooldown = (seconds) => {
     const el = $("#cooldown-indicator");
-    if (seconds <= 0) {
-      el.textContent = "冷却空闲，可随时提交";
-    } else {
-      const min = Math.floor(seconds / 60);
-      const sec = seconds % 60;
-      el.textContent = min > 0 ? `还需等待 ${min} 分 ${sec} 秒` : `还需等待 ${sec} 秒`;
-    }
+    if (seconds <= 0) el.textContent = "";
+    else { const m = Math.floor(seconds / 60); const s = seconds % 60; el.textContent = m > 0 ? `  ${m}  ${s} ` : `  ${s} `; }
+  };
+
+  const refreshHistory = async () => {
+    const resp = await callApi("list_submissions", 20);
+    if (!resp.ok) { renderHistory([]); return; }
+    renderHistory(resp.data || []);
+  };
+
+  const refreshCooldown = async () => {
+    if (!state.activeDeveloper) { renderCooldown(0); return; }
+    const resp = await callApi("cooldown_for", state.activeDeveloper);
+    if (!resp.ok) { renderCooldown(0); return; }
+    renderCooldown(Number(resp.data) || 0);
   };
 
   // --------------------------------------------------------------
-  // 通用列表渲染
-  // --------------------------------------------------------------
-
-  const renderItemList = (listId, items, templateFn) => {
-    const list = $(`#${listId}`);
-    list.innerHTML = "";
-    if (!items || items.length === 0) {
-      const empty = document.createElement("li");
-      empty.className = "item-list__empty";
-      empty.textContent = "暂无数据";
-      list.appendChild(empty);
-      return;
-    }
-    for (const item of items) {
-      const li = document.createElement("li");
-      li.className = "item-list__item";
-      li.dataset.id = item.id || "";
-      li.innerHTML = templateFn(item);
-      li.addEventListener("click", () => {
-        $$(`#${listId} .item-list__item`).forEach((el) => el.classList.remove("item-list__item--active"));
-        li.classList.add("item-list__item--active");
-      });
-      list.appendChild(li);
-    }
-  };
-
-  // --------------------------------------------------------------
-  // 角色编辑器
+  // Character editor
   // --------------------------------------------------------------
 
   let _selectedCharId = null;
@@ -243,7 +237,7 @@
     const resp = await callApi("list_characters");
     if (!resp.ok) return;
     renderItemList("char-list", resp.data || [], (c) =>
-      `<strong>${c.display_name || c.name}</strong><br/><small>${c.id} · ${(c.tags || []).join(", ")}</small>`
+      `<strong>${escHtml(c.display_name || c.name)}</strong><br/><small>${escHtml(c.id)}  ${((c.tags || []).join(", "))}</small>`
     );
     refreshCharButtons();
   };
@@ -259,13 +253,36 @@
     $("#char-editing-id").value = char?.id || "";
     $("#char-name").value = char?.name || "";
     $("#char-display-name").value = char?.display_name || "";
-    $("#char-voice").value = char?.voice_profile || "";
+    $("#char-lang-style").value = char?.language_style || "";
     $("#char-emotion").value = char?.default_emotion || "neutral";
     $("#char-tags").value = (char?.tags || []).join(", ");
     $("#char-persona").value = char?.persona_doc || "";
+
+    // Assigned dropdowns
+    const setOpt = (id, val) => {
+      const sel = $(`#${id}`);
+      if (!sel) return;
+      for (const opt of sel.options) { if (opt.value === val) { opt.selected = true; return; } }
+    };
+    setOpt("char-assigned-world", char?.assigned_world || "");
+    setOpt("char-assigned-memory", char?.assigned_memory_pack || "");
+    setOpt("char-assigned-voice", char?.assigned_voice_pack || "");
+    setOpt("char-assigned-model", char?.assigned_model || "");
+
+    // Memory config
+    const mc = char?.memory_config || {};
+    $("#char-mc-max-long").value = mc.max_long_term ?? 200;
+    $("#char-mc-long-imp-min").value = mc.long_term_importance_min ?? 0.6;
+    $("#char-mc-max-short").value = mc.max_short_term ?? 50;
+    $("#char-mc-short-decay").value = mc.short_term_decay_rate ?? 0.05;
+    $("#char-mc-short-imp-min").value = mc.short_term_importance_min ?? 0.3;
+    $("#char-mc-max-ctx").value = mc.max_context_tokens ?? 8000;
+    $("#char-mc-reserve").value = mc.reserve_tokens_for_reply ?? 2000;
+    $("#char-mc-force-recall").value = mc.force_recall_on_history ? "true" : "false";
+
     $("#char-editor-hint").textContent = char
       ? `编辑：${char.display_name || char.name}`
-      : "新建角色";
+      : "";
     refreshCharButtons();
   };
 
@@ -274,11 +291,23 @@
     $("#char-editing-id").value = "";
     $("#char-name").value = "";
     $("#char-display-name").value = "";
-    $("#char-voice").value = "";
+    $("#char-lang-style").value = "";
     $("#char-emotion").value = "neutral";
     $("#char-tags").value = "";
     $("#char-persona").value = "";
-    $("#char-editor-hint").textContent = "选择一个角色或新建后进行编辑";
+    $("#char-assigned-world").value = "";
+    $("#char-assigned-memory").value = "";
+    $("#char-assigned-voice").value = "";
+    $("#char-assigned-model").value = "";
+    $("#char-mc-max-long").value = 200;
+    $("#char-mc-long-imp-min").value = 0.6;
+    $("#char-mc-max-short").value = 50;
+    $("#char-mc-short-decay").value = 0.05;
+    $("#char-mc-short-imp-min").value = 0.3;
+    $("#char-mc-max-ctx").value = 8000;
+    $("#char-mc-reserve").value = 2000;
+    $("#char-mc-force-recall").value = "true";
+    $("#char-editor-hint").textContent = "";
     refreshCharButtons();
   };
 
@@ -288,23 +317,35 @@
   };
 
   const onCharSave = async () => {
-    const tags = $("#char-tags").value
-      .split(",")
-      .map((t) => t.trim())
-      .filter(Boolean);
+    const tags = $("#char-tags").value.split(",").map((t) => t.trim()).filter(Boolean);
     const data = {
       id: $("#char-editing-id").value || undefined,
       name: $("#char-name").value.trim(),
       display_name: $("#char-display-name").value.trim(),
-      voice_profile: $("#char-voice").value.trim(),
+      language_style: $("#char-lang-style").value.trim(),
+      voice_profile: "",
       default_emotion: $("#char-emotion").value.trim(),
       tags,
       persona_doc: $("#char-persona").value,
+      assigned_world: $("#char-assigned-world").value,
+      assigned_memory_pack: $("#char-assigned-memory").value,
+      assigned_voice_pack: $("#char-assigned-voice").value,
+      assigned_model: $("#char-assigned-model").value,
+      memory_config: {
+        max_long_term: parseInt($("#char-mc-max-long").value) || 200,
+        long_term_importance_min: parseFloat($("#char-mc-long-imp-min").value) || 0.6,
+        max_short_term: parseInt($("#char-mc-max-short").value) || 50,
+        short_term_decay_rate: parseFloat($("#char-mc-short-decay").value) || 0.05,
+        short_term_importance_min: parseFloat($("#char-mc-short-imp-min").value) || 0.3,
+        max_context_tokens: parseInt($("#char-mc-max-ctx").value) || 8000,
+        reserve_tokens_for_reply: parseInt($("#char-mc-reserve").value) || 2000,
+        force_recall_on_history: $("#char-mc-force-recall").value === "true",
+      },
     };
-    if (!data.name) { toast("请填写角色名称", "err"); return; }
+    if (!data.name) { toast("", "err"); return; }
     const resp = await callApi("save_character", data);
     if (!resp.ok) { setStatus("#char-status", `保存失败：${resp.message}`, "err"); return; }
-    toast("角色已保存", "ok");
+    toast("", "ok");
     setStatus("#char-status", `已保存：${resp.data.id}`, "ok");
     await renderCharList();
     _selectedCharId = resp.data.id;
@@ -314,8 +355,8 @@
   const onCharDelete = async () => {
     if (!_selectedCharId) return;
     const resp = await callApi("delete_character", _selectedCharId);
-    if (!resp.ok) { toast("删除失败", "err"); return; }
-    toast("已删除", "ok");
+    if (!resp.ok) { toast("", "err"); return; }
+    toast("", "ok");
     resetCharEditor();
     await renderCharList();
   };
@@ -323,27 +364,82 @@
   const onCharExport = async () => {
     if (!_selectedCharId) return;
     const resp = await callApi("export_character", _selectedCharId);
-    if (!resp.ok) { toast("导出失败", "err"); return; }
-    toast("导出成功，可在创作提交标签页继续操作", "ok");
-    setStatus("#char-status", "已导出，前往创作提交标签页提交", "ok");
+    if (!resp.ok) { toast("", "err"); return; }
+    toast("", "ok");
+    setStatus("#char-status", "", "ok");
+  };
+
+  const onCharImportPersona = async () => {
+    if (!_selectedCharId) { toast("", "err"); return; }
+    if (!window.pywebview || !window.pywebview.create_file_dialog) {
+      toast("pywebview ", "err");
+      return;
+    }
+    let picked;
+    try {
+      picked = await window.pywebview.create_file_dialog(
+        window.pywebview.types.OPEN,
+        { file_types: ["md", "markdown", "txt"] }
+      );
+    } catch { toast("", "err"); return; }
+    if (!picked || picked.length === 0) return;
+    const resp = await callApi("import_persona", _selectedCharId, picked);
+    if (!resp.ok) { toast(`导入失败：${resp.message}`, "err"); return; }
+    $("#char-persona").value = resp.data.message;
+    toast("", "ok");
+    setStatus("#char-status", "", "ok");
   };
 
   // --------------------------------------------------------------
-  // 记忆条目编辑器
+  // Character dropdown population
+  // --------------------------------------------------------------
+
+  const populateCharDropdowns = async () => {
+    const worldsResp = await callApi("list_worlds");
+    const worlds = worldsResp.ok ? (worldsResp.data || []) : [];
+    populateSelect("#char-assigned-world", worlds, (w) => ({ value: w.id, label: w.name }));
+
+    const memCharsResp = await callApi("list_memory_characters");
+    const memChars = memCharsResp.ok ? (memCharsResp.data || []) : [];
+    populateSelect("#char-assigned-memory", memChars, (c) => ({ value: c, label: c }));
+
+    const voiceCharsResp = await callApi("list_voice_characters");
+    const voiceChars = voiceCharsResp.ok ? (voiceCharsResp.data || []) : [];
+    populateSelect("#char-assigned-voice", voiceChars, (c) => ({ value: c, label: c }));
+
+    const modelsResp = await callApi("list_models");
+    const models = modelsResp.ok ? (modelsResp.data || []) : [];
+    populateSelect("#char-assigned-model", models, (m) => ({ value: m.id, label: m.name }));
+  };
+
+  const populateSelect = (selId, items, mapFn) => {
+    const sel = $(selId);
+    if (!sel) return;
+    const current = sel.value;
+    sel.innerHTML = '<option value="">  </option>';
+    for (const item of items) {
+      const { value, label } = mapFn(item);
+      const opt = document.createElement("option");
+      opt.value = value;
+      opt.textContent = label;
+      sel.appendChild(opt);
+    }
+    sel.value = current;
+  };
+
+  // --------------------------------------------------------------
+  // Memory editor
   // --------------------------------------------------------------
 
   let _selectedMemId = null;
 
   const renderMemList = async () => {
     const charId = $("#mem-char-id").value.trim();
-    if (!charId) {
-      renderItemList("mem-list", [], () => "");
-      return;
-    }
+    if (!charId) { renderItemList("mem-list", [], () => ""); return; }
     const resp = await callApi("list_memory_entries", charId);
     if (!resp.ok) { renderItemList("mem-list", [], () => ""); return; }
     renderItemList("mem-list", resp.data || [], (e) =>
-      `<strong>[${e.type === "long" ? "长期" : "短期"}]</strong> ${e.content.slice(0, 60)}${e.content.length > 60 ? "…" : ""}<br/><small>重要性: ${e.importance} · ${(e.tags || []).join(", ")}</small>`
+      `<strong>[${e.type === "long" ? "" : ""}]</strong> ${escHtml(e.content.slice(0, 60))}${e.content.length > 60 ? "" : ""}<br/><small>: ${e.importance}  ${(e.tags || []).join(", ")}</small>`
     );
     refreshMemButtons();
   };
@@ -362,9 +458,7 @@
     $("#mem-importance").value = entry?.importance ?? 0.5;
     $("#mem-tags").value = (entry?.tags || []).join(", ");
     $("#mem-content").value = entry?.content || "";
-    $("#mem-editor-hint").textContent = entry
-      ? `编辑条目：${entry.content.slice(0, 30)}…`
-      : "新建记忆条目";
+    $("#mem-editor-hint").textContent = entry ? `编辑条目：${entry.content.slice(0, 30)}` : "";
     refreshMemButtons();
   };
 
@@ -376,7 +470,7 @@
     $("#mem-importance").value = 0.5;
     $("#mem-tags").value = "";
     $("#mem-content").value = "";
-    $("#mem-editor-hint").textContent = "新建或选择一条记忆进行编辑";
+    $("#mem-editor-hint").textContent = "";
     refreshMemButtons();
   };
 
@@ -390,11 +484,11 @@
       tags,
       content: $("#mem-content").value,
     };
-    if (!data.character_id) { toast("请填写角色 ID", "err"); return; }
-    if (!data.content) { toast("请填写记忆内容", "err"); return; }
+    if (!data.character_id) { toast("", "err"); return; }
+    if (!data.content) { toast("", "err"); return; }
     const resp = await callApi("save_memory_entry", data);
     if (!resp.ok) { setStatus("#mem-status", `保存失败：${resp.message}`, "err"); return; }
-    toast("记忆条目已保存", "ok");
+    toast("", "ok");
     setStatus("#mem-status", `已保存：${resp.data.id}`, "ok");
     await renderMemList();
   };
@@ -402,23 +496,23 @@
   const onMemDelete = async () => {
     if (!_selectedMemId) return;
     const resp = await callApi("delete_memory_entry", _selectedMemId);
-    if (!resp.ok) { toast("删除失败", "err"); return; }
-    toast("已删除", "ok");
+    if (!resp.ok) { toast("", "err"); return; }
+    toast("", "ok");
     resetMemEditor();
     await renderMemList();
   };
 
   const onMemExport = async () => {
     const charId = $("#mem-char").value.trim() || $("#mem-char-id").value.trim();
-    if (!charId) { toast("请填写角色 ID", "err"); return; }
+    if (!charId) { toast("", "err"); return; }
     const resp = await callApi("export_memory_entries", charId);
-    if (!resp.ok) { toast("导出失败", "err"); return; }
-    toast("导出成功", "ok");
-    setStatus("#mem-status", "已导出，前往创作提交标签页提交", "ok");
+    if (!resp.ok) { toast("", "err"); return; }
+    toast("", "ok");
+    setStatus("#mem-status", "", "ok");
   };
 
   // --------------------------------------------------------------
-  // 世界观编辑器
+  // World editor
   // --------------------------------------------------------------
 
   let _selectedWorldId = null;
@@ -427,7 +521,7 @@
     const resp = await callApi("list_worlds");
     if (!resp.ok) return;
     renderItemList("world-list", resp.data || [], (w) =>
-      `<strong>${w.name}</strong><br/><small>${w.id}</small>`
+      `<strong>${escHtml(w.name)}</strong><br/><small>${escHtml(w.id)}</small>`
     );
     refreshWorldButtons();
   };
@@ -444,7 +538,7 @@
     $("#world-name").value = world?.name || "";
     $("#world-config").value = world?.config ? JSON.stringify(world.config, null, 2) : "";
     $("#world-doc").value = world?.world_doc || "";
-    $("#world-editor-hint").textContent = world ? `编辑：${world.name}` : "新建世界观";
+    $("#world-editor-hint").textContent = world ? `编辑：${world.name}` : "";
     refreshWorldButtons();
   };
 
@@ -454,26 +548,24 @@
     $("#world-name").value = "";
     $("#world-config").value = "";
     $("#world-doc").value = "";
-    $("#world-editor-hint").textContent = "选择一个世界观或新建后进行编辑";
+    $("#world-editor-hint").textContent = "";
     refreshWorldButtons();
   };
 
   const onWorldSave = async () => {
     let config = {};
-    try {
-      const raw = $("#world-config").value.trim();
-      if (raw) config = JSON.parse(raw);
-    } catch { toast("配置文件 JSON 格式错误", "err"); return; }
+    try { const raw = $("#world-config").value.trim(); if (raw) config = JSON.parse(raw); }
+    catch { toast("JSON ", "err"); return; }
     const data = {
       id: $("#world-editing-id").value || undefined,
       name: $("#world-name").value.trim(),
       config,
       world_doc: $("#world-doc").value,
     };
-    if (!data.name) { toast("请填写世界观名称", "err"); return; }
+    if (!data.name) { toast("", "err"); return; }
     const resp = await callApi("save_world", data);
     if (!resp.ok) { setStatus("#world-status", `保存失败：${resp.message}`, "err"); return; }
-    toast("世界观已保存", "ok");
+    toast("", "ok");
     setStatus("#world-status", `已保存：${resp.data.id}`, "ok");
     await renderWorldList();
   };
@@ -481,8 +573,8 @@
   const onWorldDelete = async () => {
     if (!_selectedWorldId) return;
     const resp = await callApi("delete_world", _selectedWorldId);
-    if (!resp.ok) { toast("删除失败", "err"); return; }
-    toast("已删除", "ok");
+    if (!resp.ok) { toast("", "err"); return; }
+    toast("", "ok");
     resetWorldEditor();
     await renderWorldList();
   };
@@ -490,13 +582,13 @@
   const onWorldExport = async () => {
     if (!_selectedWorldId) return;
     const resp = await callApi("export_world", _selectedWorldId);
-    if (!resp.ok) { toast("导出失败", "err"); return; }
-    toast("导出成功", "ok");
-    setStatus("#world-status", "已导出，前往创作提交标签页提交", "ok");
+    if (!resp.ok) { toast("", "err"); return; }
+    toast("", "ok");
+    setStatus("#world-status", "", "ok");
   };
 
   // --------------------------------------------------------------
-  // 3D 模型预览
+  // 3D model viewer
   // --------------------------------------------------------------
 
   let _selectedModelId = null;
@@ -505,14 +597,14 @@
     const resp = await callApi("list_models");
     if (!resp.ok) return;
     renderItemList("model-list", resp.data || [], (m) =>
-      `<strong>${m.name}</strong><br/><small>${m.format} · ${fmtBytes(m.size_bytes)}</small>`
+      `<strong>${escHtml(m.name)}</strong><br/><small>${escHtml(m.format)}  ${fmtBytes(m.size_bytes)}</small>`
     );
   };
 
   const showModelInfo = (model) => {
     if (!model) {
       $("#model-info").hidden = true;
-      $("#model-viewer-container").innerHTML = '<p class="status status--idle">请从左侧列表选择一个模型</p>';
+      $("#model-viewer-container").innerHTML = '<p class="status status--idle"></p>';
       return;
     }
     _selectedModelId = model.id;
@@ -521,55 +613,57 @@
     $("#model-info-size").textContent = fmtBytes(model.size_bytes);
     $("#model-editor-hint").textContent = model.name;
     $("#model-info").hidden = false;
-    const container = $("#model-viewer-container");
-    container.innerHTML = `<p class="status status--ok">已加载: ${model.name}<br/><small>路径: ${model.path}</small></p>`;
+    $("#model-viewer-container").innerHTML = `<p class="status status--ok">: ${escHtml(model.name)}<br/><small>: ${escHtml(model.path)}</small></p>`;
   };
 
   const onModelAdd = async () => {
-    if (!window.pywebview || !window.pywebview.create_file_dialog) {
-      toast("pywebview 文件对话框未就绪", "err");
-      return;
-    }
+    if (!window.pywebview || !window.pywebview.create_file_dialog) { toast("pywebview ", "err"); return; }
     let picked;
-    try {
-      picked = await window.pywebview.create_file_dialog(
-        window.pywebview.types.OPEN,
-        { file_types: ["vrm", "glb", "gltf"] }
-      );
-    } catch { toast("文件对话框失败", "err"); return; }
+    try { picked = await window.pywebview.create_file_dialog(window.pywebview.types.OPEN, { file_types: ["vrm", "glb", "gltf"] }); }
+    catch { toast("", "err"); return; }
     if (!picked || picked.length === 0) return;
     const resp = await callApi("register_model", picked);
     if (!resp.ok) { toast(`添加失败：${resp.message}`, "err"); return; }
-    toast("模型已添加", "ok");
+    toast("", "ok");
     await renderModelList();
   };
 
   const onModelUnregister = async () => {
     if (!_selectedModelId) return;
     const resp = await callApi("unregister_model", _selectedModelId);
-    if (!resp.ok) { toast("移除失败", "err"); return; }
-    toast("已移除", "ok");
+    if (!resp.ok) { toast("", "err"); return; }
+    toast("", "ok");
     _selectedModelId = null;
     showModelInfo(null);
     await renderModelList();
   };
 
   // --------------------------------------------------------------
-  // 声音克隆
+  // Voice clone
   // --------------------------------------------------------------
 
   let _selectedVoiceId = null;
 
+  const populateVoiceEngines = async () => {
+    const resp = await callApi("list_voice_engines");
+    if (!resp.ok) return;
+    const sel = $("#voice-engine");
+    sel.innerHTML = "";
+    for (const eng of resp.data || []) {
+      const opt = document.createElement("option");
+      opt.value = eng;
+      opt.textContent = eng;
+      sel.appendChild(opt);
+    }
+  };
+
   const renderVoiceList = async () => {
     const charId = $("#voice-char-id").value.trim();
-    if (!charId) {
-      renderItemList("voice-list", [], () => "");
-      return;
-    }
+    if (!charId) { renderItemList("voice-list", [], () => ""); return; }
     const resp = await callApi("list_voices", charId);
     if (!resp.ok) { renderItemList("voice-list", [], () => ""); return; }
     renderItemList("voice-list", resp.data || [], (v) =>
-      `<strong>${v.name}</strong><br/><small>${v.engine} · ${v.sample_path ? "有样本文件" : "无样本"}</small>`
+      `<strong>${escHtml(v.name)}</strong><br/><small>${escHtml(v.engine)}  ${v.sample_path ? "" : ""}</small>`
     );
     refreshVoiceButtons();
   };
@@ -585,7 +679,7 @@
     $("#voice-name").value = voice?.name || "";
     $("#voice-engine").value = voice?.engine || "melo-tts";
     $("#voice-sample-path").value = voice?.sample_path || "";
-    $("#voice-editor-hint").textContent = voice ? `编辑：${voice.name}` : "添加声音样本";
+    $("#voice-editor-hint").textContent = voice ? `编辑：${voice.name}` : "";
     refreshVoiceButtons();
   };
 
@@ -596,20 +690,20 @@
     $("#voice-name").value = "";
     $("#voice-engine").value = "melo-tts";
     $("#voice-sample-path").value = "";
-    $("#voice-editor-hint").textContent = "添加或编辑声音样本信息";
+    $("#voice-editor-hint").textContent = "";
     refreshVoiceButtons();
   };
 
   const onVoiceSave = async () => {
     const charId = $("#voice-char").value.trim();
     const name = $("#voice-name").value.trim();
-    const engine = $("#voice-engine").value.trim();
+    const engine = $("#voice-engine").value;
     const samplePath = $("#voice-sample-path").value.trim() || null;
-    if (!charId) { toast("请填写角色 ID", "err"); return; }
-    if (!name) { toast("请填写声音名称", "err"); return; }
+    if (!charId) { toast("", "err"); return; }
+    if (!name) { toast("", "err"); return; }
     const resp = await callApi("save_voice", charId, name, samplePath, engine);
     if (!resp.ok) { setStatus("#voice-status", `保存失败：${resp.message}`, "err"); return; }
-    toast("声音样本已保存", "ok");
+    toast("", "ok");
     setStatus("#voice-status", `已保存：${resp.data.id}`, "ok");
     await renderVoiceList();
   };
@@ -617,30 +711,75 @@
   const onVoiceDelete = async () => {
     if (!_selectedVoiceId) return;
     const resp = await callApi("delete_voice", _selectedVoiceId);
-    if (!resp.ok) { toast("删除失败", "err"); return; }
-    toast("已删除", "ok");
+    if (!resp.ok) { toast("", "err"); return; }
+    toast("", "ok");
     resetVoiceEditor();
     await renderVoiceList();
   };
 
   const onVoicePickFile = async () => {
-    if (!window.pywebview || !window.pywebview.create_file_dialog) {
-      toast("pywebview 文件对话框未就绪", "err");
-      return;
-    }
+    if (!window.pywebview || !window.pywebview.create_file_dialog) { toast("pywebview ", "err"); return; }
     let picked;
-    try {
-      picked = await window.pywebview.create_file_dialog(
-        window.pywebview.types.OPEN,
-        { file_types: ["wav", "mp3", "m4a", "ogg", "flac"] }
-      );
-    } catch { toast("文件对话框失败", "err"); return; }
+    try { picked = await window.pywebview.create_file_dialog(window.pywebview.types.OPEN, { file_types: ["wav", "mp3", "m4a", "ogg", "flac"] }); }
+    catch { toast("", "err"); return; }
     if (!picked || picked.length === 0) return;
     $("#voice-sample-path").value = picked;
   };
 
   // --------------------------------------------------------------
-  // 操作
+  // Item list renderer
+  // --------------------------------------------------------------
+
+  const renderItemList = (listId, items, templateFn) => {
+    const list = $(`#${listId}`);
+    list.innerHTML = "";
+    if (!items || items.length === 0) {
+      const empty = document.createElement("li");
+      empty.className = "item-list__empty";
+      empty.textContent = "";
+      list.appendChild(empty);
+      return;
+    }
+    for (const item of items) {
+      const li = document.createElement("li");
+      li.className = "item-list__item";
+      li.dataset.id = item.id || "";
+      li.innerHTML = templateFn(item);
+      li.addEventListener("click", () => {
+        $$(`#${listId} .item-list__item`).forEach((el) => el.classList.remove("item-list__item--active"));
+        li.classList.add("item-list__item--active");
+      });
+      list.appendChild(li);
+    }
+  };
+
+  // --------------------------------------------------------------
+  // Help modal
+  // --------------------------------------------------------------
+
+  const openHelp = () => {
+    const overlay = $("#help-overlay");
+    if (!overlay) return;
+    overlay.hidden = false;
+    switchHelpTab("general");
+  };
+
+  const closeHelp = () => {
+    const overlay = $("#help-overlay");
+    if (overlay) overlay.hidden = true;
+  };
+
+  const switchHelpTab = (tab) => {
+    $$(".help-nav__btn").forEach((btn) => {
+      btn.classList.toggle("help-nav__btn--active", btn.dataset.helpTab === tab);
+    });
+    $$(".help-content").forEach((content) => {
+      content.hidden = content.id !== `help-content-${tab}`;
+    });
+  };
+
+  // --------------------------------------------------------------
+  // Bootstrap
   // --------------------------------------------------------------
 
   const loadBootstrap = async () => {
@@ -650,9 +789,6 @@
       const cfg = await callApi("whoami");
       if (!cfg.ok) throw new Error("whoami failed");
       renderConfig(cfg.data);
-      const kinds = await callApi("target_kinds");
-      if (!kinds.ok) throw new Error("target_kinds failed");
-      renderTargetKinds(kinds.data);
       const me = await callApi("current_developer");
       if (me.ok && me.data && me.data.developer_id) {
         state.activeDeveloper = me.data.developer_id;
@@ -661,18 +797,25 @@
       renderDeveloperChip();
       await refreshHistory();
       await refreshCooldown();
-      setStatus("#login-status", "就绪", "ok");
-      $("#status-bar").textContent = "已连接";
+      await loadPackages();
+      setStatus("#login-status", "", "ok");
+      $("#status-bar").textContent = "";
+      await populateCharDropdowns();
+      await populateVoiceEngines();
     } catch (err) {
       console.error("bootstrap failed", err);
       setStatus("#login-status", `初始化失败：${err.message}`, "err");
-      $("#status-bar").textContent = "未连接";
+      $("#status-bar").textContent = "";
     }
   };
 
+  // --------------------------------------------------------------
+  // Login / logout
+  // --------------------------------------------------------------
+
   const onLogin = async () => {
     const id = $("#developer-id").value.trim();
-    if (!id) { setStatus("#login-status", "请输入开发者 ID", "warn"); return; }
+    if (!id) { setStatus("#login-status", "", "warn"); return; }
     const resp = await callApi("login", id);
     if (!resp.ok) { setStatus("#login-status", `登录失败：${resp.message}`, "err"); return; }
     state.activeDeveloper = resp.data.developer_id;
@@ -680,108 +823,46 @@
     setStatus("#login-status", `已登录为 ${resp.data.developer_id}`, "ok");
     await refreshHistory();
     await refreshCooldown();
-    toast("已切换开发者", "ok");
+    refreshSubmitBtn();
+    toast("", "ok");
   };
 
   const onLogout = async () => {
-    const resp = await callApi("logout");
+    await callApi("logout");
     state.activeDeveloper = null;
     renderDeveloperChip();
-    setStatus("#login-status", resp.data.previous ? `已退出 ${resp.data.previous}` : "已退出", "ok");
+    setStatus("#login-status", "", "ok");
     await refreshCooldown();
-  };
-
-  const onPickFiles = async () => {
-    if (!window.pywebview || !window.pywebview.create_file_dialog) {
-      toast("pywebview 文件对话框未就绪", "err");
-      return;
-    }
-    let picked;
-    try {
-      picked = await window.pywebview.create_file_dialog(
-        window.pywebview.types.OPEN_MULTIPLE,
-        { allow_multiple: true, file_types: [] }
-      );
-    } catch { toast("文件对话框失败", "err"); return; }
-    if (!picked || picked.length === 0) return;
-    const resp = await callApi("preview_size", picked.map((p) => ({ path: p, size: 0 })));
-    if (!resp.ok) { setStatus("#files-status", `预检失败：${resp.message}`, "err"); return; }
-    state.files = picked.map((p) => ({ path: p, name: p.split("/").pop(), size: 0 }));
-    renderFiles();
-    setStatus("#files-status", `已选 ${state.files.length} 个文件 · 体积将在服务端复核`, "ok");
-  };
-
-  const onClearFiles = () => {
-    state.files = [];
-    renderFiles();
-    setStatus("#files-status", "已清空", "idle");
-  };
-
-  const onSubmit = async () => {
-    if (!state.activeDeveloper) { toast("请先登录", "err"); return; }
-    const targetKind = $("#target-kind").value;
-    const targetId = $("#target-id").value.trim();
-    const aiRatio = parseFloat($("#ai-ratio").value || "0");
-    const notes = $("#notes").value.trim();
-    if (!targetId) { toast("请填写目标 ID", "err"); return; }
-    const payload = {
-      notes,
-      ai_ratio: Number.isFinite(aiRatio) ? aiRatio : 0,
-      files: state.files.map((f) => f.path),
-    };
-    const fileEntries = state.files.map((f) => ({ path: f.path, arcname: f.name, size: f.size }));
-    setStatus("#submit-status", "正在打包并投递（约 10–60 秒）…", "warn");
-    $("#submit-btn").disabled = true;
-    const resp = await callApi("submit", state.activeDeveloper, targetKind, targetId, payload, fileEntries);
-    if (!resp.ok) {
-      setStatus("#submit-status", `提交失败：${resp.message} (${resp.code || resp.status || ""})`, "err");
-      toast(`提交失败：${resp.message}`, "err");
-      $("#submit-btn").disabled = false;
-      refreshSubmitButton();
-      return;
-    }
-    const r = resp.data;
-    setStatus("#submit-status", `提交成功：${r.id} · ${fmtBytes(r.archive_size)} · sha256 ${shortSha(r.content_sha256)} · smtp ${r.smtp_status} ${r.smtp_code}`, "ok");
-    toast(`已发送：${r.id}`, "ok");
-    $("#status-bar").textContent = `上次提交 ${r.submitted_at}`;
-    await refreshHistory();
-    await refreshCooldown();
-    $("#submit-btn").disabled = false;
-    refreshSubmitButton();
-  };
-
-  const refreshHistory = async () => {
-    const resp = await callApi("list_submissions", 20);
-    if (!resp.ok) { renderHistory([]); return; }
-    renderHistory(resp.data || []);
-  };
-
-  const refreshCooldown = async () => {
-    if (!state.activeDeveloper) { renderCooldown(0); return; }
-    const resp = await callApi("cooldown_for", state.activeDeveloper);
-    if (!resp.ok) { renderCooldown(0); return; }
-    renderCooldown(Number(resp.data) || 0);
+    refreshSubmitBtn();
   };
 
   // --------------------------------------------------------------
-  // 绑定
+  // Bind events
   // --------------------------------------------------------------
 
   const bind = () => {
-    // Tab navigation
     $$(".tab-nav__btn").forEach((btn) => {
-      btn.addEventListener("click", () => switchTab(btn.dataset.tab));
+      btn.addEventListener("click", () => {
+        if (btn.dataset.tab) switchTab(btn.dataset.tab);
+      });
+    });
+
+    // Help
+    $("#help-btn").addEventListener("click", openHelp);
+    $("#help-close-btn").addEventListener("click", closeHelp);
+    $("#help-overlay").addEventListener("click", (e) => { if (e.target === e.currentTarget) closeHelp(); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeHelp(); });
+    $$(".help-nav__btn").forEach((btn) => {
+      btn.addEventListener("click", () => switchHelpTab(btn.dataset.helpTab));
     });
 
     // Submit tab
     $("#login-btn").addEventListener("click", onLogin);
     $("#logout-btn").addEventListener("click", onLogout);
     $("#developer-id").addEventListener("keydown", (e) => { if (e.key === "Enter") onLogin(); });
-    $("#pick-files-btn").addEventListener("click", onPickFiles);
-    $("#clear-files-btn").addEventListener("click", onClearFiles);
     $("#submit-btn").addEventListener("click", onSubmit);
     $("#refresh-history-btn").addEventListener("click", refreshHistory);
-    $("#target-id").addEventListener("input", refreshSubmitButton);
+    $("#packages-refresh-btn").addEventListener("click", loadPackages);
 
     // Character tab
     $("#char-refresh-btn").addEventListener("click", renderCharList);
@@ -789,6 +870,7 @@
     $("#char-save-btn").addEventListener("click", onCharSave);
     $("#char-delete-btn").addEventListener("click", onCharDelete);
     $("#char-export-btn").addEventListener("click", onCharExport);
+    $("#char-import-persona-btn").addEventListener("click", onCharImportPersona);
     $("#char-list").addEventListener("click", (e) => {
       const li = e.target.closest(".item-list__item");
       if (li && li.dataset.id) onCharSelect(li.dataset.id);
@@ -852,21 +934,15 @@
   };
 
   // --------------------------------------------------------------
-  // 启动
+  // Start
   // --------------------------------------------------------------
 
   const start = () => {
     bind();
-    if (window.pywebview && window.pywebview.api) {
-      loadBootstrap();
-    } else {
-      window.addEventListener("pywebviewready", () => loadBootstrap(), { once: true });
-    }
+    if (window.pywebview && window.pywebview.api) loadBootstrap();
+    else window.addEventListener("pywebviewready", () => loadBootstrap(), { once: true });
   };
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", start, { once: true });
-  } else {
-    start();
-  }
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start, { once: true });
+  else start();
 })();

@@ -664,3 +664,250 @@ textarea.field__input {
     transform: translate(-50%, 0);
   }
 }
+
+/* === Help modal ========================================= */
+
+.help-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fade-in 150ms ease-out;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.help-modal {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  width: min(720px, calc(100vw - 40px));
+  max-height: min(80vh, 620px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.help-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-elev-2);
+}
+
+.help-modal__header h2 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.help-modal__body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.help-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px;
+  border-right: 1px solid var(--border);
+  min-width: 130px;
+  background: var(--bg);
+}
+
+.help-nav__btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--fg-muted);
+  padding: 8px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 6px;
+  text-align: left;
+  font-family: inherit;
+  transition: background var(--transition), color var(--transition);
+}
+
+.help-nav__btn:hover {
+  background: var(--bg-elev-2);
+  color: var(--fg);
+}
+
+.help-nav__btn--active {
+  background: var(--bg-elev-2);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.help-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.help-content h3 {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: var(--accent);
+}
+
+.help-content h4 {
+  margin: 14px 0 4px;
+  font-size: 12px;
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.help-content p,
+.help-content li {
+  color: var(--fg-muted);
+}
+
+.help-content ol,
+.help-content ul {
+  padding-left: 18px;
+  margin: 6px 0;
+}
+
+.help-content dl {
+  margin: 6px 0;
+}
+
+.help-content dt {
+  font-weight: 600;
+  color: var(--fg);
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.help-content dd {
+  margin: 2px 0 0 12px;
+  color: var(--fg-muted);
+}
+
+.help-content code {
+  background: var(--bg);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 11px;
+}
+
+/* === Packages list ===================================== */
+
+.packages-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--bg);
+}
+
+.packages-list:empty::before {
+  content: "暂无可提交的内容。请先在角色人设、记忆条目、世界观标签页中创建内容。";
+  display: block;
+  padding: 20px 12px;
+  text-align: center;
+  color: var(--fg-dim);
+  font-size: 11px;
+}
+
+.package-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-card);
+  cursor: pointer;
+  transition: border-color var(--transition);
+}
+
+.package-item:hover {
+  border-color: var(--accent);
+}
+
+.package-item--checked {
+  border-color: var(--accent);
+  background: var(--bg-elev-2);
+}
+
+.package-item input[type="checkbox"] {
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+
+.package-item__info {
+  flex: 1;
+  min-width: 0;
+}
+
+.package-item__name {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.package-item__desc {
+  font-size: 11px;
+  color: var(--fg-muted);
+  margin-top: 2px;
+}
+
+.package-item__type {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fg-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+/* === Field group (collapsible) ========================= */
+
+.field-group {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.field-group__summary {
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--fg-muted);
+  cursor: pointer;
+  background: var(--bg-elev-2);
+  user-select: none;
+}
+
+.field-group__summary:hover {
+  color: var(--fg);
+}
+
+.field-group__body {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}

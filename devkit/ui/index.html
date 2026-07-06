@@ -33,6 +33,7 @@
       <button class="tab-nav__btn" data-tab="world">世界观</button>
       <button class="tab-nav__btn" data-tab="model">3D 预览</button>
       <button class="tab-nav__btn" data-tab="voice">声音克隆</button>
+      <button class="tab-nav__btn" id="help-btn" type="button" style="margin-left:auto;color:var(--accent)">帮助</button>
     </nav>
 
     <main class="app-main">
@@ -81,19 +82,15 @@
               </label>
             </div>
           </section>
-          <section class="card" id="files-card">
+          <section class="card" id="packages-card">
             <header class="card__header">
-              <h2>3. 选择打包文件</h2>
-              <p class="card__hint">单次提交附件≤ <span id="files-card-max">…</span>；每个开发者 ID 每 <span id="files-card-cooldown">…</span> 至多 1 次。</p>
+              <h2>3. 选择要提交的内容包</h2>
+              <p class="card__hint">勾选需要提交的内容（角色、记忆包、世界观等），系统会自动打包。</p>
             </header>
             <div class="card__body">
-              <div class="row row--gap">
-                <button id="pick-files-btn" class="btn btn--secondary" type="button">选择文件…</button>
-                <button id="clear-files-btn" class="btn btn--ghost" type="button">清空</button>
-                <span id="files-summary" class="files-summary">尚未选择文件</span>
-              </div>
-              <ul id="files-list" class="files-list"></ul>
-              <p id="files-status" class="status status--idle" role="status"></p>
+              <button id="packages-refresh-btn" class="btn btn--ghost" type="button">刷新可提交列表</button>
+              <div id="packages-list" class="packages-list"></div>
+              <p id="packages-status" class="status status--idle" role="status"></p>
             </div>
           </section>
           <section class="card" id="submit-card">
@@ -175,22 +172,105 @@
                   <input id="char-display-name" class="field__input" type="text" placeholder="例如：雪" />
                 </label>
               </div>
-              <label class="field">
-                <span class="field__label">声音配置</span>
-                <input id="char-voice" class="field__input" type="text" placeholder="例如：melo_zh_female_warm_v1" />
-              </label>
-              <label class="field">
-                <span class="field__label">默认情感</span>
-                <input id="char-emotion" class="field__input" type="text" placeholder="neutral" value="neutral" />
-              </label>
+              <div class="grid grid--2">
+                <label class="field">
+                  <span class="field__label">语言风格</span>
+                  <input id="char-lang-style" class="field__input" type="text" placeholder="例如：modern_jp, classical, tsundere" />
+                </label>
+                <label class="field">
+                  <span class="field__label">默认情感</span>
+                  <input id="char-emotion" class="field__input" type="text" placeholder="neutral" value="neutral" />
+                </label>
+              </div>
               <label class="field">
                 <span class="field__label">标签（逗号分隔）</span>
                 <input id="char-tags" class="field__input" type="text" placeholder="例如：tsundere, student" />
               </label>
+
+              <!-- 人设文档 -->
               <label class="field">
                 <span class="field__label">人设文档（Markdown）</span>
-                <textarea id="char-persona" class="field__input field__input--code" rows="12" placeholder="在此编写角色的人设、背景故事、性格描述等……"></textarea>
+                <div class="row row--gap">
+                  <textarea id="char-persona" class="field__input field__input--code" rows="12" placeholder="在此编写角色的人设、背景故事、性格描述等……"></textarea>
+                </div>
+                <div class="row" style="margin-top:4px">
+                  <button id="char-import-persona-btn" class="btn btn--secondary" type="button">从 .md 文件导入</button>
+                </div>
               </label>
+
+              <!-- 关联配置 -->
+              <details class="field-group" open>
+                <summary class="field-group__summary">关联配置</summary>
+                <div class="field-group__body">
+                  <label class="field">
+                    <span class="field__label">关联世界观</span>
+                    <select id="char-assigned-world" class="field__input"><option value="">— 无 —</option></select>
+                  </label>
+                  <label class="field">
+                    <span class="field__label">关联记忆包</span>
+                    <select id="char-assigned-memory" class="field__input"><option value="">— 无 —</option></select>
+                  </label>
+                  <label class="field">
+                    <span class="field__label">关联声音包</span>
+                    <select id="char-assigned-voice" class="field__input"><option value="">— 无 —</option></select>
+                  </label>
+                  <label class="field">
+                    <span class="field__label">关联 3D 模型</span>
+                    <select id="char-assigned-model" class="field__input"><option value="">— 无 —</option></select>
+                  </label>
+                </div>
+              </details>
+
+              <!-- 记忆配置 -->
+              <details class="field-group" open>
+                <summary class="field-group__summary">记忆配置</summary>
+                <div class="field-group__body">
+                  <div class="grid grid--2">
+                    <label class="field">
+                      <span class="field__label">长期记忆上限</span>
+                      <input id="char-mc-max-long" class="field__input" type="number" min="1" value="200" />
+                    </label>
+                    <label class="field">
+                      <span class="field__label">长期记忆重要性阈值</span>
+                      <input id="char-mc-long-imp-min" class="field__input" type="number" min="0" max="1" step="0.05" value="0.6" />
+                    </label>
+                  </div>
+                  <div class="grid grid--2">
+                    <label class="field">
+                      <span class="field__label">短期记忆上限</span>
+                      <input id="char-mc-max-short" class="field__input" type="number" min="1" value="50" />
+                    </label>
+                    <label class="field">
+                      <span class="field__label">短期记忆衰减率</span>
+                      <input id="char-mc-short-decay" class="field__input" type="number" min="0" max="1" step="0.01" value="0.05" />
+                    </label>
+                  </div>
+                  <div class="grid grid--2">
+                    <label class="field">
+                      <span class="field__label">短期重要性阈值</span>
+                      <input id="char-mc-short-imp-min" class="field__input" type="number" min="0" max="1" step="0.05" value="0.3" />
+                    </label>
+                    <label class="field">
+                      <span class="field__label">上下文 Token 上限</span>
+                      <input id="char-mc-max-ctx" class="field__input" type="number" min="100" value="8000" />
+                    </label>
+                  </div>
+                  <div class="grid grid--2">
+                    <label class="field">
+                      <span class="field__label">回复保留 Token</span>
+                      <input id="char-mc-reserve" class="field__input" type="number" min="0" value="2000" />
+                    </label>
+                    <label class="field">
+                      <span class="field__label">强制召回历史</span>
+                      <select id="char-mc-force-recall" class="field__input">
+                        <option value="true">是</option>
+                        <option value="false">否</option>
+                      </select>
+                    </label>
+                  </div>
+                </div>
+              </details>
+
               <div class="row row--end row--gap">
                 <div class="row">
                   <button id="char-export-btn" class="btn btn--secondary" type="button" disabled>导出为提交</button>
@@ -405,7 +485,7 @@
               </div>
               <label class="field">
                 <span class="field__label">声音引擎</span>
-                <input id="voice-engine" class="field__input" type="text" value="melo-tts" />
+                <select id="voice-engine" class="field__input"></select>
               </label>
               <label class="field">
                 <span class="field__label">音频文件路径</span>
@@ -428,6 +508,140 @@
     <footer class="app-footer">
       <small id="status-bar">就绪</small>
     </footer>
+
+    <!-- ======== 帮助弹窗 ======== -->
+    <div id="help-overlay" class="help-overlay" hidden>
+      <div class="help-modal">
+        <header class="help-modal__header">
+          <h2>帮助文档</h2>
+          <button id="help-close-btn" class="btn btn--ghost" type="button">✕</button>
+        </header>
+        <div class="help-modal__body">
+          <nav class="help-nav">
+            <button class="help-nav__btn help-nav__btn--active" data-help-tab="general">概述</button>
+            <button class="help-nav__btn" data-help-tab="character">角色人设</button>
+            <button class="help-nav__btn" data-help-tab="memory">记忆条目</button>
+            <button class="help-nav__btn" data-help-tab="world">世界观</button>
+            <button class="help-nav__btn" data-help-tab="voice">声音克隆</button>
+            <button class="help-nav__btn" data-help-tab="submit">创作提交</button>
+          </nav>
+          <div class="help-content" id="help-content-general">
+            <h3>开发者工具使用概述</h3>
+            <p>隙间开发者工具是一套本地创作套件，帮助你创建、编辑角色人设、记忆条目、世界观文档、声音样本和 3D 模型，并将它们打包提交给审核团队。</p>
+            <h4>工作流程</h4>
+            <ol>
+              <li><strong>登录</strong> — 在「创作提交」标签页输入你的开发者 ID。</li>
+              <li><strong>创作内容</strong> — 在对应标签页中创建角色、记忆、世界观等内容。</li>
+              <li><strong>选择提交包</strong> — 切换到「创作提交」，从可提交列表中勾选要提交的内容。</li>
+              <li><strong>提交</strong> — 填写 AI 协助占比和补充说明，点击提交。系统会自动打包并通过邮件发送。</li>
+            </ol>
+            <h4>注意事项</h4>
+            <ul>
+              <li>每个开发者 ID 每 1 小时只能提交一次。</li>
+              <li>附件总大小不超过 1200 MB。</li>
+              <li>所有数据存储在本地 <code>~/隙间Dev/</code> 目录下。</li>
+            </ul>
+          </div>
+          <div class="help-content" id="help-content-character" hidden>
+            <h3>角色人设</h3>
+            <p>在此管理角色的基本信息、人设文档和相关配置。</p>
+            <h4>字段说明</h4>
+            <dl>
+              <dt>名称</dt>
+              <dd>角色的唯一标识名，例如 <code>yuki</code>。创建后不可更改。</dd>
+              <dt>显示名称</dt>
+              <dd>在对话中显示的名称，例如「雪」。</dd>
+              <dt>语言风格</dt>
+              <dd>角色说话的风格，例如 <code>modern_jp</code>（现代日语）、<code>classical</code>（古典）、<code>tsundere</code>（傲娇）。可自定义。</dd>
+              <dt>默认情感</dt>
+              <dd>角色默认的情感状态，如 <code>neutral</code>、<code>happy</code>、<code>sad</code>。</dd>
+              <dt>标签</dt>
+              <dd>逗号分隔的关键词，用于分类和检索。</dd>
+              <dt>人设文档</dt>
+              <dd>用 Markdown 编写角色的完整人设，包括背景故事、性格、喜好等。支持从本地的 <code>.md</code> 文件导入。</dd>
+              <dt>关联配置</dt>
+              <dd>将角色与已有的世界观、记忆包、声音包或 3D 模型关联。提交时会一同打包。</dd>
+              <dt>记忆配置</dt>
+              <dd>控制角色的记忆系统行为：长期/短期记忆上限、重要性阈值、上下文 Token 限制等。</dd>
+            </dl>
+          </div>
+          <div class="help-content" id="help-content-memory" hidden>
+            <h3>记忆条目</h3>
+            <p>为角色编写长期或短期记忆片段，构成角色的知识库。</p>
+            <h4>字段说明</h4>
+            <dl>
+              <dt>角色 ID</dt>
+              <dd>记忆所属的角色 ID。</dd>
+              <dt>类型</dt>
+              <dd><strong>短期</strong>：对话上下文中临时存储的信息；<strong>长期</strong>：被固化到角色知识库中的重要信息。</dd>
+              <dt>重要性 (0.0–1.0)</dt>
+              <dd>该记忆的重要程度。重要性 ≥ 长期阈值的记忆才会被写入长期存储。</dd>
+              <dt>标签</dt>
+              <dd>逗号分隔的关键词，用于分类。</dd>
+              <dt>记忆内容</dt>
+              <dd>记忆的具体描述。应当清晰、具体，便于模型理解。</dd>
+            </dl>
+            <h4>打包提交</h4>
+            <p>一个角色的全部记忆条目会作为一个「记忆包」整体导出。在提交标签页的列表中选择对应角色 ID 的记忆包即可。</p>
+          </div>
+          <div class="help-content" id="help-content-world" hidden>
+            <h3>世界观</h3>
+            <p>创建和管理世界设定文档。</p>
+            <h4>字段说明</h4>
+            <dl>
+              <dt>名称</dt>
+              <dd>世界观的名称，例如「现代东京」或「奇幻大陆」。</dd>
+              <dt>配置文件（JSON）</dt>
+              <dd>可选的结构化配置，例如标签、规则等。</dd>
+              <dt>世界观文档（Markdown）</dt>
+              <dd>世界观的详细描述，包括历史、地理、社会结构、特殊规则等。</dd>
+            </dl>
+          </div>
+          <div class="help-content" id="help-content-voice" hidden>
+            <h3>声音克隆</h3>
+            <p>管理角色的声音参考样本。</p>
+            <h4>字段说明</h4>
+            <dl>
+              <dt>角色 ID</dt>
+              <dd>声音所属的角色 ID。</dd>
+              <dt>名称</dt>
+              <dd>声音样本的名称，例如 <code>default</code>、<code>whisper</code>。</dd>
+              <dt>声音引擎</dt>
+              <dd>选择用于合成声音的引擎。支持：melo-tts, cosyvoice, gpt-sovits, fish-speech, chat-tts, bert-vits2, vall-e, openai-tts。</dd>
+              <dt>音频文件路径</dt>
+              <dd>参考音频文件（.wav / .mp3 / .m4a / .ogg / .flac）。</dd>
+            </dl>
+          </div>
+          <div class="help-content" id="help-content-submit" hidden>
+            <h3>创作提交</h3>
+            <p>将创作的内容打包并通过邮件提交给审核团队。</p>
+            <h4>流程</h4>
+            <ol>
+              <li><strong>登录</strong> — 输入你的开发者 ID，用于追踪提交记录。</li>
+              <li><strong>选择内容类型</strong> — 选择产出物类型并填写标识，或使用下方的包列表直接选择。</li>
+              <li><strong>选择内容包</strong> — 从「选择要提交的内容包」列表中勾选需要提交的项目。列表中会自动聚合所有已创建的角色、记忆包和世界观。</li>
+              <li><strong>填写信息</strong> — 设置 AI 协助占比和补充说明。</li>
+              <li><strong>提交</strong> — 点击提交按钮，系统会打包所有选中内容并通过邮件发送。</li>
+            </ol>
+            <h4>包类型说明</h4>
+            <dl>
+              <dt>角色包 (<code>character</code>)</dt>
+              <dd>包含角色的 JSON 配置和人设文档（persona.md）。</dd>
+              <dt>记忆包 (<code>memory_pack</code>)</dt>
+              <dd>包含指定角色的所有记忆条目，导出为 JSON 文件。</dd>
+              <dt>世界观包 (<code>world</code>)</dt>
+              <dd>包含世界观的 JSON 配置和文档。</dd>
+            </dl>
+            <h4>限制</h4>
+            <ul>
+              <li>同一开发者 ID 每 3600 秒（1 小时）可提交一次。</li>
+              <li>附件上限 1200 MB（超出会拒绝）。</li>
+              <li>提交后会在左侧「历史提交」面板显示记录。</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <script src="devkit.js"></script>
   </body>
