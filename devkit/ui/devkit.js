@@ -71,6 +71,19 @@
     $("#recipient-chip-value").textContent = cfg.recipient ?? "";
   };
 
+  const renderTargetKinds = (kinds) => {
+    state.targetKinds = kinds;
+    const select = $("#target-kind");
+    if (!select) return;
+    select.innerHTML = "";
+    for (const k of kinds) {
+      const opt = document.createElement("option");
+      opt.value = k;
+      opt.textContent = k;
+      select.appendChild(opt);
+    }
+  };
+
   const renderDeveloperChip = () => {
     const chip = $("#developer-chip-value");
     const logoutBtn = $("#logout-btn");
@@ -156,6 +169,8 @@
   // Submit tab — submit
   // --------------------------------------------------------------
 
+  const _sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
   const onSubmit = async () => {
     if (!state.activeDeveloper) { toast("请先登录", "err"); return; }
     if (state.selectedPackages.size === 0) { toast("请勾选要提交的内容包", "err"); return; }
@@ -163,27 +178,58 @@
     const aiRatio = parseFloat($("#ai-ratio").value || "0");
     const notes = $("#notes").value.trim();
     const payload = { notes, ai_ratio: Number.isFinite(aiRatio) ? aiRatio : 0 };
+    const startedAt = new Date();
 
-    setStatus("#submit-status", "", "warn");
+    const step = (n, total, msg) => {
+      const elapsed = ((new Date() - startedAt) / 1000).toFixed(1);
+      setStatus("#submit-status", `[${n}/${total}] ${msg}（${elapsed} 秒）`, "warn");
+    };
+
     $("#submit-btn").disabled = true;
-    const resp = await callApi("submit", state.activeDeveloper, null, null, payload, null, packageIds);
-    if (!resp.ok) {
-      setStatus("#submit-status", `提交失败：${resp.message} (${resp.code || resp.status || ""})`, "err");
-      toast(`提交失败：${resp.message}`, "err");
+
+    try {
+      step(1, 5, "检查冷却时间与输入");
+      await _sleep(50);
+
+      step(2, 5, `解析 ${packageIds.length} 个内容包`);
+      await _sleep(50);
+
+      step(3, 5, "打包文件为 7Z 归档");
+      await _sleep(50);
+
+      step(4, 5, "通过 SMTP 发送邮件（可能需要 10–60 秒）");
+      const resp = await callApi("submit", state.activeDeveloper, null, null, payload, null, packageIds);
+      const elapsed = ((new Date() - startedAt) / 1000).toFixed(1);
+
+      if (!resp.ok) {
+        setStatus("#submit-status", `[失败] 耗时 ${elapsed} 秒 · ${resp.message} (${resp.code || resp.status || ""})`, "err");
+        toast(`提交失败：${resp.message}`, "err");
+        $("#submit-btn").disabled = false;
+        refreshSubmitBtn();
+        return;
+      }
+
+      const r = resp.data;
+      step(5, 5, `提交完成 · 归档 ${fmtBytes(r.archive_size)} · SHA256 ${shortSha(r.content_sha256)} · SMTP ${r.smtp_status}`);
+      setStatus(
+        "#submit-status",
+        `[完成] 耗时 ${elapsed} 秒 · ID ${r.id} · ${fmtBytes(r.archive_size)} · sha256 ${shortSha(r.content_sha256)} · SMTP ${r.smtp_status}${r.smtp_code ? ` (${r.smtp_code})` : ""}`,
+        "ok",
+      );
+      toast(`提交成功：${r.id}`, "ok");
+      $("#status-bar").textContent = `上次提交 ${r.submitted_at}`;
+      await refreshHistory();
+      await refreshCooldown();
+      state.selectedPackages.clear();
+      renderPackages();
+    } catch (err) {
+      const elapsed = ((new Date() - startedAt) / 1000).toFixed(1);
+      setStatus("#submit-status", `[异常] 耗时 ${elapsed} 秒 · ${err.message}`, "err");
+      toast(`提交异常：${err.message}`, "err");
+    } finally {
       $("#submit-btn").disabled = false;
       refreshSubmitBtn();
-      return;
     }
-    const r = resp.data;
-    setStatus("#submit-status", `提交成功：${r.id}  ${fmtBytes(r.archive_size)}  sha256 ${shortSha(r.content_sha256)}  smtp ${r.smtp_status} ${r.smtp_code}`, "ok");
-    toast(`已发送：${r.id}`, "ok");
-    $("#status-bar").textContent = `上次提交 ${r.submitted_at}`;
-    await refreshHistory();
-    await refreshCooldown();
-    state.selectedPackages.clear();
-    renderPackages();
-    $("#submit-btn").disabled = false;
-    refreshSubmitBtn();
   };
 
   // --------------------------------------------------------------
@@ -789,6 +835,8 @@
       const cfg = await callApi("whoami");
       if (!cfg.ok) throw new Error("whoami failed");
       renderConfig(cfg.data);
+      const kinds = await callApi("target_kinds");
+      if (kinds.ok) renderTargetKinds(kinds.data);
       const me = await callApi("current_developer");
       if (me.ok && me.data && me.data.developer_id) {
         state.activeDeveloper = me.data.developer_id;
