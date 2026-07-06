@@ -390,10 +390,10 @@ class TestPackPayload:
                     f.write(self.buffer.getvalue())
                 return False
 
-            def writestr(self, name, data):
+            def writestr(self, data, arcname):
                 if isinstance(data, str):
                     data = data.encode("utf-8")
-                self.buffer.write(b"STR:" + name.encode() + b":" + data + b"\n")
+                self.buffer.write(b"STR:" + arcname.encode() + b":" + data + b"\n")
 
             def write(self, src, arcname):
                 with open(src, "rb") as f:

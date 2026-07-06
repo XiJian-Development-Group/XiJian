@@ -475,6 +475,7 @@ def pack_payload(
         :func:`local_archive_path` + :func:`archive_name`.
     """
     pre_size = _cumulative_size(file_entries)
+    _LOGGER.info("pack_payload: %d file entries, %d cumulative bytes", len(file_entries), pre_size)
     if pre_size > DEV_SUBMIT_MAX_ATTACHMENT_BYTES:
         # We don't even start packing — there's no way 7Z / zip can
         # produce a smaller output than the sum of inputs (modest
@@ -498,16 +499,22 @@ def pack_payload(
         "utf-8"
     )
 
+    _LOGGER.info("packing archive to %s", target)
+
     if py7zr is not None:
-        with py7zr.SevenZipFile(target, mode="solid") as archive:
-            archive.writestr("manifest.json", manifest_bytes)
+        with py7zr.SevenZipFile(target, mode="w") as archive:
+            archive.writestr(manifest_bytes, "manifest.json")
             for entry in file_entries:
                 src = entry.get("path")
                 if not src or not os.path.isfile(src):
+                    _LOGGER.warning("skipping missing file entry: %s", entry)
                     continue
                 arcname = entry.get("arcname") or os.path.basename(src)
                 archive.write(src, arcname)
-        return target, _file_size(target), ARCHIVE_FORMAT_7Z
+                _LOGGER.debug("added to archive: %s -> %s", src, arcname)
+        result = target, _file_size(target), ARCHIVE_FORMAT_7Z
+        _LOGGER.info("archive created (7z): %s (%d bytes)", target, result[1])
+        return result
 
     # Fallback to zip when py7zr is not installed.  We log a
     # WARNING (not just info) so operators see it in their console
@@ -523,10 +530,14 @@ def pack_payload(
         for entry in file_entries:
             src = entry.get("path")
             if not src or not os.path.isfile(src):
+                _LOGGER.warning("skipping missing file entry: %s", entry)
                 continue
             arcname = entry.get("arcname") or os.path.basename(src)
             zf.write(src, arcname)
-    return target, _file_size(target), ARCHIVE_FORMAT_ZIP
+            _LOGGER.debug("added to zip: %s -> %s", src, arcname)
+    result = target, _file_size(target), ARCHIVE_FORMAT_ZIP
+    _LOGGER.info("archive created (zip fallback): %s (%d bytes)", target, result[1])
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -560,32 +571,46 @@ def _smtp_send(
 
     smtp: smtplib.SMTP | smtplib.SMTP_SSL | None = None
     try:
+        _LOGGER.info("connecting to SMTP %s:%s (SSL=%s, TLS=%s)", host, port, port == 465, use_tls)
         try:
             if port == 465:
                 smtp = smtplib.SMTP_SSL(host, port, timeout=30, context=ssl.create_default_context())
+                _LOGGER.info("connected via SMTP_SSL to %s:%s", host, port)
             else:
                 smtp = smtplib.SMTP(host, port, timeout=30)
+                _LOGGER.info("connected via SMTP to %s:%s", host, port)
         except (OSError, smtplib.SMTPConnectError) as exc:
+            _LOGGER.error("SMTP connection failed: %s", exc)
             raise SmtpError("connection_failed", str(exc)) from exc
         try:
             if not isinstance(smtp, smtplib.SMTP_SSL) and use_tls:
+                _LOGGER.info("starting STARTTLS upgrade")
                 try:
                     smtp.starttls(context=ssl.create_default_context())
+                    _LOGGER.info("STARTTLS upgrade successful")
                 except (smtplib.SMTPException, ssl.SSLError, OSError) as exc:
+                    _LOGGER.error("STARTTLS failed: %s", exc)
                     raise SmtpError("tls_failed", str(exc)) from exc
+            _LOGGER.info("logging in as %s", user)
             try:
                 smtp.login(user, password)
+                _LOGGER.info("SMTP login successful")
             except smtplib.SMTPAuthenticationError as exc:
+                _LOGGER.error("SMTP auth failed (bad user/password): %s", exc)
                 raise SmtpError("auth_failed", str(exc)) from exc
             except smtplib.SMTPException as exc:
+                _LOGGER.error("SMTP auth failed: %s", exc)
                 raise SmtpError("auth_failed", str(exc)) from exc
+            _LOGGER.info("sending mail from %s to %s (%d bytes)", sender, recipient, len(message.as_string()))
             refused = smtp.sendmail(sender, [recipient], message.as_string())
             if refused:
+                _LOGGER.error("recipient refused: %s", refused)
                 raise SmtpError(
                     "other",
                     f"recipient refused: {refused}",
                 )
             code, response = smtp.noop()
+            _LOGGER.info("SMTP send complete: code=%s response=%s", code, response)
             return str(code), str(response)
         finally:
             try:
@@ -672,6 +697,10 @@ def send_submission_email(
     archive_filename = os.path.basename(archive_path)
     archive_size = _file_size(archive_path)
     sha256 = compute_sha256(archive_path)
+    _LOGGER.info(
+        "building email: to=%s subject=[XiJian DevKit Package Submit] %s archive=%s (%d bytes)",
+        DEV_SUBMIT_RECIPIENT, developer_id, archive_filename, archive_size,
+    )
     msg = build_email_message(
         developer_id=developer_id,
         submitted_at=submitted_at,
@@ -767,12 +796,18 @@ def submit(
     """
     payload = dict(payload or {})
     file_entries = list(file_entries or [])
+    _LOGGER.info(
+        "submit start: developer=%s kind=%s id=%s files=%d",
+        developer_id, target_kind, target_id, len(file_entries),
+    )
     _validate_submission(developer_id, target_kind, target_id)
 
     submitted_at = _now_iso()
+    _LOGGER.info("checking rate limit for %s", developer_id)
     check_rate_limit(developer_id, now=now)
 
     ai_ratio = float(payload.get("ai_ratio", 0.0) or 0.0)
+    _LOGGER.info("building manifest (ai_ratio=%.2f)", ai_ratio)
     manifest = build_manifest(
         developer_id=developer_id,
         target_kind=target_kind,
@@ -781,13 +816,17 @@ def submit(
         submitted_at=submitted_at,
         ai_ratio=ai_ratio,
     )
+    _LOGGER.info("packing payload")
     archive_path, archive_size, archive_format = pack_payload(
         manifest, file_entries, archive_path=archive_path
     )
+    _LOGGER.info("checking archive size: %d bytes", archive_size)
     check_archive_size(archive_size)
 
+    _LOGGER.info("computing sha256 of %s", archive_path)
     sha256 = compute_sha256(archive_path)
 
+    _LOGGER.info("sending submission email")
     email_result = send_submission_email(
         developer_id=developer_id,
         submitted_at=submitted_at,
@@ -820,6 +859,10 @@ def submit(
     state.submissions[submission_id] = record
     state.last_submit_at[developer_id] = submitted_at
     state.local_archives[submission_id] = archive_path
+    _LOGGER.info(
+        "submission complete: id=%s developer=%s smtp_status=%s archive=%s",
+        submission_id, developer_id, email_result["smtp_status"], archive_path,
+    )
 
     return dict(record)
 

@@ -417,11 +417,16 @@ class DevKitApi:
                     "`package_ids` must be a list of strings",
                     code="bad_package_ids",
                 )
+            _LOGGER.info("resolving %d package(s) for submission: %s", len(package_ids), package_ids)
             resolved_all = self._resolve_packages(package_ids)
             target_kind = resolved_all["target_kind"]
             target_id = resolved_all["target_id"]
             file_entries = resolved_all["file_entries"]
             payload = payload or resolved_all["payload"]
+            _LOGGER.info(
+                "resolved packages → kind=%s id=%s files=%d",
+                target_kind, target_id, len(file_entries),
+            )
         else:
             if not isinstance(target_kind, str) or not target_kind:
                 raise DevKitError(
