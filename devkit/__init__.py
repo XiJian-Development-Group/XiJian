@@ -955,4 +955,10 @@ __all__ = [
     "RateLimitedError",
     "PayloadTooLargeError",
     "SmtpError",
+    # editor modules
+    "character_editor",
+    "memory_editor",
+    "world_editor",
+    "model_viewer",
+    "voice_cloner",
 ]

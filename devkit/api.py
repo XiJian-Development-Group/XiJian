@@ -89,6 +89,41 @@ from devkit import (
     list_submissions,
     submit,
 )
+from devkit.character_editor import (
+    list_characters as _ce_list,
+    get_character as _ce_get,
+    save_character as _ce_save,
+    delete_character as _ce_delete,
+    export_character_for_submit as _ce_export,
+)
+from devkit.memory_editor import (
+    list_entries as _me_list,
+    list_characters_with_memories as _me_chars,
+    get_entry as _me_get,
+    save_entry as _me_save,
+    delete_entry as _me_delete,
+    export_entries_for_submit as _me_export,
+)
+from devkit.world_editor import (
+    list_worlds as _we_list,
+    get_world as _we_get,
+    save_world as _we_save,
+    delete_world as _we_delete,
+    export_world_for_submit as _we_export,
+)
+from devkit.model_viewer import (
+    list_models as _mv_list,
+    register_model as _mv_register,
+    unregister_model as _mv_unregister,
+    get_model_info as _mv_info,
+)
+from devkit.voice_cloner import (
+    list_voices as _vc_list,
+    list_characters_with_voices as _vc_chars,
+    get_voice as _vc_get,
+    save_voice as _vc_save,
+    delete_voice as _vc_delete,
+)
 
 
 _LOGGER = logging.getLogger("devkit.api")
@@ -407,6 +442,184 @@ class DevKitApi:
             )
         ok = delete_local_archive(submission_id)
         return {"deleted": bool(ok), "submission_id": submission_id}
+
+    # --- work directory ------------------------------------------------
+
+    def _work_dir(self) -> str:
+        import os
+        return os.environ.get(
+            "XIJIAN_DEV_WORK_DIR",
+            os.path.join(os.path.expanduser("~"), "隙间Dev"),
+        )
+
+    # --- character editor ----------------------------------------------
+
+    @_serialize_call
+    def list_characters(self) -> list[dict[str, Any]]:
+        return _ce_list(self._work_dir())
+
+    @_serialize_call
+    def get_character(self, char_id: Any) -> dict[str, Any] | None:
+        if not isinstance(char_id, str) or not char_id:
+            raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
+        return _ce_get(self._work_dir(), char_id)
+
+    @_serialize_call
+    def save_character(self, data: Any) -> dict[str, Any]:
+        if not isinstance(data, dict):
+            raise DevKitError(400, "数据格式错误", code="bad_data")
+        return _ce_save(self._work_dir(), data)
+
+    @_serialize_call
+    def delete_character(self, char_id: Any) -> dict[str, Any]:
+        if not isinstance(char_id, str) or not char_id:
+            raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
+        ok = _ce_delete(self._work_dir(), char_id)
+        return {"deleted": ok}
+
+    @_serialize_call
+    def export_character(self, char_id: Any) -> dict[str, Any]:
+        if not isinstance(char_id, str) or not char_id:
+            raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
+        return _ce_export(self._work_dir(), char_id)
+
+    # --- memory editor -------------------------------------------------
+
+    @_serialize_call
+    def list_memory_entries(self, character_id: Any) -> list[dict[str, Any]]:
+        if not isinstance(character_id, str) or not character_id:
+            raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
+        return _me_list(self._work_dir(), character_id)
+
+    @_serialize_call
+    def list_memory_characters(self) -> list[str]:
+        return _me_chars(self._work_dir())
+
+    @_serialize_call
+    def get_memory_entry(self, entry_id: Any) -> dict[str, Any] | None:
+        if not isinstance(entry_id, str) or not entry_id:
+            raise DevKitError(400, "条目 ID 不能为空", code="missing_entry_id")
+        return _me_get(self._work_dir(), entry_id)
+
+    @_serialize_call
+    def save_memory_entry(self, data: Any) -> dict[str, Any]:
+        if not isinstance(data, dict):
+            raise DevKitError(400, "数据格式错误", code="bad_data")
+        return _me_save(self._work_dir(), data)
+
+    @_serialize_call
+    def delete_memory_entry(self, entry_id: Any) -> dict[str, Any]:
+        if not isinstance(entry_id, str) or not entry_id:
+            raise DevKitError(400, "条目 ID 不能为空", code="missing_entry_id")
+        ok = _me_delete(self._work_dir(), entry_id)
+        return {"deleted": ok}
+
+    @_serialize_call
+    def export_memory_entries(self, character_id: Any) -> dict[str, Any]:
+        if not isinstance(character_id, str) or not character_id:
+            raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
+        return _me_export(self._work_dir(), character_id)
+
+    # --- world editor --------------------------------------------------
+
+    @_serialize_call
+    def list_worlds(self) -> list[dict[str, Any]]:
+        return _we_list(self._work_dir())
+
+    @_serialize_call
+    def get_world(self, world_id: Any) -> dict[str, Any] | None:
+        if not isinstance(world_id, str) or not world_id:
+            raise DevKitError(400, "世界观 ID 不能为空", code="missing_world_id")
+        return _we_get(self._work_dir(), world_id)
+
+    @_serialize_call
+    def save_world(self, data: Any) -> dict[str, Any]:
+        if not isinstance(data, dict):
+            raise DevKitError(400, "数据格式错误", code="bad_data")
+        return _we_save(self._work_dir(), data)
+
+    @_serialize_call
+    def delete_world(self, world_id: Any) -> dict[str, Any]:
+        if not isinstance(world_id, str) or not world_id:
+            raise DevKitError(400, "世界观 ID 不能为空", code="missing_world_id")
+        ok = _we_delete(self._work_dir(), world_id)
+        return {"deleted": ok}
+
+    @_serialize_call
+    def export_world(self, world_id: Any) -> dict[str, Any]:
+        if not isinstance(world_id, str) or not world_id:
+            raise DevKitError(400, "世界观 ID 不能为空", code="missing_world_id")
+        return _we_export(self._work_dir(), world_id)
+
+    # --- 3D model viewer -----------------------------------------------
+
+    @_serialize_call
+    def list_models(self) -> list[dict[str, Any]]:
+        return _mv_list(self._work_dir())
+
+    @_serialize_call
+    def register_model(self, path: Any) -> dict[str, Any]:
+        if not isinstance(path, str) or not path:
+            raise DevKitError(400, "文件路径不能为空", code="missing_path")
+        return _mv_register(self._work_dir(), path)
+
+    @_serialize_call
+    def unregister_model(self, model_id: Any) -> dict[str, Any]:
+        if not isinstance(model_id, str) or not model_id:
+            raise DevKitError(400, "模型 ID 不能为空", code="missing_model_id")
+        ok = _mv_unregister(self._work_dir(), model_id)
+        return {"deleted": ok}
+
+    @_serialize_call
+    def get_model_info(self, model_id: Any) -> dict[str, Any] | None:
+        if not isinstance(model_id, str) or not model_id:
+            raise DevKitError(400, "模型 ID 不能为空", code="missing_model_id")
+        return _mv_info(self._work_dir(), model_id)
+
+    # --- voice clone ---------------------------------------------------
+
+    @_serialize_call
+    def list_voices(self, character_id: Any) -> list[dict[str, Any]]:
+        if not isinstance(character_id, str) or not character_id:
+            raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
+        return _vc_list(self._work_dir(), character_id)
+
+    @_serialize_call
+    def list_voice_characters(self) -> list[str]:
+        return _vc_chars(self._work_dir())
+
+    @_serialize_call
+    def get_voice(self, voice_id: Any) -> dict[str, Any] | None:
+        if not isinstance(voice_id, str) or not voice_id:
+            raise DevKitError(400, "声音 ID 不能为空", code="missing_voice_id")
+        return _vc_get(self._work_dir(), voice_id)
+
+    @_serialize_call
+    def save_voice(
+        self,
+        character_id: Any = None,
+        name: Any = None,
+        sample_path: Any = None,
+        engine: Any = None,
+    ) -> dict[str, Any]:
+        if not isinstance(character_id, str) or not character_id:
+            raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
+        if not isinstance(name, str) or not name:
+            raise DevKitError(400, "声音名称不能为空", code="missing_name")
+        return _vc_save(
+            self._work_dir(),
+            character_id,
+            name,
+            sample_path=sample_path if isinstance(sample_path, str) else None,
+            engine=engine if isinstance(engine, str) else "melo-tts",
+        )
+
+    @_serialize_call
+    def delete_voice(self, voice_id: Any) -> dict[str, Any]:
+        if not isinstance(voice_id, str) or not voice_id:
+            raise DevKitError(400, "声音 ID 不能为空", code="missing_voice_id")
+        ok = _vc_delete(self._work_dir(), voice_id)
+        return {"deleted": ok}
 
     # --- helpers not exposed via js_api --------------------------------
 

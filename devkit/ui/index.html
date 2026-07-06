@@ -10,7 +10,7 @@
     <header class="app-header">
       <div class="app-header__brand">
         <h1>隙间 · 开发者工具</h1>
-        <p class="app-header__subtitle">本地打包并提交你的创作内容</p>
+        <p class="app-header__subtitle">创作、编辑、打包并提交你的内容</p>
       </div>
       <div class="app-header__meta">
         <div id="recipient-chip" class="chip chip--ghost" title="本次提交将发送到此邮箱">
@@ -25,159 +25,404 @@
       </div>
     </header>
 
+    <!-- 导航标签 -->
+    <nav class="tab-nav" id="tab-nav">
+      <button class="tab-nav__btn tab-nav__btn--active" data-tab="submit">创作提交</button>
+      <button class="tab-nav__btn" data-tab="character">角色人设</button>
+      <button class="tab-nav__btn" data-tab="memory">记忆条目</button>
+      <button class="tab-nav__btn" data-tab="world">世界观</button>
+      <button class="tab-nav__btn" data-tab="model">3D 预览</button>
+      <button class="tab-nav__btn" data-tab="voice">声音克隆</button>
+    </nav>
+
     <main class="app-main">
-      <!-- 左侧：登录 + 提交表单 -->
-      <section class="card" id="login-card">
-        <header class="card__header">
-          <h2>1. 登录</h2>
-          <p class="card__hint">填一个便于识别的标识，我们会用它来记录这次提交。</p>
-        </header>
-        <div class="card__body">
-          <label class="field">
-            <span class="field__label">开发者 ID</span>
-            <input
-              id="developer-id"
-              class="field__input"
-              type="text"
-              placeholder="例如：alice-32a1"
-              autocomplete="off"
-              spellcheck="false"
-            />
-          </label>
-          <div class="row row--end">
-            <button id="login-btn" class="btn btn--primary" type="button">登录</button>
-          </div>
-          <p id="login-status" class="status status--idle" role="status"></p>
+      <!-- ======== Tab: 创作提交 ======== -->
+      <section class="tab-panel tab-panel--active" id="tab-submit">
+        <div class="tab-panel__content">
+          <section class="card" id="login-card">
+            <header class="card__header">
+              <h2>1. 登录</h2>
+              <p class="card__hint">填一个便于识别的标识，我们会用它来记录这次提交。</p>
+            </header>
+            <div class="card__body">
+              <label class="field">
+                <span class="field__label">开发者 ID</span>
+                <input id="developer-id" class="field__input" type="text" placeholder="例如：alice-32a1" autocomplete="off" spellcheck="false" />
+              </label>
+              <div class="row row--end">
+                <button id="login-btn" class="btn btn--primary" type="button">登录</button>
+              </div>
+              <p id="login-status" class="status status--idle" role="status"></p>
+            </div>
+          </section>
+          <section class="card" id="target-card">
+            <header class="card__header">
+              <h2>2. 选择产出物</h2>
+              <p class="card__hint">选择提交类型，并填上对应的标识。</p>
+            </header>
+            <div class="card__body">
+              <div class="grid grid--2">
+                <label class="field">
+                  <span class="field__label">类型</span>
+                  <select id="target-kind" class="field__input"></select>
+                </label>
+                <label class="field">
+                  <span class="field__label">标识</span>
+                  <input id="target-id" class="field__input" type="text" placeholder="例如：char_yuki" autocomplete="off" spellcheck="false" />
+                </label>
+              </div>
+              <label class="field">
+                <span class="field__label">AI 协助占比 (0–1)</span>
+                <input id="ai-ratio" class="field__input" type="number" min="0" max="1" step="0.05" value="0" />
+              </label>
+              <label class="field">
+                <span class="field__label">补充说明（可选）</span>
+                <textarea id="notes" class="field__input" rows="3" placeholder="本次提交的额外说明，会随内容一起发送"></textarea>
+              </label>
+            </div>
+          </section>
+          <section class="card" id="files-card">
+            <header class="card__header">
+              <h2>3. 选择打包文件</h2>
+              <p class="card__hint">单次提交附件≤ <span id="files-card-max">…</span>；每个开发者 ID 每 <span id="files-card-cooldown">…</span> 至多 1 次。</p>
+            </header>
+            <div class="card__body">
+              <div class="row row--gap">
+                <button id="pick-files-btn" class="btn btn--secondary" type="button">选择文件…</button>
+                <button id="clear-files-btn" class="btn btn--ghost" type="button">清空</button>
+                <span id="files-summary" class="files-summary">尚未选择文件</span>
+              </div>
+              <ul id="files-list" class="files-list"></ul>
+              <p id="files-status" class="status status--idle" role="status"></p>
+            </div>
+          </section>
+          <section class="card" id="submit-card">
+            <header class="card__header">
+              <h2>4. 提交</h2>
+              <p class="card__hint">点击后会开始打包并发送，过程通常需要几秒到一分钟。</p>
+            </header>
+            <div class="card__body">
+              <div class="row row--end">
+                <button id="submit-btn" class="btn btn--primary btn--danger" type="button" disabled>提交</button>
+              </div>
+              <p id="submit-status" class="status status--idle" role="status"></p>
+            </div>
+          </section>
+        </div>
+        <aside class="sidebar">
+          <section class="card" id="history-card">
+            <header class="card__header">
+              <h2>历史提交</h2>
+              <p class="card__hint"><span id="cooldown-indicator">冷却空闲，可随时提交</span></p>
+            </header>
+            <div class="card__body">
+              <button id="refresh-history-btn" class="btn btn--ghost" type="button">刷新</button>
+              <ol id="history-list" class="history-list"></ol>
+            </div>
+          </section>
+          <section class="card" id="config-card">
+            <header class="card__header">
+              <h2>运行配置</h2>
+              <p class="card__hint">本次提交使用的设置</p>
+            </header>
+            <div class="card__body">
+              <dl class="kv">
+                <dt>API 版本</dt><dd id="cfg-api-version">…</dd>
+                <dt>归档格式</dt><dd id="cfg-archive-format">…</dd>
+                <dt>体积上限</dt><dd id="cfg-max-bytes">…</dd>
+                <dt>SMTP 服务器</dt><dd id="cfg-smtp-host">…</dd>
+                <dt>SMTP 端口</dt><dd id="cfg-smtp-port">…</dd>
+                <dt>SMTP STARTTLS</dt><dd id="cfg-smtp-tls">…</dd>
+                <dt>SMTP 用户</dt><dd id="cfg-smtp-user">…</dd>
+              </dl>
+            </div>
+          </section>
+        </aside>
+      </section>
+
+      <!-- ======== Tab: 角色人设 ======== -->
+      <section class="tab-panel" id="tab-character">
+        <div class="tab-panel__content">
+          <section class="card">
+            <header class="card__header">
+              <h2>角色列表</h2>
+              <p class="card__hint">管理所有已创建的角色人设文档</p>
+            </header>
+            <div class="card__body">
+              <div class="row row--gap">
+                <button id="char-refresh-btn" class="btn btn--ghost" type="button">刷新</button>
+                <button id="char-new-btn" class="btn btn--primary" type="button">新建角色</button>
+              </div>
+              <ul id="char-list" class="item-list"></ul>
+            </div>
+          </section>
+        </div>
+        <div class="tab-panel__editor">
+          <section class="card">
+            <header class="card__header">
+              <h2>编辑角色人设</h2>
+              <p class="card__hint" id="char-editor-hint">选择一个角色或新建后进行编辑</p>
+            </header>
+            <div class="card__body">
+              <input type="hidden" id="char-editing-id" value="" />
+              <div class="grid grid--2">
+                <label class="field">
+                  <span class="field__label">名称</span>
+                  <input id="char-name" class="field__input" type="text" placeholder="例如：Yuki" />
+                </label>
+                <label class="field">
+                  <span class="field__label">显示名称</span>
+                  <input id="char-display-name" class="field__input" type="text" placeholder="例如：雪" />
+                </label>
+              </div>
+              <label class="field">
+                <span class="field__label">声音配置</span>
+                <input id="char-voice" class="field__input" type="text" placeholder="例如：melo_zh_female_warm_v1" />
+              </label>
+              <label class="field">
+                <span class="field__label">默认情感</span>
+                <input id="char-emotion" class="field__input" type="text" placeholder="neutral" value="neutral" />
+              </label>
+              <label class="field">
+                <span class="field__label">标签（逗号分隔）</span>
+                <input id="char-tags" class="field__input" type="text" placeholder="例如：tsundere, student" />
+              </label>
+              <label class="field">
+                <span class="field__label">人设文档（Markdown）</span>
+                <textarea id="char-persona" class="field__input field__input--code" rows="12" placeholder="在此编写角色的人设、背景故事、性格描述等……"></textarea>
+              </label>
+              <div class="row row--end row--gap">
+                <div class="row">
+                  <button id="char-export-btn" class="btn btn--secondary" type="button" disabled>导出为提交</button>
+                  <button id="char-delete-btn" class="btn btn--ghost btn--danger-ghost" type="button" disabled>删除</button>
+                </div>
+                <button id="char-save-btn" class="btn btn--primary" type="button">保存</button>
+              </div>
+              <p id="char-status" class="status status--idle" role="status"></p>
+            </div>
+          </section>
         </div>
       </section>
 
-      <section class="card" id="target-card">
-        <header class="card__header">
-          <h2>2. 选择产出物</h2>
-          <p class="card__hint">选择提交类型，并填上对应的标识。</p>
-        </header>
-        <div class="card__body">
-          <div class="grid grid--2">
-            <label class="field">
-              <span class="field__label">类型</span>
-              <select id="target-kind" class="field__input"></select>
-            </label>
-            <label class="field">
-              <span class="field__label">标识</span>
-              <input
-                id="target-id"
-                class="field__input"
-                type="text"
-                placeholder="例如：char_yuki"
-                autocomplete="off"
-                spellcheck="false"
-              />
-            </label>
-          </div>
-          <label class="field">
-            <span class="field__label">AI 协助占比 (0–1)</span>
-            <input
-              id="ai-ratio"
-              class="field__input"
-              type="number"
-              min="0"
-              max="1"
-              step="0.05"
-              value="0"
-            />
-          </label>
-          <label class="field">
-            <span class="field__label">补充说明（可选）</span>
-            <textarea
-              id="notes"
-              class="field__input"
-              rows="3"
-              placeholder="本次提交的额外说明，会随内容一起发送"
-            ></textarea>
-          </label>
+      <!-- ======== Tab: 记忆条目 ======== -->
+      <section class="tab-panel" id="tab-memory">
+        <div class="tab-panel__content">
+          <section class="card">
+            <header class="card__header">
+              <h2>记忆条目</h2>
+              <p class="card__hint">为角色编写长期或短期记忆</p>
+            </header>
+            <div class="card__body">
+              <label class="field">
+                <span class="field__label">角色 ID</span>
+                <input id="mem-char-id" class="field__input" type="text" placeholder="例如：char_yuki" />
+              </label>
+              <div class="row row--gap">
+                <button id="mem-refresh-btn" class="btn btn--ghost" type="button">刷新</button>
+                <button id="mem-new-btn" class="btn btn--primary" type="button">新建条目</button>
+              </div>
+              <ul id="mem-list" class="item-list"></ul>
+            </div>
+          </section>
+        </div>
+        <div class="tab-panel__editor">
+          <section class="card">
+            <header class="card__header">
+              <h2>编辑记忆条目</h2>
+              <p class="card__hint" id="mem-editor-hint">新建或选择一条记忆进行编辑</p>
+            </header>
+            <div class="card__body">
+              <input type="hidden" id="mem-editing-id" value="" />
+              <div class="grid grid--2">
+                <label class="field">
+                  <span class="field__label">角色 ID</span>
+                  <input id="mem-char" class="field__input" type="text" placeholder="char_yuki" />
+                </label>
+                <label class="field">
+                  <span class="field__label">类型</span>
+                  <select id="mem-type" class="field__input">
+                    <option value="short">短期</option>
+                    <option value="long">长期</option>
+                  </select>
+                </label>
+              </div>
+              <div class="grid grid--2">
+                <label class="field">
+                  <span class="field__label">重要性 (0.0–1.0)</span>
+                  <input id="mem-importance" class="field__input" type="number" min="0" max="1" step="0.05" value="0.5" />
+                </label>
+                <label class="field">
+                  <span class="field__label">标签（逗号分隔）</span>
+                  <input id="mem-tags" class="field__input" type="text" placeholder="例如：preference, food" />
+                </label>
+              </div>
+              <label class="field">
+                <span class="field__label">记忆内容</span>
+                <textarea id="mem-content" class="field__input" rows="8" placeholder="描述这条记忆的具体内容……"></textarea>
+              </label>
+              <div class="row row--end row--gap">
+                <div class="row">
+                  <button id="mem-export-btn" class="btn btn--secondary" type="button" disabled>导出为提交</button>
+                  <button id="mem-delete-btn" class="btn btn--ghost btn--danger-ghost" type="button" disabled>删除</button>
+                </div>
+                <button id="mem-save-btn" class="btn btn--primary" type="button">保存</button>
+              </div>
+              <p id="mem-status" class="status status--idle" role="status"></p>
+            </div>
+          </section>
         </div>
       </section>
 
-      <section class="card" id="files-card">
-        <header class="card__header">
-          <h2>3. 选择打包文件</h2>
-          <p class="card__hint">
-            单次提交附件≤ <span id="files-card-max">…</span>；每个开发者 ID 每
-            <span id="files-card-cooldown">…</span> 至多 1 次。
-          </p>
-        </header>
-        <div class="card__body">
-          <div class="row row--gap">
-            <button id="pick-files-btn" class="btn btn--secondary" type="button">
-              选择文件…
-            </button>
-            <button id="clear-files-btn" class="btn btn--ghost" type="button">
-              清空
-            </button>
-            <span id="files-summary" class="files-summary">尚未选择文件</span>
-          </div>
-          <ul id="files-list" class="files-list"></ul>
-          <p id="files-status" class="status status--idle" role="status"></p>
+      <!-- ======== Tab: 世界观 ======== -->
+      <section class="tab-panel" id="tab-world">
+        <div class="tab-panel__content">
+          <section class="card">
+            <header class="card__header">
+              <h2>世界观列表</h2>
+              <p class="card__hint">管理所有已创建的世界观文档</p>
+            </header>
+            <div class="card__body">
+              <div class="row row--gap">
+                <button id="world-refresh-btn" class="btn btn--ghost" type="button">刷新</button>
+                <button id="world-new-btn" class="btn btn--primary" type="button">新建世界观</button>
+              </div>
+              <ul id="world-list" class="item-list"></ul>
+            </div>
+          </section>
+        </div>
+        <div class="tab-panel__editor">
+          <section class="card">
+            <header class="card__header">
+              <h2>编辑世界观</h2>
+              <p class="card__hint" id="world-editor-hint">选择一个世界观或新建后进行编辑</p>
+            </header>
+            <div class="card__body">
+              <input type="hidden" id="world-editing-id" value="" />
+              <label class="field">
+                <span class="field__label">名称</span>
+                <input id="world-name" class="field__input" type="text" placeholder="例如：现代东京" />
+              </label>
+              <label class="field">
+                <span class="field__label">配置文件（JSON）</span>
+                <textarea id="world-config" class="field__input field__input--code" rows="5" placeholder='例如：{"tags":["modern","school"],"rules":"..."}'></textarea>
+              </label>
+              <label class="field">
+                <span class="field__label">世界观文档（Markdown）</span>
+                <textarea id="world-doc" class="field__input field__input--code" rows="12" placeholder="在此编写世界观的详细描述、规则、历史等……"></textarea>
+              </label>
+              <div class="row row--end row--gap">
+                <div class="row">
+                  <button id="world-export-btn" class="btn btn--secondary" type="button" disabled>导出为提交</button>
+                  <button id="world-delete-btn" class="btn btn--ghost btn--danger-ghost" type="button" disabled>删除</button>
+                </div>
+                <button id="world-save-btn" class="btn btn--primary" type="button">保存</button>
+              </div>
+              <p id="world-status" class="status status--idle" role="status"></p>
+            </div>
+          </section>
         </div>
       </section>
 
-      <section class="card" id="submit-card">
-        <header class="card__header">
-          <h2>4. 提交</h2>
-          <p class="card__hint">
-            点击后会开始打包并发送，过程通常需要几秒到一分钟。
-          </p>
-        </header>
-        <div class="card__body">
-          <div class="row row--end">
-            <button
-              id="submit-btn"
-              class="btn btn--primary btn--danger"
-              type="button"
-              disabled
-            >
-              提交
-            </button>
-          </div>
-          <p id="submit-status" class="status status--idle" role="status"></p>
+      <!-- ======== Tab: 3D 预览 ======== -->
+      <section class="tab-panel" id="tab-model">
+        <div class="tab-panel__content">
+          <section class="card">
+            <header class="card__header">
+              <h2>已注册的模型</h2>
+              <p class="card__hint">导入 VRM / GLB / GLTF 文件进行预览</p>
+            </header>
+            <div class="card__body">
+              <div class="row row--gap">
+                <button id="model-add-btn" class="btn btn--primary" type="button">添加模型文件</button>
+                <button id="model-refresh-btn" class="btn btn--ghost" type="button">刷新</button>
+              </div>
+              <ul id="model-list" class="item-list"></ul>
+            </div>
+          </section>
+        </div>
+        <div class="tab-panel__editor">
+          <section class="card">
+            <header class="card__header">
+              <h2>3D 模型预览</h2>
+              <p class="card__hint" id="model-editor-hint">选择一个模型进行预览</p>
+            </header>
+            <div class="card__body">
+              <div id="model-viewer-container" class="model-viewer">
+                <p class="status status--idle">请从左侧列表选择一个模型</p>
+              </div>
+              <div id="model-info" class="model-info" hidden>
+                <dl class="kv">
+                  <dt>文件名</dt><dd id="model-info-name">—</dd>
+                  <dt>格式</dt><dd id="model-info-format">—</dd>
+                  <dt>大小</dt><dd id="model-info-size">—</dd>
+                </dl>
+                <button id="model-unregister-btn" class="btn btn--ghost btn--danger-ghost" type="button">移除</button>
+              </div>
+              <p id="model-status" class="status status--idle" role="status"></p>
+            </div>
+          </section>
         </div>
       </section>
 
-      <!-- 右侧：历史 + 配置 -->
-      <aside class="sidebar">
-        <section class="card" id="history-card">
-          <header class="card__header">
-            <h2>历史提交</h2>
-            <p class="card__hint">
-              <span id="cooldown-indicator">冷却空闲，可随时提交</span>
-            </p>
-          </header>
-          <div class="card__body">
-            <button id="refresh-history-btn" class="btn btn--ghost" type="button">
-              刷新
-            </button>
-            <ol id="history-list" class="history-list"></ol>
-          </div>
-        </section>
-
-        <section class="card" id="config-card">
-          <header class="card__header">
-            <h2>运行配置</h2>
-            <p class="card__hint">本次提交使用的设置</p>
-          </header>
-          <div class="card__body">
-            <dl class="kv">
-              <dt>API 版本</dt><dd id="cfg-api-version">…</dd>
-              <dt>归档格式</dt><dd id="cfg-archive-format">…</dd>
-              <dt>体积上限</dt><dd id="cfg-max-bytes">…</dd>
-              <dt>SMTP 服务器</dt><dd id="cfg-smtp-host">…</dd>
-              <dt>SMTP 端口</dt><dd id="cfg-smtp-port">…</dd>
-              <dt>SMTP STARTTLS</dt><dd id="cfg-smtp-tls">…</dd>
-              <dt>SMTP 用户</dt><dd id="cfg-smtp-user">…</dd>
-            </dl>
-          </div>
-        </section>
-      </aside>
+      <!-- ======== Tab: 声音克隆 ======== -->
+      <section class="tab-panel" id="tab-voice">
+        <div class="tab-panel__content">
+          <section class="card">
+            <header class="card__header">
+              <h2>声音样本</h2>
+              <p class="card__hint">管理角色的声音参考样本</p>
+            </header>
+            <div class="card__body">
+              <label class="field">
+                <span class="field__label">角色 ID</span>
+                <input id="voice-char-id" class="field__input" type="text" placeholder="例如：char_yuki" />
+              </label>
+              <div class="row row--gap">
+                <button id="voice-refresh-btn" class="btn btn--ghost" type="button">刷新</button>
+                <button id="voice-new-btn" class="btn btn--primary" type="button">添加声音样本</button>
+              </div>
+              <ul id="voice-list" class="item-list"></ul>
+            </div>
+          </section>
+        </div>
+        <div class="tab-panel__editor">
+          <section class="card">
+            <header class="card__header">
+              <h2>编辑声音样本</h2>
+              <p class="card__hint" id="voice-editor-hint">添加或编辑声音样本信息</p>
+            </header>
+            <div class="card__body">
+              <input type="hidden" id="voice-editing-id" value="" />
+              <div class="grid grid--2">
+                <label class="field">
+                  <span class="field__label">角色 ID</span>
+                  <input id="voice-char" class="field__input" type="text" placeholder="char_yuki" />
+                </label>
+                <label class="field">
+                  <span class="field__label">名称</span>
+                  <input id="voice-name" class="field__input" type="text" placeholder="例如：default" />
+                </label>
+              </div>
+              <label class="field">
+                <span class="field__label">声音引擎</span>
+                <input id="voice-engine" class="field__input" type="text" value="melo-tts" />
+              </label>
+              <label class="field">
+                <span class="field__label">音频文件路径</span>
+                <div class="row row--gap">
+                  <input id="voice-sample-path" class="field__input" type="text" placeholder="选择或输入音频文件路径" />
+                  <button id="voice-pick-btn" class="btn btn--secondary" type="button">选择文件</button>
+                </div>
+              </label>
+              <div class="row row--end row--gap">
+                <button id="voice-delete-btn" class="btn btn--ghost btn--danger-ghost" type="button" disabled>删除</button>
+                <button id="voice-save-btn" class="btn btn--primary" type="button">保存</button>
+              </div>
+              <p id="voice-status" class="status status--idle" role="status"></p>
+            </div>
+          </section>
+        </div>
+      </section>
     </main>
 
     <footer class="app-footer">
