@@ -29,6 +29,7 @@
 #   scan would miss (WKWebView/WebView2/webkitgtk; LZMA/AES codecs).
 
 import os
+import sys
 
 from PyInstaller.utils.hooks import collect_all
 
@@ -105,19 +106,20 @@ coll = COLLECT(
     name="xijian-devkit",
 )
 
-app = BUNDLE(
-    coll,
-    name="隙间开发者工具.app",
-    icon=None,
-    bundle_identifier="com.xijian.devkit",
-    info_plist={
-        "CFBundleName": "隙间开发者工具",
-        "CFBundleDisplayName": "隙间 · 开发者工具",
-        "CFBundleShortVersionString": "0.1.0",
-        "CFBundleVersion": "0.1.0",
-        "NSHighResolutionCapable": True,
-        # No network server is ever opened; the app talks SMTP outbound
-        # only.  Declared here for App Transport Security clarity.
-        "LSMinimumSystemVersion": "11.0",
-    },
-)
+if sys.platform == "darwin":
+    app = BUNDLE(
+        coll,
+        name="隙间开发者工具.app",
+        icon=None,
+        bundle_identifier="com.xijian.devkit",
+        info_plist={
+            "CFBundleName": "隙间开发者工具",
+            "CFBundleDisplayName": "隙间 · 开发者工具",
+            "CFBundleShortVersionString": "0.1.0",
+            "CFBundleVersion": "0.1.0",
+            "NSHighResolutionCapable": True,
+            # No network server is ever opened; the app talks SMTP outbound
+            # only.  Declared here for App Transport Security clarity.
+            "LSMinimumSystemVersion": "11.0",
+        },
+    )

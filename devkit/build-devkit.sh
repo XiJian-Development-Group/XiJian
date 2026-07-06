@@ -97,6 +97,16 @@ fi
 PIP="${VENV}/bin/pip"
 PY="${VENV}/bin/python"
 
+# Windows venv uses Scripts/ instead of bin/
+if [[ ! -f "${PIP}" ]]; then
+    PIP="${VENV}/Scripts/pip"
+    PY="${VENV}/Scripts/python"
+fi
+if [[ ! -f "${PIP}" && -f "${VENV}/Scripts/pip.exe" ]]; then
+    PIP="${VENV}/Scripts/pip.exe"
+    PY="${VENV}/Scripts/python.exe"
+fi
+
 if [[ "${SKIP_INSTALL}" != "1" && ( "${NEED_INSTALL}" == "1" || "${PYI_BIN}" == "" ) ]]; then
     echo "==> installing runtime deps + pyinstaller"
     "${PIP}" install --quiet --upgrade pip
@@ -108,6 +118,12 @@ fi
 
 if [[ -z "${PYI_BIN}" ]]; then
     PYI_BIN="${VENV}/bin/pyinstaller"
+    if [[ ! -f "${PYI_BIN}" ]]; then
+        PYI_BIN="${VENV}/Scripts/pyinstaller"
+    fi
+    if [[ ! -f "${PYI_BIN}" && -f "${VENV}/Scripts/pyinstaller.exe" ]]; then
+        PYI_BIN="${VENV}/Scripts/pyinstaller.exe"
+    fi
 fi
 if [[ ! -x "${PYI_BIN}" ]]; then
     echo "ERROR: pyinstaller not found at ${PYI_BIN}" >&2
