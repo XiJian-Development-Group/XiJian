@@ -160,6 +160,38 @@
     return d.innerHTML;
   };
 
+  // Minimal Markdown → HTML renderer for the world-doc live preview
+  // (C1.2).  Supports headings, bold/italic, inline code, unordered
+  // and ordered lists, and paragraphs.  Output is escaped first to avoid
+  // injecting raw HTML from user content.
+  const renderMarkdown = (md) => {
+    if (!md) return "";
+    const lines = md.split(/\r?\n/);
+    const out = [];
+    let inUl = false, inOl = false;
+    const closeLists = () => {
+      if (inUl) { out.push("</ul>"); inUl = false; }
+      if (inOl) { out.push("</ol>"); inOl = false; }
+    };
+    const inline = (t) => escHtml(t)
+      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+      .replace(/(?<!\*)\*(?!\*)(.+?)\*(?!\*)/g, "<em>$1</em>")
+      .replace(/`(.+?)`/g, "<code>$1</code>");
+    for (const line of lines) {
+      const h = line.match(/^(#{1,6})\s+(.*)$/);
+      if (h) { closeLists(); out.push(`<h${h[1].length}>${inline(h[2])}</h${h[1].length}>`); continue; }
+      const ul = line.match(/^\s*[-*]\s+(.*)$/);
+      if (ul) { if (!inUl) { out.push("<ul>"); inUl = true; } if (inOl) { out.push("</ol>"); inOl = false; } out.push(`<li>${inline(ul[1])}</li>`); continue; }
+      const ol = line.match(/^\s*\d+\.\s+(.*)$/);
+      if (ol) { if (!inOl) { out.push("<ol>"); inOl = true; } if (inUl) { out.push("</ul>"); inUl = false; } out.push(`<li>${inline(ol[1])}</li>`); continue; }
+      if (line.trim() === "") { closeLists(); continue; }
+      closeLists();
+      out.push(`<p>${inline(line)}</p>`);
+    }
+    closeLists();
+    return out.join("\n");
+  };
+
   const refreshSubmitBtn = () => {
     const btn = $("#submit-btn");
     btn.disabled = !state.activeDeveloper || state.selectedPackages.size === 0;
@@ -594,12 +626,24 @@
 
   const loadWorldEditor = (world) => {
     _selectedWorldId = world?.id || null;
+    const cfg = (world && world.config) || {};
     $("#world-editing-id").value = world?.id || "";
     $("#world-name").value = world?.name || "";
-    $("#world-config").value = world?.config ? JSON.stringify(world.config, null, 2) : "";
-    $("#world-doc").value = world?.world_doc || "";
+    $("#world-config").value = Object.keys(cfg).length ? JSON.stringify(cfg, null, 2) : "";
+    $("#world-doc").value = (world && world.world_doc) || "";
+    $("#world-cfg-timeflow").value = cfg.time_flow_multiplier ?? 30;
+    $("#world-cfg-daylen").value = cfg.day_length_minutes ?? 1440;
+    $("#world-cfg-night").value = cfg.night_ratio ?? 0.4;
+    $("#world-cfg-weather").value = JSON.stringify(cfg.weather_probabilities || {}, null, 2);
+    $("#world-cfg-lighting").value = (cfg.lighting_presets || ["default", "warm", "cold", "dramatic"]).join(", ");
+    $("#world-cfg-audio").value = (cfg.ambient_audio_library || []).join(", ");
     $("#world-editor-hint").textContent = world ? `编辑：${world.name}` : "";
+    $("#world-doc-preview").hidden = true;
+    $("#world-doc-preview").innerHTML = "";
+    $("#world-doc-lint").textContent = "";
+    $("#world-doc-lint").className = "status status--idle";
     refreshWorldButtons();
+    if (_selectedWorldId) await renderWorldEvents(_selectedWorldId);
   };
 
   const resetWorldEditor = () => {
@@ -608,14 +652,41 @@
     $("#world-name").value = "";
     $("#world-config").value = "";
     $("#world-doc").value = "";
+    $("#world-cfg-timeflow").value = 30;
+    $("#world-cfg-daylen").value = 1440;
+    $("#world-cfg-night").value = 0.4;
+    $("#world-cfg-weather").value = "";
+    $("#world-cfg-lighting").value = "default, warm, cold, dramatic";
+    $("#world-cfg-audio").value = "";
     $("#world-editor-hint").textContent = "";
+    $("#world-doc-preview").hidden = true;
+    $("#world-doc-preview").innerHTML = "";
+    $("#world-event-list").innerHTML = "";
     refreshWorldButtons();
   };
 
+  const _collectWorldConfig = () => {
+    let raw = {};
+    try { const t = $("#world-config").value.trim(); if (t) raw = JSON.parse(t); }
+    catch { raw = {}; }
+    const lighting = $("#world-cfg-lighting").value.split(",").map((s) => s.trim()).filter(Boolean);
+    const audio = $("#world-cfg-audio").value.split(",").map((s) => s.trim()).filter(Boolean);
+    let weather = {};
+    try { const w = $("#world-cfg-weather").value.trim(); if (w) weather = JSON.parse(w); }
+    catch { weather = {}; }
+    return {
+      ...raw,
+      time_flow_multiplier: parseFloat($("#world-cfg-timeflow").value) || 30,
+      day_length_minutes: parseFloat($("#world-cfg-daylen").value) || 1440,
+      night_ratio: parseFloat($("#world-cfg-night").value) || 0.4,
+      weather_probabilities: weather,
+      lighting_presets: lighting,
+      ambient_audio_library: audio,
+    };
+  };
+
   const onWorldSave = async () => {
-    let config = {};
-    try { const raw = $("#world-config").value.trim(); if (raw) config = JSON.parse(raw); }
-    catch { toast("JSON 格式错误", "err"); return; }
+    const config = _collectWorldConfig();
     const data = {
       id: $("#world-editing-id").value || undefined,
       name: $("#world-name").value.trim(),
@@ -628,6 +699,88 @@
     toast("世界观已保存", "ok");
     setStatus("#world-status", `已保存：${resp.data.id}`, "ok");
     await renderWorldList();
+  };
+
+  const onWorldCheckConfig = async () => {
+    const config = _collectWorldConfig();
+    const resp = await callApi("validate_world_config", config);
+    if (!resp.ok) { $("#world-cfg-check-result").textContent = `检查失败：${resp.message}`; $("#world-cfg-check-result").className = "status status--err"; return; }
+    const r = resp.data;
+    $("#world-cfg-check-result").textContent = r.ok ? "配置校验通过" : ("校验未通过：" + (r.errors || []).join("；"));
+    $("#world-cfg-check-result").className = r.ok ? "status status--ok" : "status status--err";
+  };
+
+  const onWorldDocPreview = async () => {
+    const md = $("#world-doc").value;
+    const resp = await callApi("lint_world_doc", md);
+    if (resp.ok) {
+      const r = resp.data;
+      $("#world-doc-lint").textContent = r.ok ? "文档结构完整" : ("缺失关键字段：" + (r.missing || []).join(", "));
+      $("#world-doc-lint").className = r.ok ? "status status--ok" : "status status--warn";
+    }
+    const el = $("#world-doc-preview");
+    el.hidden = !el.hidden ? true : false;
+    if (!el.hidden) el.innerHTML = renderMarkdown(md);
+  };
+
+  // ---- world custom events (C1.1) ----
+  let _selectedWorldEventId = null;
+
+  const renderWorldEvents = async (worldId) => {
+    const resp = await callApi("list_world_events", worldId);
+    if (!resp.ok) { renderItemList("world-event-list", [], () => ""); return; }
+    renderItemList("world-event-list", resp.data || [], (e) =>
+      `<strong>[${escHtml(e.kind)}] ${escHtml(e.name)}</strong><br/><small>优先级 ${e.priority} · ${e.is_enabled ? "启用" : "禁用"}</small>`
+    );
+  };
+
+  const loadWorldEventEditor = (ev) => {
+    _selectedWorldEventId = ev?.id || null;
+    $("#world-event-editing-id").value = ev?.id || "";
+    $("#world-event-name").value = ev?.name || "";
+    $("#world-event-priority").value = ev?.priority ?? 50;
+    $("#world-event-enabled").checked = ev ? !!ev.is_enabled : true;
+    $("#world-event-trigger").value = ev?.trigger ? JSON.stringify(ev.trigger, null, 2) : "";
+    $("#world-event-scene").value = ev?.scene || "";
+    $("#world-event-effects").value = ev?.effects ? JSON.stringify(ev.effects) : "";
+    $("#world-event-delete-btn").disabled = !ev;
+  };
+
+  const onWorldEventNew = () => { loadWorldEventEditor(null); };
+
+  const onWorldEventSave = async () => {
+    if (!_selectedWorldId) { toast("请先选择或保存世界观", "err"); return; }
+    let trigger = {};
+    try { const t = $("#world-event-trigger").value.trim(); if (t) trigger = JSON.parse(t); }
+    catch { toast("触发器 JSON 格式错误", "err"); return; }
+    let effects = {};
+    try { const e = $("#world-event-effects").value.trim(); if (e) effects = JSON.parse(e); }
+    catch { toast("影响 JSON 格式错误", "err"); return; }
+    const data = {
+      id: $("#world-event-editing-id").value || undefined,
+      world_id: _selectedWorldId,
+      name: $("#world-event-name").value.trim(),
+      priority: parseInt($("#world-event-priority").value, 10) || 50,
+      is_enabled: $("#world-event-enabled").checked,
+      trigger,
+      scene: $("#world-event-scene").value.trim(),
+      effects,
+    };
+    if (!data.name) { toast("请填写事件名", "err"); return; }
+    const resp = await callApi("save_world_event", data);
+    if (!resp.ok) { setStatus("#world-event-status", `保存失败：${resp.message}`, "err"); return; }
+    toast("事件已保存", "ok");
+    setStatus("#world-event-status", `已保存：${resp.data.id}`, "ok");
+    await renderWorldEvents(_selectedWorldId);
+  };
+
+  const onWorldEventDelete = async () => {
+    if (!_selectedWorldId || !_selectedWorldEventId) return;
+    const resp = await callApi("delete_world_event", _selectedWorldId, _selectedWorldEventId);
+    if (!resp.ok) { toast("删除失败", "err"); return; }
+    toast("事件已删除", "ok");
+    loadWorldEventEditor(null);
+    await renderWorldEvents(_selectedWorldId);
   };
 
   const onWorldDelete = async () => {
@@ -1681,6 +1834,20 @@
     $("#world-save-btn").addEventListener("click", onWorldSave);
     $("#world-delete-btn").addEventListener("click", onWorldDelete);
     $("#world-export-btn").addEventListener("click", onWorldExport);
+    $("#world-cfg-check-btn").addEventListener("click", onWorldCheckConfig);
+    $("#world-doc-preview-btn").addEventListener("click", onWorldDocPreview);
+    $("#world-event-new-btn").addEventListener("click", onWorldEventNew);
+    $("#world-event-refresh-btn").addEventListener("click", () => { if (_selectedWorldId) renderWorldEvents(_selectedWorldId); });
+    $("#world-event-save-btn").addEventListener("click", onWorldEventSave);
+    $("#world-event-delete-btn").addEventListener("click", onWorldEventDelete);
+    $("#world-event-list").addEventListener("click", async (e) => {
+      const li = e.target.closest(".item-list__item");
+      if (li && li.dataset.id && _selectedWorldId) {
+        const resp = await callApi("list_world_events", _selectedWorldId);
+        const ev = (resp.data || []).find((x) => x.id === li.dataset.id);
+        if (ev) loadWorldEventEditor(ev);
+      }
+    });
     $("#world-list").addEventListener("click", async (e) => {
       const li = e.target.closest(".item-list__item");
       if (li && li.dataset.id) {

@@ -63,6 +63,7 @@ JS call                          Purpose
 from __future__ import annotations
 
 import logging
+import os
 import threading
 from collections.abc import Mapping
 from typing import Any
@@ -96,6 +97,7 @@ from devkit.character_editor import (
     delete_character as _ce_delete,
     export_character_for_submit as _ce_export,
     import_persona as _ce_import_persona,
+    check_initial_memory_minimum as _ce_check_min,
 )
 from devkit.memory_editor import (
     list_entries as _me_list,
@@ -111,6 +113,14 @@ from devkit.world_editor import (
     save_world as _we_save,
     delete_world as _we_delete,
     export_world_for_submit as _we_export,
+    get_world_config as _we_get_config,
+    save_world_config as _we_save_config,
+    validate_world_config as _we_validate_config,
+    list_world_events as _we_list_events,
+    save_world_event as _we_save_event,
+    delete_world_event as _we_delete_event,
+    validate_event_trigger as _we_validate_trigger,
+    lint_world_doc as _we_lint_doc,
 )
 from devkit.model_viewer import (
     list_models as _mv_list,
@@ -716,6 +726,16 @@ class DevKitApi:
         result = _ce_import_persona(self._work_dir(), char_id, file_path)
         return {"imported": True, "message": result}
 
+    @_serialize_call
+    def check_initial_memory(self, char_id: Any, min_count: Any = None) -> dict[str, Any]:
+        """C2.5 — report whether a character meets the initial-memory minimum."""
+        if not isinstance(char_id, str) or not char_id:
+            raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
+        n = int(min_count) if min_count is not None else None
+        if n is None:
+            return _ce_check_min(self._work_dir(), char_id)
+        return _ce_check_min(self._work_dir(), char_id, min_count=n)
+
     # --- memory editor -------------------------------------------------
 
     @_serialize_call
@@ -783,6 +803,68 @@ class DevKitApi:
         if not isinstance(world_id, str) or not world_id:
             raise DevKitError(400, "世界观 ID 不能为空", code="missing_world_id")
         return _we_export(self._work_dir(), world_id)
+
+    # --- world structured config (C1.3) --------------------------------
+
+    @_serialize_call
+    def get_world_config(self, world_id: Any) -> dict[str, Any]:
+        if not isinstance(world_id, str) or not world_id:
+            raise DevKitError(400, "世界观 ID 不能为空", code="missing_world_id")
+        return _we_get_config(self._work_dir(), world_id)
+
+    @_serialize_call
+    def save_world_config(self, world_id: Any, config: Any) -> dict[str, Any]:
+        if not isinstance(world_id, str) or not world_id:
+            raise DevKitError(400, "世界观 ID 不能为空", code="missing_world_id")
+        if not isinstance(config, dict):
+            raise DevKitError(400, "配置必须是对象", code="bad_data")
+        return _we_save_config(self._work_dir(), world_id, config)
+
+    @_serialize_call
+    def validate_world_config(self, config: Any) -> dict[str, Any]:
+        if not isinstance(config, dict):
+            raise DevKitError(400, "配置必须是对象", code="bad_data")
+        ok, errors = _we_validate_config(config)
+        return {"ok": ok, "errors": errors}
+
+    # --- world custom events (C1.1) -------------------------------------
+
+    @_serialize_call
+    def list_world_events(self, world_id: Any) -> list[dict[str, Any]]:
+        if not isinstance(world_id, str) or not world_id:
+            raise DevKitError(400, "世界观 ID 不能为空", code="missing_world_id")
+        return _we_list_events(self._work_dir(), world_id)
+
+    @_serialize_call
+    def save_world_event(self, data: Any) -> dict[str, Any]:
+        if not isinstance(data, dict):
+            raise DevKitError(400, "数据格式错误", code="bad_data")
+        world_id = data.get("world_id")
+        if not isinstance(world_id, str) or not world_id:
+            raise DevKitError(400, "世界观 ID 不能为空", code="missing_world_id")
+        return _we_save_event(self._work_dir(), world_id, data)
+
+    @_serialize_call
+    def delete_world_event(self, world_id: Any, event_id: Any) -> dict[str, Any]:
+        if not isinstance(world_id, str) or not world_id:
+            raise DevKitError(400, "世界观 ID 不能为空", code="missing_world_id")
+        if not isinstance(event_id, str) or not event_id:
+            raise DevKitError(400, "事件 ID 不能为空", code="missing_event_id")
+        ok = _we_delete_event(self._work_dir(), world_id, event_id)
+        return {"deleted": ok}
+
+    @_serialize_call
+    def validate_event_trigger(self, trigger: Any) -> dict[str, Any]:
+        if not isinstance(trigger, dict):
+            raise DevKitError(400, "触发器必须是对象", code="bad_data")
+        ok, errors = _we_validate_trigger(trigger)
+        return {"ok": ok, "errors": errors}
+
+    @_serialize_call
+    def lint_world_doc(self, doc: Any) -> dict[str, Any]:
+        if not isinstance(doc, str):
+            raise DevKitError(400, "文档必须是字符串", code="bad_data")
+        return _we_lint_doc(doc)
 
     # --- 3D model viewer -----------------------------------------------
 
@@ -1041,7 +1123,10 @@ class DevKitApi:
     def save_plot_node(self, data: Any) -> dict[str, Any]:
         if not isinstance(data, dict):
             raise DevKitError(400, "数据格式错误", code="bad_data")
-        return _pe_node_save(self._work_dir(), data)
+        plot_id = data.get("plot_id")
+        if not isinstance(plot_id, str) or not plot_id:
+            raise DevKitError(400, "节点必须关联剧情 ID", code="missing_plot_id")
+        return _pe_node_save(self._work_dir(), plot_id, data)
 
     @_serialize_call
     def delete_plot_node(self, node_id: Any) -> dict[str, Any]:
@@ -1060,7 +1145,10 @@ class DevKitApi:
     def save_plot_edge(self, data: Any) -> dict[str, Any]:
         if not isinstance(data, dict):
             raise DevKitError(400, "数据格式错误", code="bad_data")
-        return _pe_edge_save(self._work_dir(), data)
+        plot_id = data.get("plot_id")
+        if not isinstance(plot_id, str) or not plot_id:
+            raise DevKitError(400, "连线必须关联剧情 ID", code="missing_plot_id")
+        return _pe_edge_save(self._work_dir(), plot_id, data)
 
     @_serialize_call
     def delete_plot_edge(self, edge_id: Any) -> dict[str, Any]:
@@ -1091,7 +1179,10 @@ class DevKitApi:
     def save_dialog(self, data: Any) -> dict[str, Any]:
         if not isinstance(data, dict):
             raise DevKitError(400, "数据格式错误", code="bad_data")
-        return _de_save(self._work_dir(), data)
+        character_id = data.get("character_id")
+        if not isinstance(character_id, str) or not character_id:
+            raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
+        return _de_save(self._work_dir(), character_id, data)
 
     @_serialize_call
     def delete_dialog(self, dialog_id: Any) -> dict[str, Any]:
@@ -1104,8 +1195,12 @@ class DevKitApi:
     def check_dialog_minimum(self, character_id: Any) -> dict[str, Any]:
         if not isinstance(character_id, str) or not character_id:
             raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
-        ok, msg, count = _de_minimum(self._work_dir(), character_id)
-        return {"ok": ok, "message": msg, "dialog_count": count}
+        result = _de_minimum(self._work_dir(), character_id)
+        return {
+            "ok": bool(result.get("ok", False)),
+            "message": result.get("message", ""),
+            "dialog_count": result.get("current_count", 0),
+        }
 
     @_serialize_call
     def export_dialogs(self, character_id: Any) -> dict[str, Any]:
@@ -1135,7 +1230,10 @@ class DevKitApi:
     def save_motion(self, data: Any) -> dict[str, Any]:
         if not isinstance(data, dict):
             raise DevKitError(400, "数据格式错误", code="bad_data")
-        return _moe_save(self._work_dir(), data)
+        character_id = data.get("character_id")
+        if not isinstance(character_id, str) or not character_id:
+            raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
+        return _moe_save(self._work_dir(), character_id, data)
 
     @_serialize_call
     def delete_motion(self, motion_id: Any) -> dict[str, Any]:
@@ -1148,9 +1246,16 @@ class DevKitApi:
     def import_motion_file(self, character_id: Any, file_path: Any) -> dict[str, Any]:
         if not isinstance(character_id, str) or not character_id:
             raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
-        if not isinstance(file_path, str) or not file_path:
+        if file_path is None:
             raise DevKitError(400, "文件路径不能为空", code="missing_file_path")
-        return _moe_import(self._work_dir(), character_id, file_path)
+        # pywebview's create_file_dialog returns a list of paths.
+        paths = file_path if isinstance(file_path, (list, tuple)) else [file_path]
+        paths = [p for p in paths if isinstance(p, str) and p]
+        if not paths:
+            raise DevKitError(400, "文件路径不能为空", code="missing_file_path")
+        src = paths[0]
+        name = os.path.splitext(os.path.basename(src))[0]
+        return _moe_import(self._work_dir(), character_id, src, name)
 
     @_serialize_call
     def export_motions(self, character_id: Any) -> dict[str, Any]:
@@ -1164,7 +1269,13 @@ class DevKitApi:
     def log_assist_event(self, data: Any) -> dict[str, Any]:
         if not isinstance(data, dict):
             raise DevKitError(400, "数据格式错误", code="bad_data")
-        return _aa_log(self._work_dir(), data)
+        return _aa_log(
+            self._work_dir(),
+            event_type=str(data.get("event_type", "")),
+            target_module=str(data.get("target_module", "")),
+            description=str(data.get("description", "")),
+            accepted=bool(data.get("accepted", True)),
+        )
 
     @_serialize_call
     def list_assist_log(self, limit: Any = 50, offset: Any = 0) -> list[dict[str, Any]]:
@@ -1181,13 +1292,13 @@ class DevKitApi:
 
     @_serialize_call
     def get_ai_ratio(self) -> dict[str, Any]:
-        return _aa_ratio(self._work_dir())
+        ratio = _aa_ratio(self._work_dir())
+        return {"ai_ratio": ratio, "ratio": ratio}
 
     @_serialize_call
     def check_ai_threshold(self, threshold: Any = None) -> dict[str, Any]:
         t = float(threshold) if threshold is not None else None
-        ok, current, limit = _aa_threshold(self._work_dir(), threshold=t)
-        return {"ok": ok, "current_ratio": current, "threshold": limit}
+        return _aa_threshold(self._work_dir(), threshold=t)
 
     @_serialize_call
     def auto_suggest(self, context: Any) -> dict[str, Any]:

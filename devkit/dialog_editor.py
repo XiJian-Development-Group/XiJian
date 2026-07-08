@@ -77,8 +77,10 @@ def save_dialog(work_dir: str, character_id: str, data: dict[str, Any]) -> dict[
         "id": dialog_id,
         "character_id": character_id,
         "turn": data.get("turn", len(dialogs) + 1),
-        "role": data.get("role", "user"),
-        "content": data.get("content", ""),
+        "scene": data.get("scene", ""),
+        "user_message": data.get("user_message", ""),
+        "character_message": data.get("character_message", ""),
+        "emotion": data.get("emotion", "neutral"),
         "notes": data.get("notes", ""),
         "source": data.get("source", "manual"),
         "created_at": data.get("created_at", now) if dialog_id else now,
@@ -112,11 +114,18 @@ def delete_dialog(work_dir: str, dialog_id: str) -> bool:
 def check_dialog_minimum(work_dir: str, character_id: str) -> dict[str, Any]:
     dialogs = _load_dialogs(work_dir, character_id)
     count = len(dialogs)
+    ok = count >= _MIN_DIALOG_COUNT
     return {
         "character_id": character_id,
         "current_count": count,
         "minimum_required": _MIN_DIALOG_COUNT,
-        "meets_requirement": count >= _MIN_DIALOG_COUNT,
+        "meets_requirement": ok,
+        "ok": ok,
+        "message": (
+            f"当前 {count} 条对话样本，已满足最少 {_MIN_DIALOG_COUNT} 条要求"
+            if ok
+            else f"当前仅 {count} 条对话样本，至少需要 {_MIN_DIALOG_COUNT} 条（还差 {_MIN_DIALOG_COUNT - count} 条）"
+        ),
     }
 
 

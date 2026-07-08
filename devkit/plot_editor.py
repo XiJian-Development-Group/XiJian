@@ -140,7 +140,12 @@ def save_plot_node(work_dir: str, plot_id: str, node: dict[str, Any]) -> dict[st
     return node
 
 
-def delete_plot_node(work_dir: str, plot_id: str, node_id: str) -> bool:
+def delete_plot_node(work_dir: str, node_id: str, *, plot_id: str | None = None) -> bool:
+    # The UI only sends the node id, so locate the owning plot first.
+    if plot_id is None:
+        plot_id = _find_plot_with_node(work_dir, node_id)
+    if plot_id is None:
+        return False
     nodes = get_plot_nodes(work_dir, plot_id)
     before = len(nodes)
     nodes = [n for n in nodes if n.get("id") != node_id]
@@ -148,6 +153,14 @@ def delete_plot_node(work_dir: str, plot_id: str, node_id: str) -> bool:
         _save_json(_nodes_path(work_dir, plot_id), nodes)
         return True
     return False
+
+
+def _find_plot_with_node(work_dir: str, node_id: str) -> str | None:
+    for plot in list_plots(work_dir):
+        pid = plot.get("id", "")
+        if any(n.get("id") == node_id for n in get_plot_nodes(work_dir, pid)):
+            return pid
+    return None
 
 
 def get_plot_edges(work_dir: str, plot_id: str) -> list[dict[str, Any]]:
@@ -173,7 +186,12 @@ def save_plot_edge(work_dir: str, plot_id: str, edge: dict[str, Any]) -> dict[st
     return edge
 
 
-def delete_plot_edge(work_dir: str, plot_id: str, edge_id: str) -> bool:
+def delete_plot_edge(work_dir: str, edge_id: str, *, plot_id: str | None = None) -> bool:
+    # The UI only sends the edge id, so locate the owning plot first.
+    if plot_id is None:
+        plot_id = _find_plot_with_edge(work_dir, edge_id)
+    if plot_id is None:
+        return False
     edges = get_plot_edges(work_dir, plot_id)
     before = len(edges)
     edges = [e for e in edges if e.get("id") != edge_id]
@@ -181,6 +199,14 @@ def delete_plot_edge(work_dir: str, plot_id: str, edge_id: str) -> bool:
         _save_json(_edges_path(work_dir, plot_id), edges)
         return True
     return False
+
+
+def _find_plot_with_edge(work_dir: str, edge_id: str) -> str | None:
+    for plot in list_plots(work_dir):
+        pid = plot.get("id", "")
+        if any(e.get("id") == edge_id for e in get_plot_edges(work_dir, pid)):
+            return pid
+    return None
 
 
 def export_plot_for_submit(work_dir: str, plot_id: str) -> dict[str, Any]:

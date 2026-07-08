@@ -1,0 +1,30 @@
+{
+  "file": "Config/Config.json",
+  "description": "This file includes some basic configurations for project.py",
+  "ProjectInfo": {
+    "name": {"en_short": "XiJian", "en_full": "The XiJian Project", "ch_short": "隙间", "ch_full": "隙间"},
+    "lang": ["en_US", "zh_CN"],
+    "author": "The XiJian Development Group",
+    "license": "MIT",
+    "os": ["macOS", "Windows", "Android", "iOS"],
+    "os_full": ["macOS >= 26.0", "Windows >= 24H2", "Android >= 12.0", "iOS >= 26.0"],
+    "projectModules": ["DevKit", "CoreApi", "macOSUIApp", "iOSUIApp", "CommonUIApp"]
+  },
+  "ProjectBaseDir": {
+    "Core": "core",
+    "GithubActions": ".github/workflows",
+    "ConfigForProjectManager": "Config",
+    "DevKit": "devkit",
+    "macOSUIApp": "macapp",
+    "Documents": "docs"
+  },
+  "Version": {
+    "Main": "v0.0.1-Beta",
+    "CoreApi": "v1.2.0-Alpha",
+    "macOSUIApp": "Unavailable",
+    "iOSUIApp": "Unavailable",
+    "CommonUIApp": "Unavailable"
+  },
+  "ConfigVersion": "v1.0.0",
+  "ProjectManagerPath": ["project.py", "project.bin"]
+}

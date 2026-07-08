@@ -386,14 +386,99 @@
                 <span class="field__label">名称</span>
                 <input id="world-name" class="field__input" type="text" placeholder="例如：现代东京" />
               </label>
+
+              <details class="field-group">
+                <summary>结构化配置（C1.3 · 时间/天气/光照）</summary>
+                <div class="field-group__body">
+                  <div class="row row--gap">
+                    <label class="field field--inline">
+                      <span class="field__label">时间流速倍率</span>
+                      <input id="world-cfg-timeflow" class="field__input" type="number" step="0.1" min="0" value="30" />
+                    </label>
+                    <label class="field field--inline">
+                      <span class="field__label">一天虚拟分钟</span>
+                      <input id="world-cfg-daylen" class="field__input" type="number" step="1" min="1" value="1440" />
+                    </label>
+                    <label class="field field--inline">
+                      <span class="field__label">夜晚占比 0~1</span>
+                      <input id="world-cfg-night" class="field__input" type="number" step="0.05" min="0" max="1" value="0.4" />
+                    </label>
+                  </div>
+                  <label class="field">
+                    <span class="field__label">天气概率表（JSON，各时段概率和须为 1）</span>
+                    <textarea id="world-cfg-weather" class="field__input field__input--code" rows="6"></textarea>
+                  </label>
+                  <label class="field">
+                    <span class="field__label">光照预设（逗号分隔）</span>
+                    <input id="world-cfg-lighting" class="field__input" type="text" value="default, warm, cold, dramatic" />
+                  </label>
+                  <label class="field">
+                    <span class="field__label">环境音库（逗号分隔，可选）</span>
+                    <input id="world-cfg-audio" class="field__input" type="text" value="" />
+                  </label>
+                  <div class="row row--gap">
+                    <button id="world-cfg-check-btn" class="btn btn--ghost" type="button">检查配置</button>
+                    <span id="world-cfg-check-result" class="status status--idle"></span>
+                  </div>
+                  <p class="card__hint">以上字段保存时合并进配置文件；也可直接编辑下方原始 JSON。</p>
+                </div>
+              </details>
+
               <label class="field">
-                <span class="field__label">配置文件（JSON）</span>
-                <textarea id="world-config" class="field__input field__input--code" rows="5" placeholder='例如：{"tags":["modern","school"],"rules":"..."}'></textarea>
+                <span class="field__label">配置文件（JSON，原始）</span>
+                <textarea id="world-config" class="field__input field__input--code" rows="4" placeholder='例如：{"tags":["modern","school"]}'></textarea>
               </label>
+
               <label class="field">
                 <span class="field__label">世界观文档（Markdown）</span>
-                <textarea id="world-doc" class="field__input field__input--code" rows="12" placeholder="在此编写世界观的详细描述、规则、历史等……"></textarea>
+                <textarea id="world-doc" class="field__input field__input--code" rows="10" placeholder="在此编写世界观的详细描述、规则、历史等……"></textarea>
               </label>
+              <div class="row row--gap">
+                <button id="world-doc-preview-btn" class="btn btn--ghost" type="button">预览 Markdown</button>
+                <span id="world-doc-lint" class="status status--idle"></span>
+              </div>
+              <div id="world-doc-preview" class="md-preview" hidden></div>
+
+              <details class="field-group">
+                <summary>自定义事件（C1.1 · 触发 DSL）</summary>
+                <div class="field-group__body">
+                  <div class="row row--gap">
+                    <button id="world-event-new-btn" class="btn btn--primary" type="button">新建事件</button>
+                    <button id="world-event-refresh-btn" class="btn btn--ghost" type="button">刷新</button>
+                  </div>
+                  <ul id="world-event-list" class="item-list"></ul>
+                  <input type="hidden" id="world-event-editing-id" value="" />
+                  <div class="row row--gap">
+                    <label class="field field--inline">
+                      <span class="field__label">事件名</span>
+                      <input id="world-event-name" class="field__input" type="text" placeholder="暴雨事件" />
+                    </label>
+                    <label class="field field--inline">
+                      <span class="field__label">优先级</span>
+                      <input id="world-event-priority" class="field__input" type="number" value="50" />
+                    </label>
+                    <label class="field field--inline">
+                      <span class="field__label">启用</span>
+                      <input id="world-event-enabled" type="checkbox" checked />
+                    </label>
+                  </div>
+                  <label class="field">
+                    <span class="field__label">触发条件（JSON：{kind:"time"|"state"|"probability"|"composite", ...}）</span>
+                    <textarea id="world-event-trigger" class="field__input field__input--code" rows="4" placeholder='{"kind":"probability","chance":0.1}'></textarea>
+                  </label>
+                  <label class="field">
+                    <span class="field__label">关联场景 / 影响（JSON，可选）</span>
+                    <input id="world-event-scene" class="field__input" type="text" placeholder="market_square" />
+                    <textarea id="world-event-effects" class="field__input field__input--code" rows="2" placeholder='{"npc_mood": 5}'></textarea>
+                  </label>
+                  <div class="row row--gap">
+                    <button id="world-event-save-btn" class="btn btn--primary" type="button">保存事件</button>
+                    <button id="world-event-delete-btn" class="btn btn--ghost btn--danger-ghost" type="button" disabled>删除</button>
+                    <span id="world-event-status" class="status status--idle"></span>
+                  </div>
+                </div>
+              </details>
+
               <div class="row row--end row--gap">
                 <div class="row">
                   <button id="world-export-btn" class="btn btn--secondary" type="button" disabled>导出为提交</button>

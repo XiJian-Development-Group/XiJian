@@ -91,13 +91,19 @@ def save_motion(work_dir: str, character_id: str, data: dict[str, Any]) -> dict[
     motion_id = data.get("id", _gen_id())
 
     now = __import__("devkit._vendor", fromlist=["iso_now"]).iso_now()
+    raw_params = data.get("params", data.get("parameters"))
+    if isinstance(raw_params, str):
+        try:
+            raw_params = json.loads(raw_params) if raw_params.strip() else {}
+        except (json.JSONDecodeError, ValueError):
+            raw_params = {}
     record = {
         "id": motion_id,
         "character_id": character_id,
         "name": name,
         "type": data.get("type", "custom"),
         "description": data.get("description", ""),
-        "parameters": data.get("parameters", {}),
+        "parameters": raw_params if isinstance(raw_params, dict) else {},
         "file_path": data.get("file_path", ""),
         "duration_seconds": data.get("duration_seconds", 2.0),
         "loop": data.get("loop", False),

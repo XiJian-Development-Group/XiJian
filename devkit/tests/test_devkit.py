@@ -1125,6 +1125,15 @@ def test_package_does_not_depend_on_flask():
         pytest.skip("flask not installed")
     import sys
 
+    # Snapshot the original devkit modules so we can restore them
+    # afterwards — re-importing devkit creates brand-new class objects
+    # (e.g. DevKitError) that would otherwise leak into later tests and
+    # break isinstance/pytest.raises checks that reference the old class.
+    saved_devkit = {
+        name: mod
+        for name, mod in list(sys.modules.items())
+        if name == "devkit" or name.startswith("devkit.")
+    }
     sys.modules["flask"] = None  # simulate the module being absent
     for mod in list(sys.modules):
         if mod == "devkit" or mod.startswith("devkit."):
@@ -1135,6 +1144,8 @@ def test_package_does_not_depend_on_flask():
         import devkit.main  # noqa: F401
     finally:
         del sys.modules["flask"]
+        for name, mod in saved_devkit.items():
+            sys.modules[name] = mod
     # If the imports above raised ImportError they'd bubble — the
     # devkit package doesn't import flask anywhere.
     assert True
@@ -1157,6 +1168,11 @@ def test_package_does_not_depend_on_xijian_api():
     }
     for name in saved:
         sys.modules[name] = None  # simulate absence
+    saved_devkit = {
+        name: mod
+        for name, mod in list(sys.modules.items())
+        if name == "devkit" or name.startswith("devkit.")
+    }
     for mod in list(sys.modules):
         if mod == "devkit" or mod.startswith("devkit."):
             sys.modules.pop(mod, None)
@@ -1172,6 +1188,8 @@ def test_package_does_not_depend_on_xijian_api():
                 sys.modules.pop(name, None)
             else:
                 sys.modules[name] = mod
+        for name, mod in saved_devkit.items():
+            sys.modules[name] = mod
     assert True
 
 

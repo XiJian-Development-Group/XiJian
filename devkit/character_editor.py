@@ -138,6 +138,9 @@ def save_character(work_dir: str, data: dict[str, Any]) -> dict[str, Any]:
         "created_at": data.get("created_at", now),
         "updated_at": now,
     }
+    enforce_initial_memory_minimum(
+        work_dir, char_id, record["assigned_memory_pack"]
+    )
     fpath = _char_path(work_dir, char_id)
     with open(fpath, "w", encoding="utf-8") as f:
         json.dump(record, f, ensure_ascii=False, indent=2)
@@ -150,6 +153,60 @@ def delete_character(work_dir: str, char_id: str) -> bool:
         return False
     shutil.rmtree(char_dir)
     return True
+
+
+#: Minimum number of long-term initial memory entries a character must
+#: carry before it can be saved with an assigned memory pack (function
+#: list C2.5).  Mirrors the spec's ``[TODO: 默认 10]``.
+_MIN_INITIAL_MEMORY = 10
+
+
+def check_initial_memory_minimum(
+    work_dir: str, char_id: str, min_count: int = _MIN_INITIAL_MEMORY
+) -> dict[str, Any]:
+    """Verify a character has enough initial memories (C2.5).
+
+    The function list requires a new character to carry at least
+    ``min_count`` long/short memory entries (manual) before it is
+    considered saveable.  We count the entries of the character's own
+    memory pack (the pack is keyed by ``character_id``).
+    """
+    from devkit.memory_editor import list_entries
+
+    entries = list_entries(work_dir, char_id)
+    count = len(entries)
+    return {
+        "character_id": char_id,
+        "current_count": count,
+        "minimum_required": min_count,
+        "meets_requirement": count >= min_count,
+        "ok": count >= min_count,
+        "message": (
+            f"当前 {count} 条记忆条目，已满足最少 {min_count} 条要求"
+            if count >= min_count
+            else f"当前仅 {count} 条记忆条目，至少需要 {min_count} 条（还差 {min_count - count} 条）"
+        ),
+    }
+
+
+def enforce_initial_memory_minimum(
+    work_dir: str, char_id: str, assigned_pack: str, min_count: int = _MIN_INITIAL_MEMORY
+) -> None:
+    """Block saving a character whose assigned memory pack is too thin (C2.5).
+
+    Only enforced when a memory pack is actually assigned, so first-time
+    creation (no pack yet) is still allowed; the developer must populate
+    the pack before linking it to the character.
+    """
+    if not assigned_pack:
+        return
+    result = check_initial_memory_minimum(work_dir, char_id, min_count=min_count)
+    if not result["meets_requirement"]:
+        raise DevKitError(
+            400,
+            result["message"],
+            code="insufficient_initial_memory",
+        )
 
 
 def export_character_for_submit(work_dir: str, char_id: str) -> dict[str, Any]:
