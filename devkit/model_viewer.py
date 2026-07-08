@@ -128,3 +128,65 @@ def read_model_bytes(work_dir: str, model_id: str) -> dict[str, Any] | None:
         "mime": _FORMAT_MIMES.get(ext, "application/octet-stream"),
         "data_b64": base64.b64encode(raw).decode("ascii"),
     }
+
+
+def export_model_for_submit(work_dir: str, model_id: str) -> dict[str, Any]:
+    info = get_model_info(work_dir, model_id)
+    if not info:
+        raise DevKitError(404, f"模型不存在: {model_id}", code="not_found")
+
+    path = info.get("path", "")
+    if not path or not os.path.isfile(path):
+        raise DevKitError(400, "模型文件不存在", code="file_not_found")
+
+    ext = os.path.splitext(path)[1].lower()
+    size = os.path.getsize(path)
+
+    return {
+        "target_kind": "character",
+        "files": [{
+            "path": path,
+            "arcname": f"models/{model_id}{ext}",
+            "size": size,
+        }],
+        "payload": {
+            "notes": f"3D 模型: {info.get('name', '')} ({info.get('format', '')})",
+            "files": [path],
+        },
+    }
+
+
+def generate_model_from_text(
+    work_dir: str,
+    description: str,
+    name: str = "",
+) -> dict[str, Any]:
+    if not description.strip():
+        raise DevKitError(400, "描述文本不能为空", code="empty_description")
+
+    import tempfile
+    model_id = "model_" + secrets.token_hex(8)
+    name = name or f"AI生成_{model_id[:8]}"
+
+    placeholder_path = os.path.join(tempfile.gettempdir(), f"xijian_ai_model_{model_id}.glb")
+    with open(placeholder_path, "w") as f:
+        f.write(json.dumps({
+            "asset": {"version": "2.0", "generator": "XiJian AI Model Generator"},
+            "generated_from": description,
+            "model_id": model_id,
+            "note": "Placeholder — full AI VRM generation requires MLX backend",
+        }))
+
+    index = _load_index(work_dir)
+    entry = {
+        "id": model_id,
+        "path": placeholder_path,
+        "name": name,
+        "format": "glb",
+        "size_bytes": os.path.getsize(placeholder_path),
+        "generated": True,
+        "description": description,
+    }
+    index.append(entry)
+    _save_index(work_dir, index)
+    return entry

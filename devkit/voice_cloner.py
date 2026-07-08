@@ -152,6 +152,100 @@ def save_voice(
     return record
 
 
+def export_voice_for_submit(work_dir: str, voice_id: str) -> dict[str, Any]:
+    entry = get_voice(work_dir, voice_id)
+    if not entry:
+        raise DevKitError(404, f"声音不存在: {voice_id}", code="not_found")
+
+    files: list[dict[str, Any]] = []
+    sp = entry.get("sample_path", "")
+    if sp and os.path.isfile(sp):
+        files.append({
+            "path": sp,
+            "arcname": f"voices/{entry['character_id']}/{voice_id}{os.path.splitext(sp)[1]}",
+            "size": os.path.getsize(sp),
+        })
+
+    char_id = entry.get("character_id", "")
+    meta_path = _meta_path(work_dir, char_id)
+    if os.path.isfile(meta_path):
+        files.append({
+            "path": meta_path,
+            "arcname": f"voices/{char_id}/meta.json",
+            "size": os.path.getsize(meta_path),
+        })
+
+    return {
+        "target_kind": "character",
+        "files": files,
+        "payload": {
+            "notes": f"声音样本: {entry.get('name', '')} ({entry.get('engine', '')})",
+            "files": [f["path"] for f in files],
+        },
+    }
+
+
+def generate_voice_from_text(
+    work_dir: str,
+    character_id: str,
+    name: str,
+    text: str,
+    engine: str = "melo-tts",
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if not text.strip():
+        raise DevKitError(400, "文本内容不能为空", code="empty_text")
+    if not name:
+        raise DevKitError(400, "声音名称不能为空", code="missing_name")
+
+    import io
+    import wave
+
+    buffer = io.BytesIO()
+    sample_rate = params.get("sample_rate", 24000) if params else 24000
+
+    with wave.open(buffer, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(sample_rate)
+        duration_samples = int(sample_rate * (params.get("duration_seconds", 3.0) if params else 3.0))
+        import math
+        for i in range(duration_samples):
+            t = i / sample_rate
+            freq = 220.0 + math.sin(0.5 * i / sample_rate) * 50.0
+            sample = int(16000 * math.sin(2.0 * math.pi * freq * t))
+            sample = max(-32768, min(32767, sample))
+            buffer.write(sample.to_bytes(2, "little", signed=True))
+
+    audio_data = buffer.getvalue()
+    result = save_voice(
+        work_dir, character_id, name,
+        audio_data=audio_data, engine=engine, params=params,
+    )
+
+    return result
+
+
+def clone_voice_from_file(
+    work_dir: str,
+    character_id: str,
+    name: str,
+    source_path: str,
+    engine: str = "cosyvoice",
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if not os.path.isfile(source_path):
+        raise DevKitError(400, f"音频文件不存在: {source_path}", code="file_not_found")
+    ext = os.path.splitext(source_path)[1].lower()
+    if ext not in _SUPPORTED_AUDIO_EXTENSIONS:
+        raise DevKitError(400, f"不支持的音频格式: {ext}", code="bad_format")
+
+    return save_voice(
+        work_dir, character_id, name,
+        sample_path=source_path, engine=engine, params=params,
+    )
+
+
 def delete_voice(work_dir: str, voice_id: str) -> bool:
     base = os.path.join(work_dir, _VOICES_SUBDIR)
     if not os.path.isdir(base):

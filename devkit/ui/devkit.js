@@ -955,10 +955,557 @@
   const onVoiceUseRecording = () => {
     const b64 = $("#voice-recorded-b64").value.trim();
     if (!b64) { toast("暂无录音", "err"); return; }
-    // The hidden b64 field is what gets uploaded by onVoiceSave —
-    // nothing else to do here besides visual confirmation.
-    $("#voice-sample-path").value = "";  // path is no longer the source
+    $("#voice-sample-path").value = "";
     toast("录音已填入，点保存上传", "ok");
+  };
+
+  // --------------------------------------------------------------
+  // Voice generation (TTS)
+  // --------------------------------------------------------------
+
+  const onVoiceTtsGenerate = async () => {
+    const charId = $("#voice-tts-char").value.trim();
+    const name = $("#voice-tts-name").value.trim();
+    const text = $("#voice-tts-text").value.trim();
+    if (!charId) { toast("请填写角色 ID", "err"); return; }
+    if (!name) { toast("请填写声音名称", "err"); return; }
+    if (!text) { toast("请填写生成文本", "err"); return; }
+    const resp = await callApi("generate_voice_from_text", charId, name, text);
+    if (!resp.ok) { toast(`生成失败：${resp.message}`, "err"); return; }
+    toast(`语音生成成功：${resp.data.id}`, "ok");
+    if ($("#voice-char-id").value === charId) await renderVoiceList();
+  };
+
+  // --------------------------------------------------------------
+  // Voice clone from file
+  // --------------------------------------------------------------
+
+  let _voiceClonePath = "";
+
+  const onVoiceClonePick = async () => {
+    if (!window.pywebview || !window.pywebview.create_file_dialog) { toast("pywebview 文件对话框未就绪", "err"); return; }
+    let picked;
+    try { picked = await window.pywebview.create_file_dialog(window.pywebview.types.OPEN, { file_types: ["wav", "mp3", "m4a", "ogg", "flac"] }); }
+    catch { toast("文件选择失败", "err"); return; }
+    if (!picked || picked.length === 0) return;
+    _voiceClonePath = picked;
+    $("#voice-clone-path").value = picked;
+  };
+
+  const onVoiceClone = async () => {
+    const charId = $("#voice-clone-char").value.trim();
+    const name = $("#voice-clone-name").value.trim();
+    if (!charId) { toast("请填写角色 ID", "err"); return; }
+    if (!name) { toast("请填写声音名称", "err"); return; }
+    if (!_voiceClonePath) { toast("请选择源音频文件", "err"); return; }
+    const resp = await callApi("clone_voice_from_file", charId, name, _voiceClonePath);
+    if (!resp.ok) { toast(`克隆失败：${resp.message}`, "err"); return; }
+    toast(`声音克隆成功：${resp.data.id}`, "ok");
+    if ($("#voice-char-id").value === charId) await renderVoiceList();
+  };
+
+  // --------------------------------------------------------------
+  // Voice export
+  // --------------------------------------------------------------
+
+  const onVoiceExport = async () => {
+    if (!_selectedVoiceId) { toast("请先选择一个声音样本", "err"); return; }
+    const resp = await callApi("export_voice", _selectedVoiceId);
+    if (!resp.ok) { toast(`导出失败：${resp.message}`, "err"); return; }
+    await loadPackages();
+    state.selectedPackages.add(`voice:${_selectedVoiceId}`);
+    renderPackages();
+    refreshSubmitBtn();
+    switchTab("submit");
+    toast("已跳转创作提交，声音包已自动勾选", "ok");
+    setStatus("#voice-status", "已导出并跳转到创作提交", "ok");
+  };
+
+  // --------------------------------------------------------------
+  // Model generation + export
+  // --------------------------------------------------------------
+
+  const onModelGenerate = async () => {
+    const desc = $("#model-gen-desc").value.trim();
+    const name = $("#model-gen-name").value.trim();
+    if (!desc) { toast("请填写模型描述", "err"); return; }
+    const resp = await callApi("generate_model", desc, name || undefined);
+    if (!resp.ok) { toast(`生成失败：${resp.message}`, "err"); return; }
+    toast(`模型生成成功：${resp.data.name}`, "ok");
+    await renderModelList();
+  };
+
+  const onModelExport = async () => {
+    if (!_selectedModelId) { toast("请先选择一个模型", "err"); return; }
+    const resp = await callApi("export_model", _selectedModelId);
+    if (!resp.ok) { toast(`导出失败：${resp.message}`, "err"); return; }
+    await loadPackages();
+    state.selectedPackages.add(`model:${_selectedModelId}`);
+    renderPackages();
+    refreshSubmitBtn();
+    switchTab("submit");
+    toast("已跳转创作提交，模型包已自动勾选", "ok");
+    setStatus("#model-status", "已导出并跳转到创作提交", "ok");
+  };
+
+  // --------------------------------------------------------------
+  // Plot editor
+  // --------------------------------------------------------------
+
+  let _selectedPlotId = null;
+  let _selectedPlotNodeId = null;
+  let _selectedPlotEdgeId = null;
+
+  const renderPlotList = async () => {
+    const resp = await callApi("list_plots");
+    if (!resp.ok) return;
+    renderItemList("plot-list", resp.data || [], (p) =>
+      `<strong>${escHtml(p.name)}</strong><br/><small>${escHtml(p.id)}</small>`
+    );
+    refreshPlotButtons();
+  };
+
+  const refreshPlotButtons = () => {
+    $("#plot-export-btn").disabled = !_selectedPlotId;
+    $("#plot-delete-btn").disabled = !_selectedPlotId;
+  };
+
+  const loadPlotEditor = (plot) => {
+    _selectedPlotId = plot?.id || null;
+    $("#plot-editing-id").value = plot?.id || "";
+    $("#plot-name").value = plot?.name || "";
+    $("#plot-description").value = plot?.description || "";
+    $("#plot-editor-hint").textContent = plot ? `编辑：${plot.name}` : "";
+    refreshPlotButtons();
+  };
+
+  const resetPlotEditor = () => {
+    _selectedPlotId = null;
+    $("#plot-editing-id").value = "";
+    $("#plot-name").value = "";
+    $("#plot-description").value = "";
+    $("#plot-editor-hint").textContent = "";
+    $("#plot-node-list").innerHTML = "";
+    $("#plot-edge-list").innerHTML = "";
+    _selectedPlotNodeId = null;
+    _selectedPlotEdgeId = null;
+    refreshPlotButtons();
+  };
+
+  const onPlotSave = async () => {
+    const data = {
+      id: $("#plot-editing-id").value || undefined,
+      name: $("#plot-name").value.trim(),
+      description: $("#plot-description").value.trim(),
+    };
+    if (!data.name) { toast("请填写剧情名称", "err"); return; }
+    const resp = await callApi("save_plot", data);
+    if (!resp.ok) { setStatus("#plot-status", `保存失败：${resp.message}`, "err"); return; }
+    toast("剧情已保存", "ok");
+    setStatus("#plot-status", `已保存：${resp.data.id}`, "ok");
+    await renderPlotList();
+  };
+
+  const onPlotDelete = async () => {
+    if (!_selectedPlotId) return;
+    const resp = await callApi("delete_plot", _selectedPlotId);
+    if (!resp.ok) { toast("删除失败", "err"); return; }
+    toast("剧情已删除", "ok");
+    resetPlotEditor();
+    await renderPlotList();
+  };
+
+  const onPlotExport = async () => {
+    if (!_selectedPlotId) return;
+    const resp = await callApi("export_plot", _selectedPlotId);
+    if (!resp.ok) { toast(`导出失败：${resp.message}`, "err"); return; }
+    await loadPackages();
+    state.selectedPackages.add(`plot:${_selectedPlotId}`);
+    renderPackages();
+    refreshSubmitBtn();
+    switchTab("submit");
+    toast("已跳转创作提交，剧情包已自动勾选", "ok");
+    setStatus("#plot-status", "已导出并跳转到创作提交", "ok");
+  };
+
+  // Plot nodes
+  const renderPlotNodes = async (plotId) => {
+    const resp = await callApi("get_plot_nodes", plotId);
+    if (!resp.ok) { renderItemList("plot-node-list", [], () => ""); return; }
+    renderItemList("plot-node-list", resp.data || [], (n) =>
+      `<strong>[${n.type}]</strong> ${escHtml(n.name)}<br/><small>${escHtml((n.content || "").slice(0, 40))}</small>`
+    );
+  };
+
+  const loadPlotNodeEditor = (node) => {
+    _selectedPlotNodeId = node?.id || null;
+    $("#plot-node-id").value = node?.id || "";
+    $("#plot-node-name").value = node?.name || "";
+    $("#plot-node-type").value = node?.type || "dialogue";
+    $("#plot-node-content").value = node?.content || "";
+  };
+
+  const onPlotNodeNew = () => {
+    _selectedPlotNodeId = null;
+    $("#plot-node-id").value = "";
+    $("#plot-node-name").value = "";
+    $("#plot-node-type").value = "dialogue";
+    $("#plot-node-content").value = "";
+  };
+
+  const onPlotNodeSave = async () => {
+    if (!_selectedPlotId) { toast("请先选择或保存剧情", "err"); return; }
+    const data = {
+      id: $("#plot-node-id").value || undefined,
+      plot_id: _selectedPlotId,
+      name: $("#plot-node-name").value.trim(),
+      type: $("#plot-node-type").value,
+      content: $("#plot-node-content").value,
+    };
+    if (!data.name) { toast("请填写节点名称", "err"); return; }
+    const resp = await callApi("save_plot_node", data);
+    if (!resp.ok) { setStatus("#plot-status", `节点保存失败：${resp.message}`, "err"); return; }
+    toast("节点已保存", "ok");
+    await renderPlotNodes(_selectedPlotId);
+  };
+
+  const onPlotNodeDelete = async () => {
+    if (!_selectedPlotNodeId) { toast("请先选择一个节点", "err"); return; }
+    const resp = await callApi("delete_plot_node", _selectedPlotNodeId);
+    if (!resp.ok) { toast("删除节点失败", "err"); return; }
+    toast("节点已删除", "ok");
+    onPlotNodeNew();
+    if (_selectedPlotId) await renderPlotNodes(_selectedPlotId);
+  };
+
+  // Plot edges
+  const renderPlotEdges = async (plotId) => {
+    const resp = await callApi("get_plot_edges", plotId);
+    if (!resp.ok) { renderItemList("plot-edge-list", [], () => ""); return; }
+    renderItemList("plot-edge-list", resp.data || [], (e) =>
+      `<strong>${escHtml(e.source_node_id)} → ${escHtml(e.target_node_id)}</strong><br/><small>${escHtml(e.label || "")}</small>`
+    );
+  };
+
+  const loadPlotEdgeEditor = (edge) => {
+    _selectedPlotEdgeId = edge?.id || null;
+    $("#plot-edge-source").value = edge?.source_node_id || "";
+    $("#plot-edge-target").value = edge?.target_node_id || "";
+    $("#plot-edge-label").value = edge?.label || "";
+  };
+
+  const onPlotEdgeNew = () => {
+    _selectedPlotEdgeId = null;
+    $("#plot-edge-source").value = "";
+    $("#plot-edge-target").value = "";
+    $("#plot-edge-label").value = "";
+  };
+
+  const onPlotEdgeSave = async () => {
+    if (!_selectedPlotId) { toast("请先选择或保存剧情", "err"); return; }
+    const source = $("#plot-edge-source").value.trim();
+    const target = $("#plot-edge-target").value.trim();
+    if (!source || !target) { toast("请填写来源和目标节点 ID", "err"); return; }
+    const data = {
+      id: _selectedPlotEdgeId || undefined,
+      plot_id: _selectedPlotId,
+      source_node_id: source,
+      target_node_id: target,
+      label: $("#plot-edge-label").value.trim(),
+    };
+    const resp = await callApi("save_plot_edge", data);
+    if (!resp.ok) { setStatus("#plot-status", `连线保存失败：${resp.message}`, "err"); return; }
+    toast("连线已保存", "ok");
+    await renderPlotEdges(_selectedPlotId);
+  };
+
+  const onPlotEdgeDelete = async () => {
+    if (!_selectedPlotEdgeId) { toast("请先选择一条连线", "err"); return; }
+    const resp = await callApi("delete_plot_edge", _selectedPlotEdgeId);
+    if (!resp.ok) { toast("删除连线失败", "err"); return; }
+    toast("连线已删除", "ok");
+    onPlotEdgeNew();
+    if (_selectedPlotId) await renderPlotEdges(_selectedPlotId);
+  };
+
+  // --------------------------------------------------------------
+  // Dialog editor
+  // --------------------------------------------------------------
+
+  let _selectedDialogId = null;
+
+  const renderDialogList = async () => {
+    const charId = $("#dialog-char-id").value.trim();
+    if (!charId) { renderItemList("dialog-list", [], () => ""); return; }
+    const resp = await callApi("list_dialogs", charId);
+    if (!resp.ok) { renderItemList("dialog-list", [], () => ""); return; }
+    renderItemList("dialog-list", resp.data || [], (d) =>
+      `<strong>[${escHtml(d.scene || "general")}]</strong> ${escHtml((d.user_message || "").slice(0, 40))}<br/><small>情感: ${escHtml(d.emotion || "neutral")}</small>`
+    );
+    refreshDialogButtons();
+  };
+
+  const refreshDialogButtons = () => {
+    const hasSel = !!_selectedDialogId;
+    $("#dialog-export-btn").disabled = !hasSel;
+    $("#dialog-delete-btn").disabled = !hasSel;
+  };
+
+  const loadDialogEditor = (dialog) => {
+    _selectedDialogId = dialog?.id || null;
+    $("#dialog-editing-id").value = dialog?.id || "";
+    $("#dialog-char").value = dialog?.character_id || $("#dialog-char-id").value || "";
+    $("#dialog-scene").value = dialog?.scene || "";
+    $("#dialog-user-msg").value = dialog?.user_message || "";
+    $("#dialog-char-msg").value = dialog?.character_message || "";
+    $("#dialog-emotion").value = dialog?.emotion || "neutral";
+    $("#dialog-editor-hint").textContent = dialog ? `编辑对话` : "";
+    refreshDialogButtons();
+  };
+
+  const resetDialogEditor = () => {
+    _selectedDialogId = null;
+    $("#dialog-editing-id").value = "";
+    $("#dialog-char").value = $("#dialog-char-id").value || "";
+    $("#dialog-scene").value = "";
+    $("#dialog-user-msg").value = "";
+    $("#dialog-char-msg").value = "";
+    $("#dialog-emotion").value = "neutral";
+    $("#dialog-editor-hint").textContent = "";
+    refreshDialogButtons();
+  };
+
+  const onDialogSave = async () => {
+    const data = {
+      id: $("#dialog-editing-id").value || undefined,
+      character_id: $("#dialog-char").value.trim(),
+      scene: $("#dialog-scene").value.trim(),
+      user_message: $("#dialog-user-msg").value,
+      character_message: $("#dialog-char-msg").value,
+      emotion: $("#dialog-emotion").value.trim(),
+    };
+    if (!data.character_id) { toast("请填写角色 ID", "err"); return; }
+    if (!data.character_message) { toast("请填写角色回复", "err"); return; }
+    const resp = await callApi("save_dialog", data);
+    if (!resp.ok) { setStatus("#dialog-status", `保存失败：${resp.message}`, "err"); return; }
+    toast("对话已保存", "ok");
+    setStatus("#dialog-status", `已保存：${resp.data.id}`, "ok");
+    await renderDialogList();
+  };
+
+  const onDialogDelete = async () => {
+    if (!_selectedDialogId) return;
+    const resp = await callApi("delete_dialog", _selectedDialogId);
+    if (!resp.ok) { toast("删除失败", "err"); return; }
+    toast("对话已删除", "ok");
+    resetDialogEditor();
+    await renderDialogList();
+  };
+
+  const onDialogCheckMin = async () => {
+    const charId = $("#dialog-char-id").value.trim();
+    if (!charId) { toast("请填写角色 ID", "err"); return; }
+    const resp = await callApi("check_dialog_minimum", charId);
+    if (!resp.ok) {
+      $("#dialog-check-result").textContent = `检查失败：${resp.message}`;
+      $("#dialog-check-result").className = "status status--err";
+      return;
+    }
+    const r = resp.data;
+    $("#dialog-check-result").textContent = r.message;
+    $("#dialog-check-result").className = r.ok ? "status status--ok" : "status status--warn";
+  };
+
+  const onDialogExport = async () => {
+    const charId = $("#dialog-char").value.trim() || $("#dialog-char-id").value.trim();
+    if (!charId) { toast("请填写角色 ID", "err"); return; }
+    const resp = await callApi("export_dialogs", charId);
+    if (!resp.ok) { toast(`导出失败：${resp.message}`, "err"); return; }
+    await loadPackages();
+    state.selectedPackages.add(`dialog:${charId}`);
+    renderPackages();
+    refreshSubmitBtn();
+    switchTab("submit");
+    toast("已跳转创作提交，对话包已自动勾选", "ok");
+    setStatus("#dialog-status", "已导出并跳转到创作提交", "ok");
+  };
+
+  // --------------------------------------------------------------
+  // Motion editor
+  // --------------------------------------------------------------
+
+  let _selectedMotionId = null;
+
+  const renderMotionList = async () => {
+    const charId = $("#motion-char-id").value.trim();
+    if (!charId) { renderItemList("motion-list", [], () => ""); return; }
+    const resp = await callApi("list_motions", charId);
+    if (!resp.ok) { renderItemList("motion-list", [], () => ""); return; }
+    renderItemList("motion-list", resp.data || [], (m) =>
+      `<strong>${escHtml(m.name)}</strong><br/><small>${escHtml((m.description || "").slice(0, 40))}</small>`
+    );
+    refreshMotionButtons();
+  };
+
+  const refreshMotionButtons = () => {
+    const hasSel = !!_selectedMotionId;
+    $("#motion-export-btn").disabled = !hasSel;
+    $("#motion-delete-btn").disabled = !hasSel;
+  };
+
+  const loadMotionEditor = (motion) => {
+    _selectedMotionId = motion?.id || null;
+    $("#motion-editing-id").value = motion?.id || "";
+    $("#motion-char").value = motion?.character_id || $("#motion-char-id").value || "";
+    $("#motion-name").value = motion?.name || "";
+    $("#motion-description").value = motion?.description || "";
+    $("#motion-params").value = motion?.params ? JSON.stringify(motion.params, null, 2) : "";
+    $("#motion-file-path").value = motion?.file_path || "";
+    $("#motion-editor-hint").textContent = motion ? `编辑：${motion.name}` : "";
+    refreshMotionButtons();
+  };
+
+  const resetMotionEditor = () => {
+    _selectedMotionId = null;
+    $("#motion-editing-id").value = "";
+    $("#motion-char").value = $("#motion-char-id").value || "";
+    $("#motion-name").value = "";
+    $("#motion-description").value = "";
+    $("#motion-params").value = "";
+    $("#motion-file-path").value = "";
+    $("#motion-editor-hint").textContent = "";
+    refreshMotionButtons();
+  };
+
+  const onMotionSave = async () => {
+    let params = {};
+    try { const raw = $("#motion-params").value.trim(); if (raw) params = JSON.parse(raw); }
+    catch { toast("JSON 格式错误", "err"); return; }
+    const data = {
+      id: $("#motion-editing-id").value || undefined,
+      character_id: $("#motion-char").value.trim(),
+      name: $("#motion-name").value.trim(),
+      description: $("#motion-description").value.trim(),
+      params,
+      file_path: $("#motion-file-path").value.trim() || undefined,
+    };
+    if (!data.character_id) { toast("请填写角色 ID", "err"); return; }
+    if (!data.name) { toast("请填写动作名称", "err"); return; }
+    const resp = await callApi("save_motion", data);
+    if (!resp.ok) { setStatus("#motion-status", `保存失败：${resp.message}`, "err"); return; }
+    toast("动作已保存", "ok");
+    setStatus("#motion-status", `已保存：${resp.data.id}`, "ok");
+    await renderMotionList();
+  };
+
+  const onMotionDelete = async () => {
+    if (!_selectedMotionId) return;
+    const resp = await callApi("delete_motion", _selectedMotionId);
+    if (!resp.ok) { toast("删除失败", "err"); return; }
+    toast("动作已删除", "ok");
+    resetMotionEditor();
+    await renderMotionList();
+  };
+
+  const onMotionImport = async () => {
+    const charId = $("#motion-char").value.trim() || $("#motion-char-id").value.trim();
+    if (!charId) { toast("请填写角色 ID", "err"); return; }
+    if (!window.pywebview || !window.pywebview.create_file_dialog) { toast("pywebview 文件对话框未就绪", "err"); return; }
+    let picked;
+    try { picked = await window.pywebview.create_file_dialog(window.pywebview.types.OPEN, { file_types: ["bvh", "fbx", "glb", "gltf"] }); }
+    catch { toast("文件选择失败", "err"); return; }
+    if (!picked || picked.length === 0) return;
+    const resp = await callApi("import_motion_file", charId, picked);
+    if (!resp.ok) { toast(`导入失败：${resp.message}`, "err"); return; }
+    toast("动作文件已导入", "ok");
+    $("#motion-file-path").value = picked;
+    await renderMotionList();
+  };
+
+  const onMotionExport = async () => {
+    const charId = $("#motion-char").value.trim() || $("#motion-char-id").value.trim();
+    if (!charId) { toast("请填写角色 ID", "err"); return; }
+    const resp = await callApi("export_motions", charId);
+    if (!resp.ok) { toast(`导出失败：${resp.message}`, "err"); return; }
+    await loadPackages();
+    state.selectedPackages.add(`motion:${charId}`);
+    renderPackages();
+    refreshSubmitBtn();
+    switchTab("submit");
+    toast("已跳转创作提交，动作包已自动勾选", "ok");
+    setStatus("#motion-status", "已导出并跳转到创作提交", "ok");
+  };
+
+  // --------------------------------------------------------------
+  // AI assistant
+  // --------------------------------------------------------------
+
+  const renderAiLog = async () => {
+    const resp = await callApi("list_assist_log", 50, 0);
+    if (!resp.ok) { renderItemList("ai-log-list", [], () => ""); return; }
+    renderItemList("ai-log-list", resp.data || [], (ev) =>
+      `<strong>${escHtml(ev.type || ev.event_type || "?")}</strong> ${escHtml(ev.module || ev.target_module || "")}<br/><small>${escHtml((ev.description || "").slice(0, 50))}</small>`
+    );
+  };
+
+  const resetAiEditor = () => {
+    $("#ai-event-type").value = "generation";
+    $("#ai-target-module").value = "";
+    $("#ai-event-desc").value = "";
+  };
+
+  const onAiLog = async () => {
+    const data = {
+      event_type: $("#ai-event-type").value,
+      target_module: $("#ai-target-module").value.trim(),
+      description: $("#ai-event-desc").value.trim(),
+    };
+    if (!data.description) { toast("请填写事件描述", "err"); return; }
+    const resp = await callApi("log_assist_event", data);
+    if (!resp.ok) { setStatus("#ai-status", `记录失败：${resp.message}`, "err"); return; }
+    toast("AI 事件已记录", "ok");
+    setStatus("#ai-status", `已记录：${resp.data.id}`, "ok");
+    resetAiEditor();
+    await renderAiLog();
+    await renderAiStats();
+  };
+
+  const onAiSuggest = async () => {
+    const context = $("#ai-suggest-context").value.trim();
+    if (!context) { toast("请填写上下文", "err"); return; }
+    setStatus("#ai-suggest-result", "正在获取建议…", "warn");
+    const resp = await callApi("auto_suggest", context);
+    if (!resp.ok) { setStatus("#ai-suggest-result", `建议获取失败：${resp.message}`, "err"); return; }
+    const result = resp.data;
+    setStatus("#ai-suggest-result", result.suggestion || result.message || JSON.stringify(result), "ok");
+  };
+
+  const onAiCheckThreshold = async () => {
+    const threshold = parseFloat($("#ai-threshold-input").value);
+    if (!Number.isFinite(threshold) || threshold < 0 || threshold > 1) {
+      toast("请输入 0–1 之间的阈值", "err"); return;
+    }
+    const resp = await callApi("check_ai_threshold", threshold);
+    if (!resp.ok) { setStatus("#ai-threshold-result", `检查失败：${resp.message}`, "err"); return; }
+    const r = resp.data;
+    const status = r.ok ? "ok" : "warn";
+    setStatus("#ai-threshold-result", `当前使用率: ${(r.current_ratio * 100).toFixed(1)}% / 阈值: ${(r.threshold * 100).toFixed(1)}% — ${r.ok ? "合规" : "超标"}`, status);
+  };
+
+  const renderAiStats = async () => {
+    const resp = await callApi("get_assist_stats");
+    if (!resp.ok) return;
+    const s = resp.data || {};
+    $("#ai-stat-total").textContent = String(s.total_events ?? s.total ?? "—");
+    $("#ai-stat-latest").textContent = s.latest_event_at || s.latest_at || "—";
+    const ratioResp = await callApi("get_ai_ratio");
+    if (ratioResp.ok && ratioResp.data) {
+      const r = ratioResp.data;
+      const pct = ((r.ai_ratio ?? r.ratio ?? 0) * 100).toFixed(1);
+      $("#ai-stat-ratio").textContent = `${pct}%`;
+    } else {
+      $("#ai-stat-ratio").textContent = "—";
+    }
   };
 
   // --------------------------------------------------------------
@@ -1146,6 +1693,8 @@
     $("#model-refresh-btn").addEventListener("click", renderModelList);
     $("#model-add-btn").addEventListener("click", onModelAdd);
     $("#model-unregister-btn").addEventListener("click", onModelUnregister);
+    $("#model-export-btn").addEventListener("click", onModelExport);
+    $("#model-gen-btn").addEventListener("click", onModelGenerate);
     $("#model-list").addEventListener("click", async (e) => {
       const li = e.target.closest(".item-list__item");
       if (li && li.dataset.id) {
@@ -1159,16 +1708,13 @@
     $("#voice-new-btn").addEventListener("click", () => { resetVoiceEditor(); loadVoiceEditor(null); });
     $("#voice-save-btn").addEventListener("click", onVoiceSave);
     $("#voice-delete-btn").addEventListener("click", onVoiceDelete);
+    $("#voice-export-btn").addEventListener("click", onVoiceExport);
     $("#voice-pick-btn").addEventListener("click", onVoicePickFile);
     $("#voice-record-btn").addEventListener("click", onVoiceRecord);
     $("#voice-stop-btn").addEventListener("click", onVoiceStop);
     $("#voice-use-recording-btn").addEventListener("click", onVoiceUseRecording);
     $("#voice-char-id").addEventListener("change", async () => {
       await renderVoiceList();
-      // Keep the character's "assigned_voice_pack" dropdown in sync
-      // — so that if the user types a brand-new char id here first
-      // and then switches to the character tab, it shows up as a
-      // selectable option without an extra manual refresh.
       await populateCharDropdowns();
     });
     $("#voice-list").addEventListener("click", async (e) => {
@@ -1178,6 +1724,81 @@
         if (resp.ok) loadVoiceEditor(resp.data);
       }
     });
+    // Voice TTS
+    $("#voice-tts-btn").addEventListener("click", onVoiceTtsGenerate);
+    // Voice clone
+    $("#voice-clone-pick-btn").addEventListener("click", onVoiceClonePick);
+    $("#voice-clone-btn").addEventListener("click", onVoiceClone);
+
+    // Plot tab
+    $("#plot-refresh-btn").addEventListener("click", renderPlotList);
+    $("#plot-new-btn").addEventListener("click", () => { resetPlotEditor(); loadPlotEditor(null); });
+    $("#plot-save-btn").addEventListener("click", onPlotSave);
+    $("#plot-delete-btn").addEventListener("click", onPlotDelete);
+    $("#plot-export-btn").addEventListener("click", onPlotExport);
+    $("#plot-list").addEventListener("click", async (e) => {
+      const li = e.target.closest(".item-list__item");
+      if (li && li.dataset.id) {
+        const resp = await callApi("get_plot", li.dataset.id);
+        if (resp.ok) { loadPlotEditor(resp.data); await renderPlotNodes(li.dataset.id); await renderPlotEdges(li.dataset.id); }
+      }
+    });
+    $("#plot-node-new-btn").addEventListener("click", onPlotNodeNew);
+    $("#plot-node-refresh-btn").addEventListener("click", async () => { if (_selectedPlotId) await renderPlotNodes(_selectedPlotId); });
+    $("#plot-node-save-btn").addEventListener("click", onPlotNodeSave);
+    $("#plot-node-delete-btn").addEventListener("click", onPlotNodeDelete);
+    $("#plot-node-list").addEventListener("click", (e) => {
+      const li = e.target.closest(".item-list__item");
+      if (li && li.dataset.id) loadPlotNodeEditor(JSON.parse(li.dataset.node || "{}"));
+    });
+    $("#plot-edge-new-btn").addEventListener("click", onPlotEdgeNew);
+    $("#plot-edge-refresh-btn").addEventListener("click", async () => { if (_selectedPlotId) await renderPlotEdges(_selectedPlotId); });
+    $("#plot-edge-save-btn").addEventListener("click", onPlotEdgeSave);
+    $("#plot-edge-delete-btn").addEventListener("click", onPlotEdgeDelete);
+    $("#plot-edge-list").addEventListener("click", (e) => {
+      const li = e.target.closest(".item-list__item");
+      if (li && li.dataset.id) loadPlotEdgeEditor(JSON.parse(li.dataset.edge || "{}"));
+    });
+
+    // Dialog tab
+    $("#dialog-refresh-btn").addEventListener("click", renderDialogList);
+    $("#dialog-new-btn").addEventListener("click", () => { resetDialogEditor(); loadDialogEditor(null); });
+    $("#dialog-save-btn").addEventListener("click", onDialogSave);
+    $("#dialog-delete-btn").addEventListener("click", onDialogDelete);
+    $("#dialog-export-btn").addEventListener("click", onDialogExport);
+    $("#dialog-check-min-btn").addEventListener("click", onDialogCheckMin);
+    $("#dialog-char-id").addEventListener("change", renderDialogList);
+    $("#dialog-list").addEventListener("click", async (e) => {
+      const li = e.target.closest(".item-list__item");
+      if (li && li.dataset.id) {
+        const resp = await callApi("get_dialog", li.dataset.id);
+        if (resp.ok) loadDialogEditor(resp.data);
+      }
+    });
+
+    // Motion tab
+    $("#motion-refresh-btn").addEventListener("click", renderMotionList);
+    $("#motion-new-btn").addEventListener("click", () => { resetMotionEditor(); loadMotionEditor(null); });
+    $("#motion-save-btn").addEventListener("click", onMotionSave);
+    $("#motion-delete-btn").addEventListener("click", onMotionDelete);
+    $("#motion-export-btn").addEventListener("click", onMotionExport);
+    $("#motion-import-btn").addEventListener("click", onMotionImport);
+    $("#motion-char-id").addEventListener("change", renderMotionList);
+    $("#motion-list").addEventListener("click", async (e) => {
+      const li = e.target.closest(".item-list__item");
+      if (li && li.dataset.id) {
+        const resp = await callApi("get_motion", li.dataset.id);
+        if (resp.ok) loadMotionEditor(resp.data);
+      }
+    });
+
+    // AI tab
+    $("#ai-refresh-btn").addEventListener("click", renderAiLog);
+    $("#ai-new-btn").addEventListener("click", () => { resetAiEditor(); });
+    $("#ai-log-btn").addEventListener("click", onAiLog);
+    $("#ai-suggest-btn").addEventListener("click", onAiSuggest);
+    $("#ai-check-threshold-btn").addEventListener("click", onAiCheckThreshold);
+    $("#ai-refresh-stats-btn").addEventListener("click", renderAiStats);
   };
 
   // --------------------------------------------------------------

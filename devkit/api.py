@@ -118,6 +118,8 @@ from devkit.model_viewer import (
     unregister_model as _mv_unregister,
     get_model_info as _mv_info,
     read_model_bytes as _mv_read,
+    export_model_for_submit as _mv_export,
+    generate_model_from_text as _mv_generate,
 )
 from devkit.voice_cloner import (
     list_voices as _vc_list,
@@ -126,6 +128,48 @@ from devkit.voice_cloner import (
     save_voice as _vc_save,
     delete_voice as _vc_delete,
     list_engines as _vc_engines,
+    export_voice_for_submit as _vc_export,
+    generate_voice_from_text as _vc_generate_text,
+    clone_voice_from_file as _vc_clone_file,
+)
+from devkit.plot_editor import (
+    list_plots as _pe_list,
+    get_plot as _pe_get,
+    save_plot as _pe_save,
+    delete_plot as _pe_delete,
+    get_plot_nodes as _pe_nodes,
+    save_plot_node as _pe_node_save,
+    delete_plot_node as _pe_node_delete,
+    get_plot_edges as _pe_edges,
+    save_plot_edge as _pe_edge_save,
+    delete_plot_edge as _pe_edge_delete,
+    export_plot_for_submit as _pe_export,
+)
+from devkit.dialog_editor import (
+    list_dialog_characters as _de_chars,
+    list_dialogs as _de_list,
+    get_dialog as _de_get,
+    save_dialog as _de_save,
+    delete_dialog as _de_delete,
+    check_dialog_minimum as _de_minimum,
+    export_dialogs_for_submit as _de_export,
+)
+from devkit.motion_editor import (
+    list_motion_characters as _moe_chars,
+    list_motions as _moe_list,
+    get_motion as _moe_get,
+    save_motion as _moe_save,
+    delete_motion as _moe_delete,
+    import_motion_file as _moe_import,
+    export_motions_for_submit as _moe_export,
+)
+from devkit.ai_assistant import (
+    log_assist_event as _aa_log,
+    list_assist_log as _aa_list,
+    get_assist_stats as _aa_stats,
+    calculate_ai_ratio as _aa_ratio,
+    check_ai_threshold as _aa_threshold,
+    auto_suggest as _aa_suggest,
 )
 
 
@@ -488,6 +532,16 @@ class DevKitApi:
                 export = _me_export(self._work_dir(), pid)
             elif ptype == "world":
                 export = _we_export(self._work_dir(), pid)
+            elif ptype == "plot":
+                export = _pe_export(self._work_dir(), pid)
+            elif ptype == "voice":
+                export = _vc_export(self._work_dir(), pid)
+            elif ptype == "model":
+                export = _mv_export(self._work_dir(), pid)
+            elif ptype == "dialog":
+                export = _de_export(self._work_dir(), pid)
+            elif ptype == "motion":
+                export = _moe_export(self._work_dir(), pid)
             else:
                 raise DevKitError(
                     400, f"未知的包类型: {ptype}", code="unknown_package_type"
@@ -555,6 +609,49 @@ class DevKitApi:
                 "name": name,
                 "description": f"世界观: {name}",
             })
+
+        # Plots
+        for plot in _pe_list(work_dir):
+            plot_id = plot.get("id", "")
+            name = plot.get("name", "?")
+            packages.append({
+                "package_id": f"plot:{plot_id}",
+                "package_type": "plot",
+                "target_kind": "plot",
+                "target_id": plot_id,
+                "name": name,
+                "description": f"剧情: {name}",
+            })
+
+        # Models (registered 3D)
+        for model in _mv_list(work_dir):
+            model_id = model.get("id", "")
+            name = model.get("name", "?")
+            packages.append({
+                "package_id": f"model:{model_id}",
+                "package_type": "model",
+                "target_kind": "character",
+                "target_id": model_id,
+                "name": f"3D模型: {name}",
+                "description": f"3D模型: {name}",
+            })
+
+        # Voices (per character)
+        for char_id in _vc_chars(work_dir):
+            voices = _vc_list(work_dir, char_id)
+            for voice in voices:
+                vid = voice.get("id", "")
+                vname = voice.get("name", "?")
+                char = _ce_get(work_dir, char_id) or {}
+                cname = char.get("display_name") or char.get("name", char_id)
+                packages.append({
+                    "package_id": f"voice:{vid}",
+                    "package_type": "voice",
+                    "target_kind": "character",
+                    "target_id": char_id,
+                    "name": f"{cname} 的声音: {vname}",
+                    "description": f"声音样本: {vname} ({voice.get('engine', '')})",
+                })
 
         return packages
 
@@ -831,6 +928,272 @@ class DevKitApi:
             raise DevKitError(400, "声音 ID 不能为空", code="missing_voice_id")
         ok = _vc_delete(self._work_dir(), voice_id)
         return {"deleted": ok}
+
+    # --- voice generation (TTS + clone) ---------------------------------
+
+    @_serialize_call
+    def generate_voice_from_text(
+        self,
+        character_id: Any = None,
+        name: Any = None,
+        text: Any = None,
+        engine: Any = None,
+        params: Any = None,
+    ) -> dict[str, Any]:
+        if not isinstance(character_id, str) or not character_id:
+            raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
+        if not isinstance(name, str) or not name:
+            raise DevKitError(400, "声音名称不能为空", code="missing_name")
+        if not isinstance(text, str) or not text.strip():
+            raise DevKitError(400, "文本内容不能为空", code="empty_text")
+        engine_str = engine if isinstance(engine, str) else "melo-tts"
+        params_dict = params if isinstance(params, dict) else None
+        return _vc_generate_text(
+            self._work_dir(), character_id, name, text,
+            engine=engine_str, params=params_dict,
+        )
+
+    @_serialize_call
+    def clone_voice_from_file(
+        self,
+        character_id: Any = None,
+        name: Any = None,
+        source_path: Any = None,
+        engine: Any = None,
+        params: Any = None,
+    ) -> dict[str, Any]:
+        if not isinstance(character_id, str) or not character_id:
+            raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
+        if not isinstance(name, str) or not name:
+            raise DevKitError(400, "声音名称不能为空", code="missing_name")
+        if not isinstance(source_path, str) or not source_path:
+            raise DevKitError(400, "音频文件路径不能为空", code="missing_source_path")
+        engine_str = engine if isinstance(engine, str) else "cosyvoice"
+        params_dict = params if isinstance(params, dict) else None
+        return _vc_clone_file(
+            self._work_dir(), character_id, name, source_path,
+            engine=engine_str, params=params_dict,
+        )
+
+    @_serialize_call
+    def export_voice(self, voice_id: Any) -> dict[str, Any]:
+        if not isinstance(voice_id, str) or not voice_id:
+            raise DevKitError(400, "声音 ID 不能为空", code="missing_voice_id")
+        return _vc_export(self._work_dir(), voice_id)
+
+    # --- model export + generation --------------------------------------
+
+    @_serialize_call
+    def export_model(self, model_id: Any) -> dict[str, Any]:
+        if not isinstance(model_id, str) or not model_id:
+            raise DevKitError(400, "模型 ID 不能为空", code="missing_model_id")
+        return _mv_export(self._work_dir(), model_id)
+
+    @_serialize_call
+    def generate_model(
+        self,
+        description: Any = None,
+        name: Any = None,
+    ) -> dict[str, Any]:
+        if not isinstance(description, str) or not description.strip():
+            raise DevKitError(400, "描述文本不能为空", code="empty_description")
+        name_str = name if isinstance(name, str) else ""
+        return _mv_generate(self._work_dir(), description, name=name_str)
+
+    # --- plot editor ----------------------------------------------------
+
+    @_serialize_call
+    def list_plots(self) -> list[dict[str, Any]]:
+        return _pe_list(self._work_dir())
+
+    @_serialize_call
+    def get_plot(self, plot_id: Any) -> dict[str, Any] | None:
+        if not isinstance(plot_id, str) or not plot_id:
+            raise DevKitError(400, "剧情 ID 不能为空", code="missing_plot_id")
+        return _pe_get(self._work_dir(), plot_id)
+
+    @_serialize_call
+    def save_plot(self, data: Any) -> dict[str, Any]:
+        if not isinstance(data, dict):
+            raise DevKitError(400, "数据格式错误", code="bad_data")
+        return _pe_save(self._work_dir(), data)
+
+    @_serialize_call
+    def delete_plot(self, plot_id: Any) -> dict[str, Any]:
+        if not isinstance(plot_id, str) or not plot_id:
+            raise DevKitError(400, "剧情 ID 不能为空", code="missing_plot_id")
+        ok = _pe_delete(self._work_dir(), plot_id)
+        return {"deleted": ok}
+
+    @_serialize_call
+    def export_plot(self, plot_id: Any) -> dict[str, Any]:
+        if not isinstance(plot_id, str) or not plot_id:
+            raise DevKitError(400, "剧情 ID 不能为空", code="missing_plot_id")
+        return _pe_export(self._work_dir(), plot_id)
+
+    @_serialize_call
+    def get_plot_nodes(self, plot_id: Any) -> list[dict[str, Any]]:
+        if not isinstance(plot_id, str) or not plot_id:
+            raise DevKitError(400, "剧情 ID 不能为空", code="missing_plot_id")
+        return _pe_nodes(self._work_dir(), plot_id)
+
+    @_serialize_call
+    def save_plot_node(self, data: Any) -> dict[str, Any]:
+        if not isinstance(data, dict):
+            raise DevKitError(400, "数据格式错误", code="bad_data")
+        return _pe_node_save(self._work_dir(), data)
+
+    @_serialize_call
+    def delete_plot_node(self, node_id: Any) -> dict[str, Any]:
+        if not isinstance(node_id, str) or not node_id:
+            raise DevKitError(400, "节点 ID 不能为空", code="missing_node_id")
+        ok = _pe_node_delete(self._work_dir(), node_id)
+        return {"deleted": ok}
+
+    @_serialize_call
+    def get_plot_edges(self, plot_id: Any) -> list[dict[str, Any]]:
+        if not isinstance(plot_id, str) or not plot_id:
+            raise DevKitError(400, "剧情 ID 不能为空", code="missing_plot_id")
+        return _pe_edges(self._work_dir(), plot_id)
+
+    @_serialize_call
+    def save_plot_edge(self, data: Any) -> dict[str, Any]:
+        if not isinstance(data, dict):
+            raise DevKitError(400, "数据格式错误", code="bad_data")
+        return _pe_edge_save(self._work_dir(), data)
+
+    @_serialize_call
+    def delete_plot_edge(self, edge_id: Any) -> dict[str, Any]:
+        if not isinstance(edge_id, str) or not edge_id:
+            raise DevKitError(400, "边 ID 不能为空", code="missing_edge_id")
+        ok = _pe_edge_delete(self._work_dir(), edge_id)
+        return {"deleted": ok}
+
+    # --- dialog editor --------------------------------------------------
+
+    @_serialize_call
+    def list_dialog_characters(self) -> list[str]:
+        return _de_chars(self._work_dir())
+
+    @_serialize_call
+    def list_dialogs(self, character_id: Any) -> list[dict[str, Any]]:
+        if not isinstance(character_id, str) or not character_id:
+            raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
+        return _de_list(self._work_dir(), character_id)
+
+    @_serialize_call
+    def get_dialog(self, dialog_id: Any) -> dict[str, Any] | None:
+        if not isinstance(dialog_id, str) or not dialog_id:
+            raise DevKitError(400, "对话 ID 不能为空", code="missing_dialog_id")
+        return _de_get(self._work_dir(), dialog_id)
+
+    @_serialize_call
+    def save_dialog(self, data: Any) -> dict[str, Any]:
+        if not isinstance(data, dict):
+            raise DevKitError(400, "数据格式错误", code="bad_data")
+        return _de_save(self._work_dir(), data)
+
+    @_serialize_call
+    def delete_dialog(self, dialog_id: Any) -> dict[str, Any]:
+        if not isinstance(dialog_id, str) or not dialog_id:
+            raise DevKitError(400, "对话 ID 不能为空", code="missing_dialog_id")
+        ok = _de_delete(self._work_dir(), dialog_id)
+        return {"deleted": ok}
+
+    @_serialize_call
+    def check_dialog_minimum(self, character_id: Any) -> dict[str, Any]:
+        if not isinstance(character_id, str) or not character_id:
+            raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
+        ok, msg, count = _de_minimum(self._work_dir(), character_id)
+        return {"ok": ok, "message": msg, "dialog_count": count}
+
+    @_serialize_call
+    def export_dialogs(self, character_id: Any) -> dict[str, Any]:
+        if not isinstance(character_id, str) or not character_id:
+            raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
+        return _de_export(self._work_dir(), character_id)
+
+    # --- motion editor --------------------------------------------------
+
+    @_serialize_call
+    def list_motion_characters(self) -> list[str]:
+        return _moe_chars(self._work_dir())
+
+    @_serialize_call
+    def list_motions(self, character_id: Any) -> list[dict[str, Any]]:
+        if not isinstance(character_id, str) or not character_id:
+            raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
+        return _moe_list(self._work_dir(), character_id)
+
+    @_serialize_call
+    def get_motion(self, motion_id: Any) -> dict[str, Any] | None:
+        if not isinstance(motion_id, str) or not motion_id:
+            raise DevKitError(400, "动作 ID 不能为空", code="missing_motion_id")
+        return _moe_get(self._work_dir(), motion_id)
+
+    @_serialize_call
+    def save_motion(self, data: Any) -> dict[str, Any]:
+        if not isinstance(data, dict):
+            raise DevKitError(400, "数据格式错误", code="bad_data")
+        return _moe_save(self._work_dir(), data)
+
+    @_serialize_call
+    def delete_motion(self, motion_id: Any) -> dict[str, Any]:
+        if not isinstance(motion_id, str) or not motion_id:
+            raise DevKitError(400, "动作 ID 不能为空", code="missing_motion_id")
+        ok = _moe_delete(self._work_dir(), motion_id)
+        return {"deleted": ok}
+
+    @_serialize_call
+    def import_motion_file(self, character_id: Any, file_path: Any) -> dict[str, Any]:
+        if not isinstance(character_id, str) or not character_id:
+            raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
+        if not isinstance(file_path, str) or not file_path:
+            raise DevKitError(400, "文件路径不能为空", code="missing_file_path")
+        return _moe_import(self._work_dir(), character_id, file_path)
+
+    @_serialize_call
+    def export_motions(self, character_id: Any) -> dict[str, Any]:
+        if not isinstance(character_id, str) or not character_id:
+            raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
+        return _moe_export(self._work_dir(), character_id)
+
+    # --- AI assistant ---------------------------------------------------
+
+    @_serialize_call
+    def log_assist_event(self, data: Any) -> dict[str, Any]:
+        if not isinstance(data, dict):
+            raise DevKitError(400, "数据格式错误", code="bad_data")
+        return _aa_log(self._work_dir(), data)
+
+    @_serialize_call
+    def list_assist_log(self, limit: Any = 50, offset: Any = 0) -> list[dict[str, Any]]:
+        try:
+            n = int(limit) if limit is not None else 50
+            o = int(offset) if offset is not None else 0
+        except (TypeError, ValueError) as exc:
+            raise DevKitError(400, "参数格式错误", code="bad_params") from exc
+        return _aa_list(self._work_dir(), limit=n, offset=o)
+
+    @_serialize_call
+    def get_assist_stats(self) -> dict[str, Any]:
+        return _aa_stats(self._work_dir())
+
+    @_serialize_call
+    def get_ai_ratio(self) -> dict[str, Any]:
+        return _aa_ratio(self._work_dir())
+
+    @_serialize_call
+    def check_ai_threshold(self, threshold: Any = None) -> dict[str, Any]:
+        t = float(threshold) if threshold is not None else None
+        ok, current, limit = _aa_threshold(self._work_dir(), threshold=t)
+        return {"ok": ok, "current_ratio": current, "threshold": limit}
+
+    @_serialize_call
+    def auto_suggest(self, context: Any) -> dict[str, Any]:
+        if not isinstance(context, str) or not context.strip():
+            raise DevKitError(400, "上下文不能为空", code="empty_context")
+        return _aa_suggest(self._work_dir(), context)
 
     # --- helpers not exposed via js_api --------------------------------
 

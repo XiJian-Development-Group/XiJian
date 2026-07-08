@@ -1008,4 +1008,8 @@ __all__ = [
     "world_editor",
     "model_viewer",
     "voice_cloner",
+    "plot_editor",
+    "dialog_editor",
+    "motion_editor",
+    "ai_assistant",
 ]

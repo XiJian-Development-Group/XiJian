@@ -33,6 +33,10 @@
       <button class="tab-nav__btn" data-tab="world">世界观</button>
       <button class="tab-nav__btn" data-tab="model">3D 预览</button>
       <button class="tab-nav__btn" data-tab="voice">声音克隆</button>
+      <button class="tab-nav__btn" data-tab="plot">剧情设计</button>
+      <button class="tab-nav__btn" data-tab="dialog">对话样本</button>
+      <button class="tab-nav__btn" data-tab="motion">动作编辑</button>
+      <button class="tab-nav__btn" data-tab="ai">AI 辅助</button>
       <button class="tab-nav__btn" id="help-btn" type="button" style="margin-left:auto;color:var(--accent)">帮助</button>
     </nav>
 
@@ -409,7 +413,7 @@
           <section class="card">
             <header class="card__header">
               <h2>已注册的模型</h2>
-              <p class="card__hint">导入 VRM / GLB / GLTF 文件进行预览</p>
+              <p class="card__hint">导入 VRM / GLB / GLTF 文件进行预览，或使用 AI 生成模型</p>
             </header>
             <div class="card__body">
               <div class="row row--gap">
@@ -417,6 +421,22 @@
                 <button id="model-refresh-btn" class="btn btn--ghost" type="button">刷新</button>
               </div>
               <ul id="model-list" class="item-list"></ul>
+              <details class="field-group">
+                <summary class="field-group__summary">AI 生成模型（文本描述）</summary>
+                <div class="field-group__body">
+                  <label class="field">
+                    <span class="field__label">描述文本</span>
+                    <textarea id="model-gen-desc" class="field__input" rows="3" placeholder="描述你要的模型，例如：一个穿着和服的少女，面带微笑……"></textarea>
+                  </label>
+                  <label class="field">
+                    <span class="field__label">模型名称（可选）</span>
+                    <input id="model-gen-name" class="field__input" type="text" placeholder="例如：和服少女" />
+                  </label>
+                  <div class="row row--end">
+                    <button id="model-gen-btn" class="btn btn--secondary" type="button">AI 生成</button>
+                  </div>
+                </div>
+              </details>
             </div>
           </section>
         </div>
@@ -436,7 +456,10 @@
                   <dt>格式</dt><dd id="model-info-format">—</dd>
                   <dt>大小</dt><dd id="model-info-size">—</dd>
                 </dl>
-                <button id="model-unregister-btn" class="btn btn--ghost btn--danger-ghost" type="button">移除</button>
+                <div class="row row--end">
+                  <button id="model-export-btn" class="btn btn--secondary" type="button">导出为提交</button>
+                  <button id="model-unregister-btn" class="btn btn--ghost btn--danger-ghost" type="button">移除</button>
+                </div>
               </div>
               <p id="model-status" class="status status--idle" role="status"></p>
             </div>
@@ -462,6 +485,53 @@
                 <button id="voice-new-btn" class="btn btn--primary" type="button">添加声音样本</button>
               </div>
               <ul id="voice-list" class="item-list"></ul>
+
+              <!-- TTS 文本生成 -->
+              <details class="field-group">
+                <summary class="field-group__summary">文本转语音 (TTS) 生成</summary>
+                <div class="field-group__body">
+                  <label class="field">
+                    <span class="field__label">角色 ID</span>
+                    <input id="voice-tts-char" class="field__input" type="text" placeholder="char_yuki" />
+                  </label>
+                  <label class="field">
+                    <span class="field__label">声音名称</span>
+                    <input id="voice-tts-name" class="field__input" type="text" placeholder="例如：tts-default" />
+                  </label>
+                  <label class="field">
+                    <span class="field__label">生成文本</span>
+                    <textarea id="voice-tts-text" class="field__input" rows="3" placeholder="输入你想要角色说出的文本……"></textarea>
+                  </label>
+                  <div class="row row--end">
+                    <button id="voice-tts-btn" class="btn btn--secondary" type="button">生成语音</button>
+                  </div>
+                </div>
+              </details>
+
+              <!-- 从文件克隆 -->
+              <details class="field-group">
+                <summary class="field-group__summary">从文件克隆声音</summary>
+                <div class="field-group__body">
+                  <label class="field">
+                    <span class="field__label">角色 ID</span>
+                    <input id="voice-clone-char" class="field__input" type="text" placeholder="char_yuki" />
+                  </label>
+                  <label class="field">
+                    <span class="field__label">声音名称</span>
+                    <input id="voice-clone-name" class="field__input" type="text" placeholder="例如：clone-voice-1" />
+                  </label>
+                  <label class="field">
+                    <span class="field__label">源音频文件</span>
+                    <div class="row row--gap">
+                      <input id="voice-clone-path" class="field__input" type="text" placeholder="选择音频文件" />
+                      <button id="voice-clone-pick-btn" class="btn btn--secondary" type="button">选择文件</button>
+                    </div>
+                  </label>
+                  <div class="row row--end">
+                    <button id="voice-clone-btn" class="btn btn--secondary" type="button">克隆声音</button>
+                  </div>
+                </div>
+              </details>
             </div>
           </section>
         </div>
@@ -503,10 +573,349 @@
                 <input type="hidden" id="voice-recorded-b64" value="" />
               </label>
               <div class="row row--end row--gap">
-                <button id="voice-delete-btn" class="btn btn--ghost btn--danger-ghost" type="button" disabled>删除</button>
+                <div class="row">
+                  <button id="voice-export-btn" class="btn btn--secondary" type="button" disabled>导出为提交</button>
+                  <button id="voice-delete-btn" class="btn btn--ghost btn--danger-ghost" type="button" disabled>删除</button>
+                </div>
                 <button id="voice-save-btn" class="btn btn--primary" type="button">保存</button>
               </div>
               <p id="voice-status" class="status status--idle" role="status"></p>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <!-- ======== Tab: 剧情设计 ======== -->
+      <section class="tab-panel" id="tab-plot">
+        <div class="tab-panel__content">
+          <section class="card">
+            <header class="card__header">
+              <h2>剧情列表</h2>
+              <p class="card__hint">管理剧情大纲，用节点和连线设计故事流程</p>
+            </header>
+            <div class="card__body">
+              <div class="row row--gap">
+                <button id="plot-refresh-btn" class="btn btn--ghost" type="button">刷新</button>
+                <button id="plot-new-btn" class="btn btn--primary" type="button">新建剧情</button>
+              </div>
+              <ul id="plot-list" class="item-list"></ul>
+            </div>
+          </section>
+        </div>
+        <div class="tab-panel__editor">
+          <section class="card">
+            <header class="card__header">
+              <h2>编辑剧情</h2>
+              <p class="card__hint" id="plot-editor-hint">新建或选择一个剧情进行编辑</p>
+            </header>
+            <div class="card__body">
+              <input type="hidden" id="plot-editing-id" value="" />
+              <label class="field">
+                <span class="field__label">剧情名称</span>
+                <input id="plot-name" class="field__input" type="text" placeholder="例如：第一章·相遇" />
+              </label>
+              <label class="field">
+                <span class="field__label">剧情描述</span>
+                <textarea id="plot-description" class="field__input" rows="4" placeholder="剧情大纲概要……"></textarea>
+              </label>
+
+              <!-- 节点列表 -->
+              <details class="field-group" open>
+                <summary class="field-group__summary">故事节点</summary>
+                <div class="field-group__body">
+                  <div class="row row--gap">
+                    <button id="plot-node-new-btn" class="btn btn--secondary" type="button">添加节点</button>
+                    <button id="plot-node-refresh-btn" class="btn btn--ghost" type="button">刷新</button>
+                  </div>
+                  <ul id="plot-node-list" class="item-list" style="max-height:180px"></ul>
+                  <div class="field">
+                    <span class="field__label">节点 ID</span>
+                    <input id="plot-node-id" class="field__input" type="text" placeholder="自动生成" readonly />
+                  </div>
+                  <div class="grid grid--2">
+                    <label class="field">
+                      <span class="field__label">节点名称</span>
+                      <input id="plot-node-name" class="field__input" type="text" placeholder="例如：开场对话" />
+                    </label>
+                    <label class="field">
+                      <span class="field__label">类型</span>
+                      <select id="plot-node-type" class="field__input">
+                        <option value="dialogue">对话</option>
+                        <option value="narration">叙述</option>
+                        <option value="choice">选择</option>
+                        <option value="event">事件</option>
+                        <option value="branch">分支</option>
+                      </select>
+                    </label>
+                  </div>
+                  <label class="field">
+                    <span class="field__label">节点内容</span>
+                    <textarea id="plot-node-content" class="field__input field__input--code" rows="3" placeholder="节点描述或对话内容……"></textarea>
+                  </label>
+                  <div class="row row--end">
+                    <button id="plot-node-save-btn" class="btn btn--primary" type="button">保存节点</button>
+                    <button id="plot-node-delete-btn" class="btn btn--ghost btn--danger-ghost" type="button">删除节点</button>
+                  </div>
+                </div>
+              </details>
+
+              <!-- 连线列表 -->
+              <details class="field-group" open>
+                <summary class="field-group__summary">连线</summary>
+                <div class="field-group__body">
+                  <div class="row row--gap">
+                    <button id="plot-edge-new-btn" class="btn btn--secondary" type="button">添加连线</button>
+                    <button id="plot-edge-refresh-btn" class="btn btn--ghost" type="button">刷新</button>
+                  </div>
+                  <ul id="plot-edge-list" class="item-list" style="max-height:140px"></ul>
+                  <div class="grid grid--2">
+                    <label class="field">
+                      <span class="field__label">来源节点</span>
+                      <input id="plot-edge-source" class="field__input" type="text" placeholder="节点 ID" />
+                    </label>
+                    <label class="field">
+                      <span class="field__label">目标节点</span>
+                      <input id="plot-edge-target" class="field__input" type="text" placeholder="节点 ID" />
+                    </label>
+                  </div>
+                  <label class="field">
+                    <span class="field__label">连线标签</span>
+                    <input id="plot-edge-label" class="field__input" type="text" placeholder="例如：选择 A →" />
+                  </label>
+                  <div class="row row--end">
+                    <button id="plot-edge-save-btn" class="btn btn--primary" type="button">保存连线</button>
+                    <button id="plot-edge-delete-btn" class="btn btn--ghost btn--danger-ghost" type="button">删除连线</button>
+                  </div>
+                </div>
+              </details>
+
+              <div class="row row--end row--gap">
+                <div class="row">
+                  <button id="plot-export-btn" class="btn btn--secondary" type="button" disabled>导出为提交</button>
+                  <button id="plot-delete-btn" class="btn btn--ghost btn--danger-ghost" type="button" disabled>删除</button>
+                </div>
+                <button id="plot-save-btn" class="btn btn--primary" type="button">保存剧情</button>
+              </div>
+              <p id="plot-status" class="status status--idle" role="status"></p>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <!-- ======== Tab: 对话样本 ======== -->
+      <section class="tab-panel" id="tab-dialog">
+        <div class="tab-panel__content">
+          <section class="card">
+            <header class="card__header">
+              <h2>对话样本</h2>
+              <p class="card__hint">管理角色的对话样本，确保角色有足够的对话数据</p>
+            </header>
+            <div class="card__body">
+              <label class="field">
+                <span class="field__label">角色 ID</span>
+                <input id="dialog-char-id" class="field__input" type="text" placeholder="例如：char_yuki" />
+              </label>
+              <div class="row row--gap">
+                <button id="dialog-refresh-btn" class="btn btn--ghost" type="button">刷新</button>
+                <button id="dialog-new-btn" class="btn btn--primary" type="button">添加对话</button>
+              </div>
+              <button id="dialog-check-min-btn" class="btn btn--secondary" type="button">检查最低要求</button>
+              <p id="dialog-check-result" class="status status--idle" role="status"></p>
+              <ul id="dialog-list" class="item-list"></ul>
+            </div>
+          </section>
+        </div>
+        <div class="tab-panel__editor">
+          <section class="card">
+            <header class="card__header">
+              <h2>编辑对话</h2>
+              <p class="card__hint" id="dialog-editor-hint">添加或编辑对话样本</p>
+            </header>
+            <div class="card__body">
+              <input type="hidden" id="dialog-editing-id" value="" />
+              <div class="grid grid--2">
+                <label class="field">
+                  <span class="field__label">角色 ID</span>
+                  <input id="dialog-char" class="field__input" type="text" placeholder="char_yuki" />
+                </label>
+                <label class="field">
+                  <span class="field__label">场景</span>
+                  <input id="dialog-scene" class="field__input" type="text" placeholder="例如：greeting, farewell, combat" />
+                </label>
+              </div>
+              <label class="field">
+                <span class="field__label">用户消息</span>
+                <textarea id="dialog-user-msg" class="field__input" rows="3" placeholder="用户的输入……"></textarea>
+              </label>
+              <label class="field">
+                <span class="field__label">角色回复</span>
+                <textarea id="dialog-char-msg" class="field__input field__input--code" rows="5" placeholder="角色的回复内容与语气……"></textarea>
+              </label>
+              <label class="field">
+                <span class="field__label">情感标签</span>
+                <input id="dialog-emotion" class="field__input" type="text" placeholder="例如：neutral, happy, sad" />
+              </label>
+              <div class="row row--end row--gap">
+                <div class="row">
+                  <button id="dialog-export-btn" class="btn btn--secondary" type="button" disabled>导出为提交</button>
+                  <button id="dialog-delete-btn" class="btn btn--ghost btn--danger-ghost" type="button" disabled>删除</button>
+                </div>
+                <button id="dialog-save-btn" class="btn btn--primary" type="button">保存</button>
+              </div>
+              <p id="dialog-status" class="status status--idle" role="status"></p>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <!-- ======== Tab: 动作编辑 ======== -->
+      <section class="tab-panel" id="tab-motion">
+        <div class="tab-panel__content">
+          <section class="card">
+            <header class="card__header">
+              <h2>动作列表</h2>
+              <p class="card__hint">管理角色的动作/动画数据</p>
+            </header>
+            <div class="card__body">
+              <label class="field">
+                <span class="field__label">角色 ID</span>
+                <input id="motion-char-id" class="field__input" type="text" placeholder="例如：char_yuki" />
+              </label>
+              <div class="row row--gap">
+                <button id="motion-refresh-btn" class="btn btn--ghost" type="button">刷新</button>
+                <button id="motion-new-btn" class="btn btn--primary" type="button">新建动作</button>
+              </div>
+              <ul id="motion-list" class="item-list"></ul>
+            </div>
+          </section>
+        </div>
+        <div class="tab-panel__editor">
+          <section class="card">
+            <header class="card__header">
+              <h2>编辑动作</h2>
+              <p class="card__hint" id="motion-editor-hint">新建或选择一个动作进行编辑</p>
+            </header>
+            <div class="card__body">
+              <input type="hidden" id="motion-editing-id" value="" />
+              <div class="grid grid--2">
+                <label class="field">
+                  <span class="field__label">角色 ID</span>
+                  <input id="motion-char" class="field__input" type="text" placeholder="char_yuki" />
+                </label>
+                <label class="field">
+                  <span class="field__label">动作名称</span>
+                  <input id="motion-name" class="field__input" type="text" placeholder="例如：idle, walking, waving" />
+                </label>
+              </div>
+              <label class="field">
+                <span class="field__label">动作描述</span>
+                <textarea id="motion-description" class="field__input" rows="3" placeholder="描述这个动作的具体表现……"></textarea>
+              </label>
+              <label class="field">
+                <span class="field__label">动作参数（JSON）</span>
+                <textarea id="motion-params" class="field__input field__input--code" rows="4" placeholder='{"duration": 2.0, "loop": true, "blend": 0.3}'></textarea>
+              </label>
+              <label class="field">
+                <span class="field__label">文件路径（可选）</span>
+                <div class="row row--gap">
+                  <input id="motion-file-path" class="field__input" type="text" placeholder="选择动作文件（BVH/FBX/GLB）" />
+                  <button id="motion-import-btn" class="btn btn--secondary" type="button">导入</button>
+                </div>
+              </label>
+              <div class="row row--end row--gap">
+                <div class="row">
+                  <button id="motion-export-btn" class="btn btn--secondary" type="button" disabled>导出为提交</button>
+                  <button id="motion-delete-btn" class="btn btn--ghost btn--danger-ghost" type="button" disabled>删除</button>
+                </div>
+                <button id="motion-save-btn" class="btn btn--primary" type="button">保存</button>
+              </div>
+              <p id="motion-status" class="status status--idle" role="status"></p>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <!-- ======== Tab: AI 辅助 ======== -->
+      <section class="tab-panel" id="tab-ai">
+        <div class="tab-panel__content">
+          <section class="card">
+            <header class="card__header">
+              <h2>AI 辅助记录</h2>
+              <p class="card__hint">追踪 AI 辅助创作事件与使用率</p>
+            </header>
+            <div class="card__body">
+              <div class="grid grid--2">
+                <label class="field">
+                  <span class="field__label">AI 使用率阈值</span>
+                  <input id="ai-threshold-input" class="field__input" type="number" min="0" max="1" step="0.05" value="0.5" />
+                </label>
+                <div class="field">
+                  <span class="field__label">&nbsp;</span>
+                  <button id="ai-check-threshold-btn" class="btn btn--secondary" type="button">检查阈值</button>
+                </div>
+              </div>
+              <p id="ai-threshold-result" class="status status--idle" role="status"></p>
+              <div class="row row--gap">
+                <button id="ai-refresh-btn" class="btn btn--ghost" type="button">刷新</button>
+                <button id="ai-new-btn" class="btn btn--primary" type="button">记录事件</button>
+              </div>
+              <ul id="ai-log-list" class="item-list" style="max-height:300px"></ul>
+            </div>
+          </section>
+        </div>
+        <div class="tab-panel__editor">
+          <section class="card">
+            <header class="card__header">
+              <h2>AI 事件 / 建议</h2>
+              <p class="card__hint" id="ai-editor-hint">记录 AI 使用事件或获取智能建议</p>
+            </header>
+            <div class="card__body">
+              <div class="grid grid--2">
+                <label class="field">
+                  <span class="field__label">事件类型</span>
+                  <select id="ai-event-type" class="field__input">
+                    <option value="generation">AI 生成</option>
+                    <option value="suggestion">AI 建议</option>
+                    <option value="editing">AI 辅助编辑</option>
+                    <option value="translation">AI 翻译</option>
+                    <option value="analysis">AI 分析</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span class="field__label">目标模块</span>
+                  <input id="ai-target-module" class="field__input" type="text" placeholder="例如：voice, dialog, plot" />
+                </label>
+              </div>
+              <label class="field">
+                <span class="field__label">事件描述</span>
+                <textarea id="ai-event-desc" class="field__input" rows="3" placeholder="描述 AI 协助的具体内容……"></textarea>
+              </label>
+              <div class="row row--end">
+                <button id="ai-log-btn" class="btn btn--primary" type="button">记录事件</button>
+              </div>
+              <hr style="border-color:var(--border);margin:8px 0" />
+              <label class="field">
+                <span class="field__label">智能建议</span>
+                <textarea id="ai-suggest-context" class="field__input" rows="3" placeholder="输入上下文，获取 AI 建议……"></textarea>
+              </label>
+              <div class="row row--end">
+                <button id="ai-suggest-btn" class="btn btn--secondary" type="button">获取建议</button>
+              </div>
+              <p id="ai-suggest-result" class="status status--idle" role="status"></p>
+              <p id="ai-status" class="status status--idle" role="status"></p>
+
+              <!-- Stats panel -->
+              <details class="field-group" open>
+                <summary class="field-group__summary">统计数据</summary>
+                <div class="field-group__body">
+                  <div class="kv">
+                    <dt>总事件数</dt><dd id="ai-stat-total">—</dd>
+                    <dt>AI 使用率</dt><dd id="ai-stat-ratio">—</dd>
+                    <dt>最近事件</dt><dd id="ai-stat-latest">—</dd>
+                  </div>
+                  <button id="ai-refresh-stats-btn" class="btn btn--ghost" type="button">刷新统计</button>
+                </div>
+              </details>
             </div>
           </section>
         </div>
@@ -531,7 +940,10 @@
             <button class="help-nav__btn" data-help-tab="memory">记忆条目</button>
             <button class="help-nav__btn" data-help-tab="world">世界观</button>
             <button class="help-nav__btn" data-help-tab="voice">声音克隆</button>
-            <button class="help-nav__btn" data-help-tab="submit">创作提交</button>
+            <button class="help-nav__btn" data-help-tab="plot">剧情设计</button>
+            <button class="help-nav__btn" data-help-tab="dialog">对话样本</button>
+            <button class="help-nav__btn" data-help-tab="motion">动作编辑</button>
+            <button class="help-nav__btn" data-help-tab="ai">AI 辅助</button>
           </nav>
           <div class="help-content" id="help-content-general">
             <h3>开发者工具使用概述</h3>
@@ -714,9 +1126,77 @@
             <ul>
               <li>使用高质量的参考音频（采样率 ≥ 44.1kHz，无杂音）。</li>
               <li>参考音频应包含角色的典型说话方式。</li>
-              <li>建议长度为 5–30 秒，太短的样本可能不足以捕捉声音特征。</li>
               <li>不同引擎对样本质量的要求不同，建议查阅各引擎的文档。</li>
             </ul>
+          </div>
+          <div class="help-content" id="help-content-plot" hidden>
+            <h3>剧情设计</h3>
+            <p>设计故事的剧情大纲，使用节点（Nodes）和连线（Edges）构建故事流程。剧情设计采用可视化图结构，每个节点代表一个故事片段，连线定义节点之间的流转关系。</p>
+            <h4>节点类型</h4>
+            <dl>
+              <dt>对话</dt><dd>角色之间的对话片段。</dd>
+              <dt>叙述</dt><dd>旁白或场景描述。</dd>
+              <dt>选择</dt><dd>玩家/用户的选择点，不同选择走向不同分支。</dd>
+              <dt>事件</dt><dd>触发特定事件或剧情转折。</dd>
+              <dt>分支</dt><dd>条件分支节点，根据条件走向不同路径。</dd>
+            </dl>
+            <h4>连线和标签</h4>
+            <p>连线定义节点之间的流转关系。每一条连线从「来源节点」指向「目标节点」。可以为连线添加标签（例如「选择 A」「条件满足」），便于理解分支逻辑。</p>
+            <h4>导出提交</h4>
+            <p>剧情会整体导出为 JSON 格式，包含剧情元数据、所有节点和连线。在「创作提交」标签页中选择勾选即可提交。</p>
+          </div>
+          <div class="help-content" id="help-content-dialog" hidden>
+            <h3>对话样本</h3>
+            <p>为角色编写对话样本数据，用于训练或配置角色对话模型。每个角色应有足够数量和场景覆盖的对话样本。</p>
+            <h4>字段说明</h4>
+            <dl>
+              <dt>角色 ID</dt><dd>对话所属的角色 ID。</dd>
+              <dt>场景</dt><dd>对话发生的场景分类，例如 greeting（问候）、farewell（告别）、combat（战斗）、daily（日常）等。良好的场景覆盖能提高角色对话的泛化能力。</dd>
+              <dt>用户消息</dt><dd>用户的输入内容。这是对话的触发信息。</dd>
+              <dt>角色回复</dt><dd>角色在该场景下应有的回复内容和语气。应体现角色的性格和语言风格。</dd>
+              <dt>情感标签</dt><dd>该回复的情感状态，例如 neutral（中立）、happy（开心）、sad（悲伤）、angry（生气）等。</dd>
+            </dl>
+            <h4>最低要求检查</h4>
+            <p>点击「检查最低要求」按钮可以检查当前角色的对话样本是否满足最低提交标准（通常需要至少 10 条对话样本，覆盖 3 种以上场景）。不满足最低要求的角色无法打包提交。</p>
+            <h4>编写建议</h4>
+            <ul>
+              <li>覆盖多种常见对话场景（问候、告别、请求、拒绝、提问等）。</li>
+              <li>角色回复应符合角色人设中定义的语言风格和性格。</li>
+              <li>每条对话样本都应包含合理的用户消息和角色回复。</li>
+            </ul>
+          </div>
+          <div class="help-content" id="help-content-motion" hidden>
+            <h3>动作编辑</h3>
+            <p>管理角色的动作/动画数据。可以为角色定义各种动作（行走、挥手、闲置等），并关联动作文件（BVH、FBX、GLB）。</p>
+            <h4>字段说明</h4>
+            <dl>
+              <dt>角色 ID</dt><dd>动作所属的角色 ID。</dd>
+              <dt>动作名称</dt><dd>动作的标识名称，例如 idle（闲置）、walking（行走）、waving（挥手）。</dd>
+              <dt>动作描述</dt><dd>对动作的具体描述，说明动作的内容和触发时机。</dd>
+              <dt>动作参数（JSON）</dt><dd>可选的结构化参数，用于控制动作的行为。例如时长（duration）、是否循环（loop）、融合因子（blend）等。</dd>
+              <dt>文件路径</dt><dd>动作文件的本地路径。支持 BVH、FBX、GLB、GLTF 格式。可以通过「导入」按钮从本地选择文件。</dd>
+            </dl>
+            <h4>导入文件</h4>
+            <p>点击「导入」按钮可以选择本地的动作文件。导入后文件路径会自动填入，并注册到角色的动作列表中。</p>
+          </div>
+          <div class="help-content" id="help-content-ai" hidden>
+            <h3>AI 辅助</h3>
+            <p>追踪 AI 辅助创作事件、计算 AI 使用率，并获取智能建议。这个面板帮助开发者了解 AI 在创作中的参与程度。</p>
+            <h4>AI 事件记录</h4>
+            <p>每次使用 AI 辅助（如 AI 生成、AI 建议、AI 辅助编辑、AI 翻译、AI 分析）时，记录一条事件。事件类型包括：</p>
+            <ul>
+              <li><strong>AI 生成</strong> — AI 完整生成的内容（如 TTS 语音生成、AI 模型生成）。</li>
+              <li><strong>AI 建议</strong> — AI 提供建议，由人工确认后使用。</li>
+              <li><strong>AI 辅助编辑</strong> — AI 辅助修改或优化现有内容。</li>
+              <li><strong>AI 翻译</strong> — AI 翻译内容。</li>
+              <li><strong>AI 分析</strong> — AI 分析现有内容并提供反馈。</li>
+            </ul>
+            <h4>AI 使用率</h4>
+            <p>AI 使用率 = AI 生成事件数 / 总事件数。提交时可以设定 AI 协助占比（0–1），并在「AI 辅助」面板中检查是否超过设定的阈值。</p>
+            <h4>智能建议</h4>
+            <p>输入上下文文本，点击「获取建议」可以请求 AI 提供创作建议。建议内容依赖于当前已记录的事件和上下文。</p>
+            <h4>阈值检查</h4>
+            <p>设定 AI 使用率阈值后可以检查当前使用率是否超标。在创作提交时，平台可能会对 AI 使用率过高的内容进行额外审查。</p>
           </div>
           <div class="help-content" id="help-content-submit" hidden>
             <h3>创作提交</h3>
