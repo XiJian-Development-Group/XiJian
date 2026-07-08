@@ -199,6 +199,14 @@
                 </div>
                 <div class="row" style="margin-top:4px">
                   <button id="char-import-persona-btn" class="btn btn--secondary" type="button">从 .md 文件导入</button>
+                  <button id="char-persona-template-btn" class="btn btn--ghost" type="button">模板</button>
+                </div>
+                <div id="char-persona-template-picker" class="row row--gap" style="display:none;margin-top:4px">
+                  <select id="char-persona-template-select" class="field__input" style="flex:1">
+                    <option value="">— 选择模板 —</option>
+                  </select>
+                  <button id="char-persona-template-apply-btn" class="btn btn--primary" type="button">应用</button>
+                  <button id="char-persona-template-cancel-btn" class="btn btn--ghost" type="button">取消</button>
                 </div>
               </label>
 
@@ -272,6 +280,20 @@
                       </select>
                     </label>
                   </div>
+                </div>
+              </details>
+
+              <!-- 角色配置 JSON（C2.3） -->
+              <details class="field-group">
+                <summary class="field-group__summary">角色配置 JSON（C2.3 · schema 校验 + 自动填写）</summary>
+                <div class="field-group__body">
+                  <div class="row row--gap">
+                    <button id="char-config-validate-btn" class="btn btn--ghost" type="button">校验配置</button>
+                    <button id="char-config-autofill-btn" class="btn btn--ghost" type="button">自动填写</button>
+                    <span id="char-config-status" class="status status--idle"></span>
+                  </div>
+                  <textarea id="char-config-json" class="field__input field__input--code" rows="6"
+                    placeholder='{"speaking_speed": 1.0, "emotion_stability": 0.6}'></textarea>
                 </div>
               </details>
 
@@ -435,7 +457,15 @@
               </label>
               <div class="row row--gap">
                 <button id="world-doc-preview-btn" class="btn btn--ghost" type="button">预览 Markdown</button>
+                <button id="world-doc-template-btn" class="btn btn--ghost" type="button">模板</button>
                 <span id="world-doc-lint" class="status status--idle"></span>
+              </div>
+              <div id="world-doc-template-picker" class="row row--gap" style="display:none;margin-top:4px">
+                <select id="world-doc-template-select" class="field__input" style="flex:1">
+                  <option value="">— 选择模板 —</option>
+                </select>
+                <button id="world-doc-template-apply-btn" class="btn btn--primary" type="button">应用</button>
+                <button id="world-doc-template-cancel-btn" class="btn btn--ghost" type="button">取消</button>
               </div>
               <div id="world-doc-preview" class="md-preview" hidden></div>
 

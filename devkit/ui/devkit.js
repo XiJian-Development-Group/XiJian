@@ -360,6 +360,11 @@
     $("#char-mc-reserve").value = mc.reserve_tokens_for_reply ?? 2000;
     $("#char-mc-force-recall").value = mc.force_recall_on_history ? "true" : "false";
 
+    // Character config JSON (C2.3)
+    const cfg = char?.character_config || {};
+    const cfgStr = Object.keys(cfg).length > 0 ? JSON.stringify(cfg, null, 2) : "";
+    $("#char-config-json").value = cfgStr;
+
     $("#char-editor-hint").textContent = char
       ? `编辑：${char.display_name || char.name}`
       : "";
@@ -387,6 +392,7 @@
     $("#char-mc-max-ctx").value = 8000;
     $("#char-mc-reserve").value = 2000;
     $("#char-mc-force-recall").value = "true";
+    $("#char-config-json").value = "";
     $("#char-editor-hint").textContent = "";
     refreshCharButtons();
   };
@@ -421,6 +427,10 @@
         reserve_tokens_for_reply: parseInt($("#char-mc-reserve").value) || 2000,
         force_recall_on_history: $("#char-mc-force-recall").value === "true",
       },
+      character_config: (() => {
+        try { return JSON.parse($("#char-config-json").value.trim() || "{}"); }
+        catch { return {}; }
+      })(),
     };
     if (!data.name) { toast("请填写角色名称", "err"); return; }
     const resp = await callApi("save_character", data);
@@ -472,10 +482,67 @@
     if (!picked || picked.length === 0) return;
     const resp = await callApi("import_persona", _selectedCharId, picked);
     if (!resp.ok) { toast(`导入失败：${resp.message}`, "err"); return; }
-    $("#char-persona").value = resp.data.message;
-    toast("人设导入成功", "ok");
-    setStatus("#char-status", "人设已导入", "ok");
+    $("#char-persona").value = resp.data || "";
+    toast("人设文档已导入", "ok");
   };
+
+  const onCharPersonaTemplate = async () => {
+    const picker = $("#char-persona-template-picker");
+    if (picker.style.display !== "none") { picker.style.display = "none"; return; }
+    const resp = await callApi("get_persona_templates");
+    if (!resp.ok) { toast("获取模板列表失败", "err"); return; }
+    const select = $("#char-persona-template-select");
+    select.innerHTML = '<option value="">— 选择模板 —</option>';
+    for (const [name, _] of Object.entries(resp.data || {})) {
+      const opt = document.createElement("option");
+      opt.value = name;
+      opt.textContent = name;
+      select.appendChild(opt);
+    }
+    picker.style.display = "flex";
+  };
+
+  const onCharPersonaTemplateApply = () => {
+    const name = $("#char-persona-template-select").value;
+    if (!name) { toast("请选择一个模板", "err"); return; }
+    callApi("get_persona_templates").then(resp => {
+      if (resp.ok && resp.data && resp.data[name]) {
+        if ($("#char-persona").value.trim() && !confirm("当前人设文档内容将被覆盖，确定要继续吗？")) return;
+        $("#char-persona").value = resp.data[name];
+        $("#char-persona-template-picker").style.display = "none";
+        toast("模板已应用", "ok");
+      }
+    });
+  };
+
+  const onCharPersonaTemplateCancel = () => {
+    $("#char-persona-template-picker").style.display = "none";
+  };
+
+  const onCharConfigValidate = async () => {
+    let config;
+    try { config = JSON.parse($("#char-config-json").value.trim() || "{}"); }
+    catch { setStatus("#char-config-status", "JSON 格式错误", "err"); return; }
+    const resp = await callApi("validate_character_config", config);
+    if (!resp.ok) { setStatus("#char-config-status", "校验请求失败", "err"); return; }
+    const r = resp.data;
+    if (r.ok) { setStatus("#char-config-status", "配置通过校验", "ok"); }
+    else { setStatus("#char-config-status", (r.errors || []).join("；"), "err"); }
+  };
+
+  const onCharConfigAutofill = async () => {
+    const persona = $("#char-persona").value.trim();
+    if (!persona) { toast("请先填写人设文档", "err"); return; }
+    const resp = await callApi("auto_suggest", "角色配置：\n" + persona.slice(0, 500));
+    if (!resp.ok) { toast("自动填写失败", "err"); return; }
+    const suggestion = resp.data?.suggestion || "";
+    const existing = $("#char-config-json").value.trim();
+    const comment = "// AI 建议（请复核后使用）：\n";
+    $("#char-config-json").value = existing ? existing + "\n\n" + comment + suggestion : comment + suggestion;
+    toast("已添加 AI 建议（标记为 source='ai_suggested'）", "ok");
+  };
+
+  // ---- save/load the character config JSON ----
 
   // --------------------------------------------------------------
   // Character dropdown population
@@ -721,6 +788,39 @@
     const el = $("#world-doc-preview");
     el.hidden = !el.hidden ? true : false;
     if (!el.hidden) el.innerHTML = renderMarkdown(md);
+  };
+
+  const onWorldDocTemplate = async () => {
+    const picker = $("#world-doc-template-picker");
+    if (picker.style.display !== "none") { picker.style.display = "none"; return; }
+    const resp = await callApi("get_world_doc_templates");
+    if (!resp.ok) { toast("获取模板列表失败", "err"); return; }
+    const select = $("#world-doc-template-select");
+    select.innerHTML = '<option value="">— 选择模板 —</option>';
+    for (const [name, _] of Object.entries(resp.data || {})) {
+      const opt = document.createElement("option");
+      opt.value = name;
+      opt.textContent = name;
+      select.appendChild(opt);
+    }
+    picker.style.display = "flex";
+  };
+
+  const onWorldDocTemplateApply = () => {
+    const name = $("#world-doc-template-select").value;
+    if (!name) { toast("请选择一个模板", "err"); return; }
+    callApi("get_world_doc_templates").then(resp => {
+      if (resp.ok && resp.data && resp.data[name]) {
+        if ($("#world-doc").value.trim() && !confirm("当前文档内容将被覆盖，确定要继续吗？")) return;
+        $("#world-doc").value = resp.data[name];
+        $("#world-doc-template-picker").style.display = "none";
+        toast("模板已应用", "ok");
+      }
+    });
+  };
+
+  const onWorldDocTemplateCancel = () => {
+    $("#world-doc-template-picker").style.display = "none";
   };
 
   // ---- world custom events (C1.1) ----
@@ -1808,6 +1908,11 @@
     $("#char-delete-btn").addEventListener("click", onCharDelete);
     $("#char-export-btn").addEventListener("click", onCharExport);
     $("#char-import-persona-btn").addEventListener("click", onCharImportPersona);
+    $("#char-persona-template-btn").addEventListener("click", onCharPersonaTemplate);
+    $("#char-persona-template-apply-btn").addEventListener("click", onCharPersonaTemplateApply);
+    $("#char-persona-template-cancel-btn").addEventListener("click", onCharPersonaTemplateCancel);
+    $("#char-config-validate-btn").addEventListener("click", onCharConfigValidate);
+    $("#char-config-autofill-btn").addEventListener("click", onCharConfigAutofill);
     $("#char-list").addEventListener("click", (e) => {
       const li = e.target.closest(".item-list__item");
       if (li && li.dataset.id) onCharSelect(li.dataset.id);
@@ -1836,6 +1941,9 @@
     $("#world-export-btn").addEventListener("click", onWorldExport);
     $("#world-cfg-check-btn").addEventListener("click", onWorldCheckConfig);
     $("#world-doc-preview-btn").addEventListener("click", onWorldDocPreview);
+    $("#world-doc-template-btn").addEventListener("click", onWorldDocTemplate);
+    $("#world-doc-template-apply-btn").addEventListener("click", onWorldDocTemplateApply);
+    $("#world-doc-template-cancel-btn").addEventListener("click", onWorldDocTemplateCancel);
     $("#world-event-new-btn").addEventListener("click", onWorldEventNew);
     $("#world-event-refresh-btn").addEventListener("click", () => { if (_selectedWorldId) renderWorldEvents(_selectedWorldId); });
     $("#world-event-save-btn").addEventListener("click", onWorldEventSave);

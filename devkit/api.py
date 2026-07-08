@@ -88,6 +88,7 @@ from devkit import (
     get_submission,
     last_submit_for,
     list_submissions,
+    state,
     submit,
 )
 from devkit.character_editor import (
@@ -98,6 +99,9 @@ from devkit.character_editor import (
     export_character_for_submit as _ce_export,
     import_persona as _ce_import_persona,
     check_initial_memory_minimum as _ce_check_min,
+    get_persona_templates as _ce_persona_templates,
+    get_character_config_schema as _ce_config_schema,
+    validate_character_config as _ce_validate_config,
 )
 from devkit.memory_editor import (
     list_entries as _me_list,
@@ -121,6 +125,7 @@ from devkit.world_editor import (
     delete_world_event as _we_delete_event,
     validate_event_trigger as _we_validate_trigger,
     lint_world_doc as _we_lint_doc,
+    get_world_doc_templates as _we_templates,
 )
 from devkit.model_viewer import (
     list_models as _mv_list,
@@ -505,7 +510,7 @@ class DevKitApi:
         # so pass-through works for ``payload``.  We also expose the
         # injectable ``smtp_send`` / ``archive_path`` overrides for
         # tests; production callers leave them None.
-        return submit(
+        result = submit(
             developer_id=developer_id,
             target_kind=target_kind,
             target_id=target_id,
@@ -514,6 +519,8 @@ class DevKitApi:
             smtp_send=smtp_send if callable(smtp_send) else None,
             archive_path=archive_path if isinstance(archive_path, str) else None,
         )
+        state.save(self._work_dir())
+        return result
 
     def _resolve_packages(
         self, package_ids: list[str]
@@ -736,6 +743,24 @@ class DevKitApi:
             return _ce_check_min(self._work_dir(), char_id)
         return _ce_check_min(self._work_dir(), char_id, min_count=n)
 
+    @_serialize_call
+    def get_persona_templates(self) -> dict[str, str]:
+        """C2.4 — return built-in persona-doc markdown templates."""
+        return _ce_persona_templates()
+
+    @_serialize_call
+    def get_character_config_schema(self) -> dict[str, Any]:
+        """C2.3 — return the character config JSON schema definition."""
+        return _ce_config_schema()
+
+    @_serialize_call
+    def validate_character_config(self, config: Any) -> dict[str, Any]:
+        """C2.3 — schema-validate a character config dict."""
+        if not isinstance(config, dict):
+            raise DevKitError(400, "配置必须是对象", code="bad_data")
+        ok, errors = _ce_validate_config(config)
+        return {"ok": ok, "errors": errors}
+
     # --- memory editor -------------------------------------------------
 
     @_serialize_call
@@ -865,6 +890,11 @@ class DevKitApi:
         if not isinstance(doc, str):
             raise DevKitError(400, "文档必须是字符串", code="bad_data")
         return _we_lint_doc(doc)
+
+    @_serialize_call
+    def get_world_doc_templates(self) -> dict[str, str]:
+        """C1.2 — return built-in world-doc markdown templates."""
+        return _we_templates()
 
     # --- 3D model viewer -----------------------------------------------
 

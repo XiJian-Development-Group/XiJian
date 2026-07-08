@@ -13,22 +13,18 @@ import shutil
 from typing import Any
 
 from devkit import DevKitError
+from devkit.tts_engine import get_tts_manager, TTSRequest
 
 
 _VOICES_SUBDIR = "voices"
 
 _SUPPORTED_AUDIO_EXTENSIONS = {".wav", ".mp3", ".m4a", ".ogg", ".flac"}
 
-# Available TTS / voice-clone engines.
+# Available TTS / voice-clone engines (display names for UI).
 AVAILABLE_ENGINES: tuple[str, ...] = (
-    "melo-tts",
-    "cosyvoice",
-    "gpt-sovits",
-    "fish-speech",
-    "chat-tts",
-    "bert-vits2",
-    "vall-e",
-    "openai-tts",
+    "mlx",
+    "gguf",
+    "fallback",
 )
 
 
@@ -101,7 +97,7 @@ def save_voice(
     *,
     sample_path: str | None = None,
     audio_data: bytes | None = None,
-    engine: str = "melo-tts",
+    engine: str = "fallback",
     params: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if not character_id:
@@ -190,7 +186,7 @@ def generate_voice_from_text(
     character_id: str,
     name: str,
     text: str,
-    engine: str = "melo-tts",
+    engine: str = "fallback",
     params: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if not text.strip():
@@ -198,32 +194,31 @@ def generate_voice_from_text(
     if not name:
         raise DevKitError(400, "声音名称不能为空", code="missing_name")
 
-    import io
-    import wave
+    # Use the new TTS engine abstraction
+    mgr = get_tts_manager()
+    request = TTSRequest(
+        text=text,
+        voice_id=params.get("voice_id") if params else None,
+        language=params.get("language", "zh") if params else "zh",
+        speed=params.get("speed", 1.0) if params else 1.0,
+        output_path=None,
+        params=params,
+    )
+    result = mgr.synthesize(request, engine=engine)
 
-    buffer = io.BytesIO()
-    sample_rate = params.get("sample_rate", 24000) if params else 24000
+    if not result.success:
+        raise DevKitError(500, f"TTS 生成失败: {result.error}", code="tts_failed")
 
-    with wave.open(buffer, "wb") as wf:
-        wf.setnchannels(1)
-        wf.setsampwidth(2)
-        wf.setframerate(sample_rate)
-        duration_samples = int(sample_rate * (params.get("duration_seconds", 3.0) if params else 3.0))
-        import math
-        for i in range(duration_samples):
-            t = i / sample_rate
-            freq = 220.0 + math.sin(0.5 * i / sample_rate) * 50.0
-            sample = int(16000 * math.sin(2.0 * math.pi * freq * t))
-            sample = max(-32768, min(32767, sample))
-            buffer.write(sample.to_bytes(2, "little", signed=True))
+    # Save the generated audio as a voice sample
+    audio_data = None
+    if result.audio_path and os.path.isfile(result.audio_path):
+        with open(result.audio_path, "rb") as f:
+            audio_data = f.read()
 
-    audio_data = buffer.getvalue()
-    result = save_voice(
+    return save_voice(
         work_dir, character_id, name,
         audio_data=audio_data, engine=engine, params=params,
     )
-
-    return result
 
 
 def clone_voice_from_file(
@@ -231,7 +226,7 @@ def clone_voice_from_file(
     character_id: str,
     name: str,
     source_path: str,
-    engine: str = "cosyvoice",
+    engine: str = "gguf",
     params: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     if not os.path.isfile(source_path):

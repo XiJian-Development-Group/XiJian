@@ -7,6 +7,9 @@
 # `devkit` package that lives at the repo root.
 #
 # Runtime deps:  ../devkit/requirements.txt   (pywebview, py7zr)
+# Optional ML deps (install via extras):
+#   pip install -e .[devkit-mlx]     # Apple Silicon MLX TTS (mlx-audio)
+#   pip install -e .[devkit-gguf]    # GGUF / llama.cpp TTS (llama-cpp-python)
 # Build tool:    pyinstaller                  (installed by build-devkit.sh)
 
 [tool.pytest.ini_options]
@@ -16,3 +19,7 @@
 pythonpath = [".."]
 testpaths = ["tests"]
 addopts = "-ra"
+
+[project.optional-dependencies]
+devkit-mlx = ["mlx-audio>=0.4"]
+devkit-gguf = ["llama-cpp-python>=0.2.70"]

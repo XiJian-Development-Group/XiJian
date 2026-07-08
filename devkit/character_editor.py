@@ -20,6 +20,109 @@ from devkit import DevKitError
 
 _CHARACTERS_SUBDIR = "characters"
 
+# Built-in character config schema definition (C2.3).
+CHARACTER_CONFIG_SCHEMA: dict[str, dict[str, Any]] = {
+    "max_long_term": {"type": "integer", "min": 1, "max": 1000, "default": 200, "label": "长期记忆上限"},
+    "long_term_importance_min": {"type": "number", "min": 0.0, "max": 1.0, "default": 0.6, "label": "长期记忆重要性阈值", "step": 0.05},
+    "max_short_term": {"type": "integer", "min": 0, "max": 500, "default": 50, "label": "短期记忆上限"},
+    "short_term_decay_rate": {"type": "number", "min": 0.0, "max": 1.0, "default": 0.05, "label": "短期记忆衰减率", "step": 0.01},
+    "short_term_importance_min": {"type": "number", "min": 0.0, "max": 1.0, "default": 0.3, "label": "短期记忆重要性阈值", "step": 0.05},
+    "max_context_tokens": {"type": "integer", "min": 100, "max": 32000, "default": 8000, "label": "上下文 Token 上限"},
+    "reserve_tokens_for_reply": {"type": "integer", "min": 0, "max": 16000, "default": 2000, "label": "回复保留 Token"},
+    "force_recall_on_history": {"type": "boolean", "default": True, "label": "强制召回历史"},
+    "speaking_speed": {"type": "number", "min": 0.5, "max": 2.0, "default": 1.0, "label": "语速倍率", "step": 0.1},
+    "emotion_stability": {"type": "number", "min": 0.0, "max": 1.0, "default": 0.6, "label": "情绪稳定性", "step": 0.05},
+}
+
+
+def get_character_config_schema() -> dict[str, dict[str, Any]]:
+    """Return the character config schema definition (C2.3)."""
+    return dict(CHARACTER_CONFIG_SCHEMA)
+
+
+def validate_character_config(config: dict[str, Any]) -> tuple[bool, list[str]]:
+    """Schema-validate a character config dict (C2.3 AC-1).
+
+    Checks each field against its type/range constraints.
+    Returns ``(ok, [errors])``.
+    """
+    errors: list[str] = []
+    if not isinstance(config, dict):
+        return False, ["配置必须是对象"]
+    for key, rule in CHARACTER_CONFIG_SCHEMA.items():
+        if key not in config:
+            continue
+        value = config[key]
+        kind = rule["type"]
+        if kind == "integer":
+            try:
+                v = int(value)
+            except (TypeError, ValueError):
+                errors.append(f"{rule['label']}（{key}）必须是整数")
+                continue
+            if v < rule["min"]:
+                errors.append(f"{rule['label']}（{key}）不能小于 {rule['min']}")
+            if v > rule["max"]:
+                errors.append(f"{rule['label']}（{key}）不能大于 {rule['max']}")
+        elif kind == "number":
+            try:
+                v = float(value)
+            except (TypeError, ValueError):
+                errors.append(f"{rule['label']}（{key}）必须是数字")
+                continue
+            if v < rule["min"]:
+                errors.append(f"{rule['label']}（{key}）不能小于 {rule['min']}")
+            if v > rule["max"]:
+                errors.append(f"{rule['label']}（{key}）不能大于 {rule['max']}")
+        elif kind == "boolean" and not isinstance(value, bool):
+            errors.append(f"{rule['label']}（{key}）必须是布尔值")
+    return (len(errors) == 0), errors
+
+
+# Built-in persona-doc templates (C2.4).
+_PERSONA_TEMPLATES: dict[str, str] = {
+    "通用角色": (
+        "## 基本信息\n\n"
+        "- 姓名：\n- 年龄：\n- 性别：\n- 职业：\n\n"
+        "## 性格描述\n\n"
+        "（核心性格特征、矛盾点）\n\n"
+        "## 背景故事\n\n"
+        "（出生、成长经历、关键转折事件）\n\n"
+        "## 语言风格\n\n"
+        "（说话方式、口头禅、语气特点）\n\n"
+        "## 人际关系\n\n"
+        "- （人物名）：（关系、看法）\n- （人物名）：（关系、看法）\n\n"
+        "## 癖好与习惯\n\n"
+        "（小动作、偏好、忌讳）"
+    ),
+    "主角型": (
+        "## 基本信息\n\n"
+        "- 姓名：\n- 年龄：\n- 身份／定位：\n- 标签：\n\n"
+        "## 核心动机\n\n"
+        "（驱动角色行动的根本原因）\n\n"
+        "## 性格光谱\n\n"
+        "- 外向 ← → 内向：\n- 理性 ← → 感性：\n- 善良 ← → 冷酷：\n\n"
+        "## 成长弧线\n\n"
+        "（初始状态 → 关键事件 → 转变后状态）\n\n"
+        "## 标志性台词\n\n"
+        "（2-3 句最能代表角色的台词）\n\n"
+        "## 禁忌 / 弱点\n\n"
+        "（角色最不想面对的事物）"
+    ),
+    "配角型": (
+        "## 基本信息\n\n"
+        "- 姓名：\n- 年龄：\n- 与主角的关系：\n\n"
+        "## 性格快照\n\n"
+        "（2-3 句话概括性格）\n\n"
+        "## 功能定位\n\n"
+        "（在剧情中扮演的角色：助攻、阻碍、情报源等）\n\n"
+        "## 秘密\n\n"
+        "（角色隐藏的事）\n\n"
+        "## 可变性\n\n"
+        "（角色能否被说服、收买、改变立场）"
+    ),
+}
+
 
 def _gen_id() -> str:
     return f"char_{secrets.token_hex(8)}"
@@ -131,6 +234,7 @@ def save_character(work_dir: str, data: dict[str, Any]) -> dict[str, Any]:
             "reserve_tokens_for_reply": int(data.get("memory_config", {}).get("reserve_tokens_for_reply", 2000)),
             "force_recall_on_history": bool(data.get("memory_config", {}).get("force_recall_on_history", True)),
         },
+        "character_config": data.get("character_config", {}),
         "assigned_memory_pack": data.get("assigned_memory_pack", ""),
         "assigned_voice_pack": data.get("assigned_voice_pack", ""),
         "assigned_model": data.get("assigned_model", ""),
@@ -153,6 +257,11 @@ def delete_character(work_dir: str, char_id: str) -> bool:
         return False
     shutil.rmtree(char_dir)
     return True
+
+
+def get_persona_templates() -> dict[str, str]:
+    """Return built-in persona-doc markdown templates (C2.4)."""
+    return dict(_PERSONA_TEMPLATES)
 
 
 #: Minimum number of long-term initial memory entries a character must

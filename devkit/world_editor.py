@@ -170,6 +170,89 @@ def get_world_config(work_dir: str, world_id: str) -> dict[str, Any]:
 #: Key sections a world-view document should contain (C1.2 AC-2).
 _WORLD_DOC_REQUIRED_SECTIONS = ("时间线", "地理", "主要势力")
 
+#: Built-in world-doc templates (C1.2 AC-1).
+_WORLD_DOC_TEMPLATES: dict[str, str] = {
+    "异世界": (
+        "## 时间线\n\n"
+        "### 创世 / 纪元开端\n"
+        "（描述世界的诞生传说、神话起源）\n\n"
+        "### 关键转折\n"
+        "（改变世界格局的重大事件）\n\n"
+        "### 现代\n"
+        "（当前时间点，角色所处的时代）\n\n"
+        "## 地理\n\n"
+        "### 主要大陆 / 区域\n"
+        "- （区域名）：（特征、文化、冲突）\n"
+        "- （区域名）：（特征、文化、冲突）\n\n"
+        "### 重要地标\n"
+        "- （地标名）：（用途、背景故事）\n\n"
+        "## 主要势力\n\n"
+        "- （势力名）：（目标、手段、与主角的关系）\n"
+        "- （势力名）：（目标、手段、与主角的关系）\n\n"
+        "## 魔法 / 科技体系\n\n"
+        "（世界独特的规则，如魔法体系、科技水平）\n\n"
+        "## 文化习俗\n\n"
+        "（节日、禁忌、社会结构等）"
+    ),
+    "现代都市": (
+        "## 时间线\n\n"
+        "### 历史背景\n"
+        "（城市建立、重要发展阶段）\n\n"
+        "### 现代\n"
+        "（当前时间点）\n\n"
+        "## 地理\n\n"
+        "### 城区分布\n"
+        "- （区名）：（氛围、主要人群）\n"
+        "- （区名）：（氛围、主要人群）\n\n"
+        "### 重要场所\n"
+        "- （场所名）：（描述）\n\n"
+        "## 主要势力\n\n"
+        "- （势力名）：（背景、影响力、隐藏面）\n"
+        "- （势力名）：（背景、影响力、隐藏面）\n\n"
+        "## 社会规则\n\n"
+        "（都市里的潜规则、阶级分化、特殊设定）"
+    ),
+    "校园": (
+        "## 时间线\n\n"
+        "### 学年历\n"
+        "（开学、文化祭、考试、毕业等关键时间点）\n\n"
+        "## 地理\n\n"
+        "### 校园布局\n"
+        "- （校舍/教学楼名）：（用途、传闻）\n"
+        "- （社团楼）：（活跃社团）\n"
+        "- （后庭/天台等）：（学生聚集地）\n\n"
+        "### 校外区域\n"
+        "（学生常去的场所）\n\n"
+        "## 主要势力\n\n"
+        "- （学生会/风纪委员会）：（宗旨、权力范围）\n"
+        "- （社团/圈子）：（特点、成员）\n"
+        "- （问题学生群体）：（威胁程度）\n\n"
+        "## 校园传说\n\n"
+        "（七大不可思议、流传的都市传说等）"
+    ),
+    "星际": (
+        "## 时间线\n\n"
+        "### 大航海纪元\n"
+        "（人类踏入星际的关键节点）\n\n"
+        "### 主要冲突\n"
+        "（星系战争、外交危机）\n\n"
+        "### 当前纪元\n"
+        "（政治格局、科技水平）\n\n"
+        "## 地理\n\n"
+        "### 星系 / 星区\n"
+        "- （星区）：（政权、资源、威胁等级）\n"
+        "- （星区）：（政权、资源、威胁等级）\n\n"
+        "### 重要空间站 / 行星\n"
+        "- （名称）：（功能、人口、特色）\n\n"
+        "## 主要势力\n\n"
+        "- （星际联邦/帝国）：（体制、领土、军队）\n"
+        "- （企业/商会）：（经济影响力）\n"
+        "- （海盗/反抗组织）：（威胁、隐藏阵营）\n\n"
+        "## 科技设定\n\n"
+        "（超光速航行、AI 伦理、基因改造等）"
+    ),
+}
+
 
 def lint_world_doc(doc: str) -> dict[str, Any]:
     """Lightweight world-doc linter (C1.2 AC-2).
@@ -188,16 +271,11 @@ def lint_world_doc(doc: str) -> dict[str, Any]:
     if len(text) < 200:
         warnings.append("文档过短，建议补充更多设定")
     return {"ok": len(missing) == 0, "missing": missing, "warnings": warnings}
-    if not os.path.isfile(fpath):
-        return dict(WORLD_CONFIG_DEFAULT)
-    try:
-        with open(fpath, encoding="utf-8") as f:
-            data = json.load(f)
-        merged = dict(WORLD_CONFIG_DEFAULT)
-        merged.update(data)
-        return merged
-    except (json.JSONDecodeError, OSError):
-        return dict(WORLD_CONFIG_DEFAULT)
+
+
+def get_world_doc_templates() -> dict[str, str]:
+    """Return built-in world-doc markdown templates (C1.2 AC-1)."""
+    return dict(_WORLD_DOC_TEMPLATES)
 
 
 def save_world_config(work_dir: str, world_id: str, config: dict[str, Any]) -> dict[str, Any]:

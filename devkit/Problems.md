@@ -97,42 +97,44 @@
 
 | # | 问题 | 详述 |
 |---|------|------|
-| C1-01 | **C1.1 自定义事件 DSL 编辑器未实现** | 功能清单要求事件定义表单（名称/描述/触发条件/优先级/场景/影响范围）+ 触发条件 DSL（时间/状态/概率/组合）。DevKit UI 无事件编辑界面。 |
-| C1-02 | **C1.2 世界观 MD 编辑器缺功能** | UI 仅有纯文本 textarea，缺少：Markdown 实时预览、Linter、模板系统（异世界/现代都市等）、多版本保存、关键字段缺失校验。 |
-| C1-03 | **C1.3 时间/场景系统配置缺结构化 UI** | UI 仅有 JSON 自由格式 textarea，缺少：时间流速倍率、昼夜时长比例、天气概率表、光照预设、环境音库的结构化编辑界面。 |
+| C1-01 | **C1.1 自定义事件 DSL 编辑器已实现 ✅** | `world_editor.py`：`list_world_events`/`save_world_event`/`delete_world_event`/`validate_event_trigger`。UI：事件列表 + 表单（名称/优先级/启用/触发条件 JSON/场景/影响）。DSL 支持 time/state/probability/composite 四种触发 kind。 |
+| C1-02 | **C1.2 世界观 MD 编辑器已实现 ✅** | `world_editor.py`：`lint_world_doc` 检查必需标题（时间线/地理/主要势力），`get_world_doc_templates` 提供异世界/现代都市/校园/星际四套模板。UI：Markdown 预览按钮 + 渲染器 + lint 结果显示 + 模板选择器。多版本保存仍缺（存到本地 MD 文件）。 |
+| C1-03 | **C1.3 时间/场景系统配置已实现 ✅** | `world_editor.py`：`get_world_config`/`save_world_config`/`validate_world_config`。UI：时间流速倍率、一天虚拟分钟、夜晚占比、天气概率表 JSON、光照预设、环境音库字段 + 检查配置按钮。 |
 
 ### C2. 角色创建
 
 | # | 问题 | 详述 |
 |---|------|------|
-| C2-01 | **C2.1 声音设计未实现** | `voice_cloner.py` 仅为声音样本元数据管理器，无实际 TTS 生成或声音克隆功能。功能清单要求的"通过文本描述生成声音"和"从音频文件克隆声音"均未实现。MeloTTS/DiffSinger 未集成到 DevKit。 |
-| C2-02 | **C2.5 初始记忆无最少条数校验** | 功能清单要求至少 N 条初始记忆（TODO 默认 10），少于 N 条无法保存。当前 `memory_editor.py` 无此校验。 |
-| C2-03 | **C2.7 对话信息编辑器未实现** | 功能清单要求至少 8 轮"标准对话"用于调优回答风格。DevKit 无对话样本编辑器，无 `character_tuning_dialogs` 表。 |
-| C2-04 | **C2.8 3D 模型 AI 生成未实现** | 功能清单要求"通过文本描述 + 参考图让 AI 生成 VRM"。当前 `model_viewer.py` 仅支持从本地文件导入/预览，无 AI 生成路径。VRM 1.0 规范校验未实现。 |
-| C2-05 | **C2.8 换装/BlendShape 未实现** | 功能清单要求换装切换延时 < 200ms、BlendShape 切换。当前不会触发换装或表情切换。 |
-| C2-06 | **C2.9 动作设计完全未实现** | 功能清单要求 AI 推断动作（文本/视频 → VRM 骨骼动画）、BVH/FBX 导入。DevKit 无动作编辑器。 |
+| C2-01 | **C2.1 声音设计未实现（需 ML 后端）** | `voice_cloner.py` 的 `generate_voice_from_text` 产生正弦波占位音频，`clone_voice_from_file` 仅为文件复制。真正的 MeloTTS/DiffSinger 集成需要 ML 库不可用。**无法独自完成**。 |
+| C2-02 | **C2.5 初始记忆最少条数校验已实现 ✅** | `character_editor.py`：`check_initial_memory_minimum`/`enforce_initial_memory_minimum`（默认 10 条）。`save_character` 在 `assigned_memory_pack` 非空时强制执行。`api.check_initial_memory` 桥接。 |
+| C2-03 | **C2.7 对话信息编辑器已实现 ✅** | `dialog_editor.py` 完整 CRUD + `check_dialog_minimum` 校验 ≥8 轮。UI：对话样本标签页 + 列表 + 编辑器 + 导出。 |
+| C2-04 | **C2.8 3D 模型 AI 生成未实现（需外部服务）** | `model_viewer.py` 的 `generate_model_from_text` 返回占位 JSON。真正的 VRM 生成需要 Tripo/Meshy API 或自训练模型，DevKit 无法独立完成。VRM 1.0 规范校验未实现。**无法独自完成**。 |
+| C2-05 | **C2.8 换装/BlendShape 未实现（需 three.js VRM）** | 换装切换和 BlendShape 表情需要在 three.js VRM 预览器中实现，超过纯 Python/HTML 能力范围。**无法独自完成**。 |
+| C2-06 | **C2.9 动作设计已实现 ✅** | `motion_editor.py` 完整 CRUD + BVH/FBX 文件导入 + 参数 JSON 编辑 + 提交导出。UI：动作标签页 + 列表 + 编辑器。AI 推断动作需 ML 后端不可用。 |
+| C2-07 | **C2.3 角色配置 JSON 编辑器已实现 ✅** | `character_editor.py`：`get_character_config_schema`/`validate_character_config`。UI：角色配置 JSON textarea + 校验按钮 + 自动填写按钮（调用 auto_suggest 从人设文档推断）。 |
+| C2-08 | **C2.4 人设 MD 模板已实现 ✅** | `character_editor.py`：`get_persona_templates` 提供通用角色/主角型/配角型三套模板。UI：人设文档 textarea + 模板选择器。 |
 
 ### C3. 剧情设计
 
 | # | 问题 | 详述 |
 |---|------|------|
-| C3-01 | **剧情设计完全未实现** | 功能清单要求 `plot_designs`、`plot_nodes`、`plot_edges` 表，节点/边/触发条件/奖励编辑。DevKit 无剧情标签页，无相关代码。`TARGET_KINDS` 中虽定义了 `"plot"` 但从未使用。 |
+| C3-01 | **剧情设计已实现 ✅** | `plot_editor.py` 完整 CRUD（剧情/节点/边 + 提交导出）。UI：剧情标签页 + 列表 + 节点编辑器 + 边编辑器 + 导出。节点/边关系以文本列表呈现，缺少可视化图形编辑器。 |
 
 ### C4. AI 设计辅助
 
 | # | 问题 | 详述 |
 |---|------|------|
-| C4-01 | **AI 辅助功能完全未实现** | 功能清单要求 C1.1~C3 几乎所有步骤可一键召唤 AI 助手。当前 DevKit 仅有一个"AI 协助占比"输入框用于提交声明，无实际 AI 对话/建议/填充能力。 |
-| C4-02 | **dev_ai_assist_log 表未实现** | 功能清单定义的 `dev_ai_assist_log` 表（用于记录 AI 介入步骤、输出、接受/修改状态）不存在。 |
-| C4-03 | **AI 产出标记与 30% 阈值未实现** | 功能清单要求所有 AI 产出字段标记 `source='ai_suggested'`，单条产出 AI 占比 > 30% 强制审核。未实现。 |
+| C4-01 | **AI 辅助功能 API 已桥接 ⚠️** | `ai_assistant.py` 已重写：`auto_suggest`/`calculate_ai_ratio`/`check_ai_threshold`/`log_assist_event` 均符合 JS 调用约定。所有 6 个 API 方法已注册。但 `auto_suggest` 仍返回固定占位建议（无真正 LLM 调用）。 |
+| C4-02 | **dev_ai_assist_log 表未实现 ⚠️** | `log_assist_event` 已实现（将事件追加到 `assist_log.json`），但非 SQLite 表结构。 |
+| C4-03 | **AI 产出标记与 30% 阈值已桥接 ⚠️** | `calculate_ai_ratio` 和 `check_ai_threshold` 已实现并注册为 API。但 `source='ai_suggested'` 标记未在保存路径中实际注入。 |
 
 ### C5. 提交与上架
 
 | # | 问题 | 详述 |
 |---|------|------|
-| C5-01 | **剧情提交不可用** | `TARGET_KINDS` 定义了 `"plot"` 但无 plot editor 和 plot submission，提交时 `"plot"` 类型不可选择。 |
-| C5-02 | **模型/声音样本不可提交** | `model_viewer.py` 无 `export_model_for_submit`，`voice_cloner.py` 无 `export_voice_for_submit`。VRM 模型和声音样本无法包含在提交包中。 |
-| C5-03 | **settings 无磁盘持久化** | 所有 DevKit 状态为进程内内存，窗口关闭后丢失。`DEV_SUBMIT_LOCAL_RETENTION_SECONDS`（7 天）已定义但无定时清理任务。 |
+| C5-01 | **剧情提交已实现 ✅** | `plot` 已在 `TARGET_KINDS` 中，`export_plot_for_submit` 存在，`api.list_submit_packages` 返回剧情包。提交时可勾选剧情内容。 |
+| C5-02 | **模型/声音样本提交已实现 ✅** | `model_viewer.py` 有 `export_model_for_submit`，`voice_cloner.py` 有 `export_voice_for_submit`。UI 中声音/模型包显示在提交列表。 |
+| C5-03 | **状态已磁盘持久化 ✅** | `state.py` 新增 `load()`/`save()`，提交记录、冷却时间和归档路径在每次提交后持久化到 `devkit_state.json`，重启不丢失。 |
 | C5-04 | **C2.2 笔迹设计暂不开放（符合预期）** | 功能清单明确笔迹设计功能暂不开放，`character_handwritings` 表保留但 UI 入口隐藏。当前状态符合预期。 |
 
 ---
