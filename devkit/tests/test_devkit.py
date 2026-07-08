@@ -1280,11 +1280,13 @@ class TestVoiceCloner:
             save_voice(str(tmp_path), "char_e", "default", sample_path=src)
         assert ei.value.code == "bad_audio_format"
 
-    def test_list_engines_includes_melo_tts(self):
+    def test_list_engines_includes_mlx(self):
         from devkit.voice_cloner import list_engines
 
         engines = list_engines()
-        assert "melo-tts" in engines
+        assert "mlx" in engines
+        assert "gguf" in engines
+        assert "fallback" in engines
         assert isinstance(engines, list)
 
 

@@ -14,46 +14,33 @@
 //   2. We decode the base64 into a ``Uint8Array`` and feed it to GLTFLoader
 //      via ``Loader.parse(...)`` — no object URL needed.
 //
-// Three.js is loaded on demand from a CDN (esm.sh) so the rest of the
-// DevKit UI stays a single offline-served HTML page.  If the CDN is
-// unreachable (offline machine, China firewall, ...) we fall back to a
-// plain text panel showing the model metadata so the editor is still
-// useful for inspecting file size / name / format.
+// Three.js and its examples are loaded from local ``vendor/`` so the
+// preview works completely offline.
 //
 // Scope (not pretending to be a full viewer)
 // ------------------------------------------
 //
 // * GLB  — fully rendered, auto-framed, lit, with orbit controls.
-// * GLTF — fully rendered (the .gltf JSON + sidecar .bin are read into a
-//          Uint8Array; GLTFLoader accepts a single buffer only if the
-//          .gltf has embedded data URIs.  Standalone .gltf + .bin files
-//          would need a resource loader, which is out of scope; we
-//          surface a clear error in that case).
-// * VRM  — VRM 0.x / 1.0 are GLB with extras.  GLTFLoader will parse
-//          the mesh + materials, but humanoid bones, expressions, and
-//          MToon shaders need @pixiv/three-vrm.  We render what we
-//          can and label the panel "VRM (basic)" so the user knows.
-//
+// * GLTF — fully rendered (embedded buffers only; sidecar .bin needs a
+//          resource loader, out of scope).
+// * VRM  — VRM 0.x / 1.0 are GLB with extras.  GLTFLoader parses the
+//          mesh + materials, but humanoid bones, expressions, and MToon
+//          shaders need @pixiv/three-vrm.  We render what we can and
+//          label "VRM (basic)" so the user knows.
 (() => {
   "use strict";
 
   // --- tiny DOM helpers (kept local so we don't depend on devkit.js) ---
   const $ = (sel, root = document) => root.querySelector(sel);
 
-  // CDN candidates, in order.  esm.sh bundles three as ESM with proper
-  // dependency resolution; unpkg requires us to map three/examples/jsm
-  // manually.  jsdelivr as a last resort.
-  const CDN_BASES = [
-    "https://esm.sh/three@0.160.0",
-    "https://unpkg.com/three@0.160.0/build/three.module.js",
-    "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-  ];
+  // Local vendor paths (all files under devkit/ui/vendor/)
+  const VENDOR_BASE = "./vendor/";
 
   const FALLBACK_MSG = (name, err) =>
     `<div class="status status--warn">
       <p><strong>未能加载 3D 预览</strong></p>
-      <p>three.js CDN 加载失败：${(err && err.message) || err || "未知错误"}</p>
-      <p>模型 "${esc(name)}" 的元数据仍然可查看。完整预览需要联网。</p>
+      <p>本地 three.js 加载失败：${(err && err.message) || err || "未知错误"}</p>
+      <p>模型 "${esc(name)}" 的元数据仍然可查看。</p>
     </div>`;
 
   const esc = (s) => {
@@ -76,16 +63,14 @@
   const loadThree = async () => {
     if (_threePromise) return _threePromise;
     _threePromise = (async () => {
-      for (const url of CDN_BASES) {
-        try {
-          // Dynamic import — three is published as ESM since 0.150.
-          const THREE = await import(/* @vite-ignore */ url);
-          if (THREE && (THREE.Scene || THREE.default?.Scene)) {
-            return THREE.Scene ? THREE : THREE.default;
-          }
-        } catch (_e) { /* try next */ }
-      }
-      throw new Error("所有 three.js CDN 镜像均不可达");
+      // Load three.js from local vendor
+      try {
+        const THREE = await import(/* @vite-ignore */ VENDOR_BASE + "three.module.js");
+        if (THREE && (THREE.Scene || THREE.default?.Scene)) {
+          return THREE.Scene ? THREE : THREE.default;
+        }
+      } catch (_e) { /* fall through */ }
+      throw new Error("本地 three.js 加载失败，请检查 vendor/ 目录");
     })();
     return _threePromise;
   };
@@ -137,10 +122,7 @@
     key.position.set(3, 5, 4);
     scene.add(key);
 
-    // Orbit controls — try to load from three/examples.  esm.sh resolves
-    // bare specifiers through three's own package, so this works when
-    // three came from there.  Fall back to a basic mouse-drag rotation
-    // if the import fails (no internet, older three, etc.).
+    // Orbit controls — load from local vendor
     const controls = await tryLoadOrbitControls(THREE, renderer.domElement, camera);
 
     // --- load the model ------------------------------------------------
@@ -148,7 +130,7 @@
     if (!GLTFLoader) {
       container.innerHTML = `<div class="status status--err">
         <p>three.js 加载成功，但 GLTFLoader 不可用</p>
-        <p>请检查网络后重试。</p>
+        <p>请检查 vendor/GLTFLoader.js 是否存在。</p>
       </div>`;
       return;
     }
@@ -236,14 +218,8 @@
   // --- helpers ----------------------------------------------------------
 
   const tryLoadOrbitControls = async (THREE, domElement, camera) => {
-    // esm.sh's three bundle exposes /examples/jsm/controls/OrbitControls
-    // through the same package.  Try the relative specifier first; if
-    // three was loaded from a bare-file CDN (unpkg / jsdelivr), this
-    // fails and we fall back to a hand-rolled mouse-drag controller.
     try {
-      const mod = await import(
-        /* @vite-ignore */ "https://esm.sh/three@0.160.0/examples/jsm/controls/OrbitControls.js"
-      );
+      const mod = await import(/* @vite-ignore */ VENDOR_BASE + "OrbitControls.js");
       const OC = mod.OrbitControls || mod.default?.OrbitControls;
       if (OC) return new OC(camera, domElement);
     } catch (_e) { /* fall through */ }
@@ -252,9 +228,7 @@
 
   const tryLoadGltfLoader = async (_THREE) => {
     try {
-      const mod = await import(
-        /* @vite-ignore */ "https://esm.sh/three@0.160.0/examples/jsm/loaders/GLTFLoader.js"
-      );
+      const mod = await import(/* @vite-ignore */ VENDOR_BASE + "GLTFLoader.js");
       return mod.GLTFLoader || mod.default?.GLTFLoader || null;
     } catch (_e) {
       return null;
@@ -300,13 +274,6 @@
   const autoFrame = (object3d, camera, renderer) => {
     // Compute bounding box, move camera so the model fills ~70% of
     // the viewport.  Skips ortho / 2D cases.
-    const box = new (object3d.constructor.prototype.constructor === object3d.constructor
-      ? Object : Object)();
-    // three's Box3 — pull it off the same module.
-    const THREE = object3d.material?.constructor?.name === "MeshStandardMaterial"
-      ? null : null;
-    // Simpler: compute manually from geometry so we don't need access
-    // to THREE here.
     let minX = Infinity, minY = Infinity, minZ = Infinity;
     let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
     object3d.traverse((node) => {
