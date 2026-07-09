@@ -8,5 +8,8 @@
   </component>
   <component name="VcsDirectoryMappings">
     <mapping directory="$PROJECT_DIR$" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/macapp/build/DerivedData/SourcePackages/checkouts/NetworkImage" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/macapp/build/DerivedData/SourcePackages/checkouts/swift-cmark" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/macapp/build/DerivedData/SourcePackages/checkouts/swift-markdown-ui" vcs="Git" />
   </component>
 </project>
