@@ -55,6 +55,9 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "recipient": DEFAULT_RECIPIENT,
     "rate_limit_seconds": 3600,  # 1 hour (function list C5 AC-2)
     "max_attachment_bytes": 1_200_000_000,  # 1200 MB (macOS units)
+    # Auto-update (C6).  Network is only touched on an explicit check or,
+    # when this flag is on, once silently at launch.  User-toggleable.
+    "auto_check_update": True,
 }
 
 _ENC_PREFIX = "enc:"
@@ -176,6 +179,9 @@ def save_config(work_dir: str, config: dict[str, Any]) -> None:
         "max_attachment_bytes": config.get(
             "max_attachment_bytes", DEFAULT_CONFIG["max_attachment_bytes"]
         ),
+        "auto_check_update": bool(
+            config.get("auto_check_update", DEFAULT_CONFIG["auto_check_update"])
+        ),
     }
     with open(_config_path(work_dir), "w", encoding="utf-8") as f:
         json.dump(to_save, f, ensure_ascii=False, indent=2)
@@ -205,6 +211,19 @@ def get_max_attachment_bytes(work_dir: str) -> int:
     return int(config.get("max_attachment_bytes", DEFAULT_CONFIG["max_attachment_bytes"]))
 
 
+def get_auto_check_update(work_dir: str) -> bool:
+    """Whether to silently check for updates at launch."""
+    config = load_config(work_dir)
+    return bool(config.get("auto_check_update", DEFAULT_CONFIG["auto_check_update"]))
+
+
+def set_auto_check_update(work_dir: str, enabled: bool) -> None:
+    """Persist the launch-time auto-update-check preference."""
+    config = load_config(work_dir)
+    config["auto_check_update"] = bool(enabled)
+    save_config(work_dir, config)
+
+
 __all__ = [
     "load_config",
     "save_config",
@@ -212,6 +231,8 @@ __all__ = [
     "get_recipient",
     "get_rate_limit",
     "get_max_attachment_bytes",
+    "get_auto_check_update",
+    "set_auto_check_update",
     "DEFAULT_CONFIG",
     "DEFAULT_RECIPIENT",
 ]

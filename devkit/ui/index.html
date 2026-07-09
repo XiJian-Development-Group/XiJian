@@ -1117,6 +1117,47 @@
                 </div>
               </details>
 
+              <details class="field-group" open>
+                <summary class="field-group__summary">软件更新</summary>
+                <div class="field-group__body">
+                  <div class="kv" style="margin-bottom:8px">
+                    <dt>当前版本</dt><dd id="update-current-version">—</dd>
+                  </div>
+                  <label class="field field--inline">
+                    <input id="update-auto-check" type="checkbox" />
+                    <span class="field__label">启动时自动检查更新</span>
+                  </label>
+                  <p class="card__hint" style="margin:6px 0 10px">仅在检查更新时联网；其余功能完全离线。</p>
+                  <div class="row row--gap">
+                    <button id="update-check-btn" class="btn btn--secondary" type="button">检查更新</button>
+                  </div>
+                  <p id="update-status" class="status status--idle" role="status"></p>
+
+                  <!-- Update available panel -->
+                  <div id="update-available-panel" hidden style="margin-top:10px;padding:12px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg-elev-2)">
+                    <div class="kv">
+                      <dt>最新版本</dt><dd id="update-latest-version">—</dd>
+                    </div>
+                    <details style="margin:8px 0">
+                      <summary style="cursor:pointer;color:var(--accent)">更新说明</summary>
+                      <pre id="update-release-notes" style="white-space:pre-wrap;max-height:180px;overflow:auto;font-size:12px;margin:6px 0"></pre>
+                    </details>
+                    <div class="row row--gap">
+                      <button id="update-download-btn" class="btn btn--primary" type="button">下载更新</button>
+                      <button id="update-open-page-btn" class="btn btn--ghost" type="button">在浏览器中打开</button>
+                    </div>
+                    <div id="update-download-progress" hidden style="margin-top:8px">
+                      <div class="progress"><div id="update-progress-bar" class="progress__bar" style="width:0%"></div></div>
+                      <small id="update-progress-text" class="card__hint"></small>
+                    </div>
+                    <div id="update-install-panel" hidden style="margin-top:8px">
+                      <p class="card__hint" style="margin-bottom:6px">下载完成。安装将关闭并自动重启应用。</p>
+                      <button id="update-install-btn" class="btn btn--primary" type="button">立即安装并重启</button>
+                    </div>
+                  </div>
+                </div>
+              </details>
+
               <details class="field-group">
                 <summary class="field-group__summary">应用偏好</summary>
                 <div class="field-group__body">

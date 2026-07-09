@@ -1481,3 +1481,307 @@ class TestDevKitApiModelBytes:
         assert resp["data"]["mime"] == "model/gltf-binary"
         assert base64.b64decode(resp["data"]["data_b64"]) == b"glTF" + b"\x00" * 60
 
+
+# ---------------------------------------------------------------------------
+# Auto-update (C6): version parsing / comparison
+# ---------------------------------------------------------------------------
+
+
+class TestUpdaterVersionCompare:
+    def test_parse_strips_v_prefix(self):
+        from devkit.updater import parse_version
+
+        nums, rank, label = parse_version("v1.2.3")
+        assert nums == (1, 2, 3)
+        assert label == ""
+
+    def test_major_minor_patch_ordering(self):
+        from devkit.updater import is_newer
+
+        assert is_newer("v1.0.0", "v0.9.9") is True
+        assert is_newer("v0.2.0", "v0.1.9") is True
+        assert is_newer("v0.1.2", "v0.1.1") is True
+
+    def test_equal_versions_not_newer(self):
+        from devkit.updater import is_newer
+
+        assert is_newer("v0.1.0", "v0.1.0") is False
+        assert is_newer("0.1.0", "v0.1.0") is False
+
+    def test_release_outranks_prerelease(self):
+        from devkit.updater import is_newer
+
+        assert is_newer("v0.1.0", "v0.1.0-Beta") is True
+        assert is_newer("v0.1.0-Beta", "v0.1.0") is False
+
+    def test_prerelease_ordering(self):
+        from devkit.updater import is_newer
+
+        assert is_newer("v0.1.0-Beta", "v0.1.0-Alpha") is True
+        assert is_newer("v0.1.0-rc", "v0.1.0-Beta") is True
+
+    def test_differing_length_padding(self):
+        from devkit.updater import is_newer
+
+        assert is_newer("v1.0.1", "v1.0") is True
+        assert is_newer("v1.0", "v1.0.0") is False
+
+
+# ---------------------------------------------------------------------------
+# Auto-update (C6): check_for_update (mocked network)
+# ---------------------------------------------------------------------------
+
+
+class _FakeHTTPResponse:
+    def __init__(self, payload: dict, headers: dict | None = None):
+        self._body = json.dumps(payload).encode("utf-8")
+        self.headers = headers or {}
+
+    def read(self, *_a):
+        return self._body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_a):
+        return False
+
+
+class TestCheckForUpdate:
+    def test_unconfigured_source_returns_error(self, monkeypatch):
+        from devkit import updater, version
+
+        monkeypatch.setattr(
+            version, "get_update_source",
+            lambda: {"owner": "", "repo": "", "api_url": ""},
+        )
+        r = updater.check_for_update("v0.1.0")
+        assert r["configured"] is False
+        assert r["update_available"] is False
+        assert "error" in r
+
+    def test_detects_newer_release_and_asset(self, monkeypatch):
+        from devkit import updater, version
+
+        monkeypatch.setattr(
+            version, "get_update_source",
+            lambda: {"owner": "XiJian-Development-Group", "repo": "XiJian",
+                     "tag_prefix": "DevKit@",
+                     "api_url": "https://api.github.com/repos/XiJian-Development-Group/XiJian/releases?per_page=100"},
+        )
+        monkeypatch.setattr(
+            version, "get_asset_patterns",
+            lambda: {"macOS": "DevKit_macOS.zip", "Windows": "DevKit_Windows.zip", "Linux": ""},
+        )
+        # A list of releases across components; only DevKit@ ones count.
+        releases = [
+            {"tag_name": "Core@v3.0.0", "assets": []},
+            {"tag_name": "Main@v9.9.9", "assets": []},
+            {
+                "tag_name": "DevKit@v1.5.0",
+                "body": "Notes",
+                "html_url": "https://github.com/XiJian-Development-Group/XiJian/releases/tag/DevKit@v1.5.0",
+                "assets": [
+                    {"name": "DevKit_Windows.zip", "browser_download_url": "https://dl/win.zip", "size": 1},
+                    {"name": "DevKit_macOS.zip", "browser_download_url": "https://dl/mac.zip", "size": 99},
+                ],
+            },
+            {"tag_name": "DevKit@v1.4.0", "assets": []},
+        ]
+        r = updater.check_for_update(
+            "v1.4.3", _opener=lambda req: _FakeHTTPResponse(releases)
+        )
+        assert r["update_available"] is True
+        # Version is reported with the tag prefix stripped.
+        assert r["latest_version"] == "v1.5.0"
+        import sys as _sys
+        if _sys.platform == "darwin":
+            assert r["asset_name"] == "DevKit_macOS.zip"
+            assert r["asset_url"] == "https://dl/mac.zip"
+
+    def test_ignores_other_component_releases(self, monkeypatch):
+        from devkit import updater, version
+
+        monkeypatch.setattr(
+            version, "get_update_source",
+            lambda: {"owner": "o", "repo": "r", "tag_prefix": "DevKit@",
+                     "api_url": "https://api.github.com/repos/o/r/releases?per_page=100"},
+        )
+        # Newer Main/Core releases must NOT trigger a DevKit update.
+        releases = [
+            {"tag_name": "Main@v9.9.9", "assets": []},
+            {"tag_name": "Core@v8.8.8", "assets": []},
+            {"tag_name": "DevKit@v1.4.3", "assets": []},
+        ]
+        r = updater.check_for_update(
+            "v1.4.3", _opener=lambda req: _FakeHTTPResponse(releases)
+        )
+        assert r["update_available"] is False
+        assert r["latest_version"] == "v1.4.3"
+
+    def test_no_matching_component_release(self, monkeypatch):
+        from devkit import updater, version
+
+        monkeypatch.setattr(
+            version, "get_update_source",
+            lambda: {"owner": "o", "repo": "r", "tag_prefix": "DevKit@",
+                     "api_url": "https://api.github.com/repos/o/r/releases?per_page=100"},
+        )
+        releases = [{"tag_name": "Main@v1.0.0", "assets": []}]
+        r = updater.check_for_update(
+            "v1.4.3", _opener=lambda req: _FakeHTTPResponse(releases)
+        )
+        assert r["update_available"] is False
+        assert "error" in r
+
+    def test_same_version_no_update(self, monkeypatch):
+        from devkit import updater, version
+
+        monkeypatch.setattr(
+            version, "get_update_source",
+            lambda: {"owner": "o", "repo": "r", "tag_prefix": "DevKit@",
+                     "api_url": "https://api.github.com/repos/o/r/releases?per_page=100"},
+        )
+        releases = [{"tag_name": "DevKit@v1.4.3", "assets": []}]
+        r = updater.check_for_update(
+            "v1.4.3", _opener=lambda req: _FakeHTTPResponse(releases)
+        )
+        assert r["update_available"] is False
+
+    def test_network_error_is_caught(self, monkeypatch):
+        from devkit import updater, version
+
+        monkeypatch.setattr(
+            version, "get_update_source",
+            lambda: {"owner": "o", "repo": "r", "tag_prefix": "DevKit@",
+                     "api_url": "https://api.github.com/repos/o/r/releases?per_page=100"},
+        )
+
+        def _boom(req):
+            raise OSError("network down")
+
+        r = updater.check_for_update("v1.4.3", _opener=_boom)
+        assert r["update_available"] is False
+        assert "error" in r
+
+
+# ---------------------------------------------------------------------------
+# Auto-update (C6): download (mocked network)
+# ---------------------------------------------------------------------------
+
+
+class TestDownloadUpdate:
+    def test_requires_url_and_name(self):
+        from devkit import updater
+
+        assert "error" in updater.download_update("", "x.dmg")
+        assert "error" in updater.download_update("https://dl/x", "")
+
+    def test_streams_to_downloads_dir(self, monkeypatch, tmp_path):
+        from devkit import updater
+
+        monkeypatch.setattr(updater, "downloads_dir", lambda: tmp_path)
+
+        payload = b"BINARYDATA" * 1000
+
+        class _Stream:
+            def __init__(self):
+                self._buf = io.BytesIO(payload)
+                self.headers = {"Content-Length": str(len(payload))}
+
+            def read(self, n):
+                return self._buf.read(n)
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_a):
+                return False
+
+        seen = []
+        r = updater.download_update(
+            "https://dl/app.dmg", "app.dmg",
+            progress_cb=lambda d, t: seen.append((d, t)),
+            _opener=lambda req: _Stream(),
+        )
+        assert "error" not in r
+        assert r["size"] == len(payload)
+        assert (tmp_path / "app.dmg").read_bytes() == payload
+        assert seen and seen[-1][0] == len(payload)
+
+    def test_sanitizes_asset_name(self, monkeypatch, tmp_path):
+        from devkit import updater
+
+        monkeypatch.setattr(updater, "downloads_dir", lambda: tmp_path)
+
+        class _Stream:
+            headers = {"Content-Length": "3"}
+
+            def read(self, n):
+                if not hasattr(self, "_done"):
+                    self._done = True
+                    return b"abc"
+                return b""
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_a):
+                return False
+
+        r = updater.download_update(
+            "https://dl/x", "../../evil.dmg",
+            _opener=lambda req: _Stream(),
+        )
+        # Path traversal stripped: file lands inside tmp_path only.
+        assert "error" not in r
+        assert os.path.dirname(r["path"]) == str(tmp_path)
+
+
+# ---------------------------------------------------------------------------
+# Auto-update (C6): api bridge + version source
+# ---------------------------------------------------------------------------
+
+
+class TestUpdateApiBridge:
+    def test_get_update_settings_shape(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("XIJIAN_DEV_WORK_DIR", str(tmp_path))
+        api = DevKitApi()
+        resp = api.get_update_settings()
+        assert resp["ok"] is True
+        data = resp["data"]
+        assert "current_version" in data
+        assert "auto_check" in data
+        assert "configured" in data
+
+    def test_set_auto_check_persists(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("XIJIAN_DEV_WORK_DIR", str(tmp_path))
+        api = DevKitApi()
+        api.set_work_dir(str(tmp_path))
+        r1 = api.set_auto_check_update(False)
+        assert r1["ok"] is True
+        assert r1["data"]["auto_check"] is False
+        from devkit import config as _cfg
+        assert _cfg.get_auto_check_update(str(tmp_path)) is False
+
+    def test_download_update_requires_args(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("XIJIAN_DEV_WORK_DIR", str(tmp_path))
+        api = DevKitApi()
+        resp = api.download_update("", "")
+        assert resp["ok"] is False
+
+
+class TestVersionSource:
+    def test_get_app_version_nonempty(self):
+        from devkit import version
+
+        assert isinstance(version.get_app_version(), str)
+        assert version.get_app_version()
+
+    def test_reads_devkit_version_from_config(self):
+        from devkit import version
+
+        cfg = version.read_project_config()
+        # Config.json ships a DevKit version entry.
+        assert cfg.get("Version", {}).get("DevKit")
+

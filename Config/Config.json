@@ -21,9 +21,22 @@
   "Version": {
     "Main": "v0.0.1-Beta",
     "CoreApi": "v1.2.0-Alpha",
+    "DevKit": "v1.4.3",
     "macOSUIApp": "Unavailable",
     "iOSUIApp": "Unavailable",
     "CommonUIApp": "Unavailable"
+  },
+  "UpdateConfig": {
+    "description": "Auto-update settings for the DevKit. Releases are filtered by TagPrefix because each component (DevKit/Main/Core) is tagged independently, e.g. 'DevKit@v1.4.3'.",
+    "GitHubOwner": "XiJian-Development-Group",
+    "GitHubRepo": "XiJian",
+    "TagPrefix": "DevKit@",
+    "ReleasesApiTemplate": "https://api.github.com/repos/{owner}/{repo}/releases?per_page=100",
+    "AssetPatterns": {
+      "macOS": "DevKit_macOS.zip",
+      "Windows": "DevKit_Windows.zip",
+      "Linux": ""
+    }
   },
   "ConfigVersion": "v1.0.0",
   "ProjectManagerPath": ["project.py", "project.bin"]

@@ -2033,12 +2033,121 @@ const callApi = async (method, ...args) => {
   };
 
   const loadSettingsTab = async () => {
+    // Update settings don't require login.
+    await loadUpdateSettings();
     if (!state.activeDeveloper) {
       setStatus("#settings-history-status", "请先登录", "warn");
       setStatus("#settings-packages-status", "请先登录", "warn");
       return;
     }
     await Promise.all([renderSettingsHistory(), renderSettingsPackages()]);
+  };
+
+  // --------------------------------------------------------------
+  // Settings › 软件更新 (auto-update, C6)
+  // --------------------------------------------------------------
+
+  let _lastUpdateCheck = null;
+
+  const loadUpdateSettings = async () => {
+    const resp = await callApi("get_update_settings");
+    if (!resp.ok) return;
+    const d = resp.data || {};
+    const verEl = $("#update-current-version");
+    if (verEl) verEl.textContent = d.current_version || "—";
+    const autoEl = $("#update-auto-check");
+    if (autoEl) autoEl.checked = !!d.auto_check;
+  };
+
+  const renderUpdateAvailable = (info) => {
+    _lastUpdateCheck = info;
+    const panel = $("#update-available-panel");
+    if (!panel) return;
+    if (!info || !info.update_available) { panel.hidden = true; return; }
+    panel.hidden = false;
+    $("#update-latest-version").textContent = info.latest_version || "—";
+    $("#update-release-notes").textContent = info.release_notes || "（无更新说明）";
+    // Reset sub-panels
+    $("#update-download-progress").hidden = true;
+    $("#update-install-panel").hidden = true;
+    // Download button is only useful if we resolved a platform asset
+    const dlBtn = $("#update-download-btn");
+    if (dlBtn) dlBtn.disabled = !info.asset_url;
+  };
+
+  const onCheckUpdate = async () => {
+    setStatus("#update-status", "正在检查更新……", "warn");
+    const resp = await callApi("check_for_update");
+    if (!resp.ok) { setStatus("#update-status", `检查失败：${resp.message}`, "err"); return; }
+    const info = resp.data || {};
+    if (info.error) { setStatus("#update-status", info.error, "warn"); }
+    if (info.update_available) {
+      setStatus("#update-status", `发现新版本 ${info.latest_version}`, "ok");
+      renderUpdateAvailable(info);
+    } else if (!info.error) {
+      setStatus("#update-status", `已是最新版本（${info.current_version}）`, "ok");
+      const panel = $("#update-available-panel");
+      if (panel) panel.hidden = true;
+    }
+  };
+
+  const onDownloadUpdate = async () => {
+    if (!_lastUpdateCheck || !_lastUpdateCheck.asset_url) {
+      toast("没有可下载的更新包", "warn"); return;
+    }
+    if (!confirm(`确定下载更新包 ${_lastUpdateCheck.asset_name}？将保存到隙间更新目录。`)) return;
+    const dlBtn = $("#update-download-btn");
+    if (dlBtn) dlBtn.disabled = true;
+    const prog = $("#update-download-progress");
+    if (prog) prog.hidden = false;
+    $("#update-progress-bar").style.width = "0%";
+    $("#update-progress-text").textContent = "下载中……";
+    setStatus("#update-status", "正在下载更新……", "warn");
+    // Note: pywebview js_api is synchronous per call; progress is shown
+    // as indeterminate until the blocking download resolves.
+    const resp = await callApi("download_update", _lastUpdateCheck.asset_url, _lastUpdateCheck.asset_name);
+    if (!resp.ok) {
+      setStatus("#update-status", `下载失败：${resp.message}`, "err");
+      if (dlBtn) dlBtn.disabled = false;
+      if (prog) prog.hidden = true;
+      return;
+    }
+    $("#update-progress-bar").style.width = "100%";
+    $("#update-progress-text").textContent = `已下载 ${fmtBytes(resp.data.size)}`;
+    _lastUpdateCheck.downloaded_path = resp.data.path;
+    setStatus("#update-status", "下载完成", "ok");
+    const installPanel = $("#update-install-panel");
+    if (installPanel) installPanel.hidden = false;
+  };
+
+  const onInstallUpdate = async () => {
+    if (!_lastUpdateCheck || !_lastUpdateCheck.downloaded_path) {
+      toast("请先下载更新包", "warn"); return;
+    }
+    if (!confirm("安装将关闭并自动重启应用。确定现在安装吗？")) return;
+    setStatus("#update-status", "正在安装……", "warn");
+    const resp = await callApi("apply_update", _lastUpdateCheck.downloaded_path);
+    if (!resp.ok) { setStatus("#update-status", `安装失败：${resp.message}`, "err"); return; }
+    if (resp.data && resp.data.scheduled) {
+      setStatus("#update-status", "安装已就绪，应用即将重启……", "ok");
+      toast("正在安装更新，应用即将重启", "ok");
+      setTimeout(() => { callApi("quit_app"); }, 1200);
+    } else if (resp.data && resp.data.downloaded_path) {
+      setStatus("#update-status", "无法自动安装，请手动打开下载目录中的更新包。", "warn");
+    }
+  };
+
+  const onOpenUpdatePage = async () => {
+    const url = _lastUpdateCheck && _lastUpdateCheck.html_url;
+    if (!url) { toast("没有可打开的页面", "warn"); return; }
+    await callApi("open_external", url);
+  };
+
+  const onToggleAutoCheck = async (e) => {
+    const enabled = !!e.target.checked;
+    const resp = await callApi("set_auto_check_update", enabled);
+    if (!resp.ok) { toast(`保存失败：${resp.message}`, "err"); return; }
+    toast(enabled ? "已开启启动检查" : "已关闭启动检查", "ok");
   };
 
   // --------------------------------------------------------------
@@ -2126,10 +2235,28 @@ const callApi = async (method, ...args) => {
       await populateCharDropdowns();
       await populateVoiceEngines();
       console.log("[devkit] bootstrap complete");
+      // Silent auto-update check at launch (respects user toggle, offline-safe).
+      maybeAutoCheckUpdate();
     } catch (err) {
       console.error("[devkit] bootstrap failed:", err);
       setStatus("#login-status", `初始化失败：${err.message}`, "err");
       $("#status-bar").textContent = "";
+    }
+  };
+
+  const maybeAutoCheckUpdate = async () => {
+    try {
+      const s = await callApi("get_update_settings");
+      if (!s.ok || !s.data || !s.data.auto_check || !s.data.configured) return;
+      const resp = await callApi("check_for_update");
+      if (!resp.ok || !resp.data) return;
+      const info = resp.data;
+      if (info.update_available) {
+        renderUpdateAvailable(info);
+        toast(`发现新版本 ${info.latest_version}，可在「设置 › 软件更新」中更新`, "ok");
+      }
+    } catch (err) {
+      console.warn("[devkit] auto update check skipped:", err);
     }
   };
 
@@ -2387,6 +2514,14 @@ const callApi = async (method, ...args) => {
       }
     });
     on("#settings-packages-refresh", "click", renderSettingsPackages);
+
+    // Settings › 软件更新
+    on("#update-check-btn", "click", onCheckUpdate);
+    on("#update-download-btn", "click", onDownloadUpdate);
+    on("#update-install-btn", "click", onInstallUpdate);
+    on("#update-open-page-btn", "click", onOpenUpdatePage);
+    on("#update-auto-check", "change", onToggleAutoCheck);
+
     on("#settings-theme", "change", (e) => {
       const theme = e.target.value;
       localStorage.setItem("devkit-theme", theme);

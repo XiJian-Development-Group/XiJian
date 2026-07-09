@@ -95,6 +95,8 @@ from devkit import (
     submit,
 )
 from devkit import config
+from devkit import version as _version
+from devkit import updater as _updater
 from devkit.character_editor import (
     list_characters as _ce_list,
     get_character as _ce_get,
@@ -376,6 +378,81 @@ class DevKitApi:
         existing = config.load_config(work_dir)
         existing.update(submission_config)
         config.save_config(work_dir, existing)
+        return {"ok": True}
+
+    # --- auto-update (C6) ----------------------------------------------
+
+    @_serialize_call
+    def get_update_settings(self) -> dict[str, Any]:
+        """Return version + update-source info for the Settings UI."""
+        src = _version.get_update_source()
+        work_dir = self._work_dir()
+        auto = (
+            config.get_auto_check_update(work_dir)
+            if work_dir else config.DEFAULT_CONFIG["auto_check_update"]
+        )
+        return {
+            "current_version": _version.get_app_version(),
+            "auto_check": bool(auto),
+            "configured": bool(src["api_url"]),
+            "github_owner": src["owner"],
+            "github_repo": src["repo"],
+        }
+
+    @_serialize_call
+    def set_auto_check_update(self, enabled: Any) -> dict[str, Any]:
+        """Persist the launch-time auto-check preference."""
+        work_dir = self._work_dir()
+        if not work_dir:
+            raise DevKitError(400, "work directory not set", code="missing_work_dir")
+        config.set_auto_check_update(work_dir, bool(enabled))
+        return {"auto_check": bool(enabled)}
+
+    @_serialize_call
+    def check_for_update(self) -> dict[str, Any]:
+        """Check GitHub Releases for a newer version (network)."""
+        return _updater.check_for_update()
+
+    @_serialize_call
+    def download_update(self, asset_url: Any, asset_name: Any) -> dict[str, Any]:
+        """Download a release asset into the internal Updates folder (network)."""
+        if not isinstance(asset_url, str) or not asset_url:
+            raise DevKitError(400, "asset_url is required", code="missing_asset_url")
+        if not isinstance(asset_name, str) or not asset_name:
+            raise DevKitError(400, "asset_name is required", code="missing_asset_name")
+        result = _updater.download_update(asset_url, asset_name)
+        if "error" in result:
+            raise DevKitError(502, result["error"], code="download_failed")
+        return result
+
+    @_serialize_call
+    def apply_update(self, file_path: Any) -> dict[str, Any]:
+        """Install a downloaded update and schedule a relaunch."""
+        if not isinstance(file_path, str) or not file_path:
+            raise DevKitError(400, "file_path is required", code="missing_file_path")
+        result = _updater.apply_update(file_path)
+        if "error" in result:
+            raise DevKitError(500, result["error"], code="apply_failed")
+        return result
+
+    @_serialize_call
+    def open_external(self, url: Any) -> dict[str, Any]:
+        """Open a URL in the user's default browser (update-page fallback)."""
+        if not isinstance(url, str) or not url.startswith(("http://", "https://")):
+            raise DevKitError(400, "invalid url", code="invalid_url")
+        import webbrowser
+        webbrowser.open(url)
+        return {"ok": True}
+
+    @_serialize_call
+    def quit_app(self) -> dict[str, Any]:
+        """Close the DevKit window (used to hand off to the update helper)."""
+        try:
+            import webview  # type: ignore[import-not-found]
+            for win in list(getattr(webview, "windows", []) or []):
+                win.destroy()
+        except Exception:  # pragma: no cover — depends on GUI runtime
+            _LOGGER.warning("quit_app: failed to destroy window", exc_info=True)
         return {"ok": True}
 
     def _work_dir(self) -> str | None:
