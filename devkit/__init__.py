@@ -122,8 +122,9 @@ _LOGGER = logging.getLogger("devkit")
 # Hard-coded configuration (replace before deploy)
 # ---------------------------------------------------------------------------
 
-#: SMTP server host.
-DEV_SUBMIT_SMTP_HOST: str = os.environ.get("XIJIAN_DEV_SMTP_HOST", "smtp.qq.com")
+#: SMTP server host.  Empty by default — the developer must supply their
+#: own SMTP account (no credentials are hard-coded in source).
+DEV_SUBMIT_SMTP_HOST: str = os.environ.get("XIJIAN_DEV_SMTP_HOST", "")
 #: SMTP server port.  465 = SSL submission port.
 DEV_SUBMIT_SMTP_PORT: int = int(os.environ.get("XIJIAN_DEV_SMTP_PORT", "465") or "465")
 #: Whether to use STARTTLS on the SMTP connection.
@@ -132,32 +133,28 @@ DEV_SUBMIT_SMTP_USE_TLS: bool = os.environ.get("XIJIAN_DEV_SMTP_USE_TLS", "0") i
     "true",
     "yes",
 )
-#: SMTP authentication user.
-DEV_SUBMIT_SMTP_USER: str = os.environ.get(
-    "XIJIAN_DEV_SMTP_USER", "2500693887@qq.com"
-)
-#: SMTP authentication password.
-DEV_SUBMIT_SMTP_PASSWORD: str = os.environ.get(
-    "XIJIAN_DEV_SMTP_PASSWORD", "evcqxdqiiovtebie"
-)
-#: Developer-group recipient.
+#: SMTP authentication user (developer-supplied; never hard-coded).
+DEV_SUBMIT_SMTP_USER: str = os.environ.get("XIJIAN_DEV_SMTP_USER", "")
+#: SMTP authentication password (developer-supplied; never hard-coded).
+DEV_SUBMIT_SMTP_PASSWORD: str = os.environ.get("XIJIAN_DEV_SMTP_PASSWORD", "")
+#: Developer-group recipient (the XiJian submission inbox).  This is a
+#: routing destination, not a login credential.
 DEV_SUBMIT_RECIPIENT: str = os.environ.get(
     "XIJIAN_DEV_RECIPIENT", "panmofan@icloud.com"
 )
-#: From address on the outgoing email.
-DEV_SUBMIT_FROM_ADDR: str = os.environ.get(
-    "XIJIAN_DEV_FROM_ADDR", "2500693887@qq.com"
-)
+#: From address on the outgoing email (developer-supplied).
+DEV_SUBMIT_FROM_ADDR: str = os.environ.get("XIJIAN_DEV_FROM_ADDR", "")
 
-#: Hard limit on attachment size in bytes.  512 MB by macOS
+#: Hard limit on attachment size in bytes.  1200 MB by macOS
 #: default units (``1000 KB = 1 MB``, ``1000 MB = 1 GB``) =
-#: ``512 × 1000 × 1000 = 512 000 000``.
+#: ``1200 × 1000 × 1000 = 1 200 000 000`` (function list C5 AC-3).
 DEV_SUBMIT_MAX_ATTACHMENT_BYTES: int = int(
-    os.environ.get("XIJIAN_DEV_MAX_BYTES", "512000000") or "512000000"
+    os.environ.get("XIJIAN_DEV_MAX_BYTES", "1200000000") or "1200000000"
 )
-#: Per-developer cooldown between submissions.  120s = 2 minutes.
+#: Per-developer cooldown between submissions.  3600s = 1 hour
+#: (function list C5 AC-2).
 DEV_SUBMIT_COOLDOWN_SECONDS: int = int(
-    os.environ.get("XIJIAN_DEV_COOLDOWN_SECONDS", "120") or "120"
+    os.environ.get("XIJIAN_DEV_COOLDOWN_SECONDS", "3600") or "3600"
 )
 #: Local archive retention.  Archives are deleted after this many
 #: seconds unless :func:`keep_archive` is called.  Default: 7 days.
@@ -502,6 +499,10 @@ def pack_payload(
     _LOGGER.info("packing archive to %s", target)
 
     if py7zr is not None:
+        # C5 AC-1 mandates a 7Z *solid* archive.  py7zr's default write mode
+        # is already solid (``solid=True``), so ``mode="w"`` produces the
+        # spec-compliant solid archive.  (Older py7zr releases reject the
+        # explicit ``solid=`` kwarg, so we rely on the default.)
         with py7zr.SevenZipFile(target, mode="w") as archive:
             archive.writestr(manifest_bytes, "manifest.json")
             for entry in file_entries:

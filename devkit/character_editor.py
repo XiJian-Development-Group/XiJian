@@ -218,6 +218,7 @@ def save_character(work_dir: str, data: dict[str, Any]) -> dict[str, Any]:
         "id": char_id,
         "name": data.get("name", ""),
         "display_name": data.get("display_name", data.get("name", "")),
+        "description": data.get("description", ""),
         "persona_doc": persona_doc,
         "voice_profile": data.get("voice_profile", ""),
         "default_emotion": data.get("default_emotion", "neutral"),
@@ -316,6 +317,51 @@ def enforce_initial_memory_minimum(
             result["message"],
             code="insufficient_initial_memory",
         )
+
+
+def auto_fill_character_config(
+    work_dir: str, char_id: str, *, apply: bool = True
+) -> dict[str, Any]:
+    """Auto-fill a character's config from schema defaults (C2.3 + C4).
+
+    Uses the values defined in :data:`CHARACTER_CONFIG_SCHEMA` as sensible
+    starting defaults and marks them ``source='ai_suggested'`` so the 30%
+    AI-ratio audit (C4 AC-1) can account for them.  The developer is
+    expected to review and adjust every field before enabling the character.
+
+    Returns the (proposed or saved) config dict plus a ``source`` marker.
+    """
+    from devkit.ai_assistant import log_assist_event
+
+    record = get_character(work_dir, char_id)
+    if not record:
+        raise DevKitError(404, f"角色 {char_id} 不存在", code="not_found")
+
+    proposed: dict[str, Any] = {}
+    for key, rule in CHARACTER_CONFIG_SCHEMA.items():
+        if key in record.get("character_config", {}):
+            proposed[key] = record["character_config"][key]
+        else:
+            proposed[key] = rule.get("default")
+
+    result = {"config": proposed, "source": "ai_suggested"}
+
+    if apply:
+        record["character_config"] = proposed
+        record["character_config_source"] = "ai_suggested"
+        record["updated_at"] = __import__("devkit._vendor", fromlist=["iso_now"]).iso_now()
+        fpath = _char_path(work_dir, char_id)
+        with open(fpath, "w", encoding="utf-8") as f:
+            json.dump(record, f, ensure_ascii=False, indent=2)
+        log_assist_event(
+            work_dir,
+            event_type="auto_fill_config",
+            target_module="character",
+            description=f"auto-filled config for {char_id}",
+            accepted=True,
+            source="ai_suggested",
+        )
+    return result
 
 
 def export_character_for_submit(work_dir: str, char_id: str) -> dict[str, Any]:

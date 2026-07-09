@@ -132,25 +132,16 @@ def check_ai_threshold(work_dir: str, threshold: float | None = None) -> dict[st
 def auto_suggest(work_dir: str, context: str) -> dict[str, Any]:
     """Return an AI suggestion for ``context`` and log the assist event.
 
-    The UI sends a free-text ``context``; we pick a template by simple
-    keyword detection (no external model is required for the DevKit,
-    which is a server-less Pywebview app).  Every suggestion is logged
-    with ``source='ai_suggested'`` so it counts toward the 30% audit.
+    When a local chat backend (MLX/GGUF) is installed and available the
+    DevKit routes the request through it for a real, context-aware answer
+    (fully offline).  If no backend is available — the normal case for a
+    server-less Pywebview app — it falls back to the built-in keyword
+    templates so the feature stays usable without any network/model
+    dependency.  Every suggestion is logged with ``source='ai_suggested'``
+    so it counts toward the 30% audit.
     """
     ctx = (context or "").lower()
-    if any(k in ctx for k in ("角色", "人设", "性格", "character")):
-        suggestion = _character_suggestion(context)
-    elif any(k in ctx for k in ("世界", "世界观", "设定", "world")):
-        suggestion = _world_suggestion(context)
-    elif any(k in ctx for k in ("剧情", "故事", "plot", "章节")):
-        suggestion = _plot_suggestion(context)
-    elif any(k in ctx for k in ("对话", "台词", "dialog")):
-        suggestion = _dialog_suggestion(context)
-    else:
-        suggestion = (
-            "请补充更多上下文（例如：角色名、世界观类型、剧情走向），"
-            "AI 将据此给出更具体的建议。"
-        )
+    suggestion, backend = _generate_suggestion(ctx, context)
 
     log_assist_event(
         work_dir,
@@ -160,7 +151,111 @@ def auto_suggest(work_dir: str, context: str) -> dict[str, Any]:
         accepted=False,
         source="ai_suggested",
     )
-    return {"suggestion": suggestion}
+    return {"suggestion": suggestion, "backend": backend}
+
+
+def _generate_suggestion(ctx: str, context: str) -> tuple[str, str]:
+    """Try a real local backend first, then fall back to templates."""
+    suggestion = _template_suggestion(ctx, context)
+    try:
+        from devkit.ai.registry import get_chat_backend
+
+        backend = get_chat_backend(fallbacks=("gguf", "mock"))
+    except Exception:
+        # No backend module / not available → template only.
+        return suggestion, "template"
+    try:
+        answer = backend.complete(
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "你是隙间（XiJian）开发辅助 AI，帮助开发者设计角色、"
+                        "世界观、剧情与对话。只输出具体、可执行的建议，使用中文。"
+                    ),
+                },
+                {"role": "user", "content": f"请就以下内容给出设计建议：\n{context}"},
+            ]
+        )
+        if answer and answer.strip():
+            return answer.strip(), getattr(backend, "name", "mlx")
+    except Exception:
+        return suggestion, "template"
+    return suggestion, "template"
+
+
+def _template_suggestion(ctx: str, context: str) -> str:
+    if any(k in ctx for k in ("角色", "人设", "性格", "character")):
+        return _character_suggestion(context)
+    elif any(k in ctx for k in ("世界", "世界观", "设定", "world")):
+        return _world_suggestion(context)
+    elif any(k in ctx for k in ("剧情", "故事", "plot", "章节")):
+        return _plot_suggestion(context)
+    elif any(k in ctx for k in ("对话", "台词", "dialog")):
+        return _dialog_suggestion(context)
+    return (
+        "请补充更多上下文（例如：角色名、世界观类型、剧情走向），"
+        "AI 将据此给出更具体的建议。"
+    )
+
+
+def suggest_with_questions(work_dir: str, context: str) -> dict[str, Any]:
+    """C4 AC-2 — propose clarifying questions before producing a design.
+
+    The function list requires the AI assistant to *ask the user first* on
+    key decision points rather than deciding preferences unilaterally.  This
+    returns a structured ``questions`` list derived from the context so the
+    UI can present them and the developer answers before the assistant fills
+    in fields.  The template suggestion is also returned as a starting point.
+    """
+    ctx = (context or "").lower()
+    module = _detect_module(ctx)
+    questions = _build_questions(module, context)
+    suggestion, backend = _generate_suggestion(ctx, context)
+    log_assist_event(
+        work_dir,
+        event_type="ask_questions",
+        target_module=module,
+        description=context,
+        accepted=False,
+        source="ai_suggested",
+    )
+    return {
+        "suggestion": suggestion,
+        "backend": backend,
+        "module": module,
+        "questions": questions,
+    }
+
+
+def _build_questions(module: str, context: str) -> list[dict[str, Any]]:
+    """Return clarifying questions for a module (C4 AC-2)."""
+    common = [
+        {"key": "name", "question": "这个条目的名称/标题是什么？", "required": True},
+        {"key": "tone", "question": "希望的整体基调是？（轻松 / 严肃 / 悲壮 / 治愈）", "required": False},
+    ]
+    if module == "character":
+        return common + [
+            {"key": "personality_core", "question": "角色的核心性格矛盾是什么？（一句话）", "required": True},
+            {"key": "world_id", "question": "该角色属于哪个世界？（world ID）", "required": False},
+            {"key": "voice_style", "question": "语言风格/口头禅有哪些？", "required": False},
+        ]
+    if module == "world":
+        return common + [
+            {"key": "era", "question": "时间线当前所处的纪元是？", "required": True},
+            {"key": "conflict", "question": "世界的主要冲突/势力有哪些？", "required": True},
+        ]
+    if module == "plot":
+        return common + [
+            {"key": "inciting", "question": "打破日常的起点事件是什么？", "required": True},
+            {"key": "bind_character", "question": "剧情要绑定哪些角色？（character ID）", "required": False},
+        ]
+    if module == "dialog":
+        return common + [
+            {"key": "scenario", "question": "这段对话发生的场景是？", "required": False},
+            {"key": "emotion", "question": "期望的角色情绪是？", "required": False},
+        ]
+    return common
 
 
 def _detect_module(ctx: str) -> str:

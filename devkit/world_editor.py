@@ -338,6 +338,9 @@ def validate_world_config(config: dict[str, Any]) -> tuple[bool, list[str]]:
 #: Recognised trigger operators for the event DSL (see C1.1).
 _EVENT_TRIGGER_KINDS = ("time", "state", "probability", "composite")
 
+#: Single-world event cap (function list C1.1 AC-2, ``[TODO: 默认 200]``).
+MAX_EVENTS_PER_WORLD: int = 200
+
 
 def _events_path(work_dir: str, world_id: str) -> str:
     return os.path.join(_world_dir(work_dir, world_id), "events.json")
@@ -367,6 +370,30 @@ def save_world_event(work_dir: str, world_id: str, data: dict[str, Any]) -> dict
 
     events = list_world_events(work_dir, world_id)
     event_id = data.get("id") or f"evt_{secrets.token_hex(8)}"
+    is_new = event_id not in {e.get("id") for e in events}
+
+    # C1.1 AC-2 — single-world event cap.
+    if is_new and len(events) >= MAX_EVENTS_PER_WORLD:
+        raise DevKitError(
+            400,
+            f"单世界事件数量已达上限 {MAX_EVENTS_PER_WORLD} 条，无法继续添加",
+            code="event_cap_exceeded",
+        )
+
+    # C1.1 boundary — reject a new event whose name + trigger duplicate an
+    # existing one (conflicting definition).
+    if is_new:
+        trigger_json = json.dumps(trigger, sort_keys=True, ensure_ascii=False)
+        for existing in events:
+            if existing.get("name") == name and json.dumps(
+                existing.get("trigger", {}), sort_keys=True, ensure_ascii=False
+            ) == trigger_json:
+                raise DevKitError(
+                    400,
+                    f"已存在名称与触发条件完全相同的事件「{name}」，触发条件冲突，拒绝保存",
+                    code="event_conflict",
+                )
+
     record = {
         "id": event_id,
         "world_id": world_id,

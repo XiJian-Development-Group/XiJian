@@ -209,6 +209,44 @@ def _find_plot_with_edge(work_dir: str, edge_id: str) -> str | None:
     return None
 
 
+def validate_plot_bindings(work_dir: str, plot_id: str) -> dict[str, Any]:
+    """Validate node/edge bindings against real characters & worlds (C3 AC-2).
+
+    Nodes and edges may carry ``bind_character_id`` / ``bind_world_id`` /
+    ``bind_event_id``.  A binding is *broken* when it points at a
+    character/world that does not exist in the developer's workspace.  The
+    check is advisory (it reports problems) and never deletes anything — the
+    UI surfaces the warnings so the developer can fix dangling references
+    before submitting.
+    """
+    from devkit.character_editor import get_character
+    from devkit.world_editor import get_world, list_world_events
+
+    def _check_binding(binding: dict[str, Any], problems: list[str], where: str) -> None:
+        cid = binding.get("bind_character_id")
+        if cid and get_character(work_dir, cid) is None:
+            problems.append(f"{where}: 绑定的角色不存在 ({cid})")
+        wid = binding.get("bind_world_id")
+        if wid:
+            world = get_world(work_dir, wid)
+            if world is None:
+                problems.append(f"{where}: 绑定的世界不存在 ({wid})")
+            else:
+                eid = binding.get("bind_event_id")
+                if eid:
+                    events = list_world_events(work_dir, wid)
+                    if not any(e.get("id") == eid for e in events):
+                        problems.append(f"{where}: 绑定的世界事件不存在 ({eid})")
+
+    problems: list[str] = []
+    for node in get_plot_nodes(work_dir, plot_id):
+        _check_binding(node, problems, f"节点 {node.get('id', '?')}")
+    for edge in get_plot_edges(work_dir, plot_id):
+        _check_binding(edge, problems, f"连线 {edge.get('id', '?')}")
+
+    return {"plot_id": plot_id, "ok": len(problems) == 0, "problems": problems}
+
+
 def export_plot_for_submit(work_dir: str, plot_id: str) -> dict[str, Any]:
     meta = get_plot(work_dir, plot_id)
     if not meta:

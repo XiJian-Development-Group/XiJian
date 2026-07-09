@@ -150,6 +150,15 @@ def import_motion_file(work_dir: str, character_id: str, file_path: str, name: s
     dest = os.path.join(d, f"{motion_id}{ext}")
     shutil.copy2(file_path, dest)
 
+    # C2.9 AC-3 — capture the imported motion's skeleton joint names so the
+    # UI / VRM runtime can verify bone-name matching before playback.
+    params: dict[str, Any] = {}
+    if ext == ".bvh":
+        joints = _extract_bvh_joints(file_path)
+        if joints is not None:
+            params["skeleton_joints"] = joints
+            params["skeleton_joint_count"] = len(joints)
+
     record = {
         "id": motion_id,
         "character_id": character_id,
@@ -157,7 +166,8 @@ def import_motion_file(work_dir: str, character_id: str, file_path: str, name: s
         "type": "imported",
         "description": f"从 {os.path.basename(file_path)} 导入",
         "file_path": dest,
-        "parameters": {},
+        "parameters": params,
+        "imported_format": ext.lstrip("."),
         "duration_seconds": 2.0,
         "loop": False,
     }
@@ -166,6 +176,36 @@ def import_motion_file(work_dir: str, character_id: str, file_path: str, name: s
     motions.append(record)
     _save_motions(work_dir, character_id, motions)
     return record
+
+
+def _extract_bvh_joints(file_path: str) -> list[str] | None:
+    """Parse the joint names from a BVH file's HIERARCHY section.
+
+    Returns the ordered list of bone names, or ``None`` if the file is not a
+    parseable BVH.  Used to surface the skeleton so the VRM runtime can check
+    bone-name compatibility (C2.9 AC-3).
+    """
+    try:
+        with open(file_path, encoding="utf-8", errors="ignore") as f:
+            lines = f.read().splitlines()
+    except OSError:
+        return None
+    joints: list[str] = []
+    in_hierarchy = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped.upper().startswith("HIERARCHY"):
+            in_hierarchy = True
+            continue
+        if not in_hierarchy:
+            continue
+        if stripped.upper().startswith("MOTION"):
+            break
+        if stripped.upper().startswith("ROOT") or stripped.upper().startswith("JOINT"):
+            name = stripped.split(None, 1)[1].strip().rstrip("{").strip()
+            if name:
+                joints.append(name)
+    return joints or None
 
 
 def export_motions_for_submit(work_dir: str, character_id: str) -> dict[str, Any]:

@@ -189,35 +189,19 @@ def generate_voice_from_text(
     engine: str = "fallback",
     params: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    """C2.1 文本生成语音（MeloTTS）。
+
+    该功能仍在制作中，暂不开放使用——直接以明确提示告知用户，而非产出
+    占位音频，避免用户误以为已生成可用语音。
+    """
     if not text.strip():
         raise DevKitError(400, "文本内容不能为空", code="empty_text")
     if not name:
         raise DevKitError(400, "声音名称不能为空", code="missing_name")
-
-    # Use the new TTS engine abstraction
-    mgr = get_tts_manager()
-    request = TTSRequest(
-        text=text,
-        voice_id=params.get("voice_id") if params else None,
-        language=params.get("language", "zh") if params else "zh",
-        speed=params.get("speed", 1.0) if params else 1.0,
-        output_path=None,
-        params=params,
-    )
-    result = mgr.synthesize(request, engine=engine)
-
-    if not result.success:
-        raise DevKitError(500, f"TTS 生成失败: {result.error}", code="tts_failed")
-
-    # Save the generated audio as a voice sample
-    audio_data = None
-    if result.audio_path and os.path.isfile(result.audio_path):
-        with open(result.audio_path, "rb") as f:
-            audio_data = f.read()
-
-    return save_voice(
-        work_dir, character_id, name,
-        audio_data=audio_data, engine=engine, params=params,
+    raise DevKitError(
+        501,
+        "语音合成（MeloTTS）功能仍在制作中，暂不开放使用。",
+        code="feature_not_available",
     )
 
 
@@ -229,16 +213,53 @@ def clone_voice_from_file(
     engine: str = "gguf",
     params: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    if not os.path.isfile(source_path):
-        raise DevKitError(400, f"音频文件不存在: {source_path}", code="file_not_found")
-    ext = os.path.splitext(source_path)[1].lower()
-    if ext not in _SUPPORTED_AUDIO_EXTENSIONS:
-        raise DevKitError(400, f"不支持的音频格式: {ext}", code="bad_format")
+    """C2.1 声音克隆。
 
-    return save_voice(
-        work_dir, character_id, name,
-        sample_path=source_path, engine=engine, params=params,
+    该功能仍在制作中，暂不开放使用——明确提示用户，而非假装已克隆。
+    若需保存自己的参考样本，请使用「选择文件 / 录制样本」（save_voice）。
+    """
+    if not source_path or not os.path.isfile(source_path):
+        raise DevKitError(400, f"音频文件不存在: {source_path}", code="file_not_found")
+    raise DevKitError(
+        501,
+        "声音克隆功能仍在制作中，暂不开放使用。",
+        code="feature_not_available",
     )
+
+
+def generate_singing(
+    work_dir: str,
+    character_id: str,
+    name: str,
+    text: str,
+    engine: str = "fallback",
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """C2.1 歌声合成（DiffSinger）。
+
+    该功能仍在制作中，暂不开放使用——明确提示用户，而非产出占位音频。
+    """
+    if not text.strip():
+        raise DevKitError(400, "歌词文本不能为空", code="empty_text")
+    if not name:
+        raise DevKitError(400, "声音名称不能为空", code="missing_name")
+    raise DevKitError(
+        501,
+        "歌声合成（DiffSinger）功能仍在制作中，暂不开放使用。",
+        code="feature_not_available",
+    )
+
+
+def _patch_voice_record(
+    work_dir: str, character_id: str, voice_id: str, patch: dict[str, Any]
+) -> None:
+    """Persist extra fields onto an existing voice record."""
+    meta = _load_meta(work_dir, character_id)
+    for i, v in enumerate(meta):
+        if v.get("id") == voice_id:
+            meta[i].update(patch)
+            _save_meta(work_dir, character_id, meta)
+            return
 
 
 def delete_voice(work_dir: str, voice_id: str) -> bool:

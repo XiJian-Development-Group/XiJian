@@ -89,7 +89,7 @@ def save_entry(work_dir: str, data: dict[str, Any]) -> dict[str, Any]:
         if entry:
             entry["content"] = content
             entry["importance"] = float(data.get("importance", entry.get("importance", 0.5)))
-            entry["type"] = data.get("type", entry.get("type", "short"))
+            entry["type"] = data.get("type", entry.get("type", "long"))
             entry["tags"] = data.get("tags", entry.get("tags", []))
             entry["updated_at"] = now
             _save_entries(work_dir, character_id, entries)
@@ -100,7 +100,7 @@ def save_entry(work_dir: str, data: dict[str, Any]) -> dict[str, Any]:
     entry = {
         "id": entry_id,
         "character_id": character_id,
-        "type": data.get("type", "short"),
+        "type": data.get("type", "long"),
         "content": content,
         "importance": min(1.0, max(0.0, float(data.get("importance", 0.5)))),
         "tags": data.get("tags", []),

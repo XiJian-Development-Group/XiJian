@@ -103,6 +103,7 @@ from devkit.character_editor import (
     get_persona_templates as _ce_persona_templates,
     get_character_config_schema as _ce_config_schema,
     validate_character_config as _ce_validate_config,
+    auto_fill_character_config as _ce_autofill,
 )
 from devkit.memory_editor import (
     list_entries as _me_list,
@@ -136,6 +137,7 @@ from devkit.model_viewer import (
     read_model_bytes as _mv_read,
     export_model_for_submit as _mv_export,
     generate_model_from_text as _mv_generate,
+    validate_model_format as _mv_validate,
 )
 from devkit.voice_cloner import (
     list_voices as _vc_list,
@@ -147,6 +149,7 @@ from devkit.voice_cloner import (
     export_voice_for_submit as _vc_export,
     generate_voice_from_text as _vc_generate_text,
     clone_voice_from_file as _vc_clone_file,
+    generate_singing as _vc_sing,
 )
 from devkit.plot_editor import (
     list_plots as _pe_list,
@@ -159,6 +162,7 @@ from devkit.plot_editor import (
     get_plot_edges as _pe_edges,
     save_plot_edge as _pe_edge_save,
     delete_plot_edge as _pe_edge_delete,
+    validate_plot_bindings as _pe_validate_bindings,
     export_plot_for_submit as _pe_export,
 )
 from devkit.dialog_editor import (
@@ -186,6 +190,7 @@ from devkit.ai_assistant import (
     calculate_ai_ratio as _aa_ratio,
     check_ai_threshold as _aa_threshold,
     auto_suggest as _aa_suggest,
+    suggest_with_questions as _aa_suggest_questions,
 )
 
 
@@ -311,6 +316,15 @@ class DevKitApi:
         if not work_dir:
             return config.DEFAULT_CONFIG["smtp"]
         return config.get_smtp_config(work_dir)
+
+    @_serialize_call
+    def get_status(self) -> dict[str, Any]:
+        """Spec ``DevKitApi.get_status`` — alias of :meth:`whoami`.
+
+        Returns the static configuration the UI renders in the header
+        (recipient, SMTP host, cooldown, size limit, target kinds).
+        """
+        return self.whoami()
 
     @_serialize_call
     def save_smtp_config(self, smtp_config: Any) -> dict[str, Any]:
@@ -828,6 +842,17 @@ class DevKitApi:
         ok, errors = _ce_validate_config(config)
         return {"ok": ok, "errors": errors}
 
+    @_serialize_call
+    def auto_fill_config(self, char_id: Any) -> dict[str, Any]:
+        """C2.3 + C4 — auto-fill a character's config from schema defaults.
+
+        Marked ``source='ai_suggested'`` so the 30% audit accounts for it;
+        the developer must review every field before enabling the character.
+        """
+        if not isinstance(char_id, str) or not char_id:
+            raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
+        return _ce_autofill(self._work_dir(), char_id, apply=True)
+
     # --- memory editor -------------------------------------------------
 
     @_serialize_call
@@ -1001,6 +1026,13 @@ class DevKitApi:
             raise DevKitError(400, "模型 ID 不能为空", code="missing_model_id")
         return _mv_read(self._work_dir(), model_id)
 
+    @_serialize_call
+    def validate_model(self, model_id: Any) -> dict[str, Any]:
+        """C2.8 AC-4 — validate a registered model against the VRM 1.0 spec."""
+        if not isinstance(model_id, str) or not model_id:
+            raise DevKitError(400, "模型 ID 不能为空", code="missing_model_id")
+        return _mv_validate(self._work_dir(), model_id)
+
     # --- voice clone ---------------------------------------------------
 
     @_serialize_call
@@ -1155,6 +1187,29 @@ class DevKitApi:
         )
 
     @_serialize_call
+    def generate_singing(
+        self,
+        character_id: Any = None,
+        name: Any = None,
+        text: Any = None,
+        engine: Any = None,
+        params: Any = None,
+    ) -> dict[str, Any]:
+        """C2.1 歌声合成（DiffSinger 占位）。离线环境用最佳 TTS 后端生成歌唱占位音频。"""
+        if not isinstance(character_id, str) or not character_id:
+            raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
+        if not isinstance(name, str) or not name:
+            raise DevKitError(400, "声音名称不能为空", code="missing_name")
+        if not isinstance(text, str) or not text.strip():
+            raise DevKitError(400, "歌词文本不能为空", code="empty_text")
+        engine_str = engine if isinstance(engine, str) else "fallback"
+        params_dict = params if isinstance(params, dict) else None
+        return _vc_sing(
+            self._work_dir(), character_id, name, text,
+            engine=engine_str, params=params_dict,
+        )
+
+    @_serialize_call
     def export_voice(self, voice_id: Any) -> dict[str, Any]:
         if not isinstance(voice_id, str) or not voice_id:
             raise DevKitError(400, "声音 ID 不能为空", code="missing_voice_id")
@@ -1253,6 +1308,13 @@ class DevKitApi:
             raise DevKitError(400, "边 ID 不能为空", code="missing_edge_id")
         ok = _pe_edge_delete(self._work_dir(), edge_id)
         return {"deleted": ok}
+
+    @_serialize_call
+    def validate_plot_bindings(self, plot_id: Any) -> dict[str, Any]:
+        """C3 AC-2 — check node/edge bindings resolve to real characters/worlds."""
+        if not isinstance(plot_id, str) or not plot_id:
+            raise DevKitError(400, "剧情 ID 不能为空", code="missing_plot_id")
+        return _pe_validate_bindings(self._work_dir(), plot_id)
 
     # --- dialog editor --------------------------------------------------
 
@@ -1402,6 +1464,13 @@ class DevKitApi:
         if not isinstance(context, str) or not context.strip():
             raise DevKitError(400, "上下文不能为空", code="empty_context")
         return _aa_suggest(self._work_dir(), context)
+
+    @_serialize_call
+    def ai_suggest_questions(self, context: Any) -> dict[str, Any]:
+        """C4 AC-2 — return clarifying questions before producing a design."""
+        if not isinstance(context, str) or not context.strip():
+            raise DevKitError(400, "上下文不能为空", code="empty_context")
+        return _aa_suggest_questions(self._work_dir(), context)
 
     # --- helpers not exposed via js_api --------------------------------
 
