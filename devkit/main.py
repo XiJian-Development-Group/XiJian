@@ -128,7 +128,8 @@ def run(argv: Sequence[str] | None = None) -> int:
 
     api = DevKitApi()
     from devkit import state as _dk_state
-    _dk_state.load(api._work_dir())
+    work_dir = api._work_dir()
+    _dk_state.load(work_dir)
     _LOGGER.info("starting DevKit window (%sx%s)", args.width, args.height)
 
     webview.create_window(

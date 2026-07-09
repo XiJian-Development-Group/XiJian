@@ -91,6 +91,7 @@ from devkit import (
     state,
     submit,
 )
+from devkit import config
 from devkit.character_editor import (
     list_characters as _ce_list,
     get_character as _ce_get,
@@ -302,6 +303,71 @@ class DevKitApi:
             "target_kinds": list(TARGET_KINDS),
             "preferred_archive_format": ARCHIVE_FORMAT_7Z,
         }
+
+    @_serialize_call
+    def get_smtp_config(self) -> dict[str, Any]:
+        """Return the developer's SMTP configuration from the config file."""
+        work_dir = self._work_dir()
+        if not work_dir:
+            return config.DEFAULT_CONFIG["smtp"]
+        return config.get_smtp_config(work_dir)
+
+    @_serialize_call
+    def save_smtp_config(self, smtp_config: Any) -> dict[str, Any]:
+        """Save SMTP configuration to the config file."""
+        work_dir = self._work_dir()
+        if not work_dir:
+            raise DevKitError(400, "work directory not set", code="missing_work_dir")
+        if not isinstance(smtp_config, dict):
+            raise DevKitError(400, "smtp_config must be a dict", code="invalid_smtp_config")
+        # Validate required fields
+        required = ["host", "port", "user", "password", "from_addr"]
+        for field in required:
+            if not smtp_config.get(field):
+                raise DevKitError(400, f"missing required field: {field}", code="missing_field")
+        # Load existing config and update SMTP section
+        existing = config.load_config(work_dir)
+        existing["smtp"] = smtp_config
+        config.save_config(work_dir, existing)
+        return {"ok": True}
+
+    @_serialize_call
+    def get_submission_config(self) -> dict[str, Any]:
+        """Return the full submission config (recipient, rate limit, size limit)."""
+        work_dir = self._work_dir()
+        if not work_dir:
+            return {
+                "recipient": config.DEFAULT_CONFIG["recipient"],
+                "rate_limit_seconds": config.DEFAULT_CONFIG["rate_limit_seconds"],
+                "max_attachment_bytes": config.DEFAULT_CONFIG["max_attachment_bytes"],
+            }
+        return {
+            "recipient": config.get_recipient(work_dir),
+            "rate_limit_seconds": config.get_rate_limit(work_dir),
+            "max_attachment_bytes": config.get_max_attachment_bytes(work_dir),
+        }
+
+    @_serialize_call
+    def save_submission_config(self, submission_config: Any) -> dict[str, Any]:
+        """Save submission config (recipient, rate limit, size limit)."""
+        work_dir = self._work_dir()
+        if not work_dir:
+            raise DevKitError(400, "work directory not set", code="missing_work_dir")
+        if not isinstance(submission_config, dict):
+            raise DevKitError(400, "submission_config must be a dict", code="invalid_config")
+        existing = config.load_config(work_dir)
+        existing.update(submission_config)
+        config.save_config(work_dir, existing)
+        return {"ok": True}
+
+    def _work_dir(self) -> str | None:
+        """Return the current work directory (if set)."""
+        # The work directory is set via api.set_work_dir() in main.py
+        return getattr(self, "_work_dir_path", None)
+
+    def set_work_dir(self, path: str) -> None:
+        """Set the work directory for config persistence."""
+        self._work_dir_path = path
 
     @_serialize_call
     def ping(self) -> dict[str, Any]:
@@ -518,6 +584,7 @@ class DevKitApi:
             file_entries=list(file_entries) if file_entries else None,
             smtp_send=smtp_send if callable(smtp_send) else None,
             archive_path=archive_path if isinstance(archive_path, str) else None,
+            work_dir=self._work_dir(),
         )
         state.save(self._work_dir())
         return result

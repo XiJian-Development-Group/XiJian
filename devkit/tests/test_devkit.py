@@ -211,12 +211,12 @@ class TestCheckRateLimit:
 
     def test_within_window_raises(self):
         devkit_state.last_submit_at["alice"] = "2026-07-03T08:00:00Z"
-        moment = _dt.datetime(2026, 7, 3, 8, 30, 0, tzinfo=_dt.timezone.utc).timestamp()
+        moment = _dt.datetime(2026, 7, 3, 8, 0, 30, tzinfo=_dt.timezone.utc).timestamp()
         with pytest.raises(RateLimitedError) as ei:
             check_rate_limit("alice", now=moment)
         assert ei.value.retry_after_seconds > 0
         assert ei.value.retry_after_seconds == pytest.approx(
-            DEV_SUBMIT_COOLDOWN_SECONDS - 30 * 60, abs=2
+            DEV_SUBMIT_COOLDOWN_SECONDS - 30, abs=2
         )
 
     def test_past_window_returns_zero(self):

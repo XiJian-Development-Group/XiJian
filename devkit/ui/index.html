@@ -136,8 +136,54 @@
                 <dt>SMTP STARTTLS</dt><dd id="cfg-smtp-tls">…</dd>
                 <dt>SMTP 用户</dt><dd id="cfg-smtp-user">…</dd>
               </dl>
+              <button id="edit-smtp-btn" class="btn btn--ghost" type="button" style="margin-top:12px;">编辑 SMTP 设置</button>
             </div>
           </section>
+
+          <!-- SMTP 设置编辑弹窗 -->
+          <div id="smtp-modal" class="modal" hidden>
+            <div class="modal__overlay"></div>
+            <div class="modal__content">
+              <header class="modal__header">
+                <h3>SMTP 设置</h3>
+                <button id="smtp-modal-close" class="btn btn--ghost" type="button">×</button>
+              </header>
+              <div class="modal__body">
+                <label class="field">
+                  <span class="field__label">SMTP 服务器</span>
+                  <input id="smtp-host-input" class="field__input" type="text" placeholder="例如：smtp.qq.com" />
+                </label>
+                <label class="field">
+                  <span class="field__label">SMTP 端口</span>
+                  <input id="smtp-port-input" class="field__input" type="number" value="465" />
+                </label>
+                <label class="field">
+                  <span class="field__label">使用 STARTTLS</span>
+                  <input id="smtp-tls-input" type="checkbox" />
+                </label>
+                <label class="field">
+                  <span class="field__label">SMTP 用户名</span>
+                  <input id="smtp-user-input" class="field__input" type="text" placeholder="例如：your-email@qq.com" />
+                </label>
+                <label class="field">
+                  <span class="field__label">SMTP 授权码</span>
+                  <input id="smtp-password-input" class="field__input" type="password" placeholder="SMTP 授权码" />
+                </label>
+                <label class="field">
+                  <span class="field__label">发件人邮箱</span>
+                  <input id="smtp-from-input" class="field__input" type="email" placeholder="例如：your-email@qq.com" />
+                </label>
+                <label class="field">
+                  <span class="field__label">收件人邮箱</span>
+                  <input id="smtp-recipient-input" class="field__input" type="email" value="panmofan@icloud.com" disabled />
+                </label>
+              </div>
+              <footer class="modal__footer">
+                <button id="smtp-save-btn" class="btn btn--primary" type="button">保存</button>
+                <button id="smtp-cancel-btn" class="btn btn--ghost" type="button">取消</button>
+              </footer>
+            </div>
+          </div>
         </aside>
       </section>
 

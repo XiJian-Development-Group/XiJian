@@ -111,7 +111,7 @@ from email.mime.text import MIMEText
 from email.utils import format_datetime
 from typing import Any
 
-from devkit import state
+from devkit import config, state
 from devkit._vendor import ApiError, gen_submission_id, iso_now, now_ts
 
 
@@ -149,15 +149,15 @@ DEV_SUBMIT_FROM_ADDR: str = os.environ.get(
     "XIJIAN_DEV_FROM_ADDR", "2500693887@qq.com"
 )
 
-#: Hard limit on attachment size in bytes.  1200 MB by macOS
+#: Hard limit on attachment size in bytes.  512 MB by macOS
 #: default units (``1000 KB = 1 MB``, ``1000 MB = 1 GB``) =
-#: ``1200 × 1000 × 1000 = 1 200 000 000``.
+#: ``512 × 1000 × 1000 = 512 000 000``.
 DEV_SUBMIT_MAX_ATTACHMENT_BYTES: int = int(
-    os.environ.get("XIJIAN_DEV_MAX_BYTES", "1200000000") or "1200000000"
+    os.environ.get("XIJIAN_DEV_MAX_BYTES", "512000000") or "512000000"
 )
-#: Per-developer cooldown between submissions.  3600s = 1 hour.
+#: Per-developer cooldown between submissions.  120s = 2 minutes.
 DEV_SUBMIT_COOLDOWN_SECONDS: int = int(
-    os.environ.get("XIJIAN_DEV_COOLDOWN_SECONDS", "3600") or "3600"
+    os.environ.get("XIJIAN_DEV_COOLDOWN_SECONDS", "120") or "120"
 )
 #: Local archive retention.  Archives are deleted after this many
 #: seconds unless :func:`keep_archive` is called.  Default: 7 days.
@@ -635,12 +635,14 @@ def build_email_message(
     content_sha256: str,
     archive_path: str,
     archive_format: str,
+    from_addr: str | None = None,
+    recipient: str | None = None,
 ) -> MIMEMultipart:
     """Build the multipart MIME message sent to the developer group."""
     msg = MIMEMultipart("mixed")
     msg["Subject"] = f"[XiJian DevKit Package Submit] {developer_id}"
-    msg["From"] = DEV_SUBMIT_FROM_ADDR
-    msg["To"] = DEV_SUBMIT_RECIPIENT
+    msg["From"] = from_addr or DEV_SUBMIT_FROM_ADDR
+    msg["To"] = recipient or DEV_SUBMIT_RECIPIENT
     msg["Date"] = format_datetime(_dt.datetime.now(_dt.timezone.utc))
 
     body_lines = [
@@ -687,13 +689,31 @@ def send_submission_email(
     ai_ratio: float,
     archive_path: str,
     archive_format: str,
+    work_dir: str | None = None,
     smtp_send: Callable[..., tuple[str, str]] | None = None,
 ) -> dict[str, str]:
     """Build + send the submission email.  Returns the SMTP status dict.
 
     Tests inject ``smtp_send`` to capture the email without touching
     the network.  When omitted, :func:`_smtp_send` is used.
+
+    If ``work_dir`` is provided, SMTP settings are loaded from the
+    developer's config file.  Otherwise, falls back to module constants.
     """
+    # Load SMTP config from developer's config file
+    if work_dir:
+        smtp_config = config.get_smtp_config(work_dir)
+        recipient = config.get_recipient(work_dir)
+    else:
+        smtp_config = {
+            "host": DEV_SUBMIT_SMTP_HOST,
+            "port": DEV_SUBMIT_SMTP_PORT,
+            "use_tls": DEV_SUBMIT_SMTP_USE_TLS,
+            "user": DEV_SUBMIT_SMTP_USER,
+            "password": DEV_SUBMIT_SMTP_PASSWORD,
+            "from_addr": DEV_SUBMIT_FROM_ADDR,
+        }
+        recipient = DEV_SUBMIT_RECIPIENT
     archive_filename = os.path.basename(archive_path)
     archive_size = _file_size(archive_path)
     sha256 = compute_sha256(archive_path)
@@ -712,16 +732,18 @@ def send_submission_email(
         content_sha256=sha256,
         archive_path=archive_path,
         archive_format=archive_format,
+        from_addr=smtp_config.get("from_addr", DEV_SUBMIT_FROM_ADDR),
+        recipient=recipient,
     )
     send = smtp_send or _smtp_send
     code, response = send(
-        host=DEV_SUBMIT_SMTP_HOST,
-        port=DEV_SUBMIT_SMTP_PORT,
-        use_tls=DEV_SUBMIT_SMTP_USE_TLS,
-        user=DEV_SUBMIT_SMTP_USER,
-        password=DEV_SUBMIT_SMTP_PASSWORD,
-        sender=DEV_SUBMIT_FROM_ADDR,
-        recipient=DEV_SUBMIT_RECIPIENT,
+        host=smtp_config.get("host", DEV_SUBMIT_SMTP_HOST),
+        port=smtp_config.get("port", DEV_SUBMIT_SMTP_PORT),
+        use_tls=smtp_config.get("use_tls", DEV_SUBMIT_SMTP_USE_TLS),
+        user=smtp_config.get("user", DEV_SUBMIT_SMTP_USER),
+        password=smtp_config.get("password", DEV_SUBMIT_SMTP_PASSWORD),
+        sender=smtp_config.get("from_addr", DEV_SUBMIT_FROM_ADDR),
+        recipient=recipient,
         message=msg,
     )
     return {
@@ -778,6 +800,7 @@ def submit(
     file_entries: list[Mapping[str, Any]] | None = None,
     smtp_send: Callable[..., tuple[str, str]] | None = None,
     archive_path: str | None = None,
+    work_dir: str | None = None,
     now: float | None = None,
 ) -> dict[str, Any]:
     """End-to-end submission.
@@ -835,6 +858,7 @@ def submit(
         ai_ratio=ai_ratio,
         archive_path=archive_path,
         archive_format=archive_format,
+        work_dir=work_dir,
         smtp_send=smtp_send,
     )
 

@@ -104,6 +104,57 @@
   };
 
   // --------------------------------------------------------------
+  // SMTP settings
+  // --------------------------------------------------------------
+
+  const openSmtpModal = async () => {
+    const resp = await callApi("get_smtp_config");
+    if (resp.ok) {
+      const cfg = resp.data;
+      $("#smtp-host-input").value = cfg.host || "";
+      $("#smtp-port-input").value = cfg.port || 465;
+      $("#smtp-tls-input").checked = cfg.use_tls || false;
+      $("#smtp-user-input").value = cfg.user || "";
+      $("#smtp-password-input").value = cfg.password || "";
+      $("#smtp-from-input").value = cfg.from_addr || "";
+    }
+    const subResp = await callApi("get_submission_config");
+    if (subResp.ok) {
+      $("#smtp-recipient-input").value = subResp.data.recipient || "panmofan@icloud.com";
+    }
+    $("#smtp-modal").hidden = false;
+  };
+
+  const closeSmtpModal = () => {
+    $("#smtp-modal").hidden = true;
+  };
+
+  const saveSmtpConfig = async () => {
+    const smtpConfig = {
+      host: $("#smtp-host-input").value.trim(),
+      port: parseInt($("#smtp-port-input").value, 10) || 465,
+      use_tls: $("#smtp-tls-input").checked,
+      user: $("#smtp-user-input").value.trim(),
+      password: $("#smtp-password-input").value,
+      from_addr: $("#smtp-from-input").value.trim(),
+    };
+    if (!smtpConfig.host || !smtpConfig.user || !smtpConfig.password || !smtpConfig.from_addr) {
+      toast("请填写所有必填字段", "warn");
+      return;
+    }
+    const resp = await callApi("save_smtp_config", smtpConfig);
+    if (resp.ok) {
+      toast("SMTP 设置已保存", "ok");
+      closeSmtpModal();
+      // Reload config
+      const cfgResp = await callApi("whoami");
+      if (cfgResp.ok) renderConfig(cfgResp.data);
+    } else {
+      toast(`保存失败：${resp.message}`, "err");
+    }
+  };
+
+  // --------------------------------------------------------------
   // Submit tab — packages
   // --------------------------------------------------------------
 
@@ -1892,6 +1943,12 @@
     $$(".help-nav__btn").forEach((btn) => {
       btn.addEventListener("click", () => switchHelpTab(btn.dataset.helpTab));
     });
+
+    // SMTP settings
+    $("#edit-smtp-btn").addEventListener("click", openSmtpModal);
+    $("#smtp-modal-close").addEventListener("click", closeSmtpModal);
+    $("#smtp-cancel-btn").addEventListener("click", closeSmtpModal);
+    $("#smtp-save-btn").addEventListener("click", saveSmtpConfig);
 
     // Submit tab
     $("#login-btn").addEventListener("click", onLogin);
