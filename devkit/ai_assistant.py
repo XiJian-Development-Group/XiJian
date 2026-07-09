@@ -129,29 +129,23 @@ def check_ai_threshold(work_dir: str, threshold: float | None = None) -> dict[st
     }
 
 
+#: Shown while the AI assistant backend is not yet implemented.
+AI_UNAVAILABLE_MESSAGE = "当前功能暂不开放，请耐心等待，谢谢"
+
+
 def auto_suggest(work_dir: str, context: str) -> dict[str, Any]:
     """Return an AI suggestion for ``context`` and log the assist event.
 
-    When a local chat backend (MLX/GGUF) is installed and available the
-    DevKit routes the request through it for a real, context-aware answer
-    (fully offline).  If no backend is available — the normal case for a
-    server-less Pywebview app — it falls back to the built-in keyword
-    templates so the feature stays usable without any network/model
-    dependency.  Every suggestion is logged with ``source='ai_suggested'``
-    so it counts toward the 30% audit.
+    The real local-chat backend (MLX/GGUF) is not bundled in this offline
+    DevKit build, so the assistant is currently disabled.  We return a
+    clear "not available" message instead of a misleading template so the
+    user is not misled into thinking an AI answered.
     """
-    ctx = (context or "").lower()
-    suggestion, backend = _generate_suggestion(ctx, context)
-
-    log_assist_event(
-        work_dir,
-        event_type="suggest",
-        target_module=_detect_module(ctx),
-        description=context,
-        accepted=False,
-        source="ai_suggested",
-    )
-    return {"suggestion": suggestion, "backend": backend}
+    return {
+        "suggestion": AI_UNAVAILABLE_MESSAGE,
+        "backend": "unavailable",
+        "available": False,
+    }
 
 
 def _generate_suggestion(ctx: str, context: str) -> tuple[str, str]:
@@ -210,21 +204,12 @@ def suggest_with_questions(work_dir: str, context: str) -> dict[str, Any]:
     """
     ctx = (context or "").lower()
     module = _detect_module(ctx)
-    questions = _build_questions(module, context)
-    suggestion, backend = _generate_suggestion(ctx, context)
-    log_assist_event(
-        work_dir,
-        event_type="ask_questions",
-        target_module=module,
-        description=context,
-        accepted=False,
-        source="ai_suggested",
-    )
     return {
-        "suggestion": suggestion,
-        "backend": backend,
+        "suggestion": AI_UNAVAILABLE_MESSAGE,
+        "backend": "unavailable",
+        "available": False,
         "module": module,
-        "questions": questions,
+        "questions": [],
     }
 
 

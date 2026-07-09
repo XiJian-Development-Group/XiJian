@@ -14,6 +14,7 @@ from xijian_api.stubs import (
     chat,
     citations,
     embedding,
+    events,
     files,
     fine_tuning,
     image,
@@ -46,6 +47,7 @@ def seed_all() -> None:
     settings.seed_default()
     overload.seed_default()
     character_state.seed_default()
+    events.seed_default()
     # citations module holds no state of its own but exposes its
     # helpers on the package for the chat pipeline to import via
     # ``from xijian_api.stubs import citations``.
@@ -68,6 +70,7 @@ __all__ = [
     "chat",
     "citations",
     "embedding",
+    "events",
     "files",
     "fine_tuning",
     "image",

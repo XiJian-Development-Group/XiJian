@@ -194,6 +194,21 @@ def gen_event_instance_id() -> str:
     return gen_id("evinst_", _SHORT_HEX_LEN)
 
 
+def gen_npc_id() -> str:
+    """Return an NPC id (``npc_<12 hex>``)."""
+    return gen_id("npc_", _SHORT_HEX_LEN)
+
+
+def gen_npc_scheduling_log_id() -> str:
+    """Return an NPC-tier-transition log id (``npcsched_<12 hex>``)."""
+    return gen_id("npcsched_", _SHORT_HEX_LEN)
+
+
+def gen_world_audit_id() -> str:
+    """Return a world-audit log id (``waudit_<12 hex>``)."""
+    return gen_id("waudit_", _SHORT_HEX_LEN)
+
+
 def gen_submission_id() -> str:
     """Return a Developer-Kit submission id (``sub_<12 hex>``).
 

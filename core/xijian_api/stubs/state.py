@@ -92,6 +92,38 @@ world_events: dict = {}
 world_event_instances: dict = {}
 world_event_categories_disabled: dict = {}
 
+# A4.2 world-manager system.  Five buckets mirror the SQL schema in
+# the function list v2:
+#   npcs                       — {npc_id: {world_id, name, persona_doc,
+#                                          state_json, compute_budget,
+#                                          is_alive, activity_tier,
+#                                          importance, last_think_at,
+#                                          created_at}}
+#   npc_scheduling_log         — {log_id: {npc_id, world_id, action,
+#                                          from_tier, to_tier, reason,
+#                                          created_at}}
+#                                         Append-only audit of NPC
+#                                         tier transitions for
+#                                         compute-budget backtracking.
+#   world_compute_config       — {world_id: {total_token_budget,
+#                                          active_tier, max_npcs,
+#                                          max_active_npcs, updated_at}}
+#                                         Per-world compute tiers
+#                                         (high_active=3 / low_active=10).
+#   world_environment          — {world_id: {weather, time_of_day,
+#                                          light_level, ambient_audio,
+#                                          env_meta}}
+#   world_audit_log            — {log_id: {world_id, action, actor,
+#                                          payload, created_at}}
+#                                         Append-only operator/system
+#                                         event log (reset / patch /
+#                                         transition / npc_create / etc).
+npcs: dict = {}
+npc_scheduling_log: dict = {}
+world_compute_config: dict = {}
+world_environment: dict = {}
+world_audit_log: dict = {}
+
 # Developer Kit (C5) state lives in ``xijian_api.devkit.state`` — the
 # DevKit is a stand-alone Pywebview application that does not share a
 # Flask server with the main API, so its buckets are intentionally
@@ -140,6 +172,12 @@ def reset_for_testing() -> None:
     world_events.clear()
     world_event_instances.clear()
     world_event_categories_disabled.clear()
+    # A4.2 buckets.
+    npcs.clear()
+    npc_scheduling_log.clear()
+    world_compute_config.clear()
+    world_environment.clear()
+    world_audit_log.clear()
     files.clear()
     batches.clear()
     fine_tuning_jobs.clear()
@@ -173,6 +211,11 @@ __all__ = [
     "world_events",
     "world_event_instances",
     "world_event_categories_disabled",
+    "npcs",
+    "npc_scheduling_log",
+    "world_compute_config",
+    "world_environment",
+    "world_audit_log",
     "files",
     "batches",
     "fine_tuning_jobs",

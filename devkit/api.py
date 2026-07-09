@@ -455,6 +455,69 @@ class DevKitApi:
             _LOGGER.warning("quit_app: failed to destroy window", exc_info=True)
         return {"ok": True}
 
+    @_serialize_call
+    def open_file_dialog(
+        self,
+        dialog_type: Any = "open",
+        file_types: Any = None,
+        allow_multiple: Any = False,
+    ) -> dict[str, Any]:
+        """Open a native file dialog (single source of truth).
+
+        pywebview only exposes the file dialog from the Python side
+        (``Window.create_file_dialog``); the JS-side
+        ``window.pywebview.create_file_dialog`` is frequently reported
+        as "not ready" in some runtimes.  This method drives the dialog
+        on the live window and returns the chosen path(s).
+
+        Returns ``{"paths": [str, ...]}`` (empty list when cancelled).
+        """
+        try:
+            import webview  # type: ignore[import-not-found]
+        except Exception as exc:  # pragma: no cover
+            raise DevKitError(500, f"webview 不可用：{exc}", code="webview_unavailable")
+
+        windows = list(getattr(webview, "windows", []) or [])
+        if not windows:
+            raise DevKitError(500, "窗口尚未就绪，无法打开文件对话框", code="window_not_ready")
+        win = windows[-1]
+
+        kind_str = str(dialog_type or "open").lower()
+        kind = getattr(webview, "FileDialog", None)
+        if kind is None:  # pragma: no cover — ancient pywebview
+            kind = webview.OPEN_DIALOG
+        dialog_kind = {
+            "open": kind.OPEN,
+            "folder": kind.FOLDER,
+            "save": kind.SAVE,
+        }.get(kind_str, kind.OPEN)
+
+        file_types_arg = None
+        if file_types and kind_str == "open":
+            exts = [str(e) for e in file_types if e] if isinstance(file_types, list) else [str(file_types)]
+            # pywebview expects a list of (label, ext) tuples; we label generically.
+            file_types_arg = [("允许的格式", ",".join(exts))] if exts else None
+
+        try:
+            result = win.create_file_dialog(
+                dialog_kind,
+                file_types=file_types_arg,
+                allow_multiple=bool(allow_multiple),
+            )
+        except Exception as exc:  # pragma: no cover — depends on GUI runtime
+            raise DevKitError(500, f"打开文件对话框失败：{exc}", code="dialog_failed")
+
+        # pywebview returns a str (single) or list[str]; normalise to list.
+        if result is None:
+            paths = []
+        elif isinstance(result, str):
+            paths = [result]
+        elif isinstance(result, (list, tuple)):
+            paths = [str(p) for p in result]
+        else:
+            paths = []
+        return {"paths": paths}
+
     def _work_dir(self) -> str | None:
         """Return the current work directory (if set)."""
         # The work directory is set via api.set_work_dir() in main.py

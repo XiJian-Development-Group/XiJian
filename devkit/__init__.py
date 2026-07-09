@@ -975,6 +975,16 @@ def clear_submissions(work_dir: str) -> int:
 
 def delete_package(package_id: str, work_dir: str) -> bool:
     """Delete a submittable package by its package_id (e.g. 'char:abc')."""
+    # Import locally to avoid circular imports
+    from devkit.character_editor import delete_character as _ce_delete
+    from devkit.memory_editor import delete_entry as _me_delete, list_entries as _me_list
+    from devkit.world_editor import delete_world as _we_delete
+    from devkit.plot_editor import delete_plot as _pe_delete
+    from devkit.voice_cloner import delete_voice as _vc_delete
+    from devkit.dialog_editor import delete_dialog as _de_delete
+    from devkit.motion_editor import delete_motion as _moe_delete
+    from devkit.model_viewer import unregister_model as _mv_unregister
+
     if ":" not in package_id:
         return False
     ptype, pid = package_id.split(":", 1)
@@ -995,6 +1005,10 @@ def delete_package(package_id: str, work_dir: str) -> bool:
             return _mv_unregister(work_dir, pid)
         elif ptype == "voice":
             return _vc_delete(work_dir, pid)
+        elif ptype == "dialog":
+            return _de_delete(work_dir, pid)
+        elif ptype == "motion":
+            return _moe_delete(work_dir, pid)
         else:
             return False
     except Exception:

@@ -401,6 +401,21 @@ def _matches_disabled_categories(
     return event_kind in disabled
 
 
+def _is_overload_active() -> bool:
+    """True if the A5.4 overload protection is currently in a recovery window.
+
+    Reads :data:`state.overload["recovery"]` directly to avoid a hard
+    import of the overload module (which would create a circular
+    dependency).  When A5.4 has triggered but the user has not yet
+    finalized recovery, new event fires are dropped instead of being
+    queued — per ``docs/notes.md`` A4.1 cross-link guidance.
+    """
+    recovery = (state.overload or {}).get("recovery")
+    if not recovery:
+        return False
+    return recovery.get("status") in {"waiting", "first_confirmed"}
+
+
 def _pick_fire_payload(event_record: dict, now: float) -> dict:
     """Compose the ``payload`` for a fired instance.
 
@@ -415,6 +430,36 @@ def _pick_fire_payload(event_record: dict, now: float) -> dict:
     payload = dict(template)
     payload.setdefault("fired_at", now)
     return payload
+
+
+def _broadcast_event_fired(instance: dict) -> None:
+    """Publish an ``event.fired`` WebSocket notification.
+
+    Best-effort: the scheduler must never crash because the WS layer
+    isn't wired (early tests, headless CI, etc.).  Mirrors the
+    overload module's swallow-and-log posture.
+    """
+    try:
+        from xijian_api.routes.ws_routes import publish_event
+    except Exception:  # noqa: BLE001
+        return
+    try:
+        publish_event(
+            "event.fired",
+            {
+                "instance_id": instance["id"],
+                "event_id": instance["event_id"],
+                "world_id": instance["world_id"],
+                "fired_at": instance["fired_at"],
+                "needs_scene": instance.get("needs_scene"),
+                "scene_ref_id": instance.get("scene_ref_id"),
+                "affects_user": instance.get("affects_user"),
+            },
+        )
+    except Exception:  # noqa: BLE001
+        # WS may be down (tests, no client connected).  Firing must
+        # still succeed — the instance is already committed above.
+        return
 
 
 # ---------------------------------------------------------------------------
@@ -599,6 +644,7 @@ def fire_event(
     }
     state.world_event_instances[instance_id] = instance
     _trim_instances()
+    _broadcast_event_fired(instance)
     return instance
 
 
@@ -740,6 +786,25 @@ def tick_world(world_id: str, *, now: float | None = None) -> list[dict]:
 
     fired: list[dict] = []
     if candidates:
+        # A5.4 overload shortcut — if the overload protection is in a
+        # recovery window, drop every candidate outright instead of
+        # either queueing or applying per-event cooldowns.  Per
+        # docs/notes.md (A4.1 cross-link): "高频事件风暴节流触发时，
+        # 如果系统已在过载，应直接拒绝新事件而非入冷却队列".
+        if _is_overload_active():
+            for _priority, record in candidates:
+                skipped.append(
+                    {"event_id": record["id"], "reason": "overload_active"}
+                )
+            fired = []
+            if skipped:
+                _LOGGER.debug(
+                    "tick_world(%s): %d fired, %d skipped (overload-active drop)",
+                    world_id,
+                    len(fired),
+                    len(skipped),
+                )
+            return fired
         # Storm throttle — only allow one event per window.  Highest
         # priority wins.  We do this *before* firing so losers don't
         # consume cooldown slots.

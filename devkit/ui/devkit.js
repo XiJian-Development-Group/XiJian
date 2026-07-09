@@ -142,6 +142,14 @@ const callApi = async (method, ...args) => {
   return fn(...args);
 };
 
+  // Native file dialog via the Python-side API (reliable; the JS-side
+  // window.pywebview.create_file_dialog is frequently unavailable).
+  const openFileDialog = async (dialogType = "open", exts = [], allowMultiple = false) => {
+    const resp = await callApi("open_file_dialog", dialogType, exts, allowMultiple);
+    if (!resp.ok) { toast(`打开文件对话框失败：${resp.message}`, "err"); return []; }
+    return resp.data.paths || [];
+  };
+
   const switchTab = (tabName) => {
     $$(".tab-nav__btn").forEach((btn) => {
       btn.classList.toggle("tab-nav__btn--active", btn.dataset.tab === tabName);
@@ -627,19 +635,9 @@ const callApi = async (method, ...args) => {
 
   const onCharImportPersona = async () => {
     if (!_selectedCharId) { toast("请先选择一个角色", "err"); return; }
-    if (!window.pywebview || !window.pywebview.create_file_dialog) {
-      toast("pywebview 文件对话框未就绪", "err");
-      return;
-    }
-    let picked;
-    try {
-      picked = await window.pywebview.create_file_dialog(
-        window.pywebview.types.OPEN,
-        { file_types: ["md", "markdown", "txt"] }
-      );
-    } catch { toast("文件选择失败", "err"); return; }
+    const picked = await openFileDialog("open", ["md", "markdown", "txt"]);
     if (!picked || picked.length === 0) return;
-    const resp = await callApi("import_persona", _selectedCharId, picked);
+    const resp = await callApi("import_persona", _selectedCharId, picked[0]);
     if (!resp.ok) { toast(`导入失败：${resp.message}`, "err"); return; }
     $("#char-persona").value = resp.data || "";
     toast("人设文档已导入", "ok");
@@ -915,7 +913,6 @@ const callApi = async (method, ...args) => {
     const cfg = (world && world.config) || {};
     $("#world-editing-id").value = world?.id || "";
     $("#world-name").value = world?.name || "";
-    $("#world-config").value = Object.keys(cfg).length ? JSON.stringify(cfg, null, 2) : "";
     $("#world-doc").value = (world && world.world_doc) || "";
     $("#world-cfg-timeflow").value = cfg.time_flow_multiplier ?? 30;
     $("#world-cfg-daylen").value = cfg.day_length_minutes ?? 1440;
@@ -936,7 +933,6 @@ const callApi = async (method, ...args) => {
     _selectedWorldId = null;
     $("#world-editing-id").value = "";
     $("#world-name").value = "";
-    $("#world-config").value = "";
     $("#world-doc").value = "";
     $("#world-cfg-timeflow").value = 30;
     $("#world-cfg-daylen").value = 1440;
@@ -952,16 +948,12 @@ const callApi = async (method, ...args) => {
   };
 
   const _collectWorldConfig = () => {
-    let raw = {};
-    try { const t = $("#world-config").value.trim(); if (t) raw = JSON.parse(t); }
-    catch { raw = {}; }
     const lighting = $("#world-cfg-lighting").value.split(",").map((s) => s.trim()).filter(Boolean);
     const audio = $("#world-cfg-audio").value.split(",").map((s) => s.trim()).filter(Boolean);
     let weather = {};
     try { const w = $("#world-cfg-weather").value.trim(); if (w) weather = JSON.parse(w); }
     catch { weather = {}; }
     return {
-      ...raw,
       time_flow_multiplier: parseFloat($("#world-cfg-timeflow").value) || 30,
       day_length_minutes: parseFloat($("#world-cfg-daylen").value) || 1440,
       night_ratio: parseFloat($("#world-cfg-night").value) || 0.4,
@@ -1123,12 +1115,9 @@ const callApi = async (method, ...args) => {
   };
 
   const onModelAdd = async () => {
-    if (!window.pywebview || !window.pywebview.create_file_dialog) { toast("pywebview 文件对话框未就绪", "err"); return; }
-    let picked;
-    try { picked = await window.pywebview.create_file_dialog(window.pywebview.types.OPEN, { file_types: ["vrm", "glb", "gltf"] }); }
-    catch { toast("文件选择失败", "err"); return; }
+    const picked = await openFileDialog("open", ["vrm", "glb", "gltf"]);
     if (!picked || picked.length === 0) return;
-    const resp = await callApi("register_model", picked);
+    const resp = await callApi("register_model", picked[0]);
     if (!resp.ok) { toast(`添加失败：${resp.message}`, "err"); return; }
     toast("模型已添加", "ok");
     await renderModelList();
@@ -1233,12 +1222,9 @@ const callApi = async (method, ...args) => {
   };
 
   const onVoicePickFile = async () => {
-    if (!window.pywebview || !window.pywebview.create_file_dialog) { toast("pywebview 文件对话框未就绪", "err"); return; }
-    let picked;
-    try { picked = await window.pywebview.create_file_dialog(window.pywebview.types.OPEN, { file_types: ["wav", "mp3", "m4a", "ogg", "flac"] }); }
-    catch { toast("文件选择失败", "err"); return; }
+    const picked = await openFileDialog("open", ["wav", "mp3", "m4a", "ogg", "flac"]);
     if (!picked || picked.length === 0) return;
-    $("#voice-sample-path").value = picked;
+    $("#voice-sample-path").value = picked[0];
     // Clear any prior recording so the form doesn't try to upload
     // both at once.
     clearVoiceRecording();
@@ -1251,6 +1237,27 @@ const callApi = async (method, ...args) => {
   let _mediaRecorder = null;
   let _recordingChunks = [];
   let _recordingUrl = null;
+
+  // Webviews (pywebview / WKWebView) typically don't expose
+  // navigator.mediaDevices, so microphone recording is unavailable.
+  // Detect this and hide the recording controls, pointing the user to
+  // the file picker instead.
+  const voiceRecordingSupported = () => {
+    return !!(
+      navigator.mediaDevices &&
+      typeof navigator.mediaDevices.getUserMedia === "function"
+    );
+  };
+
+  const setupVoiceRecordingUI = () => {
+    if (voiceRecordingSupported()) return;
+    const group = $("#voice-record-group");
+    if (group) group.hidden = true;
+    const hint = $("#voice-record-hint");
+    if (hint) hint.hidden = true;
+    const unsupported = $("#voice-record-unsupported");
+    if (unsupported) unsupported.hidden = false;
+  };
 
   const setRecordingUi = (state) => {
     const recBtn = $("#voice-record-btn");
@@ -1395,13 +1402,10 @@ const callApi = async (method, ...args) => {
   let _voiceClonePath = "";
 
   const onVoiceClonePick = async () => {
-    if (!window.pywebview || !window.pywebview.create_file_dialog) { toast("pywebview 文件对话框未就绪", "err"); return; }
-    let picked;
-    try { picked = await window.pywebview.create_file_dialog(window.pywebview.types.OPEN, { file_types: ["wav", "mp3", "m4a", "ogg", "flac"] }); }
-    catch { toast("文件选择失败", "err"); return; }
+    const picked = await openFileDialog("open", ["wav", "mp3", "m4a", "ogg", "flac"]);
     if (!picked || picked.length === 0) return;
-    _voiceClonePath = picked;
-    $("#voice-clone-path").value = picked;
+    _voiceClonePath = picked[0];
+    $("#voice-clone-path").value = picked[0];
   };
 
   const onVoiceClone = async () => {
@@ -1822,15 +1826,12 @@ const callApi = async (method, ...args) => {
   const onMotionImport = async () => {
     const charId = $("#motion-char").value.trim() || $("#motion-char-id").value.trim();
     if (!charId) { toast("请填写角色 ID", "err"); return; }
-    if (!window.pywebview || !window.pywebview.create_file_dialog) { toast("pywebview 文件对话框未就绪", "err"); return; }
-    let picked;
-    try { picked = await window.pywebview.create_file_dialog(window.pywebview.types.OPEN, { file_types: ["bvh", "fbx", "glb", "gltf"] }); }
-    catch { toast("文件选择失败", "err"); return; }
+    const picked = await openFileDialog("open", ["bvh", "fbx", "glb", "gltf"]);
     if (!picked || picked.length === 0) return;
-    const resp = await callApi("import_motion_file", charId, picked);
+    const resp = await callApi("import_motion_file", charId, picked[0]);
     if (!resp.ok) { toast(`导入失败：${resp.message}`, "err"); return; }
     toast("动作文件已导入", "ok");
-    $("#motion-file-path").value = picked;
+    $("#motion-file-path").value = picked[0];
     await renderMotionList();
   };
 
@@ -2248,6 +2249,8 @@ const callApi = async (method, ...args) => {
       await populateCharDropdowns();
       await populateVoiceEngines();
       console.log("[devkit] bootstrap complete");
+      // Hide microphone recording controls if the runtime lacks support.
+      setupVoiceRecordingUI();
       // Silent auto-update check at launch (respects user toggle, offline-safe).
       maybeAutoCheckUpdate();
     } catch (err) {

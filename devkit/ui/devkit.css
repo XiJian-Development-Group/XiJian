@@ -12,6 +12,8 @@
   --fg-muted: #9aa0b1;
   --fg-dim: #6e7383;
   --accent: #f0a85a;
+  --header-h: 120px;
+  --footer-h: 44px;
   --accent-strong: #e89a3d;
   --accent-on: #1c1f26;
   --success: #6acf90;
@@ -220,30 +222,48 @@ body {
   width: 100%;
 }
 
+/* Every active tab panel scrolls as a single unit so expanded content
+   (especially the right-side editors) is always reachable. */
+.tab-panel--active {
+  max-height: calc(100vh - var(--header-h, 120px) - var(--footer-h, 44px) - 20px);
+  overflow-y: auto;
+  padding-bottom: 28px;
+}
+
+/* Two-column tabs (content + editor) use a grid. The submit tab (no
+   editor side) keeps its own flex layout but still scrolls. */
 .tab-panel--active {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 360px;
+  align-items: start;
+}
+.tab-panel--active:not(:has(.tab-panel__editor)) {
+  display: flex;
 }
 
 .tab-panel__content {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-width: 0;
 }
 
 .tab-panel__editor {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-width: 0;
 }
 
+/* The editor card body grows with its content; the panel scrolls, so we
+   must NOT cap its height here (that previously clipped expanded editors). */
 .tab-panel__editor .card__body {
   overflow-y: auto;
-  max-height: calc(100vh - 260px);
 }
 
+/* Stacked (narrow) layout: single column, still scrolls as a unit. */
 @media (max-width: 980px) {
-  .tab-panel--active {
+  .tab-panel--active:has(.tab-panel__content):has(.tab-panel__editor) {
     grid-template-columns: 1fr;
   }
 }

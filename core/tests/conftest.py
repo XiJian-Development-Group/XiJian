@@ -24,6 +24,8 @@ os.environ.setdefault("XIJIAN_OVERLOAD_MONITOR", "0")
 # The character-state tick thread is the A3.2 equivalent — keep it
 # off by default; individual tests opt in via ``monkeypatch``.
 os.environ.setdefault("XIJIAN_STATE_TICK", "0")
+# The events scheduler thread (A4.1) — same posture as A3.2.
+os.environ.setdefault("XIJIAN_EVENT_SCHEDULER", "0")
 
 from xijian_api import auth  # noqa: E402  (import after env setup)
 from xijian_api.app import create_app  # noqa: E402
@@ -87,6 +89,8 @@ def _reset_state(app):
         ov_stub.reset_for_testing()
         from xijian_api.stubs import character_state as cs_stub
         cs_stub.reset_for_testing()
+        from xijian_api.stubs import events as events_stub
+        events_stub.reset_for_testing()
     yield
 
 

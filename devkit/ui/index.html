@@ -494,11 +494,6 @@
               </details>
 
               <label class="field">
-                <span class="field__label">配置文件（JSON，原始）</span>
-                <textarea id="world-config" class="field__input field__input--code" rows="4" placeholder='例如：{"tags":["modern","school"]}'></textarea>
-              </label>
-
-              <label class="field">
                 <span class="field__label">世界观文档（Markdown）</span>
                 <textarea id="world-doc" class="field__input field__input--code" rows="10" placeholder="在此编写世界观的详细描述、规则、历史等……"></textarea>
               </label>
@@ -725,13 +720,14 @@
                   <input id="voice-sample-path" class="field__input" type="text" placeholder="选择或输入音频文件路径" />
                   <button id="voice-pick-btn" class="btn btn--secondary" type="button">选择文件</button>
                 </div>
-                <div class="row row--gap" style="margin-top:6px">
+                <div id="voice-record-group" class="row row--gap" style="margin-top:6px">
                   <button id="voice-record-btn" class="btn btn--secondary" type="button">开始录制</button>
                   <button id="voice-stop-btn" class="btn btn--ghost" type="button" disabled>停止</button>
                   <button id="voice-use-recording-btn" class="btn btn--primary" type="button" disabled>使用此录音</button>
                   <audio id="voice-playback" controls hidden style="height:28px;flex:1;min-width:200px"></audio>
                 </div>
                 <small id="voice-record-hint" class="card__hint">直接通过麦克风录制参考样本。录制后试听，再点「使用此录音」填入。</small>
+                <small id="voice-record-unsupported" class="card__hint" hidden>当前环境不支持麦克风录制（webview 无媒体设备权限）。请改用上方「选择文件」按钮选取本地音频作为参考样本。</small>
                 <input type="hidden" id="voice-recorded-b64" value="" />
               </label>
               <div class="row row--end row--gap">

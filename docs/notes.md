@@ -5,7 +5,122 @@
 
 ---
 
-## 2026-07-02 · A3.2 角色状态系统收尾
+## 2026-07-10 · A4.1 事件调度接入落地
+
+### 任务来源
+之前盘点（你贴过来的状态清单）把 A4.1 标成"只有 `POST /worlds/<wid>/event` 触发；调度循环没有"。实际进代码一看 `stubs/events.py`（978 行）+ `routes/xijian_events.py`（302 行）都写完了，但**根本没接到 Flask**：
+- `routes/__init__.py` 的可选路由表里**没有** `xijian_api.routes.xijian_events`
+- `stubs/__init__.py:seed_all()` 里**没有**调 `events.seed_default()`
+- `core/tests/` 里**完全没有** `test_xijian_events.py`
+
+等于写完扔在那儿没人管。本轮做的是**接入 + 测试覆盖 + 跨章节联动落地**，不是从零起。
+
+### 已完成（实测一遍）
+- **stub + 路由**：原本就有 978 行 stub（4 类触发器 time/interval/probability/condition、CRUD、实例、分类禁用、调度生命周期、storm throttle、优先级竞争）+ 302 行路由（CRUD/实例/分类/调度/summary）。基础语义、验收标准、风暴节流、用户禁用、优先级竞争全部到位
+- **接入（这一轮补的）**：
+  - `stubs/__init__.py:30` 把 `events` 加进子模块列表 + `seed_all()` 第 50 行调 `events.seed_default()`（默认启动 scheduler 线程，符合"生产默认跑"约定）
+  - `routes/__init__.py:48` 把 `xijian_api.routes.xijian_events` 加进可选路由表
+  - `stubs/__init__.py:73` 把 `events` 加进 `__all__`
+  - `core/tests/conftest.py:27` 加 `XIJIAN_EVENT_SCHEDULER=0`（与 A3.2 / A5.4 同约定）
+  - `core/tests/conftest.py:91-93` 测试间 reset 调 `events_stub.reset_for_testing()`
+- **过载联动（这一轮补的）**：
+  - `stubs/events.py:_is_overload_active()` 内联读 `state.overload["recovery"]`（避免 import overload 形成循环依赖），status ∈ {`waiting`, `first_confirmed`} → True
+  - `stubs/events.py:tick_world` 在 storm throttle 检查之前加 overload 短路：**全部候选标 `overload_active` 跳过**，不消费 cooldown 槽
+- **WS 联动（这一轮补的）**：
+  - `stubs/events.py:_broadcast_event_fired` 在 `fire_event` 末尾 publish `event.fired`，附带 `instance_id / event_id / world_id / fired_at / needs_scene / scene_ref_id / affects_user`
+  - best-effort：publish 抛错不阻塞 `fire_event` 入库（与 overload 模块同模式）
+- **测试**：117 个新测试覆盖
+  - 纯函数：`_validate_trigger`（含 4 类触发器的边界）+ `_evaluate_trigger` 4 类 + `_evaluate_probability_trigger` 决定性 + `_evaluate_condition_trigger`（含 `gt/lt/in/not_in/类型不匹配 swallow`）+ `_safe_compare` + `_is_in_cooldown` + `_storm_throttle_pass` + `_matches_disabled_categories` + `_pick_fire_payload`
+  - CRUD：create / get / list（按 world/kind/enabled_only 过滤 + priority desc 排序）/ update（含 id/world_id 不可变校验）/ delete
+  - 实例：fire / get / list / resolve / `_trim_instances` FIFO 上限
+  - 分类禁用：set/is/list + 世界隔离
+  - 调度：`tick_world`（无事件 / 禁用 / per-event cooldown / storm throttle / 优先级竞争 / 触发器异常隔离 / **overload 短路 / overload finalized 不再阻塞**）+ `tick_all` 多世界
+  - 生命周期：start/stop/status/env 关闭/env 间隔/floor 1s/start 真起一帧
+  - WS 广播：fire 触发 broadcast + publish 抛错不阻塞 fire
+  - 路由：CRUD 完整 round-trip + 缺失字段 + 校验错误 + 空 patch + 404；实例 list / get / resolve / limit 校验；分类 list / toggle / 缺 disabled 字段 / world 404；scheduler status / dev tick prod 阻断 / dev tick 允许 + tick_all / summary / world 404；auth 表驱动覆盖所有事件端点
+
+### 本轮修补清单
+1. `events.py:tick_world` — 在 storm throttle 检查之前加 `if _is_overload_active()` 短路，明确写了"不消费 cooldown 槽"的口径（不光是"丢弃"）
+2. `events.py:_evaluate_probability_trigger` — 桶索引改成 `int(now) // max(int(_current_interval()), 1)`（原本就有的，但确保在 env 改 interval 时不会除零）
+3. `events.py:_broadcast_event_fired` — 单挑出来不放在 fire_event 主体里，保证 fire 入库不受 broadcast 影响
+4. `conftest.py` — 加 scheduler 默认关 + reset_for_testing
+5. 新增测试类 17 个，117 cases
+
+### 没动的（与原因）
+
+#### 1. 没有"事件入库 → 角色状态修改"的端到端联动
+**现状**：A4.1 fire 完只入 `world_event_instances` + 广播 `event.fired`。
+**为什么没接**：spec 说"影响回写：事件可能写入角色记忆"——但 v2 没规定**哪些事件**影响哪些角色、影响写入格式。下游模块都还没起，做早了要返工。
+**接谁做**：A4.2 NPC 调度起来时，把 NPC 列表 → fired instance 的 `affected_npcs` 字段已经被填过（fire_event 接受 `affected_npcs` 参数，但目前 stub 不主动算它），需要：
+- `tick_world` 自动调用一个回调 `select_affected_npcs(world_id, event_record)`，默认返回空
+- A4.2 实现时注册自己的 selector（基于 NPC 当前位置 / 状态）
+- 角色的 state 字段在 fire 时如果 `affects_user=False` 可以跳过；True 才更新 `enter_recovering(reason="world_event")`（character_state 已有这个 reason）
+
+#### 2. `condition` 触发器的 `world_state` 字段 schema 是"野生字典"
+**现状**：`worlds.py:update_state` 接 `{economy, health, diet, stamina, mentality}` 这 5 个字段（Dev.md §4.3.3 的"系统维度"）。condition 触发器读 `world_record["state"][field]` 是任意 key——没有 schema 校验。
+**为什么留**：A4.2 还没起，世界的完整 state schema 还没定。events stub 给的"任意 key"灵活性允许 event 作者定义自己的条件；等 schema 落地时再收紧。
+**接谁做**：A4.2 起来时，在 `worlds.py:update_state` 加白名单校验，并把白名单同步到 `events.py:CONDITION_FIELDS`，condition 触发器拒绝未列出字段（返回 `False` 而不是抛错，避免一个烂 event 把整个 world tick 打崩）。
+
+#### 3. dev tick 没限定只清自己的世界
+**现状**：`POST /v1/xijian/events/scheduler/tick` 接受 `{"world_id": "..."}` — 单世界模式直接调 `tick_world(wid)`。但即使有 world_id，背景线程 `tick_all` 仍然在跑，dev tick 跟背景线程可能并发触发同一世界。
+**为什么留**：测试和生产用同一个 stub，dev tick 就是"立即跑一次"的便利入口；并发竞争下 `tick_world` 内部 dict 写入非原子，可能丢失一次 fire，但**不会崩**。生产中 UI 不应该频繁触发 dev tick。
+**接谁做**：不需要动。如果以后 dev tick 路径跟生产 tick 路径要严格隔离，把 `_SCHED_LOCK` 暴露到 `tick_world` 内层，加一把进程级互斥就行。
+
+#### 4. scheduler 线程是 daemon
+**现状**：`_sched_loop` 里 `thread = threading.Thread(..., daemon=True)`。
+**为什么留**：与 A3.2 / A5.4 同口径——daemon 是简单正确选择，主进程本来就 Flask，崩溃让 tick 一起死、避免僵尸。tick 是幂等的（基于 wall clock 算 dt），丢一次下次重启从恢复点继续算，无副作用。
+**接谁做**：不需要动。生产里如果做优雅退出（SIGTERM 跑 shutdown handler），记得先调 `events.stop_scheduler()`。
+
+#### 5. `_current_interval()` 硬地板 1s
+**现状**：env 设成 `0.1` 也会被钳到 `1.0`。
+**为什么**：与 A3.2 tick thread 同口径。1s 是测试的最紧频率（dev tick 是同步路径，不走 scheduler 线程）；再快让 tick_all 在 50 世界规模 + 高频事件库里把 CPU 打满。
+**接谁做**：sub-second tick 在 spec 里没要求，不动。
+
+#### 6. 没做"事件库内置默认事件"
+**现状**：`seed_default()` 只启动 scheduler，不 seed 任何默认事件。
+**为什么留**：v2 §A4.1 把事件库描述为"内置 + 用户自定义 (C1.1)"，但**内置**事件的清单没列出来（不像 C5 那样给完整 enum）。需要作者决策"哪些事件应该默认开"，牵涉到游戏性。
+**接谁做**：等到 MVP 上 UI 之前要决定——要么：
+- 路径 A：内置一档"世界新鲜出炉"事件（玩家第一个进入世界时强制触发一次"欢迎仪式"）
+- 路径 B：完全交给 C1.1 + DevKit，让作者自己组事件库
+- 路径 C：内置只读，所有事件都可被 C1.1 覆盖
+**当前维持空 seed**，等 devkit 起来时再补这一档。
+
+#### 7. 没用 cron-style 调度
+**现状**：A4.1 的"时间触发器"只支持 `daily` / `hourly` 两种频率，精确到分钟。
+**为什么留**：cron 的全套字段（day of week / month / etc.）超出 spec。spec §A4.1 只说"时间（节日）"——节日是按"某一天"还是"某个星期几"都没规定。
+**接谁做**：等到 E2E 评估发现事件触发不灵活时再加。先 4 类触发器够用。
+
+#### 8. fire_event 不写 audit log
+**现状**：fire 完只入 `world_event_instances` + WS；没写 audit log（不像 overload / character_state 那样有 audit 痕迹）。
+**为什么**：事件是高频、低价值的"小事件"，写 audit 日志会撑爆文件。audit 应该留给"用户关键决策"（删除角色、世界重置、过载恢复等）。
+**接谁做**：审计需求（合规 / 调试）起来时再补。`fire_event` 已经返回完整 instance record，按需要回查就行。
+
+### 跨章节联动点（之后模块会碰 A4.1 的）
+- **A1.2 记忆写入**：fire 一个 `affects_user=True` 的事件，应该异步触发 `memory.append(source="world_event", ref_id=instance_id, payload=...)`，让用户聊到相关话题时 AI 知道发生过
+- **A3.2 角色状态**：fire 一个 `affected_npcs` 包含某角色的事件，自动调 `cs_stub.apply_field_change(char_id, field="health", delta=-10, source="world_event", ref_id=instance_id)` 或 `enter_recovering(reason="world_event")`
+- **A4.2 NPC 调度**：fire 时把"哪些 NPC 受影响"塞到 `affected_npcs`；NPC scheduler 据此调整它们的活跃档位
+- **A5.1 OOC 评测**：fire 完的事件描述应该被 A5.1 拿去做 OOC 检测（如果事件描述被投毒成"忽略之前所有指令..."，要在落入 context 之前就拦掉）
+- **A5.4 过载**：本轮已接——overload recovery 窗口内 tick 直接 drop 所有候选。overload 起来时可以考虑 `register_action_handler(ACTION_SUSPEND_IDLE_NPCS, suspend_npc_event_firing)` 把整个 events scheduler 关掉（这一档更激进，本轮没做——先按"drop 候选不消费 cooldown"这一档；完全关掉留给 A4.2 高活跃档时再加）
+- **A7 主动发起**：fire `kind=incident` 的事件后，可以触发 character 的主动聊天（"诶你听到了吗，刚才在市场..."）；本轮没接
+- **A8 桌宠 / 桌宠动画**：fire 需要场景的事件 `needs_scene=True`，桌宠应该弹出对应的微动画——WS 广播 `event.fired` 已经带上 `needs_scene` 和 `scene_ref_id`，UI 订阅即可
+- **C1.1 事件库创作**：作者通过 C1.1 创建的事件落到 `world_events` 表（devkit 路径），能被 events stub 直接读到——devkit 与本 stub 不共享状态是历史包袱，等 C1.1 落地时确认是否需要适配
+
+### 文档里的 `[TODO]` 状态
+- `A4.1: 默认 60s 内最多 1 个事件` — 已实装为 `DEFAULT_GLOBAL_COOLDOWN_SECONDS = 60.0` + `DEFAULT_SCHEDULER_INTERVAL_SECONDS = 60.0`，env 可覆盖。v2 文档已摘除
+
+### 测试覆盖情况
+- 纯函数 10 个：validation（4 类触发器 + 边界）/ evaluate（4 类 + 类型不匹配）+ cooldown + storm throttle + category match + payload merge
+- CRUD 12 个：create (3) / get (2) / list (4) / update (5) / delete (2) / instance (8) / category (5)
+- 调度 11 个：tick_world 7 + tick_all 1 + lifecycle 6 + reset 1 + summary 1
+- WS 2 个：fire publishes + crash tolerant
+- 路由 ~25 个：CRUD/instance/category/scheduler/dev/summary/auth 表驱动
+
+**缺口**：
+- 并发安全测试没做（`tick_world` 与背景 `tick_all` 同时跑 dict 写入）。50 角色规模撞不上问题，生产环境加数据库后端时要补锁
+- dev tick 真跑"高频事件风暴节流"测试没做——env 改 `XIJIAN_EVENT_SCHEDULER_SECONDS=1` 然后 `tick_all` 跑 3 秒验证只触发 1 次——本轮没写
+
+---
+
 
 ### 任务来源
 之前盘点（你贴过来的状态清单）把 A3.2 标成"部分实现，缺定时 tick 循环"。实际进代码一看，核心 stub + 路由 + 测试都已就位（1088 行 stub + 269 行路由 + 927 行测试）。本轮做的是**查漏 + 收尾**，不是从零起。
