@@ -204,7 +204,7 @@ def run(argv: Sequence[str] | None = None) -> int:
             confirm_close=True,
             text_select=True,
         )
-        webview.start(debug=True)
+        webview.start(debug=False) # Use "debug=True" while debugging
     finally:
         ui_server.stop()
     return 0

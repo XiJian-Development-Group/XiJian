@@ -39,6 +39,32 @@
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
+  // Theme handling (persisted in localStorage)
+  const applyTheme = (theme) => {
+    const root = document.documentElement;
+    if (theme === "dark") {
+      root.setAttribute("data-theme", "dark");
+    } else if (theme === "light") {
+      root.setAttribute("data-theme", "light");
+    } else {
+      // system - follow OS preference
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      root.setAttribute("data-theme", prefersDark ? "dark" : "light");
+    }
+  };
+
+  const initTheme = () => {
+    const saved = localStorage.getItem("devkit-theme") || "system";
+    const select = $("#settings-theme");
+    if (select) select.value = saved;
+    applyTheme(saved);
+    // Listen for system theme changes when in "system" mode
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", (e) => {
+      const current = localStorage.getItem("devkit-theme") || "system";
+      if (current === "system") applyTheme("system");
+    });
+  };
+
   // Safe binding: only attach if element exists; wraps handler to catch errors.
   const on = (sel, event, handler) => {
     const el = $(sel);
@@ -2018,6 +2044,8 @@ const callApi = async (method, ...args) => {
   // --------------------------------------------------------------
   // Item list renderer
   // --------------------------------------------------------------
+
+  const renderItemList = (listId, items, templateFn) => {
     const list = $(`#${listId}`);
     list.innerHTML = "";
     if (!items || items.length === 0) {
@@ -2359,6 +2387,11 @@ const callApi = async (method, ...args) => {
       }
     });
     on("#settings-packages-refresh", "click", renderSettingsPackages);
+    on("#settings-theme", "change", (e) => {
+      const theme = e.target.value;
+      localStorage.setItem("devkit-theme", theme);
+      applyTheme(theme);
+    });
   };
 
   // --------------------------------------------------------------
@@ -2368,6 +2401,9 @@ const callApi = async (method, ...args) => {
   const start = () => {
     console.log("[devkit] start() called, document.readyState:", document.readyState);
     console.log("[devkit] pywebview present:", !!window.pywebview, "api present:", !!(window.pywebview && window.pywebview.api));
+    
+    // Initialize theme early (before DOM ready if possible)
+    initTheme();
     
     // Wait for DOM to be fully ready before binding
     if (document.readyState !== "complete") {
