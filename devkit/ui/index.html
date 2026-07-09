@@ -37,6 +37,7 @@
       <button class="tab-nav__btn" data-tab="dialog">对话样本</button>
       <button class="tab-nav__btn" data-tab="motion">动作编辑</button>
       <button class="tab-nav__btn" data-tab="ai">AI 辅助</button>
+      <button class="tab-nav__btn" data-tab="settings">设置</button>
       <button class="tab-nav__btn" id="help-btn" type="button" style="margin-left:auto;color:var(--accent)">帮助</button>
     </nav>
 
@@ -1075,6 +1076,63 @@
                     <dt>最近事件</dt><dd id="ai-stat-latest">—</dd>
                   </div>
                   <button id="ai-refresh-stats-btn" class="btn btn--ghost" type="button">刷新统计</button>
+                </div>
+              </details>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <!-- ======== Tab: 设置 ======== -->
+      <section class="tab-panel" id="tab-settings">
+        <div class="tab-panel__content">
+          <section class="card">
+            <header class="card__header">
+              <h2>设置</h2>
+              <p class="card__hint">管理历史记录、导出包与应用偏好</p>
+            </header>
+            <div class="card__body">
+              <details class="field-group" open>
+                <summary class="field-group__summary">历史记录管理</summary>
+                <div class="field-group__body">
+                  <p class="card__hint" style="margin-bottom:8px">提交历史记录（含归档文件）。删除历史记录将同时删除对应的本地归档文件（.7z）。</p>
+                  <div class="row row--gap" style="margin-bottom:8px">
+                    <button id="settings-history-refresh" class="btn btn--ghost" type="button">刷新列表</button>
+                    <button id="settings-history-clear-all" class="btn btn--ghost btn--danger-ghost" type="button" style="background:var(--danger-bg);color:var(--danger);border-color:var(--danger-border)">清空全部历史</button>
+                  </div>
+                  <ul id="settings-history-list" class="item-list" style="max-height:300px"></ul>
+                  <p id="settings-history-status" class="status status--idle" role="status"></p>
+                </div>
+              </details>
+
+              <details class="field-group" open>
+                <summary class="field-group__summary">可提交内容包管理</summary>
+                <div class="field-group__body">
+                  <p class="card__hint" style="margin-bottom:8px">管理可提交的内容包（角色、记忆包、世界观、剧情、模型、声音、对话）。删除包将移除对应的底层内容（角色定义、记忆条目等），请谨慎操作。</p>
+                  <div class="row row--gap" style="margin-bottom:8px">
+                    <button id="settings-packages-refresh" class="btn btn--ghost" type="button">刷新列表</button>
+                  </div>
+                  <ul id="settings-packages-list" class="item-list" style="max-height:300px"></ul>
+                  <p id="settings-packages-status" class="status status--idle" role="status"></p>
+                </div>
+              </details>
+
+              <details class="field-group">
+                <summary class="field-group__summary">应用偏好</summary>
+                <div class="field-group__body">
+                  <label class="field">
+                    <span class="field__label">窗口主题</span>
+                    <select id="settings-theme" class="field__input">
+                      <option value="system">跟随系统</option>
+                      <option value="light">浅色模式</option>
+                      <option value="dark">深色模式</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span class="field__label">启动时自动检查更新</span>
+                    <input id="settings-auto-update" class="field__input" type="checkbox" />
+                  </label>
+                  <p class="card__hint" style="margin-top:8px">应用偏好保存在浏览器本地存储中，下次启动时恢复。</p>
                 </div>
               </details>
             </div>

@@ -176,11 +176,16 @@ def run(argv: Sequence[str] | None = None) -> int:
             f"Original error: {exc}"
         ) from exc
 
-    api = DevKitApi()
     from devkit import state as _dk_state
 
-    work_dir = api._work_dir()
+    # Load persisted state (submissions, cooldowns, last session) BEFORE
+    # constructing the API so the window restores the previous login and
+    # the per-developer submit cooldown survives a restart.
+    work_dir = DevKitApi()._work_dir()
     _dk_state.load(work_dir)
+    api = DevKitApi()
+    if api._active_developer:
+        _LOGGER.info("restored DevKit session for developer %s", api._active_developer)
     _LOGGER.info("starting DevKit window (%sx%s)", args.width, args.height)
 
     # Start local HTTP server for UI assets (avoids file:// CORS issues on WKWebView)
@@ -189,9 +194,6 @@ def run(argv: Sequence[str] | None = None) -> int:
     ui_server.start()
 
     try:
-        api = DevKitApi()
-        _dk_state.load(work_dir)
-
         webview.create_window(
             title="隙间 · 开发者工具",
             url=f"http://127.0.0.1:{port}/index.html",

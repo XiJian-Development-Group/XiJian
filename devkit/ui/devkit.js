@@ -409,10 +409,22 @@ const callApi = async (method, ...args) => {
 
   const renderCooldown = (seconds) => {
     const el = $("#cooldown-indicator");
+    if (!el) return;
     if (seconds <= 0) { el.textContent = "冷却空闲，可随时提交"; return; }
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
     el.textContent = m > 0 ? `还需等待 ${m} 分 ${s} 秒` : `还需等待 ${s} 秒`;
+  };
+
+  // Periodic cooldown refresh (every 5s) so UI updates in real-time
+  let _cooldownTimer = null;
+  const startCooldownTimer = () => {
+    if (_cooldownTimer) return;
+    _cooldownTimer = setInterval(() => { refreshCooldown(); }, 5000);
+    console.log("[devkit] cooldown timer started (5s interval)");
+  };
+  const stopCooldownTimer = () => {
+    if (_cooldownTimer) { clearInterval(_cooldownTimer); _cooldownTimer = null; }
   };
 
   const refreshHistory = async () => {
@@ -1883,10 +1895,129 @@ const callApi = async (method, ...args) => {
   };
 
   // --------------------------------------------------------------
-  // Item list renderer
+  // Settings tab
   // --------------------------------------------------------------
 
-  const renderItemList = (listId, items, templateFn) => {
+  const renderSettingsHistory = async () => {
+    const resp = await callApi("list_submissions", 200);
+    if (!resp.ok) { setStatus("#settings-history-status", "加载失败", "err"); return; }
+    const list = $("#settings-history-list");
+    if (!list) return;
+    list.innerHTML = "";
+    const items = resp.data || [];
+    if (items.length === 0) {
+      const li = document.createElement("li");
+      li.className = "item-list__empty";
+      li.textContent = "暂无提交历史";
+      list.appendChild(li);
+      return;
+    }
+    for (const r of items) {
+      const li = document.createElement("li");
+      li.className = "item-list__item";
+      li.dataset.id = r.id;
+      const dt = r.submitted_at ? new Date(r.submitted_at.replace("Z", "+00:00")).toLocaleString() : "—";
+      const size = r.archive_size ? fmtBytes(r.archive_size) : "—";
+      const statusClass = r.smtp_status === "sent" ? "status--ok" : (r.smtp_status === "pending" ? "status--warn" : "status--err");
+      li.innerHTML = `
+        <div class="item-info">
+          <div class="item-name">${escHtml(r.id)}</div>
+          <div class="item-desc">
+            <span class="item-tag">${escHtml(r.developer_id)}</span>
+            <span class="item-tag">${escHtml(r.target_kind)}:${escHtml(r.target_id)}</span>
+            <span class="item-tag">${escHtml(size)}</span>
+            <span class="item-tag ${statusClass}">${escHtml(r.smtp_status || "—")}</span>
+          </div>
+        </div>
+        <div class="item-meta">
+          <small>${escHtml(dt)}</small>
+          <button class="btn btn--ghost btn--danger-ghost" data-action="delete" data-id="${escHtml(r.id)}" title="删除此记录及归档">删除</button>
+        </div>
+      `;
+      list.appendChild(li);
+    }
+    // Bind delete buttons
+    list.querySelectorAll("button[data-action=delete]").forEach((btn) => {
+      btn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const subId = btn.dataset.id;
+        if (!confirm(`确定要删除提交记录 ${subId} 及其本地归档文件吗？`)) return;
+        setStatus("#settings-history-status", "删除中...", "warn");
+        const resp = await callApi("delete_submission", subId);
+        if (resp.ok) {
+          toast(`已删除 ${subId}`, "ok");
+          renderSettingsHistory();
+        } else {
+          setStatus("#settings-history-status", `删除失败：${resp.message}`, "err");
+        }
+      });
+    });
+    setStatus("#settings-history-status", `共 ${items.length} 条记录`, "ok");
+  };
+
+  const renderSettingsPackages = async () => {
+    const resp = await callApi("list_submit_packages");
+    if (!resp.ok) { setStatus("#settings-packages-status", "加载失败", "err"); return; }
+    const list = $("#settings-packages-list");
+    if (!list) return;
+    list.innerHTML = "";
+    const items = resp.data || [];
+    if (items.length === 0) {
+      const li = document.createElement("li");
+      li.className = "item-list__empty";
+      li.textContent = "暂无可提交内容包";
+      list.appendChild(li);
+      return;
+    }
+    for (const pkg of items) {
+      const li = document.createElement("li");
+      li.className = "item-list__item";
+      li.dataset.id = pkg.package_id;
+      li.innerHTML = `
+        <div class="item-info">
+          <div class="item-name">${escHtml(pkg.name)}</div>
+          <div class="item-desc">
+            <span class="item-tag">${escHtml(pkg.package_type)}</span>
+            <span class="item-tag">${escHtml(pkg.description)}</span>
+          </div>
+        </div>
+        <div class="item-meta">
+          <button class="btn btn--ghost btn--danger-ghost" data-action="delete" data-id="${escHtml(pkg.package_id)}" title="删除此内容包（会移除底层内容）">删除</button>
+        </div>
+      `;
+      list.appendChild(li);
+    }
+    // Bind delete buttons
+    list.querySelectorAll("button[data-action=delete]").forEach((btn) => {
+      btn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        const pkgId = btn.dataset.id;
+        if (!confirm(`确定要删除内容包 ${pkgId} 吗？这将移除对应的底层内容（角色/记忆/世界观/剧情/模型/声音）。`)) return;
+        setStatus("#settings-packages-status", "删除中...", "warn");
+        const resp = await callApi("delete_package", pkgId);
+        if (resp.ok) {
+          toast(`已删除 ${pkgId}`, "ok");
+          renderSettingsPackages();
+        } else {
+          setStatus("#settings-packages-status", `删除失败：${resp.message}`, "err");
+        }
+      });
+    });
+    setStatus("#settings-packages-status", `共 ${items.length} 个内容包`, "ok");
+  };
+
+  const loadSettingsTab = async () => {
+    if (!state.activeDeveloper) {
+      setStatus("#settings-history-status", "请先登录", "warn");
+      setStatus("#settings-packages-status", "请先登录", "warn");
+      return;
+    }
+    await Promise.all([renderSettingsHistory(), renderSettingsPackages()]);
+  };
+
+  // --------------------------------------------------------------
+  // Item list renderer
+  // --------------------------------------------------------------
     const list = $(`#${listId}`);
     list.innerHTML = "";
     if (!items || items.length === 0) {
@@ -1960,6 +2091,7 @@ const callApi = async (method, ...args) => {
       renderDeveloperChip();
       await refreshHistory();
       await refreshCooldown();
+      if (state.activeDeveloper) startCooldownTimer();
       await loadPackages();
       setStatus("#login-status", "就绪", "ok");
       $("#status-bar").textContent = "就绪";
@@ -1987,6 +2119,7 @@ const callApi = async (method, ...args) => {
     setStatus("#login-status", `已登录为 ${resp.data.developer_id}`, "ok");
     await refreshHistory();
     await refreshCooldown();
+    startCooldownTimer();
     refreshSubmitBtn();
     toast("登录成功", "ok");
   };
@@ -1994,6 +2127,7 @@ const callApi = async (method, ...args) => {
   const onLogout = async () => {
     await callApi("logout");
     state.activeDeveloper = null;
+    stopCooldownTimer();
     renderDeveloperChip();
     setStatus("#login-status", "已退出", "ok");
     await refreshCooldown();
@@ -2007,7 +2141,10 @@ const callApi = async (method, ...args) => {
   const bind = () => {
     $$(".tab-nav__btn").forEach((btn) => {
       btn.addEventListener("click", () => {
-        if (btn.dataset.tab) switchTab(btn.dataset.tab);
+        if (btn.dataset.tab) {
+          switchTab(btn.dataset.tab);
+          if (btn.dataset.tab === "settings") loadSettingsTab();
+        }
       });
     });
 
@@ -2207,6 +2344,21 @@ const callApi = async (method, ...args) => {
     on("#ai-suggest-btn", "click", onAiSuggest);
     on("#ai-check-threshold-btn", "click", onAiCheckThreshold);
     on("#ai-refresh-stats-btn", "click", renderAiStats);
+
+    // Settings tab
+    on("#settings-history-refresh", "click", renderSettingsHistory);
+    on("#settings-history-clear-all", "click", async () => {
+      if (!confirm("确定要清空所有提交历史记录吗？此操作不可撤销，将同时删除所有本地归档文件。")) return;
+      setStatus("#settings-history-status", "清空中...", "warn");
+      const resp = await callApi("clear_submissions");
+      if (resp.ok) {
+        toast(`已清空 ${resp.data.deleted} 条记录`, "ok");
+        renderSettingsHistory();
+      } else {
+        setStatus("#settings-history-status", `清空失败：${resp.message}`, "err");
+      }
+    });
+    on("#settings-packages-refresh", "click", renderSettingsPackages);
   };
 
   // --------------------------------------------------------------

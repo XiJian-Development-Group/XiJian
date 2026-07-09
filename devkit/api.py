@@ -286,9 +286,10 @@ class DevKitApi:
     """
 
     def __init__(self) -> None:
-        # Per-window session state.  Reset every time the window opens.
+        # Session state.  Restored from disk so a restart never silently
+        # drops the login and resets the per-developer submit cooldown.
         self._lock = threading.Lock()
-        self._active_developer: str | None = None
+        self._active_developer: str | None = state.session.get("developer_id")
 
     # --- meta ----------------------------------------------------------
 
@@ -383,6 +384,13 @@ class DevKitApi:
         """Set the work directory for config persistence."""
         self._work_dir_path = path
 
+    def _save_session(self) -> None:
+        """Persist login/session state to disk (best-effort)."""
+        try:
+            state.save(self._work_dir())
+        except Exception:  # pragma: no cover — persistence is best-effort
+            _LOGGER.warning("failed to persist DevKit session state", exc_info=True)
+
     @_serialize_call
     def ping(self) -> dict[str, Any]:
         """Liveness probe (``{"ok": True, "data": {"pong": true}}``)."""
@@ -402,6 +410,8 @@ class DevKitApi:
         cleaned = developer_id.strip()
         with self._lock:
             self._active_developer = cleaned
+            state.session["developer_id"] = cleaned
+            self._save_session()
         return {"developer_id": cleaned}
 
     @_serialize_call
@@ -410,6 +420,8 @@ class DevKitApi:
         with self._lock:
             previous = self._active_developer
             self._active_developer = None
+            state.session["developer_id"] = None
+            self._save_session()
         return {"previous": previous}
 
     @_serialize_call
@@ -472,6 +484,39 @@ class DevKitApi:
                 code="missing_submission_id",
             )
         return get_submission(submission_id)
+
+    @_serialize_call
+    def delete_submission(self, submission_id: Any) -> dict[str, Any]:
+        """Delete a single submission record and its local archive."""
+        if not isinstance(submission_id, str) or not submission_id:
+            raise DevKitError(
+                400,
+                "`submission_id` must be a non-empty string",
+                code="missing_submission_id",
+            )
+        work_dir = self._work_dir()
+        ok = delete_submission(submission_id, work_dir)
+        return {"deleted": bool(ok), "submission_id": submission_id}
+
+    @_serialize_call
+    def clear_submissions(self) -> dict[str, Any]:
+        """Delete ALL submission records and their local archives."""
+        work_dir = self._work_dir()
+        count = clear_submissions(work_dir)
+        return {"deleted": count}
+
+    @_serialize_call
+    def delete_package(self, package_id: Any) -> dict[str, Any]:
+        """Delete a submittable package by its ``package_id`` (e.g. ``char:abc``)."""
+        if not isinstance(package_id, str) or not package_id:
+            raise DevKitError(
+                400,
+                "`package_id` must be a non-empty string",
+                code="missing_package_id",
+            )
+        work_dir = self._work_dir()
+        ok = delete_package(package_id, work_dir)
+        return {"deleted": bool(ok), "package_id": package_id}
 
     # --- pre-flight ----------------------------------------------------
 

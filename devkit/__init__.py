@@ -933,6 +933,74 @@ def delete_local_archive(submission_id: str) -> bool:
     return True
 
 
+def delete_submission(submission_id: str, work_dir: str) -> bool:
+    """Delete a single submission record and its local archive."""
+    record = state.submissions.pop(submission_id, None)
+    if not record:
+        return False
+    # Remove last_submit_at if this was the latest for that developer
+    dev_id = record.get("developer_id")
+    if dev_id and state.last_submit_at.get(dev_id) == record.get("submitted_at"):
+        # Find the next most recent submission for this developer
+        latest = None
+        for r in state.submissions.values():
+            if r.get("developer_id") == dev_id:
+                if latest is None or r.get("submitted_at", "") > latest:
+                    latest = r.get("submitted_at")
+        if latest:
+            state.last_submit_at[dev_id] = latest
+        else:
+            state.last_submit_at.pop(dev_id, None)
+    # Delete local archive
+    delete_local_archive(submission_id)
+    state.save(work_dir)
+    return True
+
+
+def clear_submissions(work_dir: str) -> int:
+    """Delete ALL submission records and their local archives."""
+    count = len(state.submissions)
+    if count == 0:
+        return 0
+    # Delete all archives
+    for sub_id in list(state.local_archives.keys()):
+        delete_local_archive(sub_id)
+    # Clear all state buckets
+    state.submissions.clear()
+    state.last_submit_at.clear()
+    state.local_archives.clear()
+    state.save(work_dir)
+    return count
+
+
+def delete_package(package_id: str, work_dir: str) -> bool:
+    """Delete a submittable package by its package_id (e.g. 'char:abc')."""
+    if ":" not in package_id:
+        return False
+    ptype, pid = package_id.split(":", 1)
+    try:
+        if ptype == "char":
+            return _ce_delete(work_dir, pid)
+        elif ptype == "memory":
+            # Delete all memory entries for this character
+            entries = _me_list(work_dir, pid)
+            for entry in entries:
+                _me_delete(work_dir, entry.get("id", ""))
+            return True
+        elif ptype == "world":
+            return _we_delete(work_dir, pid)
+        elif ptype == "plot":
+            return _pe_delete(work_dir, pid)
+        elif ptype == "model":
+            return _mv_unregister(work_dir, pid)
+        elif ptype == "voice":
+            return _vc_delete(work_dir, pid)
+        else:
+            return False
+    except Exception:
+        return False
+
+
 def cooldown_remaining(developer_id: str) -> int:
     """Return seconds remaining until ``developer_id`` can submit again.
 
@@ -1019,6 +1087,9 @@ __all__ = [
     "list_submissions",
     "get_submission",
     "delete_local_archive",
+    "delete_submission",
+    "clear_submissions",
+    "delete_package",
     # seed/reset
     "seed_default",
     "reset_for_testing",
