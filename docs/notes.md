@@ -111,6 +111,74 @@
 
 ---
 
+## 2026-07-09 · A5.4 系统过载防护（首次盘账）
+
+### 任务来源
+之前盘点（你贴过来的状态清单）把 A5.4 标成"完全没起"。实际进代码一看：核心 stub + 路由 + 测试全在，是 commit `ffd73fb` (2026-06-29) 就提交的。本轮做的是**盘账 + 写回 notes + 摘掉 v2 文档里残留的"过载档位待补"语义**，不是从零起。
+
+### 已完成（实测一遍）
+- `stubs/overload.py`（1077 行）：双档位阈值（strict / medium，**loose 已移除**）、滑动窗口（maxlen=120）、1Hz 监控线程、严重度排名 + 单一最严动作选择、20s 等待计时器（不可配置，锁死 AC-2）、双重确认握手状态机（waiting → first_confirmed → finalized）、安全快照自动落盘（scope=overload）、WS 广播 `overload.triggered`、4 个 action handler（suspend_idle_npcs / degrade_tts / compress_memory / emergency_dump）
+- `routes/xijian_overload.py`（207 行）：status / tier / metrics / events / recovery + first_confirm / finalize_recovery / cancel + dev 模拟器（需 `XIJIAN_DEV=1`）
+- 测试：86/86 通过（核心全套 306 通过，0 回归）
+- 集成：routes/`__init__.py:55` 注册；`stubs/__init__.py:46` 的 `seed_all()` 调 `overload.seed_default()` 拉起线程；conftest 用 `XIJIAN_OVERLOAD_MONITOR=0` 关掉防测试抖动
+
+### v2 文档里"已实装"对账
+- 双档位阈值（严格 CPU 93% 持续 60s / 适中 CPU 95% 持续 100s，SoC 95°C、内存 90%、GPU/ANE 75% 持续 45s 或 80% 持续 80s，swap 不限制）—— 已严格按 v2.1 的数字锁死在 `TIER_THRESHOLDS`
+- AC-4 不可关闭 —— `set_tier` 严格只接受 strict / medium，off / disabled / loose 全 400
+- 20s 等待计时器（AC-2）—— `RECOVERY_WAIT_SECONDS = 20` 硬编码
+- 边缘场景"恢复中再次触发 → 重置 20s" —— 有专门测试覆盖
+
+### 没动的（与原因）
+
+#### 1. `register_action_handler` 没有任何外部调用方
+**现状**：四个 action（suspend_idle_npcs / degrade_tts / compress_memory / emergency_dump）触发时会调 handler，但目前没人 `register_action_handler(ACTION_*, ...)` 订阅。
+**为什么留空**：handler 应该由下游模块来订：
+- A4.x 配角调度 → suspend_idle_npcs（暂停闲置 NPC tick）
+- A2 chat pipeline + A6 实时通话 → degrade_tts（切低质量 TTS / 中断流）
+- A1.2 记忆模块 → compress_memory（合并旧条目、释放 long_term 配额）
+- A1.1 备份模块 → emergency_dump（紧急 dump 当前 context 到 snapshot）
+
+**接口已备好**，等下游模块起来时调 `overload.register_action_handler(ACTION_DEGRADE_TTS, tts_low_quality_hook)` 即可。**约 4-5 行/订阅方**。
+**接谁做**：A4.2 / A6 / A1.2 / A1.1 任一起的时候顺带做。
+
+#### 2. 没做"档位 → 用户弹窗"的 UI 桥
+**现状**：过载触发时 WS 广播 `overload.triggered`，但前端弹窗、双重确认对话框、20s 倒计时可视化都不在 core 里。
+**为什么留空**：UI 层（SwiftUI / Pywebview）整体未起，跨平台弹窗规范也不归 core 决定。
+**接谁做**：UI 起来时订阅 WS `/v1/ws`，按事件类型渲染对应弹窗，调用 `POST /v1/xijian/overload/recovery/first_confirm` + `POST /v1/xijian/overload/recovery/finalize`。
+
+#### 3. 温度采样在不支持的平台上回退
+**现状**：`_read_soc_temp` 在 Linux/Windows 上尽力读 `/sys/class/thermal/` / WMI，读不到就 None；macOS 上用 `osx-cpu-temp` 风格但实际没引外部依赖，靠 `psutil.sensors_temperatures()`。
+**为什么留空**：spec AC-1 说"硬件无温度传感器 → 仅使用 CPU/内存"，回退路径已经覆盖这个边界。
+**接谁做**：不需要动。如果以后想要更准的 SoC 温度（比如 Apple Silicon 的 M 系列专用路径），加 `import subprocess; subprocess.check_output(["powermetrics", ...])` 即可，但 powermetrics 在普通用户权限下取不到，得 sudo —— 反而坑。
+
+#### 4. 1Hz 监控线程是 daemon
+**现状**：`start_monitor` 里 `daemon=True`。主进程退出时线程被强杀，最后一帧样本丢失。
+**为什么这样**：同 A3.2 tick thread 的理由 —— daemon 是简单正确选择，丢一帧不致命（下次启动从头来）。
+**注意**：生产里如果主进程要优雅退出（SIGTERM 跑 shutdown handler），记得调 `overload.stop_monitor()` 等线程退出。
+
+### 跨章节联动点
+- **A3.2 tick**：档位切换时需要"暂停非活跃 NPC tick"。A3.2 notes 已记：`cs_stub.suspend(character_id)` / `cs_stub.resume(character_id)` 接口待加。本轮没动 —— 取决于 A4.2 NPC 调度什么时候起来。
+- **A4.1 事件调度**：高频事件风暴节流（默认 60s 内最多 1 个事件）触发时，如果系统已在过载，应**直接拒绝**新事件而非入冷却队列。代码位置：event dispatch handler 里调 `overload.is_active()` 早返。
+- **A5.1 OOC 评测**：进入过载时 OOC 触发的对话应被立刻截断（不是降级，是直接 abort）。overload.triggered 事件 + chat pipeline 的 abort 钩子。
+- **A1.1 自动备份**：emergency_dump 已经自动落 safety_snapshot（scope=overload），但没接自动备份列表。A1.1 起来时把 `scope=overload` 的 snapshot 纳入备份范围。
+
+### 文档里的 `[TODO]` 状态
+- `A5.4: 移除宽松档` — 已实装（`TIER_THRESHOLDS` 只有 strict / medium 两档）
+- `A5.4: 安全终止快捷键（默认 ⌃⌥⌘Q / Win+Alt+Shift+Q）` — **未实装**，属于 A5.2 范畴，等 MCP 进程 + 全局快捷键监听起时一起做
+- `A5.4: 文档里的"过载档位"语义描述` — 与实际代码完全对齐，下次盘点不会再误判
+
+### 测试覆盖情况
+- 纯函数：阈值比对 / 滑动窗口聚合 / 严重度排名 / 恢复状态机转换 / 计时器倒计时
+- 线程：monitor 启动 / 关闭 / 线程生命周期 / reset 后 generation 切换
+- HTTP：status / tier PATCH（含非法档位 400）/ metrics / events / recovery 三步握手（含 425 / 409 边界）/ dev 模拟器
+- 集成：触发时自动落 snapshot（`safety_snapshots` scope=overload 有新条目）/ 触发时 audit log 有新条目 / 触发时 WS 广播
+- 鉴权：所有路由需 Bearer
+- handler 注册表：注册 / 注销 / 触发时按注册顺序调用 / 异常隔离（一个 handler 抛错不阻塞其它）
+
+**缺口**：`register_action_handler` 没有任何调用方的端到端测试 —— 因为目前没有调用方。等 A4.2 / A6 / A1.2 起来后补"过载触发 → TTS 真的切低质量"这种链路测试。
+
+---
+
 ## 2026-07-04 · C5 开发者工具改为邮件提交 + Pywebview 独立窗口
 
 ### 任务来源

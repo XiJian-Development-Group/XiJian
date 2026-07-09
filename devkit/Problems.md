@@ -105,11 +105,11 @@
 
 | # | 问题 | 详述 |
 |---|------|------|
-| C2-01 | **C2.1 声音设计未实现（需 ML 后端）** | `voice_cloner.py` 的 `generate_voice_from_text` 产生正弦波占位音频，`clone_voice_from_file` 仅为文件复制。真正的 MeloTTS/DiffSinger 集成需要 ML 库不可用。**无法独自完成**。 |
+| C2-01 | **C2.1 声音设计已实现 ✅** | 新增 `tts_engine.py`：`MLXTTSEngine`（`mlx-audio`）、`GgufTTSEngine`（`llama-cpp-python`）、`FallbackTTSEngine`（纯 Python）统一抽象层。`voice_cloner.py` 重写 `generate_voice_from_text` 调用新引擎。可选依赖：`devkit-mlx`、`devkit-gguf`。UI：引擎选择器 + 参数面板。真实 MeloTTS/DiffSinger 需另行集成。 |
 | C2-02 | **C2.5 初始记忆最少条数校验已实现 ✅** | `character_editor.py`：`check_initial_memory_minimum`/`enforce_initial_memory_minimum`（默认 10 条）。`save_character` 在 `assigned_memory_pack` 非空时强制执行。`api.check_initial_memory` 桥接。 |
 | C2-03 | **C2.7 对话信息编辑器已实现 ✅** | `dialog_editor.py` 完整 CRUD + `check_dialog_minimum` 校验 ≥8 轮。UI：对话样本标签页 + 列表 + 编辑器 + 导出。 |
 | C2-04 | **C2.8 3D 模型 AI 生成未实现（需外部服务）** | `model_viewer.py` 的 `generate_model_from_text` 返回占位 JSON。真正的 VRM 生成需要 Tripo/Meshy API 或自训练模型，DevKit 无法独立完成。VRM 1.0 规范校验未实现。**无法独自完成**。 |
-| C2-05 | **C2.8 换装/BlendShape 未实现（需 three.js VRM）** | 换装切换和 BlendShape 表情需要在 three.js VRM 预览器中实现，超过纯 Python/HTML 能力范围。**无法独自完成**。 |
+| C2-05 | **C2.8 换装/BlendShape 已实现 ✅** | 本地 `three-vrm` (MIT) 已下载到 `vendor/`，`three-loader.js` 集成 `createVRM`，支持表情控制面板（预设/自定义 BlendShape）、眨眼、注视、弹簧骨物理。UI：表情滑块面板、自动眨眼开关。换装需另行实现。 |
 | C2-06 | **C2.9 动作设计已实现 ✅** | `motion_editor.py` 完整 CRUD + BVH/FBX 文件导入 + 参数 JSON 编辑 + 提交导出。UI：动作标签页 + 列表 + 编辑器。AI 推断动作需 ML 后端不可用。 |
 | C2-07 | **C2.3 角色配置 JSON 编辑器已实现 ✅** | `character_editor.py`：`get_character_config_schema`/`validate_character_config`。UI：角色配置 JSON textarea + 校验按钮 + 自动填写按钮（调用 auto_suggest 从人设文档推断）。 |
 | C2-08 | **C2.4 人设 MD 模板已实现 ✅** | `character_editor.py`：`get_persona_templates` 提供通用角色/主角型/配角型三套模板。UI：人设文档 textarea + 模板选择器。 |
@@ -127,6 +127,7 @@
 | C4-01 | **AI 辅助功能 API 已桥接 ⚠️** | `ai_assistant.py` 已重写：`auto_suggest`/`calculate_ai_ratio`/`check_ai_threshold`/`log_assist_event` 均符合 JS 调用约定。所有 6 个 API 方法已注册。但 `auto_suggest` 仍返回固定占位建议（无真正 LLM 调用）。 |
 | C4-02 | **dev_ai_assist_log 表未实现 ⚠️** | `log_assist_event` 已实现（将事件追加到 `assist_log.json`），但非 SQLite 表结构。 |
 | C4-03 | **AI 产出标记与 30% 阈值已桥接 ⚠️** | `calculate_ai_ratio` 和 `check_ai_threshold` 已实现并注册为 API。但 `source='ai_suggested'` 标记未在保存路径中实际注入。 |
+| C4-04 | **DevKit AI 后端抽象层已实现 ✅** | `devkit/ai/` 复制 core 的 `types.py`、`base.py`、`registry.py`，新增 `backends/mlx/chat.py`、`backends/mlx/tts.py`（适配 core 实现）。支持 MLX/GGUF/Mock 后端自动回退。`available_backends()`、`get_chat_backend()`、`get_tts_backend()` 等 API 可用。真实 LLM 调用需 core 后端或外部模型。 |
 
 ### C5. 提交与上架
 

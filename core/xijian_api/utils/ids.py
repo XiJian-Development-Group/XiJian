@@ -184,6 +184,16 @@ def gen_state_log_id() -> str:
     return gen_id("cstate_", _SHORT_HEX_LEN)
 
 
+def gen_event_id() -> str:
+    """Return a world event definition id (``event_<12 hex>``)."""
+    return gen_id("event_", _SHORT_HEX_LEN)
+
+
+def gen_event_instance_id() -> str:
+    """Return a fired world-event instance id (``evinst_<12 hex>``)."""
+    return gen_id("evinst_", _SHORT_HEX_LEN)
+
+
 def gen_submission_id() -> str:
     """Return a Developer-Kit submission id (``sub_<12 hex>``).
 

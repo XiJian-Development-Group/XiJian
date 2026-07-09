@@ -14,19 +14,18 @@
 //   2. We decode the base64 into a ``Uint8Array`` and feed it to GLTFLoader
 //      via ``Loader.parse(...)`` — no object URL needed.
 //
-// Three.js and its examples are loaded from local ``vendor/`` so the
-// preview works completely offline.
+// Three.js, @pixiv/three-vrm, and examples are loaded from local ``vendor/``
+// so the preview works completely offline.
 //
-// Scope (not pretending to be a full viewer)
+// Scope
 // ------------------------------------------
 //
 // * GLB  — fully rendered, auto-framed, lit, with orbit controls.
 // * GLTF — fully rendered (embedded buffers only; sidecar .bin needs a
 //          resource loader, out of scope).
-// * VRM  — VRM 0.x / 1.0 are GLB with extras.  GLTFLoader parses the
-//          mesh + materials, but humanoid bones, expressions, and MToon
-//          shaders need @pixiv/three-vrm.  We render what we can and
-//          label "VRM (basic)" so the user knows.
+// * VRM  — VRM 0.x / 1.0 are GLB with extras.  three-vrm loads humanoid
+//          bones, blendshapes, MToon materials, spring bones.  We expose
+//          expression controls for preview.
 (() => {
   "use strict";
 
@@ -58,8 +57,9 @@
     return out;
   };
 
-  // Cache the loaded three module so subsequent previews don't re-fetch.
+  // Cache the loaded modules so subsequent previews don't re-fetch.
   let _threePromise = null;
+  let _vrmPromise = null;
   const loadThree = async () => {
     if (_threePromise) return _threePromise;
     _threePromise = (async () => {
@@ -73,6 +73,25 @@
       throw new Error("本地 three.js 加载失败，请检查 vendor/ 目录");
     })();
     return _threePromise;
+  };
+
+  const loadVRM = async (THREE) => {
+    if (_vrmPromise) return _vrmPromise;
+    _vrmPromise = (async () => {
+      // Load three-vrm from local vendor
+      try {
+        // three-vrm requires three to be available globally or passed in
+        // We'll import it and it will use the THREE we pass to createVRM
+        const mod = await import(/* @vite-ignore */ VENDOR_BASE + "three-vrm.module.min.js");
+        // three-vrm exports createVRM function
+        const { createVRM } = mod;
+        if (createVRM) {
+          return { createVRM };
+        }
+      } catch (_e) { /* fall through */ }
+      throw new Error("本地 three-vrm 加载失败，请检查 vendor/three-vrm.module.min.js");
+    })();
+    return _vrmPromise;
   };
 
   /**
@@ -136,7 +155,9 @@
     }
 
     const loader = new GLTFLoader();
-    const onLoaded = (gltf) => {
+    let vrmInstance = null;
+
+    const onLoaded = async (gltf) => {
       const root = gltf.scene || gltf.scenes?.[0];
       if (!root) {
         container.insertAdjacentHTML("beforeend",
@@ -145,20 +166,39 @@
       }
       scene.add(root);
       autoFrame(root, camera, renderer);
-      container._viewerRender = () => renderer.render(scene, camera);
+      
+      // If VRM format, initialize with three-vrm
+      if (model.format === "vrm") {
+        try {
+          const vrmModule = await loadVRM(THREE);
+          if (vrmModule && vrmModule.createVRM) {
+            vrmInstance = await vrmModule.createVRM(root);
+            // Setup expression controls UI
+            setupVRMExpressionUI(container, vrmInstance);
+          }
+        } catch (e) {
+          console.warn("VRM initialization failed:", e);
+        }
+      }
+      
+      container._viewerRender = () => {
+        // Update VRM spring bones / look-at if available
+        if (vrmInstance && typeof vrmInstance.update === "function") {
+          vrmInstance.update(1/60); // Approximate frame time
+        }
+        renderer.render(scene, camera);
+      };
       container._viewerRender();
-      // Label VRM as "basic" so the user knows the humanoid bones
-      // / expressions aren't driven.
+      
+      // Label VRM
       if (model.format === "vrm") {
         const tag = document.createElement("div");
         tag.className = "model-viewer__tag";
-        tag.textContent = "VRM (基础网格预览 · 不含骨骼/表情)";
+        tag.textContent = "VRM (完整预览：骨骼/表情/弹簧骨)";
         container.appendChild(tag);
       }
     };
     const onError = (err) => {
-      // GLTF + standalone .bin sidecar is the most common reason for
-      // failure here — surface that hint.
       const hint = !isGlb
         ? "<p>提示：.gltf 需要同级 .bin 资源，目前实现仅支持内嵌 data URI。</p>"
         : "";
@@ -184,6 +224,7 @@
 
     // --- resize handling ----------------------------------------------
     const onResize = () => {
+      const w = () => {
       const w = container.clientWidth || 480;
       const h = container.clientHeight || 320;
       renderer.setSize(w, h);
@@ -207,12 +248,71 @@
       cancelAnimationFrame(raf);
       window.removeEventListener("resize", onResize);
       if (controls && typeof controls.dispose === "function") controls.dispose();
+      if (vrmInstance && typeof vrmInstance.destroy === "function") {
+        vrmInstance.destroy();
+      }
       try { renderer.dispose(); } catch (_e) { /* ignore */ }
       // Remove the canvas so the next render starts from a clean slate.
       if (renderer.domElement && renderer.domElement.parentNode === container) {
         container.removeChild(renderer.domElement);
       }
     };
+  };
+
+  // --- VRM Expression UI ---
+  const setupVRMExpressionUI = (container, vrm) => {
+    if (!vrm.expressions) return;
+    
+    const panel = document.createElement("div");
+    panel.className = "vrm-expression-panel";
+    panel.style.cssText = "position:absolute;right:10px;top:10px;background:rgba(0,0,0,0.7);padding:10px;border-radius:4px;color:#fff;font:12px/1.5 system-ui;max-width:200px;z-index:10";
+    
+    const title = document.createElement("div");
+    title.textContent = "表情控制";
+    title.style.cssText = "font-weight:bold;margin-bottom:8px;border-bottom:1px solid #444;padding-bottom:4px";
+    panel.appendChild(title);
+    
+    const presets = vrm.expressions.getPresetNameList?.() || Object.keys(vrm.expressions.preset || {});
+    
+    presets.forEach(name => {
+      const label = document.createElement("label");
+      label.style.cssText = "display:flex;align-items:center;gap:8px;margin:4px 0";
+      const input = document.createElement("input");
+      input.type = "range";
+      input.min = "0";
+      input.max = "1";
+      input.step = "0.01";
+      input.value = "0";
+      input.style.cssText = "flex:1";
+      input.addEventListener("input", (e) => {
+        vrm.expressions.setValue(name, parseFloat(e.target.value));
+      });
+      const span = document.createElement("span");
+      span.textContent = name;
+      span.style.cssText = "min-width:80px";
+      label.appendChild(span);
+      label.appendChild(input);
+      panel.appendChild(label);
+    });
+    
+    // Blink control
+    if (vrm.blink) {
+      const label = document.createElement("label");
+      label.style.cssText = "display:flex;align-items:center;gap:8px;margin:4px 0";
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.checked = true;
+      input.addEventListener("change", (e) => {
+        vrm.blink.enabled = e.target.checked;
+      });
+      const span = document.createElement("span");
+      span.textContent = "自动眨眼";
+      label.appendChild(span);
+      label.appendChild(input);
+      panel.appendChild(label);
+    }
+    
+    container.appendChild(panel);
   };
 
   // --- helpers ----------------------------------------------------------

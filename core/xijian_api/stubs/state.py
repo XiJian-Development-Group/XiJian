@@ -73,6 +73,25 @@ character_state_log: dict = {}
 # meaningful to persist between process restarts.
 overload: dict = {}
 
+# A4.1 world event system.  Three buckets mirror the SQL schema in the
+# function list v2:
+#   world_events             — {event_id: {world_id, kind, name,
+#                                         description, trigger_config,
+#                                         scene_ref_id, priority,
+#                                         is_enabled, cooldown_until,
+#                                         created_at}}
+#   world_event_instances    — {instance_id: {event_id, world_id,
+#                                            fired_at, resolved_at,
+#                                            payload, affected_npcs,
+#                                            affects_user}}
+#   world_event_categories_disabled — {world_id: {category_str}}
+#                                          per-world user-controlled
+#                                          category toggles (战斗 /
+#                                          日常 / 社交 / etc).
+world_events: dict = {}
+world_event_instances: dict = {}
+world_event_categories_disabled: dict = {}
+
 # Developer Kit (C5) state lives in ``xijian_api.devkit.state`` — the
 # DevKit is a stand-alone Pywebview application that does not share a
 # Flask server with the main API, so its buckets are intentionally
@@ -118,6 +137,9 @@ def reset_for_testing() -> None:
     character_state_configs.clear()
     character_state_log.clear()
     overload.clear()
+    world_events.clear()
+    world_event_instances.clear()
+    world_event_categories_disabled.clear()
     files.clear()
     batches.clear()
     fine_tuning_jobs.clear()
@@ -148,6 +170,9 @@ __all__ = [
     "character_state_configs",
     "character_state_log",
     "overload",
+    "world_events",
+    "world_event_instances",
+    "world_event_categories_disabled",
     "files",
     "batches",
     "fine_tuning_jobs",
