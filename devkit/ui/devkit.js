@@ -2224,6 +2224,19 @@ const callApi = async (method, ...args) => {
       if (me.ok && me.data && me.data.developer_id) {
         state.activeDeveloper = me.data.developer_id;
         $("#developer-id").value = me.data.developer_id;
+      } else {
+        // Backend has no active session — try the locally remembered ID
+        // and silently re-login so the user never has to retype it.
+        let savedId = "";
+        try { savedId = localStorage.getItem("devkit-developer-id") || ""; } catch {}
+        if (savedId) {
+          $("#developer-id").value = savedId;
+          const relogin = await callApi("login", savedId);
+          if (relogin.ok && relogin.data && relogin.data.developer_id) {
+            state.activeDeveloper = relogin.data.developer_id;
+            console.log("[devkit] auto-logged in from saved id:", savedId);
+          }
+        }
       }
       renderDeveloperChip();
       await refreshHistory();
@@ -2270,6 +2283,9 @@ const callApi = async (method, ...args) => {
     const resp = await callApi("login", id);
     if (!resp.ok) { setStatus("#login-status", `登录失败：${resp.message}`, "err"); return; }
     state.activeDeveloper = resp.data.developer_id;
+    // Remember the ID locally so it survives restarts even if the backend
+    // session is ever lost (belt-and-suspenders with state.session).
+    try { localStorage.setItem("devkit-developer-id", resp.data.developer_id); } catch {}
     renderDeveloperChip();
     setStatus("#login-status", `已登录为 ${resp.data.developer_id}`, "ok");
     await refreshHistory();
@@ -2282,6 +2298,7 @@ const callApi = async (method, ...args) => {
   const onLogout = async () => {
     await callApi("logout");
     state.activeDeveloper = null;
+    try { localStorage.removeItem("devkit-developer-id"); } catch {}
     stopCooldownTimer();
     renderDeveloperChip();
     setStatus("#login-status", "已退出", "ok");
