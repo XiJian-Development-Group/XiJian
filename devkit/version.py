@@ -27,7 +27,7 @@ from typing import Any
 #: Fallback used only if ``Config/Config.json`` cannot be read.  Kept in
 #: sync with ``Version.DevKit`` in that file and the ``.app`` bundle's
 #: ``CFBundleShortVersionString``.
-FALLBACK_VERSION = "v1.4.3"
+FALLBACK_VERSION = "v1.4.4"
 
 
 def config_json_path() -> pathlib.Path:

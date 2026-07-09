@@ -121,8 +121,8 @@ if sys.platform == "darwin":
         info_plist={
             "CFBundleName": "隙间开发者工具",
             "CFBundleDisplayName": "隙间 · 开发者工具",
-            "CFBundleShortVersionString": "1.4.3",
-            "CFBundleVersion": "1.4.3",
+            "CFBundleShortVersionString": "1.4.4",
+            "CFBundleVersion": "1.4.4",
             "NSHighResolutionCapable": True,
             # No network server is ever opened; the app talks SMTP outbound
             # only.  Declared here for App Transport Security clarity.
