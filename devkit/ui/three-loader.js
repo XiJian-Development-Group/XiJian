@@ -26,7 +26,8 @@
 // * VRM  — VRM 0.x / 1.0 are GLB with extras.  three-vrm loads humanoid
 //          bones, blendshapes, MToon materials, spring bones.  We expose
 //          expression controls for preview.
-(() => {
+
+(function () {
   "use strict";
 
   // --- tiny DOM helpers (kept local so we don't depend on devkit.js) ---

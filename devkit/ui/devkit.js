@@ -39,12 +39,82 @@
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
-  const callApi = async (method, ...args) => {
-    if (!window.pywebview || !window.pywebview.api) throw new Error("pywebview js_api not ready");
-    const fn = window.pywebview.api[method];
-    if (typeof fn !== "function") throw new Error(`DevKitApi.${method} is not a function`);
-    return fn(...args);
+  // Safe binding: only attach if element exists; wraps handler to catch errors.
+  const on = (sel, event, handler) => {
+    const el = $(sel);
+    if (!el) { console.warn(`[devkit] element not found for binding: ${sel}`); return; }
+    el.addEventListener(event, (e) => {
+      try {
+        const result = handler(e);
+        if (result && typeof result.then === "function") {
+          result.catch((err) => {
+            console.error(`[devkit] ${sel} ${event} handler error:`, err);
+            toast(`操作失败：${err.message || err}`, "err");
+          });
+        }
+      } catch (err) {
+        console.error(`[devkit] ${sel} ${event} handler error:`, err);
+        toast(`操作失败：${err.message || err}`, "err");
+      }
+    });
   };
+
+// Wait for pywebview API to be ready, then return the method.
+// Caches the ready promise so rapid clicks don't re-create waiters.
+let _apiReadyPromise = null;
+let _apiReadyResolved = false;
+const ensureApiReady = () => {
+  if (window.pywebview && window.pywebview.api) {
+    _apiReadyResolved = true;
+    return Promise.resolve();
+  }
+  if (!_apiReadyPromise) {
+    _apiReadyPromise = new Promise((resolve) => {
+      if (window.pywebview && window.pywebview.api) {
+        _apiReadyResolved = true;
+        return resolve();
+      }
+      console.log("[devkit] waiting for pywebviewready...");
+      window.addEventListener("pywebviewready", () => {
+        console.log("[devkit] pywebviewready fired");
+        _apiReadyResolved = true;
+        resolve();
+      }, { once: true });
+      // Fallback: poll in case event already fired
+      let polls = 0;
+      const poll = setInterval(() => {
+        if (window.pywebview && window.pywebview.api) {
+          console.log("[devkit] bridge detected via poll");
+          clearInterval(poll);
+          _apiReadyResolved = true;
+          resolve();
+        }
+        if (++polls > 50) { // 5 seconds max
+          clearInterval(poll);
+          console.error("[devkit] bridge NOT ready after 5s polling");
+          resolve(); // resolve anyway to unblock and show error
+        }
+      }, 100);
+    });
+  }
+  return _apiReadyPromise;
+};
+
+const callApi = async (method, ...args) => {
+  console.log("[devkit] callApi:", method, args);
+  await ensureApiReady();
+  if (!window.pywebview || !window.pywebview.api) {
+    console.error("[devkit] pywebview or api missing after wait", { pywebview: !!window.pywebview, api: !!(window.pywebview && window.pywebview.api) });
+    throw new Error("pywebview js_api not ready");
+  }
+  const fn = window.pywebview.api[method];
+  if (typeof fn !== "function") {
+    console.error("[devkit] method not a function:", method, "available:", Object.keys(window.pywebview.api || {}));
+    throw new Error(`DevKitApi.${method} is not a function`);
+  }
+  console.log("[devkit] calling", method);
+  return fn(...args);
+};
 
   const switchTab = (tabName) => {
     $$(".tab-nav__btn").forEach((btn) => {
@@ -742,7 +812,67 @@
     $("#world-delete-btn").disabled = !hasSel;
   };
 
-  const loadWorldEditor = (world) => {
+  // ---- world custom events (C1.1) ----
+  let _selectedWorldEventId = null;
+
+  const renderWorldEvents = async (worldId) => {
+    const resp = await callApi("list_world_events", worldId);
+    if (!resp.ok) { renderItemList("world-event-list", [], () => ""); return; }
+    renderItemList("world-event-list", resp.data || [], (e) =>
+      `<strong>[${escHtml(e.kind)}] ${escHtml(e.name)}</strong><br/><small>优先级 ${e.priority} · ${e.is_enabled ? "启用" : "禁用"}</small>`
+    );
+  };
+
+  const loadWorldEventEditor = (ev) => {
+    _selectedWorldEventId = ev?.id || null;
+    $("#world-event-editing-id").value = ev?.id || "";
+    $("#world-event-name").value = ev?.name || "";
+    $("#world-event-priority").value = ev?.priority ?? 50;
+    $("#world-event-enabled").checked = ev ? !!ev.is_enabled : true;
+    $("#world-event-trigger").value = ev?.trigger ? JSON.stringify(ev.trigger, null, 2) : "";
+    $("#world-event-scene").value = ev?.scene || "";
+    $("#world-event-effects").value = ev?.effects ? JSON.stringify(ev.effects) : "";
+    $("#world-event-delete-btn").disabled = !ev;
+  };
+
+  const onWorldEventNew = () => { loadWorldEventEditor(null); };
+
+  const onWorldEventSave = async () => {
+    if (!_selectedWorldId) { toast("请先选择或保存世界观", "err"); return; }
+    let trigger = {};
+    try { const t = $("#world-event-trigger").value.trim(); if (t) trigger = JSON.parse(t); }
+    catch { toast("触发器 JSON 格式错误", "err"); return; }
+    let effects = {};
+    try { const e = $("#world-event-effects").value.trim(); if (e) effects = JSON.parse(e); }
+    catch { toast("影响 JSON 格式错误", "err"); return; }
+    const data = {
+      id: $("#world-event-editing-id").value || undefined,
+      world_id: _selectedWorldId,
+      name: $("#world-event-name").value.trim(),
+      priority: parseInt($("#world-event-priority").value, 10) || 50,
+      is_enabled: $("#world-event-enabled").checked,
+      trigger,
+      scene: $("#world-event-scene").value.trim(),
+      effects,
+    };
+    if (!data.name) { toast("请填写事件名", "err"); return; }
+    const resp = await callApi("save_world_event", data);
+    if (!resp.ok) { setStatus("#world-event-status", `保存失败：${resp.message}`, "err"); return; }
+    toast("事件已保存", "ok");
+    setStatus("#world-event-status", `已保存：${resp.data.id}`, "ok");
+    await renderWorldEvents(_selectedWorldId);
+  };
+
+  const onWorldEventDelete = async () => {
+    if (!_selectedWorldId || !_selectedWorldEventId) return;
+    const resp = await callApi("delete_world_event", _selectedWorldId, _selectedWorldEventId);
+    if (!resp.ok) { toast("删除失败", "err"); return; }
+    toast("事件已删除", "ok");
+    loadWorldEventEditor(null);
+    await renderWorldEvents(_selectedWorldId);
+  };
+
+  const loadWorldEditor = async (world) => {
     _selectedWorldId = world?.id || null;
     const cfg = (world && world.config) || {};
     $("#world-editing-id").value = world?.id || "";
@@ -872,66 +1002,6 @@
 
   const onWorldDocTemplateCancel = () => {
     $("#world-doc-template-picker").style.display = "none";
-  };
-
-  // ---- world custom events (C1.1) ----
-  let _selectedWorldEventId = null;
-
-  const renderWorldEvents = async (worldId) => {
-    const resp = await callApi("list_world_events", worldId);
-    if (!resp.ok) { renderItemList("world-event-list", [], () => ""); return; }
-    renderItemList("world-event-list", resp.data || [], (e) =>
-      `<strong>[${escHtml(e.kind)}] ${escHtml(e.name)}</strong><br/><small>优先级 ${e.priority} · ${e.is_enabled ? "启用" : "禁用"}</small>`
-    );
-  };
-
-  const loadWorldEventEditor = (ev) => {
-    _selectedWorldEventId = ev?.id || null;
-    $("#world-event-editing-id").value = ev?.id || "";
-    $("#world-event-name").value = ev?.name || "";
-    $("#world-event-priority").value = ev?.priority ?? 50;
-    $("#world-event-enabled").checked = ev ? !!ev.is_enabled : true;
-    $("#world-event-trigger").value = ev?.trigger ? JSON.stringify(ev.trigger, null, 2) : "";
-    $("#world-event-scene").value = ev?.scene || "";
-    $("#world-event-effects").value = ev?.effects ? JSON.stringify(ev.effects) : "";
-    $("#world-event-delete-btn").disabled = !ev;
-  };
-
-  const onWorldEventNew = () => { loadWorldEventEditor(null); };
-
-  const onWorldEventSave = async () => {
-    if (!_selectedWorldId) { toast("请先选择或保存世界观", "err"); return; }
-    let trigger = {};
-    try { const t = $("#world-event-trigger").value.trim(); if (t) trigger = JSON.parse(t); }
-    catch { toast("触发器 JSON 格式错误", "err"); return; }
-    let effects = {};
-    try { const e = $("#world-event-effects").value.trim(); if (e) effects = JSON.parse(e); }
-    catch { toast("影响 JSON 格式错误", "err"); return; }
-    const data = {
-      id: $("#world-event-editing-id").value || undefined,
-      world_id: _selectedWorldId,
-      name: $("#world-event-name").value.trim(),
-      priority: parseInt($("#world-event-priority").value, 10) || 50,
-      is_enabled: $("#world-event-enabled").checked,
-      trigger,
-      scene: $("#world-event-scene").value.trim(),
-      effects,
-    };
-    if (!data.name) { toast("请填写事件名", "err"); return; }
-    const resp = await callApi("save_world_event", data);
-    if (!resp.ok) { setStatus("#world-event-status", `保存失败：${resp.message}`, "err"); return; }
-    toast("事件已保存", "ok");
-    setStatus("#world-event-status", `已保存：${resp.data.id}`, "ok");
-    await renderWorldEvents(_selectedWorldId);
-  };
-
-  const onWorldEventDelete = async () => {
-    if (!_selectedWorldId || !_selectedWorldEventId) return;
-    const resp = await callApi("delete_world_event", _selectedWorldId, _selectedWorldEventId);
-    if (!resp.ok) { toast("删除失败", "err"); return; }
-    toast("事件已删除", "ok");
-    loadWorldEventEditor(null);
-    await renderWorldEvents(_selectedWorldId);
   };
 
   const onWorldDelete = async () => {
@@ -1869,15 +1939,20 @@
   // --------------------------------------------------------------
 
   const loadBootstrap = async () => {
+    console.log("[devkit] loadBootstrap started");
     try {
       const ping = await callApi("ping");
+      console.log("[devkit] ping response:", ping);
       if (!ping.ok) throw new Error("ping failed");
       const cfg = await callApi("whoami");
+      console.log("[devkit] whoami response:", cfg);
       if (!cfg.ok) throw new Error("whoami failed");
       renderConfig(cfg.data);
       const kinds = await callApi("target_kinds");
+      console.log("[devkit] target_kinds:", kinds);
       if (kinds.ok) renderTargetKinds(kinds.data);
       const me = await callApi("current_developer");
+      console.log("[devkit] current_developer:", me);
       if (me.ok && me.data && me.data.developer_id) {
         state.activeDeveloper = me.data.developer_id;
         $("#developer-id").value = me.data.developer_id;
@@ -1890,8 +1965,9 @@
       $("#status-bar").textContent = "就绪";
       await populateCharDropdowns();
       await populateVoiceEngines();
+      console.log("[devkit] bootstrap complete");
     } catch (err) {
-      console.error("bootstrap failed", err);
+      console.error("[devkit] bootstrap failed:", err);
       setStatus("#login-status", `初始化失败：${err.message}`, "err");
       $("#status-bar").textContent = "";
     }
@@ -1936,53 +2012,53 @@
     });
 
     // Help
-    $("#help-btn").addEventListener("click", openHelp);
-    $("#help-close-btn").addEventListener("click", closeHelp);
-    $("#help-overlay").addEventListener("click", (e) => { if (e.target === e.currentTarget) closeHelp(); });
+    on("#help-btn", "click", openHelp);
+    on("#help-close-btn", "click", closeHelp);
+    on("#help-overlay", "click", (e) => { if (e.target === e.currentTarget) closeHelp(); });
     document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeHelp(); });
     $$(".help-nav__btn").forEach((btn) => {
       btn.addEventListener("click", () => switchHelpTab(btn.dataset.helpTab));
     });
 
     // SMTP settings
-    $("#edit-smtp-btn").addEventListener("click", openSmtpModal);
-    $("#smtp-modal-close").addEventListener("click", closeSmtpModal);
-    $("#smtp-cancel-btn").addEventListener("click", closeSmtpModal);
-    $("#smtp-save-btn").addEventListener("click", saveSmtpConfig);
+    on("#edit-smtp-btn", "click", openSmtpModal);
+    on("#smtp-modal-close", "click", closeSmtpModal);
+    on("#smtp-cancel-btn", "click", closeSmtpModal);
+    on("#smtp-save-btn", "click", saveSmtpConfig);
 
     // Submit tab
-    $("#login-btn").addEventListener("click", onLogin);
-    $("#logout-btn").addEventListener("click", onLogout);
-    $("#developer-id").addEventListener("keydown", (e) => { if (e.key === "Enter") onLogin(); });
-    $("#submit-btn").addEventListener("click", onSubmit);
-    $("#refresh-history-btn").addEventListener("click", refreshHistory);
-    $("#packages-refresh-btn").addEventListener("click", loadPackages);
+    on("#login-btn", "click", onLogin);
+    on("#logout-btn", "click", onLogout);
+    on("#developer-id", "keydown", (e) => { if (e.key === "Enter") onLogin(); });
+    on("#submit-btn", "click", onSubmit);
+    on("#refresh-history-btn", "click", refreshHistory);
+    on("#packages-refresh-btn", "click", loadPackages);
 
     // Character tab
-    $("#char-refresh-btn").addEventListener("click", renderCharList);
-    $("#char-new-btn").addEventListener("click", () => { resetCharEditor(); loadCharEditor(null); });
-    $("#char-save-btn").addEventListener("click", onCharSave);
-    $("#char-delete-btn").addEventListener("click", onCharDelete);
-    $("#char-export-btn").addEventListener("click", onCharExport);
-    $("#char-import-persona-btn").addEventListener("click", onCharImportPersona);
-    $("#char-persona-template-btn").addEventListener("click", onCharPersonaTemplate);
-    $("#char-persona-template-apply-btn").addEventListener("click", onCharPersonaTemplateApply);
-    $("#char-persona-template-cancel-btn").addEventListener("click", onCharPersonaTemplateCancel);
-    $("#char-config-validate-btn").addEventListener("click", onCharConfigValidate);
-    $("#char-config-autofill-btn").addEventListener("click", onCharConfigAutofill);
-    $("#char-list").addEventListener("click", (e) => {
+    on("#char-refresh-btn", "click", renderCharList);
+    on("#char-new-btn", "click", () => { resetCharEditor(); loadCharEditor(null); });
+    on("#char-save-btn", "click", onCharSave);
+    on("#char-delete-btn", "click", onCharDelete);
+    on("#char-export-btn", "click", onCharExport);
+    on("#char-import-persona-btn", "click", onCharImportPersona);
+    on("#char-persona-template-btn", "click", onCharPersonaTemplate);
+    on("#char-persona-template-apply-btn", "click", onCharPersonaTemplateApply);
+    on("#char-persona-template-cancel-btn", "click", onCharPersonaTemplateCancel);
+    on("#char-config-validate-btn", "click", onCharConfigValidate);
+    on("#char-config-autofill-btn", "click", onCharConfigAutofill);
+    on("#char-list", "click", (e) => {
       const li = e.target.closest(".item-list__item");
       if (li && li.dataset.id) onCharSelect(li.dataset.id);
     });
 
     // Memory tab
-    $("#mem-refresh-btn").addEventListener("click", renderMemList);
-    $("#mem-new-btn").addEventListener("click", () => { resetMemEditor(); loadMemEditor(null); });
-    $("#mem-save-btn").addEventListener("click", onMemSave);
-    $("#mem-delete-btn").addEventListener("click", onMemDelete);
-    $("#mem-export-btn").addEventListener("click", onMemExport);
-    $("#mem-char-id").addEventListener("change", renderMemList);
-    $("#mem-list").addEventListener("click", async (e) => {
+    on("#mem-refresh-btn", "click", renderMemList);
+    on("#mem-new-btn", "click", () => { resetMemEditor(); loadMemEditor(null); });
+    on("#mem-save-btn", "click", onMemSave);
+    on("#mem-delete-btn", "click", onMemDelete);
+    on("#mem-export-btn", "click", onMemExport);
+    on("#mem-char-id", "change", renderMemList);
+    on("#mem-list", "click", async (e) => {
       const li = e.target.closest(".item-list__item");
       if (li && li.dataset.id) {
         const resp = await callApi("get_memory_entry", li.dataset.id);
@@ -1991,21 +2067,21 @@
     });
 
     // World tab
-    $("#world-refresh-btn").addEventListener("click", renderWorldList);
-    $("#world-new-btn").addEventListener("click", () => { resetWorldEditor(); loadWorldEditor(null); });
-    $("#world-save-btn").addEventListener("click", onWorldSave);
-    $("#world-delete-btn").addEventListener("click", onWorldDelete);
-    $("#world-export-btn").addEventListener("click", onWorldExport);
-    $("#world-cfg-check-btn").addEventListener("click", onWorldCheckConfig);
-    $("#world-doc-preview-btn").addEventListener("click", onWorldDocPreview);
-    $("#world-doc-template-btn").addEventListener("click", onWorldDocTemplate);
-    $("#world-doc-template-apply-btn").addEventListener("click", onWorldDocTemplateApply);
-    $("#world-doc-template-cancel-btn").addEventListener("click", onWorldDocTemplateCancel);
-    $("#world-event-new-btn").addEventListener("click", onWorldEventNew);
-    $("#world-event-refresh-btn").addEventListener("click", () => { if (_selectedWorldId) renderWorldEvents(_selectedWorldId); });
-    $("#world-event-save-btn").addEventListener("click", onWorldEventSave);
-    $("#world-event-delete-btn").addEventListener("click", onWorldEventDelete);
-    $("#world-event-list").addEventListener("click", async (e) => {
+    on("#world-refresh-btn", "click", renderWorldList);
+    on("#world-new-btn", "click", () => { resetWorldEditor(); loadWorldEditor(null); });
+    on("#world-save-btn", "click", onWorldSave);
+    on("#world-delete-btn", "click", onWorldDelete);
+    on("#world-export-btn", "click", onWorldExport);
+    on("#world-cfg-check-btn", "click", onWorldCheckConfig);
+    on("#world-doc-preview-btn", "click", onWorldDocPreview);
+    on("#world-doc-template-btn", "click", onWorldDocTemplate);
+    on("#world-doc-template-apply-btn", "click", onWorldDocTemplateApply);
+    on("#world-doc-template-cancel-btn", "click", onWorldDocTemplateCancel);
+    on("#world-event-new-btn", "click", onWorldEventNew);
+    on("#world-event-refresh-btn", "click", () => { if (_selectedWorldId) renderWorldEvents(_selectedWorldId); });
+    on("#world-event-save-btn", "click", onWorldEventSave);
+    on("#world-event-delete-btn", "click", onWorldEventDelete);
+    on("#world-event-list", "click", async (e) => {
       const li = e.target.closest(".item-list__item");
       if (li && li.dataset.id && _selectedWorldId) {
         const resp = await callApi("list_world_events", _selectedWorldId);
@@ -2013,7 +2089,7 @@
         if (ev) loadWorldEventEditor(ev);
       }
     });
-    $("#world-list").addEventListener("click", async (e) => {
+    on("#world-list", "click", async (e) => {
       const li = e.target.closest(".item-list__item");
       if (li && li.dataset.id) {
         const resp = await callApi("get_world", li.dataset.id);
@@ -2022,12 +2098,12 @@
     });
 
     // Model tab
-    $("#model-refresh-btn").addEventListener("click", renderModelList);
-    $("#model-add-btn").addEventListener("click", onModelAdd);
-    $("#model-unregister-btn").addEventListener("click", onModelUnregister);
-    $("#model-export-btn").addEventListener("click", onModelExport);
-    $("#model-gen-btn").addEventListener("click", onModelGenerate);
-    $("#model-list").addEventListener("click", async (e) => {
+    on("#model-refresh-btn", "click", renderModelList);
+    on("#model-add-btn", "click", onModelAdd);
+    on("#model-unregister-btn", "click", onModelUnregister);
+    on("#model-export-btn", "click", onModelExport);
+    on("#model-gen-btn", "click", onModelGenerate);
+    on("#model-list", "click", async (e) => {
       const li = e.target.closest(".item-list__item");
       if (li && li.dataset.id) {
         const resp = await callApi("get_model_info", li.dataset.id);
@@ -2036,20 +2112,20 @@
     });
 
     // Voice tab
-    $("#voice-refresh-btn").addEventListener("click", renderVoiceList);
-    $("#voice-new-btn").addEventListener("click", () => { resetVoiceEditor(); loadVoiceEditor(null); });
-    $("#voice-save-btn").addEventListener("click", onVoiceSave);
-    $("#voice-delete-btn").addEventListener("click", onVoiceDelete);
-    $("#voice-export-btn").addEventListener("click", onVoiceExport);
-    $("#voice-pick-btn").addEventListener("click", onVoicePickFile);
-    $("#voice-record-btn").addEventListener("click", onVoiceRecord);
-    $("#voice-stop-btn").addEventListener("click", onVoiceStop);
-    $("#voice-use-recording-btn").addEventListener("click", onVoiceUseRecording);
-    $("#voice-char-id").addEventListener("change", async () => {
+    on("#voice-refresh-btn", "click", renderVoiceList);
+    on("#voice-new-btn", "click", () => { resetVoiceEditor(); loadVoiceEditor(null); });
+    on("#voice-save-btn", "click", onVoiceSave);
+    on("#voice-delete-btn", "click", onVoiceDelete);
+    on("#voice-export-btn", "click", onVoiceExport);
+    on("#voice-pick-btn", "click", onVoicePickFile);
+    on("#voice-record-btn", "click", onVoiceRecord);
+    on("#voice-stop-btn", "click", onVoiceStop);
+    on("#voice-use-recording-btn", "click", onVoiceUseRecording);
+    on("#voice-char-id", "change", async () => {
       await renderVoiceList();
       await populateCharDropdowns();
     });
-    $("#voice-list").addEventListener("click", async (e) => {
+    on("#voice-list", "click", async (e) => {
       const li = e.target.closest(".item-list__item");
       if (li && li.dataset.id) {
         const resp = await callApi("get_voice", li.dataset.id);
@@ -2057,50 +2133,50 @@
       }
     });
     // Voice TTS
-    $("#voice-tts-btn").addEventListener("click", onVoiceTtsGenerate);
+    on("#voice-tts-btn", "click", onVoiceTtsGenerate);
     // Voice clone
-    $("#voice-clone-pick-btn").addEventListener("click", onVoiceClonePick);
-    $("#voice-clone-btn").addEventListener("click", onVoiceClone);
+    on("#voice-clone-pick-btn", "click", onVoiceClonePick);
+    on("#voice-clone-btn", "click", onVoiceClone);
 
     // Plot tab
-    $("#plot-refresh-btn").addEventListener("click", renderPlotList);
-    $("#plot-new-btn").addEventListener("click", () => { resetPlotEditor(); loadPlotEditor(null); });
-    $("#plot-save-btn").addEventListener("click", onPlotSave);
-    $("#plot-delete-btn").addEventListener("click", onPlotDelete);
-    $("#plot-export-btn").addEventListener("click", onPlotExport);
-    $("#plot-list").addEventListener("click", async (e) => {
+    on("#plot-refresh-btn", "click", renderPlotList);
+    on("#plot-new-btn", "click", () => { resetPlotEditor(); loadPlotEditor(null); });
+    on("#plot-save-btn", "click", onPlotSave);
+    on("#plot-delete-btn", "click", onPlotDelete);
+    on("#plot-export-btn", "click", onPlotExport);
+    on("#plot-list", "click", async (e) => {
       const li = e.target.closest(".item-list__item");
       if (li && li.dataset.id) {
         const resp = await callApi("get_plot", li.dataset.id);
         if (resp.ok) { loadPlotEditor(resp.data); await renderPlotNodes(li.dataset.id); await renderPlotEdges(li.dataset.id); }
       }
     });
-    $("#plot-node-new-btn").addEventListener("click", onPlotNodeNew);
-    $("#plot-node-refresh-btn").addEventListener("click", async () => { if (_selectedPlotId) await renderPlotNodes(_selectedPlotId); });
-    $("#plot-node-save-btn").addEventListener("click", onPlotNodeSave);
-    $("#plot-node-delete-btn").addEventListener("click", onPlotNodeDelete);
-    $("#plot-node-list").addEventListener("click", (e) => {
+    on("#plot-node-new-btn", "click", onPlotNodeNew);
+    on("#plot-node-refresh-btn", "click", async () => { if (_selectedPlotId) await renderPlotNodes(_selectedPlotId); });
+    on("#plot-node-save-btn", "click", onPlotNodeSave);
+    on("#plot-node-delete-btn", "click", onPlotNodeDelete);
+    on("#plot-node-list", "click", (e) => {
       const li = e.target.closest(".item-list__item");
       if (li && li.dataset.id) loadPlotNodeEditor(JSON.parse(li.dataset.node || "{}"));
     });
-    $("#plot-edge-new-btn").addEventListener("click", onPlotEdgeNew);
-    $("#plot-edge-refresh-btn").addEventListener("click", async () => { if (_selectedPlotId) await renderPlotEdges(_selectedPlotId); });
-    $("#plot-edge-save-btn").addEventListener("click", onPlotEdgeSave);
-    $("#plot-edge-delete-btn").addEventListener("click", onPlotEdgeDelete);
-    $("#plot-edge-list").addEventListener("click", (e) => {
+    on("#plot-edge-new-btn", "click", onPlotEdgeNew);
+    on("#plot-edge-refresh-btn", "click", async () => { if (_selectedPlotId) await renderPlotEdges(_selectedPlotId); });
+    on("#plot-edge-save-btn", "click", onPlotEdgeSave);
+    on("#plot-edge-delete-btn", "click", onPlotEdgeDelete);
+    on("#plot-edge-list", "click", (e) => {
       const li = e.target.closest(".item-list__item");
       if (li && li.dataset.id) loadPlotEdgeEditor(JSON.parse(li.dataset.edge || "{}"));
     });
 
     // Dialog tab
-    $("#dialog-refresh-btn").addEventListener("click", renderDialogList);
-    $("#dialog-new-btn").addEventListener("click", () => { resetDialogEditor(); loadDialogEditor(null); });
-    $("#dialog-save-btn").addEventListener("click", onDialogSave);
-    $("#dialog-delete-btn").addEventListener("click", onDialogDelete);
-    $("#dialog-export-btn").addEventListener("click", onDialogExport);
-    $("#dialog-check-min-btn").addEventListener("click", onDialogCheckMin);
-    $("#dialog-char-id").addEventListener("change", renderDialogList);
-    $("#dialog-list").addEventListener("click", async (e) => {
+    on("#dialog-refresh-btn", "click", renderDialogList);
+    on("#dialog-new-btn", "click", () => { resetDialogEditor(); loadDialogEditor(null); });
+    on("#dialog-save-btn", "click", onDialogSave);
+    on("#dialog-delete-btn", "click", onDialogDelete);
+    on("#dialog-export-btn", "click", onDialogExport);
+    on("#dialog-check-min-btn", "click", onDialogCheckMin);
+    on("#dialog-char-id", "change", renderDialogList);
+    on("#dialog-list", "click", async (e) => {
       const li = e.target.closest(".item-list__item");
       if (li && li.dataset.id) {
         const resp = await callApi("get_dialog", li.dataset.id);
@@ -2109,14 +2185,14 @@
     });
 
     // Motion tab
-    $("#motion-refresh-btn").addEventListener("click", renderMotionList);
-    $("#motion-new-btn").addEventListener("click", () => { resetMotionEditor(); loadMotionEditor(null); });
-    $("#motion-save-btn").addEventListener("click", onMotionSave);
-    $("#motion-delete-btn").addEventListener("click", onMotionDelete);
-    $("#motion-export-btn").addEventListener("click", onMotionExport);
-    $("#motion-import-btn").addEventListener("click", onMotionImport);
-    $("#motion-char-id").addEventListener("change", renderMotionList);
-    $("#motion-list").addEventListener("click", async (e) => {
+    on("#motion-refresh-btn", "click", renderMotionList);
+    on("#motion-new-btn", "click", () => { resetMotionEditor(); loadMotionEditor(null); });
+    on("#motion-save-btn", "click", onMotionSave);
+    on("#motion-delete-btn", "click", onMotionDelete);
+    on("#motion-export-btn", "click", onMotionExport);
+    on("#motion-import-btn", "click", onMotionImport);
+    on("#motion-char-id", "change", renderMotionList);
+    on("#motion-list", "click", async (e) => {
       const li = e.target.closest(".item-list__item");
       if (li && li.dataset.id) {
         const resp = await callApi("get_motion", li.dataset.id);
@@ -2125,12 +2201,12 @@
     });
 
     // AI tab
-    $("#ai-refresh-btn").addEventListener("click", renderAiLog);
-    $("#ai-new-btn").addEventListener("click", () => { resetAiEditor(); });
-    $("#ai-log-btn").addEventListener("click", onAiLog);
-    $("#ai-suggest-btn").addEventListener("click", onAiSuggest);
-    $("#ai-check-threshold-btn").addEventListener("click", onAiCheckThreshold);
-    $("#ai-refresh-stats-btn").addEventListener("click", renderAiStats);
+    on("#ai-refresh-btn", "click", renderAiLog);
+    on("#ai-new-btn", "click", () => { resetAiEditor(); });
+    on("#ai-log-btn", "click", onAiLog);
+    on("#ai-suggest-btn", "click", onAiSuggest);
+    on("#ai-check-threshold-btn", "click", onAiCheckThreshold);
+    on("#ai-refresh-stats-btn", "click", renderAiStats);
   };
 
   // --------------------------------------------------------------
@@ -2138,11 +2214,40 @@
   // --------------------------------------------------------------
 
   const start = () => {
-    bind();
-    if (window.pywebview && window.pywebview.api) loadBootstrap();
-    else window.addEventListener("pywebviewready", () => loadBootstrap(), { once: true });
+    console.log("[devkit] start() called, document.readyState:", document.readyState);
+    console.log("[devkit] pywebview present:", !!window.pywebview, "api present:", !!(window.pywebview && window.pywebview.api));
+    
+    // Wait for DOM to be fully ready before binding
+    if (document.readyState !== "complete") {
+      console.log("[devkit] waiting for DOM ready...");
+      window.addEventListener("load", () => {
+        console.log("[devkit] window.load -> bind + bootstrap");
+        bind();
+        initBridge();
+      }, { once: true });
+    } else {
+      console.log("[devkit] DOM already complete -> bind + bootstrap");
+      bind();
+      initBridge();
+    }
   };
 
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start, { once: true });
-  else start();
+  const initBridge = () => {
+    if (window.pywebview && window.pywebview.api) {
+      console.log("[devkit] bridge already ready, loading bootstrap");
+      loadBootstrap();
+    } else {
+      console.log("[devkit] waiting for pywebviewready...");
+      window.addEventListener("pywebviewready", () => {
+        console.log("[devkit] pywebviewready -> loadBootstrap");
+        loadBootstrap();
+      }, { once: true });
+    }
+  };
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", start, { once: true });
+  } else {
+    start();
+  }
 })();

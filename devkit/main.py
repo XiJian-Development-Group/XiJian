@@ -22,14 +22,16 @@ a Flask server, and never reads the main ``Config`` object.  The window
 you get here is the only thing that runs, which is what lets it ship as
 a self-contained PyInstaller binary (function list v2.3, C5).
 
-Why pywebview rather than a Flask blueprint
-------------------------------------------
+Why pywebview + local HTTP server rather than a Flask blueprint
+---------------------------------------------------------------
 
-* 0 http surface (function list v2.2 requirement).
+* 0 http surface for the *application* logic (function list v2.2 requirement).
 * Cross-platform: pywebview picks the native webview on macOS
   (``WKWebView``), Windows (``WebView2``) and Linux (``webkitgtk``).
 * Direct ``window.pywebview.api.<method>()`` calls from JS — no
   JSON envelopes, no CORS, no auth header.
+* Local HTTP server only serves static UI assets (HTML/JS/CSS/vendor),
+  avoiding WKWebView's strict ``file://`` CORS restrictions.
 
 Failure modes
 -------------
@@ -44,9 +46,12 @@ Failure modes
 from __future__ import annotations
 
 import argparse
+import http.server
 import logging
 import os
+import socket
 import sys
+import threading
 from typing import Any, Sequence
 
 from devkit.api import DevKitApi
@@ -59,7 +64,6 @@ from devkit import (
     ui_dir,
 )
 
-
 _LOGGER = logging.getLogger("devkit.main")
 
 
@@ -67,6 +71,52 @@ _LOGGER = logging.getLogger("devkit.main")
 #: a small margin; user-resizable at runtime.
 DEFAULT_WIDTH = 1280
 DEFAULT_HEIGHT = 820
+
+
+class _UIHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
+    """Serve the DevKit UI directory with no caching (dev-friendly)."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, directory=str(ui_dir()), **kwargs)
+
+    def end_headers(self):
+        # Disable caching so devs see JS/CSS changes immediately on reload.
+        self.send_header("Cache-Control", "no-store, must-revalidate")
+        self.send_header("Pragma", "no-cache")
+        self.send_header("Expires", "0")
+        super().end_headers()
+
+    def log_message(self, format: str, *args) -> None:  # noqa: A002
+        # Quiet the default "GET / HTTP/1.1" logs; use our logger instead.
+        _LOGGER.debug("%s - %s", self.address_string(), format % args)
+
+
+def _pick_free_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+class _UIServer:
+    """Background HTTP server for the DevKit UI assets."""
+
+    def __init__(self, port: int):
+        self._port = port
+        self._server = http.server.ThreadingHTTPServer(
+            ("127.0.0.1", port), _UIHTTPRequestHandler
+        )
+        self._thread: threading.Thread | None = None
+
+    def start(self) -> None:
+        self._thread = threading.Thread(target=self._server.serve_forever, daemon=True)
+        self._thread.start()
+        _LOGGER.info("UI HTTP server listening on http://127.0.0.1:%d", self._port)
+
+    def stop(self) -> None:
+        self._server.shutdown()
+        self._server.server_close()
+        if self._thread:
+            self._thread.join(timeout=2)
 
 
 # ---------------------------------------------------------------------------
@@ -128,21 +178,33 @@ def run(argv: Sequence[str] | None = None) -> int:
 
     api = DevKitApi()
     from devkit import state as _dk_state
+
     work_dir = api._work_dir()
     _dk_state.load(work_dir)
     _LOGGER.info("starting DevKit window (%sx%s)", args.width, args.height)
 
-    webview.create_window(
-        title="隙间 · 开发者工具",
-        url=_ui_url(),
-        width=args.width,
-        height=args.height,
-        resizable=True,
-        js_api=api,
-        confirm_close=True,
-        text_select=True,
-    )
-    webview.start()
+    # Start local HTTP server for UI assets (avoids file:// CORS issues on WKWebView)
+    port = _pick_free_port()
+    ui_server = _UIServer(port)
+    ui_server.start()
+
+    try:
+        api = DevKitApi()
+        _dk_state.load(work_dir)
+
+        webview.create_window(
+            title="隙间 · 开发者工具",
+            url=f"http://127.0.0.1:{port}/index.html",
+            width=args.width,
+            height=args.height,
+            resizable=True,
+            js_api=api,
+            confirm_close=True,
+            text_select=True,
+        )
+        webview.start(debug=True)
+    finally:
+        ui_server.stop()
     return 0
 
 

@@ -1010,6 +1010,10 @@ textarea.field__input {
   justify-content: center;
 }
 
+.modal[hidden] {
+  display: none !important;
+}
+
 .modal__overlay {
   position: absolute;
   top: 0;
