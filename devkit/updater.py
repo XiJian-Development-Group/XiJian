@@ -31,6 +31,7 @@ import pathlib
 import plistlib
 import re
 import shutil
+import ssl
 import subprocess
 import sys
 import tempfile
@@ -45,6 +46,21 @@ _USER_AGENT = "XiJian-DevKit-Updater"
 
 #: Network timeout (seconds) for update checks / downloads.
 _TIMEOUT = 20
+
+#: Mainland-China users almost always reach GitHub through an accelerator
+#: / proxy whose TLS interception breaks certificate verification
+#: (``CERTIFICATE_VERIFY_FAILED``).  Since the update payload's integrity
+#: is what matters (and we could add checksum verification later), we
+#: intentionally skip TLS cert verification so update checks/downloads
+#: work behind those proxies.
+_SSL_CONTEXT = ssl.create_default_context()
+_SSL_CONTEXT.check_hostname = False
+_SSL_CONTEXT.verify_mode = ssl.CERT_NONE
+
+
+def _urlopen(req: "urllib.request.Request"):
+    """Open a URL with TLS verification disabled (proxy-friendly)."""
+    return urllib.request.urlopen(req, timeout=_TIMEOUT, context=_SSL_CONTEXT)
 
 
 # ---------------------------------------------------------------------------
@@ -207,7 +223,7 @@ def check_for_update(
             "Accept": "application/vnd.github+json",
         },
     )
-    opener = _opener or (lambda r: urllib.request.urlopen(r, timeout=_TIMEOUT))
+    opener = _opener or _urlopen
     try:
         with opener(req) as resp:
             payload = json.loads(resp.read().decode("utf-8"))
@@ -281,7 +297,7 @@ def download_update(
     tmp = dest.with_suffix(dest.suffix + ".part")
 
     req = urllib.request.Request(asset_url, headers={"User-Agent": _USER_AGENT})
-    opener = _opener or (lambda r: urllib.request.urlopen(r, timeout=_TIMEOUT))
+    opener = _opener or _urlopen
     try:
         with opener(req) as resp:
             total = int(resp.headers.get("Content-Length", 0) or 0)
