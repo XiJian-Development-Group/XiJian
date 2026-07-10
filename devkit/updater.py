@@ -382,9 +382,10 @@ def apply_update(downloaded_path: str) -> dict[str, Any]:
             new_app = _find_app_in(staging)
         elif path.suffix.lower() == ".dmg":
             mount_point = pathlib.Path(tempfile.mkdtemp(prefix="xijian_dmg_"))
-            subprocess.run(
+            # Use timeout and don't capture output to avoid hangs
+            result = subprocess.run(
                 ["hdiutil", "attach", "-nobrowse", "-mountpoint", str(mount_point), str(path)],
-                check=True, capture_output=True,
+                check=True, timeout=60, capture_output=False,
             )
             src_app = _find_app_in(mount_point)
             if src_app:
@@ -392,11 +393,17 @@ def apply_update(downloaded_path: str) -> dict[str, Any]:
                 shutil.copytree(src_app, new_app)
         else:
             return {"error": f"不支持的更新包格式：{path.suffix}"}
+    except subprocess.TimeoutExpired:
+        return {"error": "DMG 挂载超时（60秒）"}
     except (shutil.ReadError, subprocess.CalledProcessError, OSError) as exc:
         return {"error": f"解包更新失败：{exc}"}
     finally:
         if mount_point is not None:
-            subprocess.run(["hdiutil", "detach", str(mount_point)], capture_output=True)
+            # Best effort detach, ignore errors
+            subprocess.run(
+                ["hdiutil", "detach", str(mount_point)],
+                timeout=30, capture_output=False,
+            )
 
     if new_app is None or not new_app.exists():
         return {"error": "更新包中未找到 .app 应用"}
@@ -410,18 +417,28 @@ def apply_update(downloaded_path: str) -> dict[str, Any]:
         f'PID={pid}\n'
         f'NEW_APP="{new_app}"\n'
         f'CUR_APP="{current_app}"\n'
-        'while kill -0 "$PID" 2>/dev/null; do sleep 0.5; done\n'
+        # Wait for parent to exit (max 30 seconds)
+        'for i in {1..60}; do\n'
+        '  if ! kill -0 "$PID" 2>/dev/null; then break; fi\n'
+        '  sleep 0.5\n'
+        'done\n'
+        # Force kill if still alive after timeout
+        'if kill -0 "$PID" 2>/dev/null; then\n'
+        '  kill -9 "$PID" 2>/dev/null || true\n'
+        'fi\n'
         'rm -rf "$CUR_APP"\n'
         'cp -R "$NEW_APP" "$CUR_APP"\n'
         'open "$CUR_APP"\n',
         encoding="utf-8",
     )
     helper.chmod(0o755)
+    # Use Popen with proper detachment
     subprocess.Popen(
         ["/bin/bash", str(helper)],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
         start_new_session=True,
+        close_fds=True,
     )
     return {"scheduled": True, "target": str(current_app)}
 

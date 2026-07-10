@@ -7,6 +7,11 @@
 #
 # 矩阵：macOS arm64 + Windows（pywebview 用的 webview 跟系统绑定，
 #       跨编译暂时不做；Linux 因为需要 gtk 系依赖先不开）
+#
+# 产物命名：
+#   macOS:  XiJianDevKit.app         (在 dist/XiJianDevKit.app)
+#   Windows: XiJianDevKit.exe         (单文件，在 dist/XiJianDevKit.exe)
+#   通用:    xijian-devkit/ (onedir, macOS 用于打包 .app)
 
 name: build-devkit
 
@@ -79,6 +84,12 @@ jobs:
           chmod +x build-devkit.sh
           ./build-devkit.sh --target=${{ matrix.target }}
 
+      - name: Package macOS (DevKit_macOS.zip)
+        if: runner.os == 'macOS'
+        run: |
+          cd devkit/dist
+          zip -r DevKit_macOS.zip XiJianDevKit.app
+
       - name: Build (Windows)
         if: runner.os == 'Windows'
         shell: bash
@@ -86,6 +97,13 @@ jobs:
           cd devkit
           chmod +x build-devkit.sh
           ./build-devkit.sh --target=${{ matrix.target }}
+
+      - name: Package Windows (DevKit_Windows.zip)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          cd devkit/dist
+          zip DevKit_Windows.zip XiJianDevKit.exe
 
       - name: List artifacts
         shell: bash
@@ -99,8 +117,8 @@ jobs:
           name: ${{ matrix.artifact_name }}
           path: |
             devkit/dist/xijian-devkit
-            devkit/dist/xijian-devkit.exe
-            devkit/dist/隙间开发者工具.app
+            devkit/dist/DevKit_macOS.zip
+            devkit/dist/DevKit_Windows.zip
           if-no-files-found: warn
           retention-days: 14
 
@@ -122,7 +140,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
+            artifacts/**/DevKit_macOS.zip
+            artifacts/**/DevKit_Windows.zip
             artifacts/**/xijian-devkit
-            artifacts/**/xijian-devkit.exe
-            artifacts/**/隙间开发者工具.app
           fail_on_unmatched_files: false

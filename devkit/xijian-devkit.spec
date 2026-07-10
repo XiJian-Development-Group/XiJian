@@ -10,8 +10,9 @@
 #     ./build-devkit.sh
 #
 # Output:
-#   * dist/xijian-devkit/            — onedir binary (all platforms)
-#   * dist/隙间开发者工具.app         — macOS .app bundle (double-clickable)
+#   * dist/xijian-devkit/       — onedir binary (macOS, used for .app bundle)
+#   * dist/XiJianDevKit.app     — macOS .app bundle (double-clickable)
+#   * dist/XiJianDevKit.exe     — Windows single-file executable
 #
 # Design notes
 # ------------
@@ -27,6 +28,8 @@
 # * ``webview`` (pywebview) + ``py7zr`` are collected wholesale because
 #   both load platform backends / codecs dynamically that a static import
 #   scan would miss (WKWebView/WebView2/webkitgtk; LZMA/AES codecs).
+# * macOS gets an onedir collection (for .app bundle) + .app bundle
+# * Windows gets a single-file executable (onefile)
 
 import os
 import sys
@@ -83,7 +86,8 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
-exe = EXE(
+# --- onedir executable (used for macOS .app bundle on all platforms) ------
+exe_onedir = EXE(
     pyz,
     a.scripts,
     [],
@@ -101,8 +105,9 @@ exe = EXE(
     entitlements_file=None,
 )
 
+# --- onedir collection (for macOS .app bundle) -----------------------------
 coll = COLLECT(
-    exe,
+    exe_onedir,
     a.binaries,
     a.zipfiles,
     a.datas,
@@ -112,14 +117,38 @@ coll = COLLECT(
     name="xijian-devkit",
 )
 
+# --- Windows single-file executable ----------------------------------------
+if sys.platform == "win32":
+    exe_win = EXE(
+        pyz,
+        a.scripts,
+        a.binaries,
+        a.zipfiles,
+        a.datas,
+        name="XiJianDevKit",
+        debug=False,
+        bootloader_ignore_signals=False,
+        strip=False,
+        upx=True,
+        console=False,          # GUI app — no terminal window
+        disable_windowed_traceback=False,
+        argv_emulation=False,
+        target_arch=None,
+        codesign_identity=None,
+        onefile=True,           # single-file executable
+    )
+else:
+    exe_win = None
+
+# --- macOS .app bundle -----------------------------------------------------
 if sys.platform == "darwin":
     app = BUNDLE(
         coll,
-        name="隙间开发者工具.app",
+        name="XiJianDevKit.app",
         icon=None,
         bundle_identifier="com.xijian.devkit",
         info_plist={
-            "CFBundleName": "隙间开发者工具",
+            "CFBundleName": "XiJianDevKit",
             "CFBundleDisplayName": "隙间 · 开发者工具",
             "CFBundleShortVersionString": "1.4.4",
             "CFBundleVersion": "1.4.4",

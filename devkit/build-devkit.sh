@@ -23,8 +23,9 @@
 #
 # Output
 # ------
-#     dist/xijian-devkit/                     # onedir binary
-#     dist/隙间开发者工具.app                  # macOS .app bundle (double-clickable)
+#     dist/xijian-devkit/            # onedir binary (all platforms)
+#     dist/XiJianDevKit.app          # macOS .app bundle (double-clickable)
+#     dist/XiJianDevKit.exe          # Windows single-file executable
 #
 # Design contract (do not violate without updating xijian-devkit.spec)
 # -------------------------------------------------------------------
@@ -142,7 +143,7 @@ echo
 echo "==> build done. artifacts:"
 shopt -s nullglob
 for f in "${DEVKIT_DIR}/dist/xijian-devkit" "${DEVKIT_DIR}/dist/xijian-devkit.exe" \
-         "${DEVKIT_DIR}/dist/隙间开发者工具" "${DEVKIT_DIR}/dist/隙间开发者工具.app"; do
+         "${DEVKIT_DIR}/dist/XiJianDevKit.app"; do
     [[ -e "$f" ]] && echo "    $f"
 done
 
