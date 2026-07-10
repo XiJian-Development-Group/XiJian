@@ -36,7 +36,7 @@
       <button class="tab-nav__btn" data-tab="plot">剧情设计</button>
       <button class="tab-nav__btn" data-tab="dialog">对话样本</button>
       <button class="tab-nav__btn" data-tab="motion">动作编辑</button>
-      <button class="tab-nav__btn" data-tab="ai">AI 辅助</button>
+      <button class="tab-nav__btn" data-tab="ai" hidden>AI 辅助</button>
       <button class="tab-nav__btn" data-tab="settings">设置</button>
       <button class="tab-nav__btn" id="help-btn" type="button" style="margin-left:auto;color:var(--accent)">帮助</button>
     </nav>
@@ -330,9 +330,9 @@
                 </div>
               </details>
 
-              <!-- 角色配置 JSON（C2.3） -->
+              <!-- 角色配置 JSON -->
               <details class="field-group">
-                <summary class="field-group__summary">角色配置 JSON（C2.3 · schema 校验 + 自动填写）</summary>
+                <summary class="field-group__summary">角色配置 JSON（schema 校验 + 自动填写）</summary>
                 <div class="field-group__body">
                   <div class="row row--gap">
                     <button id="char-config-validate-btn" class="btn btn--ghost" type="button">校验配置</button>
@@ -457,7 +457,7 @@
               </label>
 
               <details class="field-group">
-                <summary>结构化配置（C1.3 · 时间/天气/光照）</summary>
+                <summary>结构化配置（时间 / 天气 / 光照）</summary>
                 <div class="field-group__body">
                   <div class="row row--gap">
                     <label class="field field--inline">
@@ -512,7 +512,7 @@
               <div id="world-doc-preview" class="md-preview" hidden></div>
 
               <details class="field-group">
-                <summary>自定义事件（C1.1 · 触发 DSL）</summary>
+                <summary>自定义事件（触发 DSL）</summary>
                 <div class="field-group__body">
                   <div class="row row--gap">
                     <button id="world-event-new-btn" class="btn btn--primary" type="button">新建事件</button>
@@ -994,7 +994,7 @@
       </section>
 
       <!-- ======== Tab: AI 辅助 ======== -->
-      <section class="tab-panel" id="tab-ai">
+      <section class="tab-panel" id="tab-ai" hidden>
         <div class="tab-panel__content">
           <section class="card">
             <header class="card__header">
@@ -1194,7 +1194,7 @@
             <button class="help-nav__btn" data-help-tab="plot">剧情设计</button>
             <button class="help-nav__btn" data-help-tab="dialog">对话样本</button>
             <button class="help-nav__btn" data-help-tab="motion">动作编辑</button>
-            <button class="help-nav__btn" data-help-tab="ai">AI 辅助</button>
+            <button class="help-nav__btn" data-help-tab="ai" hidden>AI 辅助</button>
           </nav>
           <div class="help-content" id="help-content-general">
             <h3>开发者工具使用概述</h3>

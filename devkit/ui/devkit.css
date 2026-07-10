@@ -234,7 +234,7 @@ body {
    editor side) keeps its own flex layout but still scrolls. */
 .tab-panel--active {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 360px;
+  grid-template-columns: minmax(0, 1fr) 500px;
   align-items: start;
 }
 .tab-panel--active:not(:has(.tab-panel__editor)) {

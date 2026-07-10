@@ -84,13 +84,11 @@ def _clean_devkit_state(tmp_path, monkeypatch):
     """Wipe the in-memory DevKit buckets between tests *and* point
     the local archive directory at ``tmp_path``.
 
-    Setting ``XIJIAN_DEV_LOCAL_DIR`` forces :func:`local_archive_dir`
-    to honour it; tests can then inspect whatever was written.
-
-    Note: ``_DEV_SUBMIT_LOCAL_DIR`` is a module-level constant read
-    from the environment at import time, so we have to monkeypatch
-    the module attribute directly rather than just ``setenv``.
+    Setting ``XIJIAN_DEV_WORK_DIR`` forces the DevKit to use the
+    temporary directory as its work directory so no test data leaks
+    into the real dev directory.
     """
+    monkeypatch.setenv("XIJIAN_DEV_WORK_DIR", str(tmp_path))
     monkeypatch.setenv("XIJIAN_DEV_LOCAL_DIR", str(tmp_path))
     monkeypatch.setattr(
         "devkit._DEV_SUBMIT_LOCAL_DIR", str(tmp_path)

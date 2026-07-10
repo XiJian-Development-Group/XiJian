@@ -527,7 +527,7 @@ const callApi = async (method, ...args) => {
     $("#char-mc-reserve").value = mc.reserve_tokens_for_reply ?? 2000;
     $("#char-mc-force-recall").value = mc.force_recall_on_history ? "true" : "false";
 
-    // Character config JSON (C2.3)
+    // Character config JSON
     const cfg = char?.character_config || {};
     const cfgStr = Object.keys(cfg).length > 0 ? JSON.stringify(cfg, null, 2) : "";
     $("#char-config-json").value = cfgStr;
@@ -634,12 +634,70 @@ const callApi = async (method, ...args) => {
   };
 
   const onCharImportPersona = async () => {
-    if (!_selectedCharId) { toast("请先选择一个角色", "err"); return; }
+    // 直接选择 .md 文件，不强制要求先选角色
+    // 若当前编辑器有选中角色，直接导入到该角色；否则提示用户先选择/创建角色
     const picked = await openFileDialog("open", ["md", "markdown", "txt"]);
     if (!picked || picked.length === 0) return;
-    const resp = await callApi("import_persona", _selectedCharId, picked[0]);
+
+    // 优先使用当前编辑器选中的角色
+    let charId = _selectedCharId;
+
+    if (!charId) {
+      // 没有选中角色，尝试获取角色列表让用户选一个
+      const charsResp = await callApi("list_characters");
+      if (!charsResp.ok || !charsResp.data || charsResp.data.length === 0) {
+        toast("暂无可用角色，请先创建角色", "warn");
+        return;
+      }
+      const chars = charsResp.data;
+      const modal = document.createElement("div");
+      modal.className = "modal-overlay";
+      modal.innerHTML = `
+        <div class="modal">
+          <header class="modal__header">
+            <h3>选择导入目标角色</h3>
+            <button class="btn btn--ghost" data-action="close">✕</button>
+          </header>
+          <div class="modal__body">
+            <label class="field">
+              <span class="field__label">目标角色</span>
+              <select id="import-persona-char-select" class="field__input">
+                <option value="">— 选择角色 —</option>
+                ${chars.map(c => `<option value="${c.id}">${escHtml(c.display_name || c.name)} (${c.id})</option>`).join("")}
+              </select>
+            </label>
+          </div>
+          <footer class="modal__footer">
+            <button class="btn btn--primary" data-action="confirm">确定导入</button>
+            <button class="btn btn--ghost" data-action="close">取消</button>
+          </footer>
+        </div>
+      `;
+      document.body.appendChild(modal);
+      const select = $("#import-persona-char-select");
+      const cleanup = () => modal.remove();
+      modal.querySelector("[data-action=close]").addEventListener("click", cleanup);
+      modal.querySelector("[data-action=confirm]").addEventListener("click", async () => {
+        charId = select.value;
+        if (!charId) { toast("请选择一个角色", "warn"); return; }
+        cleanup();
+        await doImportPersona(charId, picked[0]);
+      });
+      return;
+    }
+
+    // 直接导入到当前选中的角色
+    await doImportPersona(charId, picked[0]);
+  };
+
+  const doImportPersona = async (charId, filePath) => {
+    setStatus("#char-status", "正在导入人设文档…", "warn");
+    const resp = await callApi("import_persona", charId, filePath);
     if (!resp.ok) { toast(`导入失败：${resp.message}`, "err"); return; }
-    $("#char-persona").value = resp.data || "";
+    // 如果导入的是当前选中的角色，刷新显示
+    if (charId === _selectedCharId) {
+      $("#char-persona").value = resp.data || "";
+    }
     toast("人设文档已导入", "ok");
   };
 
@@ -848,7 +906,7 @@ const callApi = async (method, ...args) => {
     $("#world-delete-btn").disabled = !hasSel;
   };
 
-  // ---- world custom events (C1.1) ----
+  // World custom events
   let _selectedWorldEventId = null;
 
   const renderWorldEvents = async (worldId) => {
@@ -2512,7 +2570,7 @@ const callApi = async (method, ...args) => {
       }
     });
 
-    // AI tab
+    // AI tab — 暂时隐藏，等待完成后恢复显示
     on("#ai-refresh-btn", "click", renderAiLog);
     on("#ai-new-btn", "click", () => { resetAiEditor(); });
     on("#ai-log-btn", "click", onAiLog);

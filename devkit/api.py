@@ -495,8 +495,11 @@ class DevKitApi:
         file_types_arg = None
         if file_types and kind_str == "open":
             exts = [str(e) for e in file_types if e] if isinstance(file_types, list) else [str(file_types)]
-            # pywebview expects a list of (label, ext) tuples; we label generically.
-            file_types_arg = [("允许的格式", ",".join(exts))] if exts else None
+            # pywebview expects a list of (label, pattern) tuples.
+            # Pattern should use * wildcards and semicolons: "*.txt;*.md"
+            if exts:
+                pattern = ";".join(f"*{e}" if e.startswith(".") else f"*.{e}" for e in exts)
+                file_types_arg = [("允许的格式", pattern)]
 
         try:
             result = win.create_file_dialog(
