@@ -492,14 +492,12 @@ class DevKitApi:
             "save": kind.SAVE,
         }.get(kind_str, kind.OPEN)
 
-        file_types_arg = None
+        file_types_arg = ()
         if file_types and kind_str == "open":
             exts = [str(e) for e in file_types if e] if isinstance(file_types, list) else [str(file_types)]
-            # pywebview expects a list of (label, pattern) tuples.
-            # Pattern should use * wildcards and semicolons: "*.txt;*.md"
+            # pywebview expects a sequence of strings like ["*.md", "*.txt"]
             if exts:
-                pattern = ";".join(f"*{e}" if e.startswith(".") else f"*.{e}" for e in exts)
-                file_types_arg = [("允许的格式", pattern)]
+                file_types_arg = [f"*{e}" if e.startswith(".") else f"*.{e}" for e in exts]
 
         try:
             result = win.create_file_dialog(
