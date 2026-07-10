@@ -100,10 +100,14 @@ jobs:
 
       - name: Package Windows (DevKit_Windows.zip)
         if: runner.os == 'Windows'
-        shell: bash
+        shell: pwsh
         run: |
-          cd devkit/dist
-          zip DevKit_Windows.zip XiJianDevKit.exe
+          Write-Host "==> packaging Windows artifact..."
+          if (Test-Path "devkit/dist/XiJianDevKit.exe") {
+            cd devkit/dist
+            Compress-Archive -Path "XiJianDevKit.exe" -DestinationPath "DevKit_Windows.zip" -Force
+            Write-Host "Created DevKit_Windows.zip"
+          }
 
       - name: List artifacts
         shell: bash
