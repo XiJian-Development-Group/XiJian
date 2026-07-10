@@ -315,10 +315,10 @@ const callApi = async (method, ...args) => {
     return d.innerHTML;
   };
 
-  // Minimal Markdown → HTML renderer for the world-doc live preview
-  // (C1.2).  Supports headings, bold/italic, inline code, unordered
-  // and ordered lists, and paragraphs.  Output is escaped first to avoid
-  // injecting raw HTML from user content.
+// Minimal Markdown → HTML renderer for the world-doc live preview
+// Supports headings, bold/italic, inline code, unordered
+// and ordered lists, and paragraphs.  Output is escaped first to avoid
+// injecting raw HTML from user content.
   const renderMarkdown = (md) => {
     if (!md) return "";
     const lines = md.split(/\r?\n/);
