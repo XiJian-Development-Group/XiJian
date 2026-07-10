@@ -330,17 +330,60 @@
                 </div>
               </details>
 
-<!-- 角色配置 JSON -->
+<!-- 角色配置 -->
               <details class="field-group">
-                <summary class="field-group__summary">角色配置 JSON</summary>
+                <summary class="field-group__summary">角色配置</summary>
                 <div class="field-group__body">
                   <div class="row row--gap">
                     <button id="char-config-validate-btn" class="btn btn--ghost" type="button">校验配置</button>
                     <button id="char-config-autofill-btn" class="btn btn--ghost" type="button">自动填写</button>
                     <span id="char-config-status" class="status status--idle"></span>
                   </div>
-                  <textarea id="char-config-json" class="field__input field__input--code" rows="6"
-                    placeholder='{"speaking_speed": 1.0, "emotion_stability": 0.6}'></textarea>
+                  <div class="grid grid--2">
+                    <label class="field">
+                      <span class="field__label">语速倍率 <span class="hint">(speaking_speed)</span></span>
+                      <input id="char-cfg-speaking-speed" class="field__input" type="number" min="0.5" max="2.0" step="0.1" value="1.0" />
+                    </label>
+                    <label class="field">
+                      <span class="field__label">情绪稳定性 <span class="hint">(emotion_stability)</span></span>
+                      <input id="char-cfg-emotion-stability" class="field__input" type="number" min="0.0" max="1.0" step="0.05" value="0.6" />
+                    </label>
+                    <label class="field">
+                      <span class="field__label">长期记忆上限 <span class="hint">(max_long_term)</span></span>
+                      <input id="char-cfg-max-long-term" class="field__input" type="number" min="1" max="1000" value="200" />
+                    </label>
+                    <label class="field">
+                      <span class="field__label">长期记忆重要性阈值 <span class="hint">(long_term_importance_min)</span></span>
+                      <input id="char-cfg-long-term-importance-min" class="field__input" type="number" min="0.0" max="1.0" step="0.05" value="0.6" />
+                    </label>
+                    <label class="field">
+                      <span class="field__label">短期记忆上限 <span class="hint">(max_short_term)</span></span>
+                      <input id="char-cfg-max-short-term" class="field__input" type="number" min="0" max="500" value="50" />
+                    </label>
+                    <label class="field">
+                      <span class="field__label">短期记忆衰减率 <span class="hint">(short_term_decay_rate)</span></span>
+                      <input id="char-cfg-short-term-decay-rate" class="field__input" type="number" min="0.0" max="1.0" step="0.01" value="0.05" />
+                    </label>
+                    <label class="field">
+                      <span class="field__label">短期记忆重要性阈值 <span class="hint">(short_term_importance_min)</span></span>
+                      <input id="char-cfg-short-term-importance-min" class="field__input" type="number" min="0.0" max="1.0" step="0.05" value="0.3" />
+                    </label>
+                    <label class="field">
+                      <span class="field__label">上下文 Token 上限 <span class="hint">(max_context_tokens)</span></span>
+                      <input id="char-cfg-max-context-tokens" class="field__input" type="number" min="100" max="32000" value="8000" />
+                    </label>
+                    <label class="field">
+                      <span class="field__label">回复保留 Token <span class="hint">(reserve_tokens_for_reply)</span></span>
+                      <input id="char-cfg-reserve-tokens-for-reply" class="field__input" type="number" min="0" max="16000" value="2000" />
+                    </label>
+                    <label class="field">
+                      <span class="field__label">强制召回历史 <span class="hint">(force_recall_on_history)</span></span>
+                      <select id="char-cfg-force-recall-on-history" class="field__input">
+                        <option value="true">是</option>
+                        <option value="false">否</option>
+                      </select>
+                    </label>
+                  </div>
                 </div>
               </details>
 
