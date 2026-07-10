@@ -133,6 +133,15 @@ from devkit.world_editor import (
     validate_event_trigger as _we_validate_trigger,
     lint_world_doc as _we_lint_doc,
     get_world_doc_templates as _we_templates,
+    parse_event_dsl as _we_parse_dsl,
+    list_event_factories as _we_list_factories,
+    save_event_factory as _we_save_factory,
+    delete_event_factory as _we_delete_factory,
+    instantiate_event_factory as _we_instantiate_factory,
+    list_world_doc_versions as _we_list_doc_versions,
+    get_world_doc_version as _we_get_doc_version,
+    restore_world_doc_version as _we_restore_doc_version,
+    extract_world_doc_keywords as _we_extract_keywords,
 )
 from devkit.model_viewer import (
     list_models as _mv_list,
@@ -143,6 +152,11 @@ from devkit.model_viewer import (
     export_model_for_submit as _mv_export,
     generate_model_from_text as _mv_generate,
     validate_model_format as _mv_validate,
+    convert_fbx_to_vrm as _mv_convert_fbx,
+    convert_bvh_to_vrm as _mv_convert_bvh,
+    import_fbx_model as _mv_import_fbx,
+    import_glb_model as _mv_import_glb,
+    import_vrm_model as _mv_import_vrm,
 )
 from devkit.voice_cloner import (
     list_voices as _vc_list,
@@ -155,6 +169,11 @@ from devkit.voice_cloner import (
     generate_voice_from_text as _vc_generate_text,
     clone_voice_from_file as _vc_clone_file,
     generate_singing as _vc_sing,
+)
+from devkit.tts_engine import (
+    get_tts_manager,
+    MeloTTSEngine,
+    DiffSingerEngine,
 )
 from devkit.plot_editor import (
     list_plots as _pe_list,
@@ -178,6 +197,11 @@ from devkit.dialog_editor import (
     delete_dialog as _de_delete,
     check_dialog_minimum as _de_minimum,
     export_dialogs_for_submit as _de_export,
+    set_dialog_status as _de_set_status,
+    get_approved_dialogs as _de_get_approved,
+    export_approved_dialogs_for_training as _de_export_training,
+    start_finetuning_job as _de_start_finetune,
+    get_finetuning_job_status as _de_finetune_status,
 )
 from devkit.motion_editor import (
     list_motion_characters as _moe_chars,
@@ -187,6 +211,9 @@ from devkit.motion_editor import (
     delete_motion as _moe_delete,
     import_motion_file as _moe_import,
     export_motions_for_submit as _moe_export,
+    convert_bvh_to_vrm as _moe_convert_bvh,
+    validate_motion_skeleton as _moe_validate_skeleton,
+    edit_motion_keyframes as _moe_edit_keyframes,
 )
 from devkit.ai_assistant import (
     log_assist_event as _aa_log,
@@ -540,6 +567,14 @@ class DevKitApi:
             _LOGGER.warning("failed to persist DevKit session state", exc_info=True)
 
     @_serialize_call
+    def get_status(self) -> dict[str, Any]:
+        """Return the current DevKit status (matches spec's get_status).
+
+        Alias for whoami() for backward compatibility.
+        """
+        return self.get_status()
+
+    @_serialize_call
     def ping(self) -> dict[str, Any]:
         """Liveness probe (``{"ok": True, "data": {"pong": true}}``)."""
         return {"pong": True, "active_developer": self._active_developer}
@@ -595,8 +630,7 @@ class DevKitApi:
             )
         return cooldown_remaining(developer_id)
 
-    @_serialize_call
-    def last_submit(self, developer_id: Any) -> dict[str, Any] | None:
+    def last_submit_for(self, developer_id: Any) -> dict[str, Any] | None:
         """Return the most recent submission record for ``developer_id``.
 
         Returns ``null`` if the developer has never submitted.
@@ -608,6 +642,11 @@ class DevKitApi:
                 code="missing_developer_id",
             )
         return last_submit_for(developer_id)
+
+    @_serialize_call
+    def last_submit(self, developer_id: Any) -> dict[str, Any] | None:
+        """Deprecated alias for :meth:`last_submit_for`."""
+        return self.last_submit_for(developer_id)
 
     @_serialize_call
     def list_submissions(self, limit: Any = 50) -> list[dict[str, Any]]:
@@ -1181,6 +1220,125 @@ class DevKitApi:
         """C1.2 — return built-in world-doc markdown templates."""
         return _we_templates()
 
+    # --- world doc versioning (C1.2 AC-1) ------------------------------------
+
+    @_serialize_call
+    def list_world_doc_versions(self, world_id: Any) -> list[dict[str, Any]]:
+        if not isinstance(world_id, str) or not world_id:
+            raise DevKitError(400, "世界观 ID 不能为空", code="missing_world_id")
+        return _we_list_doc_versions(self._work_dir(), world_id)
+
+    @_serialize_call
+    def get_world_doc_version(self, world_id: Any, version: Any) -> dict[str, Any]:
+        if not isinstance(world_id, str) or not world_id:
+            raise DevKitError(400, "世界观 ID 不能为空", code="missing_world_id")
+        try:
+            v = int(version)
+        except (TypeError, ValueError):
+            raise DevKitError(400, "版本号必须是整数", code="bad_version")
+        return _we_get_doc_version(self._work_dir(), world_id, v)
+
+    @_serialize_call
+    def restore_world_doc_version(self, world_id: Any, version: Any) -> dict[str, Any]:
+        """Restore a specific version of the world document."""
+        if not isinstance(world_id, str) or not world_id:
+            raise DevKitError(400, "世界观 ID 不能为空", code="missing_world_id")
+        try:
+            v = int(version)
+        except (TypeError, ValueError):
+            raise DevKitError(400, "版本号必须是整数", code="bad_version")
+        return _we_restore_doc_version(self._work_dir(), world_id, v)
+
+    @_serialize_call
+    def extract_world_doc_keywords(self, world_id: Any) -> list[str]:
+        """Extract keywords from world document for A4 NPC generation."""
+        if not isinstance(world_id, str) or not world_id:
+            raise DevKitError(400, "世界观 ID 不能为空", code="missing_world_id")
+        return _we_extract_keywords(self._work_dir(), world_id)
+
+    # --- world events: DSL parser (C1.1) ----------------------------------
+
+    @_serialize_call
+    def parse_event_dsl(self, dsl_text: Any) -> dict[str, Any]:
+        """Parse event DSL text into structured trigger dict."""
+        if not isinstance(dsl_text, str) or not dsl_text.strip():
+            raise DevKitError(400, "DSL 文本不能为空", code="empty_dsl")
+        return _we_parse_dsl(dsl_text)
+
+    # --- world events: factory for batch instantiation (C1.1) -------------
+
+    @_serialize_call
+    def list_event_factories(self, world_id: Any) -> list[dict[str, Any]]:
+        if not isinstance(world_id, str) or not world_id:
+            raise DevKitError(400, "世界观 ID 不能为空", code="missing_world_id")
+        return _we_list_factories(self._work_dir(), world_id)
+
+    @_serialize_call
+    def save_event_factory(self, data: Any) -> dict[str, Any]:
+        if not isinstance(data, dict):
+            raise DevKitError(400, "数据格式错误", code="bad_data")
+        world_id = data.get("world_id")
+        if not isinstance(world_id, str) or not world_id:
+            raise DevKitError(400, "世界观 ID 不能为空", code="missing_world_id")
+        return _we_save_factory(self._work_dir(), world_id, data)
+
+    @_serialize_call
+    def delete_event_factory(self, world_id: Any, factory_id: Any) -> dict[str, Any]:
+        if not isinstance(world_id, str) or not world_id:
+            raise DevKitError(400, "世界观 ID 不能为空", code="missing_world_id")
+        if not isinstance(factory_id, str) or not factory_id:
+            raise DevKitError(400, "工厂 ID 不能为空", code="missing_factory_id")
+        ok = _we_delete_factory(self._work_dir(), world_id, factory_id)
+        return {"deleted": ok}
+
+    @_serialize_call
+    def instantiate_event_factory(
+        self, world_id: Any, factory_id: Any, count: Any = 1
+    ) -> list[dict[str, Any]]:
+        if not isinstance(world_id, str) or not world_id:
+            raise DevKitError(400, "世界观 ID 不能为空", code="missing_world_id")
+        if not isinstance(factory_id, str) or not factory_id:
+            raise DevKitError(400, "工厂 ID 不能为空", code="missing_factory_id")
+        try:
+            n = int(count) if count is not None else 1
+        except (TypeError, ValueError):
+            raise DevKitError(400, "count 必须是整数", code="bad_count")
+        if n <= 0:
+            raise DevKitError(400, "count 必须大于 0", code="bad_count")
+        return _we_instantiate_factory(self._work_dir(), world_id, factory_id, n)
+
+    # --- world doc versioning (C1.2 AC-1) ----------------------------------
+
+    @_serialize_call
+    def list_world_doc_versions(self, world_id: Any) -> list[dict[str, Any]]:
+        if not isinstance(world_id, str) or not world_id:
+            raise DevKitError(400, "世界观 ID 不能为空", code="missing_world_id")
+        return _we_list_doc_versions(self._work_dir(), world_id)
+
+    @_serialize_call
+    def get_world_doc_version(self, world_id: Any, version: Any) -> dict[str, Any]:
+        if not isinstance(world_id, str) or not world_id:
+            raise DevKitError(400, "世界观 ID 不能为空", code="missing_world_id")
+        try:
+            v = int(version)
+        except (TypeError, ValueError):
+            raise DevKitError(400, "版本号必须是整数", code="bad_version")
+        content = _we_get_doc_version(self._work_dir(), world_id, v)
+        if content is None:
+            raise DevKitError(404, f"版本 {v} 不存在", code="version_not_found")
+        return {"version": v, "content": content}
+
+    @_serialize_call
+    def extract_world_doc_keywords(self, world_id: Any) -> list[str]:
+        """Extract keywords from world document for A4 NPC generation."""
+        if not isinstance(world_id, str) or not world_id:
+            raise DevKitError(400, "世界观 ID 不能为空", code="missing_world_id")
+        world = _we_get(self._work_dir(), world_id)
+        if not world:
+            raise DevKitError(404, f"世界观 {world_id} 不存在", code="not_found")
+        doc = world.get("world_doc", "")
+        return _we_extract_keywords(doc)
+
     # --- 3D model viewer -----------------------------------------------
 
     @_serialize_call
@@ -1402,6 +1560,59 @@ class DevKitApi:
             engine=engine_str, params=params_dict,
         )
 
+    # --- TTS model management (C2.1 MeloTTS/DiffSinger) --------------------
+
+    @_serialize_call
+    def download_melotts_model(self, language: Any = "zh") -> dict[str, Any]:
+        """Download MeloTTS model for the specified language."""
+        if not isinstance(language, str) or language not in ("zh", "en"):
+            raise DevKitError(400, "语言必须是 zh 或 en", code="bad_language")
+        melo_engine = MeloTTSEngine()
+        success = melo_engine.ensure_model(language)
+        return {
+            "success": success,
+            "language": language,
+            "engine": "melo",
+            "model_path": melo_engine._model_path,
+        }
+
+    @_serialize_call
+    def download_diffsinger_model(self, language: Any = "zh") -> dict[str, Any]:
+        """Download DiffSinger model for the specified language."""
+        if not isinstance(language, str) or language not in ("zh", "en", "jp"):
+            raise DevKitError(400, "语言必须是 zh、en 或 jp", code="bad_language")
+        ds_engine = DiffSingerEngine()
+        success = ds_engine.ensure_model(language)
+        return {
+            "success": success,
+            "language": language,
+            "engine": "diffsinger",
+            "model_path": ds_engine._model_path,
+        }
+
+    @_serialize_call
+    def list_available_tts_engines(self) -> dict[str, Any]:
+        """List all TTS engines and their availability."""
+        mgr = get_tts_manager()
+        dialogue_engines = []
+        singing_engines = []
+        for eng in mgr._tts_engines:
+            dialogue_engines.append({
+                "name": eng.name,
+                "available": eng.is_available(),
+                "voices": eng.list_voices() if eng.is_available() else [],
+            })
+        for eng in mgr._singing_engines:
+            singing_engines.append({
+                "name": eng.name,
+                "available": eng.is_available(),
+                "voices": eng.list_voices() if eng.is_available() else [],
+            })
+        return {
+            "dialogue": dialogue_engines,
+            "singing": singing_engines,
+        }
+
     @_serialize_call
     def export_voice(self, voice_id: Any) -> dict[str, Any]:
         if not isinstance(voice_id, str) or not voice_id:
@@ -1426,6 +1637,74 @@ class DevKitApi:
             raise DevKitError(400, "描述文本不能为空", code="empty_description")
         name_str = name if isinstance(name, str) else ""
         return _mv_generate(self._work_dir(), description, name=name_str)
+
+    # --- model conversion (C2.8/C2.9) -----------------------------------
+
+    @_serialize_call
+    def convert_fbx_to_vrm(
+        self,
+        fbx_path: Any = None,
+        output_path: Any = None,
+        tool: Any = "univrm",
+    ) -> dict[str, Any]:
+        if not isinstance(fbx_path, str) or not fbx_path:
+            raise DevKitError(400, "FBX 文件路径不能为空", code="missing_fbx_path")
+        if not isinstance(output_path, str) or not output_path:
+            raise DevKitError(400, "输出路径不能为空", code="missing_output_path")
+        tool_str = tool if isinstance(tool, str) else "univrm"
+        vrm_path = _mv_convert_fbx(fbx_path, output_path, tool_str)
+        return {"vrm_path": vrm_path, "message": "FBX→VRM 转换完成"}
+
+    @_serialize_call
+    def convert_bvh_to_vrm(
+        self,
+        bvh_path: Any = None,
+        vrm_template: Any = None,
+        output_path: Any = None,
+    ) -> dict[str, Any]:
+        if not isinstance(bvh_path, str) or not bvh_path:
+            raise DevKitError(400, "BVH 文件路径不能为空", code="missing_bvh_path")
+        if not isinstance(vrm_template, str) or not vrm_template:
+            raise DevKitError(400, "VRM 模板路径不能为空", code="missing_vrm_template")
+        if not isinstance(output_path, str) or not output_path:
+            raise DevKitError(400, "输出路径不能为空", code="missing_output_path")
+        out_path = _mv_convert_bvh(bvh_path, vrm_template, output_path)
+        return {"output_path": out_path, "message": "BVH→VRM 转换完成"}
+
+    @_serialize_call
+    def import_fbx_model(
+        self,
+        fbx_path: Any = None,
+        convert_to_vrm: Any = True,
+        tool: Any = "univrm",
+    ) -> dict[str, Any]:
+        if not isinstance(fbx_path, str) or not fbx_path:
+            raise DevKitError(400, "FBX 文件路径不能为空", code="missing_fbx_path")
+        convert = convert_to_vrm if isinstance(convert_to_vrm, bool) else True
+        tool_str = tool if isinstance(tool, str) else "univrm"
+        model = _mv_import_fbx(self._work_dir(), fbx_path, convert, tool_str)
+        return {"model": model, "message": "FBX 导入完成"}
+
+    @_serialize_call
+    def import_glb_model(self, glb_path: Any = None) -> dict[str, Any]:
+        if not isinstance(glb_path, str) or not glb_path:
+            raise DevKitError(400, "GLB 文件路径不能为空", code="missing_glb_path")
+        model = _mv_import_glb(self._work_dir(), glb_path)
+        return {"model": model, "message": "GLB 导入完成"}
+
+    @_serialize_call
+    def import_vrm_model(self, vrm_path: Any = None) -> dict[str, Any]:
+        if not isinstance(vrm_path, str) or not vrm_path:
+            raise DevKitError(400, "VRM 文件路径不能为空", code="missing_vrm_path")
+        model = _mv_import_vrm(self._work_dir(), vrm_path)
+        return {"model": model, "message": "VRM 导入完成"}
+
+    @_serialize_call
+    def validate_model(self, model_id: Any) -> dict[str, Any]:
+        """C2.8 AC-4 — validate a registered model against the VRM 1.0 spec."""
+        if not isinstance(model_id, str) or not model_id:
+            raise DevKitError(400, "模型 ID 不能为空", code="missing_model_id")
+        return _mv_validate(self._work_dir(), model_id)
 
     # --- plot editor ----------------------------------------------------
 
@@ -1560,6 +1839,58 @@ class DevKitApi:
             raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
         return _de_export(self._work_dir(), character_id)
 
+    # --- dialog review & fine-tuning (C2.7) ------------------------------
+
+    @_serialize_call
+    def set_dialog_status(
+        self, character_id: Any, dialog_id: Any, status: Any
+    ) -> dict[str, Any] | None:
+        if not isinstance(character_id, str) or not character_id:
+            raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
+        if not isinstance(dialog_id, str) or not dialog_id:
+            raise DevKitError(400, "对话 ID 不能为空", code="missing_dialog_id")
+        if not isinstance(status, str):
+            raise DevKitError(400, "状态必须是字符串", code="bad_status")
+        return _de_set_status(self._work_dir(), character_id, dialog_id, status)
+
+    @_serialize_call
+    def get_approved_dialogs(self, character_id: Any) -> list[dict[str, Any]]:
+        if not isinstance(character_id, str) or not character_id:
+            raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
+        return _de_get_approved(self._work_dir(), character_id)
+
+    @_serialize_call
+    def export_training_data(
+        self, character_id: Any, output_path: Any = None
+    ) -> dict[str, Any]:
+        if not isinstance(character_id, str) or not character_id:
+            raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
+        return _de_export_training(
+            self._work_dir(), character_id, output_path if isinstance(output_path, str) else None
+        )
+
+    @_serialize_call
+    def start_finetuning(
+        self,
+        character_id: Any = None,
+        base_model: Any = None,
+        params: Any = None,
+    ) -> dict[str, Any]:
+        if not isinstance(character_id, str) or not character_id:
+            raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
+        return _de_start_finetune(
+            self._work_dir(),
+            character_id,
+            base_model if isinstance(base_model, str) else "qwen2.5-7b",
+            params if isinstance(params, dict) else None,
+        )
+
+    @_serialize_call
+    def get_finetuning_status(self, job_id: Any) -> dict[str, Any] | None:
+        if not isinstance(job_id, str) or not job_id:
+            raise DevKitError(400, "任务 ID 不能为空", code="missing_job_id")
+        return _de_finetune_status(self._work_dir(), job_id)
+
     # --- motion editor --------------------------------------------------
 
     @_serialize_call
@@ -1614,6 +1945,42 @@ class DevKitApi:
         if not isinstance(character_id, str) or not character_id:
             raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
         return _moe_export(self._work_dir(), character_id)
+
+    @_serialize_call
+    def export_motions(self, character_id: Any) -> dict[str, Any]:
+        if not isinstance(character_id, str) or not character_id:
+            raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
+        return _moe_export(self._work_dir(), character_id)
+
+    # --- motion conversion (C2.9) -----------------------------------------
+
+    @_serialize_call
+    def convert_bvh_to_vrm_motion(
+        self,
+        bvh_path: Any = None,
+        vrm_template: Any = None,
+        output_path: Any = None,
+    ) -> dict[str, Any]:
+        if not isinstance(bvh_path, str) or not bvh_path:
+            raise DevKitError(400, "BVH 文件路径不能为空", code="missing_bvh_path")
+        if not isinstance(vrm_template, str) or not vrm_template:
+            raise DevKitError(400, "VRM 模板路径不能为空", code="missing_vrm_template")
+        if not isinstance(output_path, str) or not output_path:
+            raise DevKitError(400, "输出路径不能为空", code="missing_output_path")
+        out_path = _moe_convert_bvh(bvh_path, vrm_template, output_path)
+        return {"output_path": out_path, "message": "BVH→VRM 动作转换完成"}
+
+    @_serialize_call
+    def validate_motion_skeleton(
+        self,
+        motion_id: Any = None,
+        character_id: Any = None,
+    ) -> dict[str, Any]:
+        if not isinstance(motion_id, str) or not motion_id:
+            raise DevKitError(400, "动作 ID 不能为空", code="missing_motion_id")
+        if not isinstance(character_id, str) or not character_id:
+            raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
+        return _moe_validate_skeleton(self._work_dir(), motion_id, character_id)
 
     # --- AI assistant ---------------------------------------------------
 

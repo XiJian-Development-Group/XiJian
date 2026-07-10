@@ -12,6 +12,13 @@ _DIALOG_SUBDIR = "dialogs"
 _MIN_DIALOG_COUNT = 8
 
 
+# C2.7: Dialog review status constants
+DIALOG_STATUS_DRAFT = "draft"
+DIALOG_STATUS_REVIEWED = "reviewed"
+DIALOG_STATUS_APPROVED = "approved"  # enabled for fine-tuning
+DIALOG_STATUS_REJECTED = "rejected"
+
+
 def _gen_id() -> str:
     return f"dialog_{secrets.token_hex(8)}"
 
@@ -83,6 +90,7 @@ def save_dialog(work_dir: str, character_id: str, data: dict[str, Any]) -> dict[
         "emotion": data.get("emotion", "neutral"),
         "notes": data.get("notes", ""),
         "source": data.get("source", "manual"),
+        "status": data.get("status", DIALOG_STATUS_DRAFT),  # C2.7: review status
         "created_at": data.get("created_at", now) if dialog_id else now,
         "updated_at": now,
     }
@@ -146,4 +154,139 @@ def export_dialogs_for_submit(work_dir: str, character_id: str) -> dict[str, Any
             "notes": f"{len(dialogs)} 条对话样本",
             "files": [path] if os.path.isfile(path) else [],
         },
+    }
+
+
+# ---------------------------------------------------------------------------
+# C2.7: Dialog review status management + fine-tuning pipeline stub
+# ---------------------------------------------------------------------------
+
+
+def set_dialog_status(
+    work_dir: str, character_id: str, dialog_id: str, status: str
+) -> dict[str, Any] | None:
+    """Set the review status of a dialog (C2.7 AC-2).
+
+    Valid statuses: draft, reviewed, approved, rejected.
+    Only 'approved' dialogs are eligible for fine-tuning/distillation.
+    """
+    valid_statuses = {
+        DIALOG_STATUS_DRAFT,
+        DIALOG_STATUS_REVIEWED,
+        DIALOG_STATUS_APPROVED,
+        DIALOG_STATUS_REJECTED,
+    }
+    if status not in valid_statuses:
+        raise DevKitError(400, f"无效状态: {status}", code="bad_status")
+
+    dialogs = _load_dialogs(work_dir, character_id)
+    for d in dialogs:
+        if d.get("id") == dialog_id:
+            d["status"] = status
+            d["updated_at"] = __import__("devkit._vendor", fromlist=["iso_now"]).iso_now()
+            _save_dialogs(work_dir, character_id, dialogs)
+            return d
+    return None
+
+
+def get_approved_dialogs(work_dir: str, character_id: str) -> list[dict[str, Any]]:
+    """Return only dialogs with 'approved' status for fine-tuning."""
+    dialogs = _load_dialogs(work_dir, character_id)
+    return [d for d in dialogs if d.get("status") == DIALOG_STATUS_APPROVED]
+
+
+def export_approved_dialogs_for_training(
+    work_dir: str, character_id: str, output_path: str | None = None
+) -> dict[str, Any]:
+    """Export approved dialogs in a format suitable for fine-tuning (C2.7 AC-3).
+
+    This is a stub for the fine-tuning/distillation pipeline.
+    Actual implementation would convert to the target format (JSONL, etc.)
+    and invoke the training job.
+    """
+    approved = get_approved_dialogs(work_dir, character_id)
+    if not approved:
+        raise DevKitError(400, "没有已审核通过的对话样本", code="no_approved_dialogs")
+
+    # Format for training: each dialog becomes a training example
+    training_examples = []
+    for d in approved:
+        example = {
+            "messages": [
+                {"role": "user", "content": d.get("user_message", "")},
+                {"role": "assistant", "content": d.get("character_message", "")},
+            ],
+            "metadata": {
+                "dialog_id": d.get("id"),
+                "scene": d.get("scene", ""),
+                "emotion": d.get("emotion", "neutral"),
+            },
+        }
+        training_examples.append(example)
+
+    if output_path:
+        os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
+        with open(output_path, "w", encoding="utf-8") as f:
+            for ex in training_examples:
+                f.write(json.dumps(ex, ensure_ascii=False) + "\n")
+
+    return {
+        "character_id": character_id,
+        "example_count": len(training_examples),
+        "output_path": output_path,
+        "format": "jsonl",
+        "message": "导出完成，可用于微调/蒸馏管线",
+    }
+
+
+def start_finetuning_job(
+    work_dir: str,
+    character_id: str,
+    base_model: str = "qwen2.5-7b",
+    params: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Stub for fine-tuning/distillation pipeline (C2.7 AC-3).
+
+    In a real implementation, this would:
+    1. Export approved dialogs to training format
+    2. Launch a LoRA/QLoRA training job (MLX/LLaMA.cpp)
+    3. Return a job ID for tracking
+
+    Currently returns a placeholder job record.
+    """
+    from devkit._vendor import iso_now
+
+    # Verify we have approved dialogs
+    approved = get_approved_dialogs(work_dir, character_id)
+    if not approved:
+        raise DevKitError(400, "没有已审核通过的对话样本，无法开始微调", code="no_approved_dialogs")
+
+    job_id = f"ft_{secrets.token_hex(8)}"
+    job = {
+        "job_id": job_id,
+        "character_id": character_id,
+        "base_model": base_model,
+        "training_examples": len(get_approved_dialogs(work_dir, character_id)),
+        "params": params or {},
+        "status": "pending",
+        "created_at": iso_now(),
+        "started_at": None,
+        "completed_at": None,
+        "output_model_path": None,
+    }
+
+    # TODO: Actually launch training job (MLX LoRA, etc.)
+    # For now, just return the job record
+
+    return job
+
+
+def get_finetuning_job_status(work_dir: str, job_id: str) -> dict[str, Any] | None:
+    """Check status of a fine-tuning job (stub)."""
+    # In a real implementation, this would query the job queue
+    return {
+        "job_id": job_id,
+        "status": "completed",
+        "progress": 1.0,
+        "output_model_path": f"models/finetuned/{job_id}",
     }

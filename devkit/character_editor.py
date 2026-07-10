@@ -18,6 +18,7 @@ from typing import Any
 from devkit import DevKitError
 
 
+from devkit.persona_parser import extract_persona_features, get_persona_templates
 _CHARACTERS_SUBDIR = "characters"
 
 # Built-in character config schema definition (C2.3).
@@ -195,6 +196,87 @@ def import_persona(work_dir: str, char_id: str, file_path: str) -> str:
     return content
 
 
+def _parse_character_config_from_fields(data: dict[str, Any]) -> dict[str, Any]:
+    """Parse character config from individual form fields.
+
+    The UI sends individual fields like `speaking_speed`, `emotion_stability`,
+    etc. This function extracts and validates them according to the schema.
+    """
+    config: dict[str, Any] = {}
+    for key, rule in CHARACTER_CONFIG_SCHEMA.items():
+        if key not in data:
+            continue
+        value = data[key]
+        kind = rule["type"]
+        try:
+            if kind == "integer":
+                v = int(value)
+            elif kind == "number":
+                v = float(value)
+            elif kind == "boolean":
+                if isinstance(value, str):
+                    v = value.lower() in ("true", "1", "yes", "on")
+                else:
+                    v = bool(value)
+            else:
+                continue
+            # Range check
+            if rule.get("min") is not None and v < rule["min"]:
+                v = rule["min"]
+            if rule.get("max") is not None and v > rule["max"]:
+                v = rule["max"]
+            config[key] = v
+        except (TypeError, ValueError):
+            # Skip invalid values
+            continue
+    return config
+
+
+def _extract_random_emotion_from_persona(persona_doc: str) -> str:
+    """Extract a random default emotion from persona document.
+
+    Parses the persona document for emotional traits and returns
+    a randomly selected base emotion. If no emotional traits are found,
+    returns 'neutral'.
+
+    Emotions are weighted by their prominence in the persona.
+    """
+    import random
+    import re
+
+    if not persona_doc or not persona_doc.strip():
+        return "neutral"
+
+    # Emotion keywords with weights (Chinese and English)
+    emotion_keywords = {
+        "happy": ["开心", "快乐", "愉快", "高兴", "欢喜", "喜悦", "欢快", "开朗", "乐观", "阳光", "happy", "joyful", "cheerful", "optimistic"],
+        "sad": ["悲伤", "伤心", "难过", "忧郁", "悲观", "消沉", "痛苦", "sad", "melancholic", "depressed", "sorrowful"],
+        "angry": ["愤怒", "生气", "暴躁", "易怒", "暴怒", "愤慨", "angry", "irritable", "furious", "temperamental"],
+        "fear": ["恐惧", "害怕", "担忧", "焦虑", "不安", "恐慌", "fearful", "anxious", "worried", "nervous"],
+        "surprise": ["惊讶", "惊奇", "震惊", "意外", "吃惊", "surprised", "amazed", "astonished"],
+        "calm": ["冷静", "沉稳", "平静", "淡定", "从容", "镇定", "calm", "composed", "serene", "peaceful"],
+        "excited": ["兴奋", "激动", "亢奋", "热血", "激昂", "excited", "enthusiastic", "passionate"],
+        "shy": ["害羞", "腼腆", "内向", "羞涩", "shy", "timid"],
+    }
+
+    # Count keyword occurrences for each emotion
+    emotion_scores = {}
+    for emotion, keywords in emotion_keywords.items():
+        score = 0
+        for kw in keywords:
+            score += len(re.findall(rf"{re.escape(kw)}", persona_doc, re.IGNORECASE))
+        if score > 0:
+            emotion_scores[emotion] = score
+
+    if not emotion_scores:
+        return "neutral"
+
+    # Weighted random selection
+    emotions = list(emotion_scores.keys())
+    weights = [emotion_scores[e] for e in emotions]
+    return random.choices(emotions, weights=weights, k=1)[0]
+
+
 def save_character(work_dir: str, data: dict[str, Any]) -> dict[str, Any]:
     if not data.get("name"):
         raise DevKitError(400, "角色名称不能为空", code="missing_name")
@@ -214,6 +296,14 @@ def save_character(work_dir: str, data: dict[str, Any]) -> dict[str, Any]:
         with open(persona_path, "w", encoding="utf-8") as f:
             f.write(persona_doc)
 
+    # Parse character_config from individual form fields (C2.3)
+    character_config = _parse_character_config_from_fields(data)
+
+    # Determine default_emotion: if provided use it, else extract from persona
+    default_emotion = data.get("default_emotion")
+    if not default_emotion or default_emotion == "neutral":
+        default_emotion = _extract_random_emotion_from_persona(persona_doc)
+
     record = {
         "id": char_id,
         "name": data.get("name", ""),
@@ -221,7 +311,7 @@ def save_character(work_dir: str, data: dict[str, Any]) -> dict[str, Any]:
         "description": data.get("description", ""),
         "persona_doc": persona_doc,
         "voice_profile": data.get("voice_profile", ""),
-        "default_emotion": data.get("default_emotion", "neutral"),
+        "default_emotion": default_emotion,
         "language_style": data.get("language_style", ""),
         "tags": data.get("tags", []),
         "models": data.get("models", []),
@@ -235,7 +325,7 @@ def save_character(work_dir: str, data: dict[str, Any]) -> dict[str, Any]:
             "reserve_tokens_for_reply": int(data.get("memory_config", {}).get("reserve_tokens_for_reply", 2000)),
             "force_recall_on_history": bool(data.get("memory_config", {}).get("force_recall_on_history", True)),
         },
-        "character_config": data.get("character_config", {}),
+        "character_config": character_config,
         "assigned_memory_pack": data.get("assigned_memory_pack", ""),
         "assigned_voice_pack": data.get("assigned_voice_pack", ""),
         "assigned_model": data.get("assigned_model", ""),
@@ -259,10 +349,6 @@ def delete_character(work_dir: str, char_id: str) -> bool:
     shutil.rmtree(char_dir)
     return True
 
-
-def get_persona_templates() -> dict[str, str]:
-    """Return built-in persona-doc markdown templates (C2.4)."""
-    return dict(_PERSONA_TEMPLATES)
 
 
 #: Minimum number of long-term initial memory entries a character must

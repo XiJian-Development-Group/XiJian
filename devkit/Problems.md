@@ -150,6 +150,7 @@
 | C5-04 | **7Z 非「solid」模式（代码确认）** | 功能清单 AC-1 字面要求 `py7zr.SevenZipFile(mode='solid')`。代码用 `mode="w"`（`__init__.py:505`）。py7zr 默认即 solid，实际大概率 solid，但不满足字面规范。 |
 | C5-05 | **`DevKitApi` 方法名与清单表不一致（代码确认）** | 清单表列 `get_status`、`last_submit_for`；代码暴露 `whoami()`（`api.py:291`）、`last_submit`（非 `last_submit_for`），名称偏离。 |
 | C5-06 | **`docs/notes.md` 与代码对 C5 的描述互相矛盾（代码确认）** | `notes.md`（2026-07-04 C5 条目）称「1200 MB 上限」「1 小时冷却（≥3600s）」「mode='solid'」，与代码默认 512 MB / 120 s / `mode="w"` 全部不符——文档已过时/不准确。notes.md 亦自承 UI 从未在真实 Pywebview 窗口跑过、7Z 路径未端到端跑过、SMTP 从未真实发送。 |
+| C5-07 | **已导出的可提交包无法删除（代码确认，Bug）** | `DevKitApi.list_submit_packages` 返回的 `package_id` 列表在 UI 展示后，用户点击删除时调用 `delete_package`，但 `api.py:768` 的实现仅从磁盘删除对应 editor 导出的文件，**未从内存/缓存层移除**，导致刷新后列表仍显示。需在 `delete_package` 中同步清理所有相关 editor 的导出产物与 UI 缓存键。 |
 
 ---
 
@@ -158,8 +159,6 @@
 - `docs/notes.md` 对 **C5** 的描述（1200 MB / 3600 s / solid）与 `devkit/` 代码默认（512 MB / 120 s / `mode="w"`）直接冲突，且 v2.4 日志称 A5.4 已实装但承认 4 个 action handler 未接线——前者会误导「已完成」的判断，建议以代码为准重新盘账。
 - 前版 `devkit/Problems.md` 将 **C2.1（声音设计）、C2.5、C2.7、C3、C4** 标为「✅ 已实现」，但据本次代码审计：C2.1 未用 MeloTTS、DiffSinger 缺失、克隆为伪；C2.5 类型默认 short 且强制有条件；C2.7 无 review 开关；C4 非真实 AI。请以上述代码级证据为准复核。
 
+---
 
-
-## 记录一个BUG
-
-DevKit设置页历史记录能清除，但是导出的可提交包怎么删都不行，刷新了依旧还在那。
+*更新时间：2026-07-10（基于 core/ 与 devkit/ 全量代码审计，排除 macapp/）*

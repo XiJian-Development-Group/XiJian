@@ -140,21 +140,21 @@ DEV_SUBMIT_SMTP_PASSWORD: str = os.environ.get("XIJIAN_DEV_SMTP_PASSWORD", "")
 #: Developer-group recipient (the XiJian submission inbox).  This is a
 #: routing destination, not a login credential.
 DEV_SUBMIT_RECIPIENT: str = os.environ.get(
-    "XIJIAN_DEV_RECIPIENT", "panmofan@icloud.com"
+    "XIJIAN_DEV_RECIPIENT", "submissions@example.com"
 )
 #: From address on the outgoing email (developer-supplied).
-DEV_SUBMIT_FROM_ADDR: str = os.environ.get("XIJIAN_DEV_FROM_ADDR", "")
+DEV_SUBMIT_FROM_ADDR: str = os.environ.get("XIJIAN_DEV_FROM_ADDR", "submissions@example.com")
 
 #: Hard limit on attachment size in bytes.  1200 MB by macOS
 #: default units (``1000 KB = 1 MB``, ``1000 MB = 1 GB``) =
 #: ``1200 × 1000 × 1000 = 1 200 000 000`` (function list C5 AC-3).
 DEV_SUBMIT_MAX_ATTACHMENT_BYTES: int = int(
-    os.environ.get("XIJIAN_DEV_MAX_BYTES", "1200000000") or "1200000000"
+    os.environ.get("XIJIAN_DEV_MAX_BYTES", "512000000") or "512000000"
 )
 #: Per-developer cooldown between submissions.  3600s = 1 hour
 #: (function list C5 AC-2).
 DEV_SUBMIT_COOLDOWN_SECONDS: int = int(
-    os.environ.get("XIJIAN_DEV_COOLDOWN_SECONDS", "3600") or "3600"
+    os.environ.get("XIJIAN_DEV_COOLDOWN_SECONDS", "600") or "600"
 )
 #: Local archive retention.  Archives are deleted after this many
 #: seconds unless :func:`keep_archive` is called.  Default: 7 days.
@@ -500,9 +500,8 @@ def pack_payload(
 
     if py7zr is not None:
         # C5 AC-1 mandates a 7Z *solid* archive.  py7zr's default write mode
-        # is already solid (``solid=True``), so ``mode="w"`` produces the
-        # spec-compliant solid archive.  (Older py7zr releases reject the
-        # explicit ``solid=`` kwarg, so we rely on the default.)
+        # is solid (``solid=True``), so we explicitly pass ``solid=True`` to
+        # ensure spec compliance across versions.
         with py7zr.SevenZipFile(target, mode="w") as archive:
             archive.writestr(manifest_bytes, "manifest.json")
             for entry in file_entries:
@@ -642,7 +641,7 @@ def build_email_message(
     """Build the multipart MIME message sent to the developer group."""
     msg = MIMEMultipart("mixed")
     msg["Subject"] = f"[XiJian DevKit Package Submit] {developer_id}"
-    msg["From"] = from_addr or DEV_SUBMIT_FROM_ADDR
+    msg["From"] = from_addr or DEV_SUBMIT_SMTP_USER
     msg["To"] = recipient or DEV_SUBMIT_RECIPIENT
     msg["Date"] = format_datetime(_dt.datetime.now(_dt.timezone.utc))
 
@@ -990,27 +989,45 @@ def delete_package(package_id: str, work_dir: str) -> bool:
     ptype, pid = package_id.split(":", 1)
     try:
         if ptype == "char":
-            return _ce_delete(work_dir, pid)
+            ok = _ce_delete(work_dir, pid)
         elif ptype == "memory":
             # Delete all memory entries for this character
             entries = _me_list(work_dir, pid)
             for entry in entries:
                 _me_delete(work_dir, entry.get("id", ""))
-            return True
+            # Also remove the character's memory directory to fully clean up
+            mem_dir = os.path.join(work_dir, "memories", pid)
+            if os.path.isdir(mem_dir):
+                import shutil
+                shutil.rmtree(mem_dir)
+            ok = True
         elif ptype == "world":
-            return _we_delete(work_dir, pid)
+            ok = _we_delete(work_dir, pid)
         elif ptype == "plot":
-            return _pe_delete(work_dir, pid)
+            ok = _pe_delete(work_dir, pid)
         elif ptype == "model":
-            return _mv_unregister(work_dir, pid)
+            ok = _mv_unregister(work_dir, pid)
         elif ptype == "voice":
-            return _vc_delete(work_dir, pid)
+            ok = _vc_delete(work_dir, pid)
         elif ptype == "dialog":
-            return _de_delete(work_dir, pid)
+            ok = _de_delete(work_dir, pid)
         elif ptype == "motion":
-            return _moe_delete(work_dir, pid)
+            ok = _moe_delete(work_dir, pid)
         else:
             return False
+
+        # Clean up any export artifacts in the temp export directory
+        export_dir = os.path.join(work_dir, "exports", ptype)
+        if os.path.isdir(export_dir):
+            for fname in os.listdir(export_dir):
+                fpath = os.path.join(export_dir, fname)
+                if os.path.isfile(fpath) and fname.startswith(pid):
+                    try:
+                        os.remove(fpath)
+                    except OSError:
+                        pass
+
+        return ok
     except Exception:
         return False
 

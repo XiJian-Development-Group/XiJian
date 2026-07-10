@@ -39,7 +39,7 @@ _KEY_FILENAME = "devkit_config.key"
 #: This is *not* a credential; it is the fixed recipient the DevKit
 #: delivers packaged submissions to.  The developer fills in their own
 #: SMTP server / login via the UI.
-DEFAULT_RECIPIENT = "panmofan@icloud.com"
+DEFAULT_RECIPIENT = "submissions@example.com"
 
 #: Default config structure.  Every SMTP *credential* field is empty —
 #: the developer must supply their own account.  Nothing is hard-coded.
@@ -53,8 +53,8 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "from_addr": "",
     },
     "recipient": DEFAULT_RECIPIENT,
-    "rate_limit_seconds": 3600,  # 1 hour (function list C5 AC-2)
-    "max_attachment_bytes": 1_200_000_000,  # 1200 MB (macOS units)
+    "rate_limit_seconds": 600,  # 10 minutes (function list C5 AC-2)
+    "max_attachment_bytes": 512_000_000,  # 512 MB (macOS units)
     # Auto-update (C6).  Network is only touched on an explicit check or,
     # when this flag is on, once silently at launch.  User-toggleable.
     "auto_check_update": True,

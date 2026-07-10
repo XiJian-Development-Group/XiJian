@@ -261,3 +261,211 @@ def _default_motion_params(name: str) -> dict[str, Any]:
         "neutral": {"blend_duration": 0.5, "loop": True},
     }
     return _params.get(name, {"blend_duration": 0.3, "loop": False})
+
+
+# ---------------------------------------------------------------------------
+# C2.9: BVH→VRM conversion and keyframe editing
+# ---------------------------------------------------------------------------
+
+
+def convert_bvh_to_vrm(
+    bvh_path: str,
+    vrm_template: str,
+    output_path: str | None = None,
+) -> str:
+    """Convert BVH motion capture data to VRM animation using bvh2vrm.
+
+    Args:
+        bvh_path: Path to the .bvh motion file
+        vrm_template: Path to a VRM model to apply the animation to
+        output_path: Output .vrm or .vrmc_animation path
+
+    Returns the output file path.
+    """
+    if not os.path.isfile(bvh_path):
+        raise DevKitError(400, f"BVH 文件不存在: {bvh_path}", code="file_not_found")
+    if not os.path.isfile(vrm_template):
+        raise DevKitError(400, f"VRM 模板不存在: {vrm_template}", code="file_not_found")
+
+    if output_path is None:
+        output_path = os.path.splitext(bvh_path)[0] + ".vrm"
+
+    # Use bvh2vrm (Python package) if available
+    try:
+        import bvh2vrm
+        bvh2vrm.convert(bvh_path, vrm_template, output_path)
+        return output_path
+    except ImportError:
+        pass
+
+    # Fallback: call CLI if available
+    bvh2vrm_cli = os.environ.get("BVH2VRM_CLI", "bvh2vrm")
+    cmd = [bvh2vrm_cli, bvh_path, vrm_template, output_path]
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    if result.returncode != 0:
+        raise DevKitError(500, f"bvh2vrm 转换失败: {result.stderr}", code="conversion_failed")
+
+    if not os.path.isfile(output_path):
+        raise DevKitError(500, "转换未生成输出文件", code="no_output")
+
+    return output_path
+
+
+def validate_motion_skeleton(
+    motion_path: str,
+    vrm_model_path: str,
+) -> dict[str, Any]:
+    """Validate that a motion's skeleton matches a VRM model (C2.9 AC-3).
+
+    Args:
+        motion_path: Path to .bvh / .fbx / .glb motion file
+        vrm_model_path: Path to the VRM model to check against
+
+    Returns a dict with:
+        - ok: bool — whether the skeleton matches
+        - motion_joints: list[str] — bone names from motion
+        - vrm_joints: list[str] — bone names from VRM
+        - missing_in_vrm: list[str] — bones in motion but not VRM
+        - extra_in_vrm: list[str] — bones in VRM but not motion
+        - errors: list[str] — validation errors
+    """
+    import re
+
+    result = {
+        "ok": False,
+        "motion_joints": [],
+        "vrm_joints": [],
+        "missing_in_vrm": [],
+        "extra_in_vrm": [],
+        "errors": [],
+    }
+
+    # Extract joints from motion file
+    ext = os.path.splitext(motion_path)[1].lower()
+    motion_joints = []
+
+    if ext == ".bvh":
+        motion_joints = _extract_bvh_joints(motion_path) or []
+    elif ext in (".fbx", ".glb", ".gltf"):
+        # For FBX/GLB, try to extract from glTF JSON
+        try:
+            if ext in (".glb", ".gltf"):
+                gltf = _read_gltf_json(motion_path)
+                if gltf:
+                    nodes = gltf.get("nodes", [])
+                    motion_joints = [n.get("name", "") for n in nodes if n.get("name")]
+        except Exception:
+            motion_joints = []
+    else:
+        result["errors"].append(f"不支持的动效格式: {ext}")
+        return result
+
+    result["motion_joints"] = motion_joints
+
+    # Extract joints from VRM model
+    try:
+        gltf = _read_gltf_json(vrm_model_path)
+        if gltf:
+            nodes = gltf.get("nodes", [])
+            vrm_joints = [n.get("name", "") for n in nodes if n.get("name")]
+            result["vrm_joints"] = vrm_joints
+    except Exception as e:
+        result["errors"].append(f"无法读取 VRM 模型: {e}")
+        return result
+
+    # Compare
+    motion_set = set(motion_joints)
+    vrm_set = set(result["vrm_joints"])
+
+    result["missing_in_vrm"] = sorted(motion_set - vrm_set)
+    result["extra_in_vrm"] = sorted(vrm_set - motion_set)
+
+    if result["missing_in_vrm"]:
+        result["errors"].append(
+            f"动效中有骨骼在 VRM 中缺失: {result['missing_in_vrm']}"
+        )
+    if result["extra_in_vrm"]:
+        result["errors"].append(
+            f"VRM 中有骨骼在动效中缺失（可能正常，需人工确认）: {result['extra_in_vrm']}"
+        )
+
+    result["ok"] = len(result["missing_in_vrm"]) == 0
+    return result
+
+
+def edit_motion_keyframes(
+    motion_id: str,
+    work_dir: str,
+    character_id: str,
+    keyframes: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Edit keyframe parameters for a motion (C2.9 AC-1).
+
+    Args:
+        motion_id: ID of the motion to edit
+        work_dir: Work directory
+        character_id: Character ID
+        keyframes: List of keyframe dicts, each with:
+            - frame: int — frame number
+            - bone: str — bone name
+            - position: [x, y, z] — optional
+            - rotation: [x, y, z, w] — optional (quaternion)
+            - scale: [x, y, z] — optional
+
+    Returns the updated motion record.
+    """
+    motions = _load_motions(work_dir, character_id)
+    for i, m in enumerate(motions):
+        if m.get("id") == motion_id:
+            m["keyframes"] = keyframes
+            m["updated_at"] = __import__("devkit._vendor", fromlist=["iso_now"]).iso_now()
+            _save_motions(work_dir, character_id, motions)
+            return dict(m)
+    return None
+
+
+# Public wrappers for API
+def convert_bvh_to_vrm_public(
+    work_dir: str,
+    bvh_path: str,
+    vrm_template: str,
+    output_path: str | None = None,
+) -> str:
+    """Public wrapper for BVH→VRM conversion."""
+    return convert_bvh_to_vrm(bvh_path, vrm_template, output_path)
+
+
+def validate_motion_skeleton_public(
+    work_dir: str,
+    motion_id: str,
+    vrm_model_id: str,
+) -> dict[str, Any]:
+    """Validate motion skeleton against a VRM model."""
+    # Load motion
+    motions = _load_motions(work_dir, "")
+    motion = next((m for m in motions if m.get("id") == motion_id), None)
+    if not motion:
+        raise DevKitError(404, f"动效不存在: {motion_id}", code="not_found")
+
+    # Load VRM model
+    from devkit.model_viewer import get_model_info as _mv_get
+    vrm_model = _mv_get(work_dir, vrm_model_id)
+    if not vrm_model:
+        raise DevKitError(404, f"VRM 模型不存在: {vrm_model_id}", code="not_found")
+
+    motion_path = motion.get("file_path", "")
+    vrm_path = vrm_model.get("path", "")
+    if not motion_path or not vrm_path:
+        raise DevKitError(400, "路径缺失", code="missing_path")
+
+    return validate_motion_skeleton(motion_path, vrm_path)
+
+
+def edit_motion_keyframes_public(
+    work_dir: str,
+    character_id: str,
+    motion_id: str,
+    keyframes: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Public wrapper for keyframe editing."""
+    return edit_motion_keyframes(motion_id, work_dir, character_id, keyframes)

@@ -20,6 +20,12 @@ from devkit._vendor import iso_now
 _WORLDS_SUBDIR = "worlds"
 
 
+# DSL Parser exceptions
+class DSLParseError(ValueError):
+    """Raised when DSL parsing fails."""
+    pass
+
+
 def _gen_id() -> str:
     return f"world_{secrets.token_hex(8)}"
 
@@ -34,6 +40,114 @@ def _world_path(work_dir: str, world_id: str) -> str:
 
 def _world_doc_path(work_dir: str, world_id: str) -> str:
     return os.path.join(_world_dir(work_dir, world_id), "world_doc.md")
+
+
+def _world_doc_versions_dir(work_dir: str, world_id: str) -> str:
+    return os.path.join(_world_dir(work_dir, world_id), "world_doc_versions")
+
+
+def _world_doc_version_path(work_dir: str, world_id: str, version: int) -> str:
+    return os.path.join(_world_doc_versions_dir(work_dir, world_id), f"world_doc_v{version}.md")
+
+
+def _list_world_doc_versions(work_dir: str, world_id: str) -> list[dict[str, Any]]:
+    """List all versions of a world document."""
+    versions_dir = _world_doc_versions_dir(work_dir, world_id)
+    if not os.path.isdir(versions_dir):
+        return []
+    versions = []
+    for fname in sorted(os.listdir(versions_dir)):
+        if fname.startswith("world_doc_v") and fname.endswith(".md"):
+            try:
+                version = int(fname[11:-3])  # Extract version number from "world_doc_v{N}.md"
+                fpath = os.path.join(versions_dir, fname)
+                stat = os.stat(fpath)
+                with open(fpath, encoding="utf-8") as f:
+                    content = f.read()
+                # Extract first heading as title
+                title = ""
+                for line in content.splitlines():
+                    if line.startswith("#"):
+                        title = line.lstrip("#").strip()
+                        break
+                versions.append({
+                    "version": version,
+                    "title": title or f"版本 {version}",
+                    "size": stat.st_size,
+                    "modified_at": stat.st_mtime,
+                    "preview": content[:200] + "..." if len(content) > 200 else content,
+                })
+            except (ValueError, OSError):
+                continue
+    return sorted(versions, key=lambda v: v["version"], reverse=True)
+
+
+def _save_world_doc_version(work_dir: str, world_id: str, content: str, version: int | None = None) -> int:
+    """Save a version of the world document. Returns the version number."""
+    versions_dir = _world_doc_versions_dir(work_dir, world_id)
+    os.makedirs(versions_dir, exist_ok=True)
+
+    if version is None:
+        # Auto-increment version
+        existing = _list_world_doc_versions(work_dir, world_id)
+        version = (existing[0]["version"] + 1) if existing else 1
+
+    fpath = _world_doc_version_path(work_dir, world_id, version)
+    with open(fpath, "w", encoding="utf-8") as f:
+        f.write(content)
+    return version
+
+
+def _get_world_doc_version(work_dir: str, world_id: str, version: int) -> str | None:
+    """Get a specific version of the world document."""
+    fpath = _world_doc_version_path(work_dir, world_id, version)
+    if not os.path.isfile(fpath):
+        return None
+    with open(fpath, encoding="utf-8") as f:
+        return f.read()
+
+
+def _extract_world_doc_keywords(doc: str) -> list[str]:
+    """Extract keywords from world document for A4 NPC generation.
+
+    Extracts:
+    - Headings (markdown # headings)
+    - Proper nouns (capitalized words in Chinese/English)
+    - Key terms from required sections (时间线, 地理, 主要势力)
+    """
+    if not doc or not doc.strip():
+        return []
+
+    keywords = set()
+
+    # Extract headings
+    for line in doc.splitlines():
+        line = line.strip()
+        if line.startswith("#"):
+            heading = line.lstrip("#").strip()
+            if heading:
+                keywords.add(heading)
+
+    # Extract Chinese proper nouns (2+ chars, capitalized or known patterns)
+    # Simple heuristic: words that appear in the required sections
+    import re
+    chinese_words = re.findall(r'[\u4e00-\u9fff]{2,}', doc)
+    for w in chinese_words:
+        if len(w) >= 2 and len(w) <= 10:
+            keywords.add(w)
+
+    # Extract English capitalized words
+    english_words = re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b', doc)
+    for w in english_words:
+        if len(w) >= 2:
+            keywords.add(w)
+
+    # Limit to top 50 most relevant
+    return list(keywords)[:50]
+
+
+def _event_factories_path(work_dir: str, world_id: str) -> str:
+    return os.path.join(_world_dir(work_dir, world_id), "event_factories.json")
 
 
 def list_worlds(work_dir: str) -> list[dict[str, Any]]:
@@ -74,15 +188,21 @@ def save_world(work_dir: str, data: dict[str, Any]) -> dict[str, Any]:
     existing_id = data.get("id", "")
     if existing_id:
         world_id = existing_id
+        # Save new version of world_doc if provided
+        world_doc = data.get("world_doc", "")
+        if world_doc:
+            _save_world_doc_version(work_dir, world_id, world_doc)
     else:
         world_id = _gen_id()
+        world_doc = data.get("world_doc", "")
     world_dir = _world_dir(work_dir, world_id)
     os.makedirs(world_dir, exist_ok=True)
-    world_doc = data.get("world_doc", "")
     if world_doc:
         doc_path = _world_doc_path(work_dir, world_id)
         with open(doc_path, "w", encoding="utf-8") as f:
             f.write(world_doc)
+    # Get all versions for the record
+    versions = _list_world_doc_versions(work_dir, world_id)
     record = {
         "id": world_id,
         "name": data.get("name", ""),
@@ -90,6 +210,7 @@ def save_world(work_dir: str, data: dict[str, Any]) -> dict[str, Any]:
         "config": data.get("config", {}),
         "created_at": data.get("created_at", now),
         "updated_at": now,
+        "doc_versions": versions,
     }
     fpath = _world_path(work_dir, world_id)
     with open(fpath, "w", encoding="utf-8") as f:
@@ -341,6 +462,439 @@ _EVENT_TRIGGER_KINDS = ("time", "state", "probability", "composite")
 #: Single-world event cap (function list C1.1 AC-2, ``[TODO: 默认 200]``).
 MAX_EVENTS_PER_WORLD: int = 200
 
+#: Event factory store path
+def _event_factories_path(work_dir: str, world_id: str) -> str:
+    return os.path.join(_world_dir(work_dir, world_id), "event_factories.json")
+
+
+# ---------------------------------------------------------------------------
+# DSL Parser (C1.1 AC-1)
+# ---------------------------------------------------------------------------
+
+
+class DSLParseError(DevKitError):
+    """Raised when DSL parsing fails."""
+
+    def __init__(self, message: str):
+        super().__init__(400, message, code="dsl_parse_error")
+
+
+def parse_event_dsl(dsl_text: str) -> dict[str, Any]:
+    """Parse the event DSL text into a structured event definition.
+
+    DSL grammar (simplified):
+        event "name" {
+            trigger: <trigger_expr>
+            priority: <int>
+            scene: <string>
+            effects: { <json_object> }
+            kind: <string>
+            description: <string>
+            is_enabled: <bool>
+        }
+
+    Trigger expressions support:
+        - time: "weekday in [1,4] AND hour == 10"
+        - state: "field op value" (e.g., "mood < 20")
+        - probability: "chance 0.1"
+        - composite: "AND/OR" with sub-rules
+
+    Returns a dict with keys: name, trigger, priority, scene, effects, kind, description, is_enabled
+    """
+    if not dsl_text or not dsl_text.strip():
+        raise DSLParseError("DSL 文本为空")
+
+    text = dsl_text.strip()
+
+    # Extract event name
+    name_match = re.match(r'event\s+"([^"]+)"\s*\{', text)
+    if not name_match:
+        raise DSLParseError('DSL 必须以 event "名称" { 开头')
+    name = name_match.group(1)
+
+    # Find the matching closing brace
+    brace_start = name_match.end() - 1
+    brace_count = 0
+    brace_end = -1
+    for i, ch in enumerate(text[brace_start:], start=brace_start):
+        if ch == "{":
+            brace_count += 1
+        elif ch == "}":
+            brace_count -= 1
+            if brace_count == 0:
+                brace_end = i
+                break
+    if brace_end == -1:
+        raise DSLParseError("DSL 大括号不匹配")
+
+    body = text[brace_start + 1 : brace_end].strip()
+
+    # Parse key-value pairs in the body
+    result = {
+        "name": name,
+        "kind": "custom",
+        "priority": 50,
+        "scene": "",
+        "effects": {},
+        "description": "",
+        "is_enabled": True,
+    }
+
+    # Split by top-level commas (not inside braces/brackets)
+    pairs = _split_top_level(body, ",")
+    for pair in pairs:
+        pair = pair.strip()
+        if not pair:
+            continue
+        if ":" not in pair:
+            continue
+        key, value = pair.split(":", 1)
+        key = key.strip()
+        value = value.strip()
+
+        if key == "trigger":
+            result["trigger"] = _parse_trigger_dsl(value)
+        elif key == "priority":
+            try:
+                result["priority"] = int(value)
+            except ValueError:
+                raise DSLParseError(f"priority 必须是整数: {value}")
+        elif key == "scene":
+            result["scene"] = value.strip('"\'')
+        elif key == "effects":
+            try:
+                result["effects"] = json.loads(value)
+            except json.JSONDecodeError as e:
+                raise DSLParseError(f"effects 必须是有效 JSON: {e}")
+        elif key == "kind":
+            result["kind"] = value.strip('"\'')
+        elif key == "description":
+            result["description"] = value.strip('"\'')
+        elif key == "is_enabled":
+            result["is_enabled"] = value.lower() in ("true", "1", "yes")
+
+    # Validate the parsed trigger
+    ok, errors = validate_event_trigger(result["trigger"])
+    if not ok:
+        raise DSLParseError("；".join(errors))
+
+    return result
+
+
+def _split_top_level(text: str, delimiter: str) -> list[str]:
+    """Split text by delimiter at top level (not inside {}, [], ()).
+
+    Also treats newlines as delimiters when delimiter is ','.
+    """
+    if delimiter == ",":
+        # For DSL body, split by both commas and newlines at top level
+        parts = []
+        current = []
+        depth_brace = 0
+        depth_bracket = 0
+        depth_paren = 0
+        in_string = False
+        string_char = ""
+
+        for ch in text:
+            if in_string:
+                current.append(ch)
+                if ch == string_char:
+                    in_string = False
+            elif ch in ('"', "'"):
+                in_string = True
+                string_char = ch
+                current.append(ch)
+            elif ch == "{":
+                depth_brace += 1
+                current.append(ch)
+            elif ch == "}":
+                depth_brace -= 1
+                current.append(ch)
+            elif ch == "[":
+                depth_bracket += 1
+                current.append(ch)
+            elif ch == "]":
+                depth_bracket -= 1
+                current.append(ch)
+            elif ch == "(":
+                depth_paren += 1
+                current.append(ch)
+            elif ch == ")":
+                depth_paren -= 1
+                current.append(ch)
+            elif (ch == "," or ch == "\n") and depth_brace == 0 and depth_bracket == 0 and depth_paren == 0:
+                parts.append("".join(current))
+                current = []
+            else:
+                current.append(ch)
+
+        if current:
+            parts.append("".join(current))
+        return parts
+    else:
+        # Original logic for other delimiters
+        parts = []
+        current = []
+        depth_brace = 0
+        depth_bracket = 0
+        depth_paren = 0
+        in_string = False
+        string_char = ""
+
+        for ch in text:
+            if in_string:
+                current.append(ch)
+                if ch == string_char:
+                    in_string = False
+            elif ch in ('"', "'"):
+                in_string = True
+                string_char = ch
+                current.append(ch)
+            elif ch == "{":
+                depth_brace += 1
+                current.append(ch)
+            elif ch == "}":
+                depth_brace -= 1
+                current.append(ch)
+            elif ch == "[":
+                depth_bracket += 1
+                current.append(ch)
+            elif ch == "]":
+                depth_bracket -= 1
+                current.append(ch)
+            elif ch == "(":
+                depth_paren += 1
+                current.append(ch)
+            elif ch == ")":
+                depth_paren -= 1
+                current.append(ch)
+            elif ch == delimiter and depth_brace == 0 and depth_bracket == 0 and depth_paren == 0:
+                parts.append("".join(current))
+                current = []
+            else:
+                current.append(ch)
+
+        if current:
+            parts.append("".join(current))
+        return parts
+
+
+def _parse_trigger_dsl(trigger_text: str) -> dict[str, Any]:
+    """Parse trigger DSL expression into structured trigger dict.
+
+    Supports:
+      - time: "weekday in [1,4] AND hour == 10"
+      - state: "mood < 20"
+      - probability: "chance 0.1"
+      - composite: "AND: rule1, rule2" or "OR: rule1, rule2"
+    """
+    trigger_text = trigger_text.strip()
+
+    # Check for probability
+    if trigger_text.lower().startswith("chance"):
+        try:
+            chance = float(trigger_text.split()[1])
+            return {"kind": "probability", "chance": chance}
+        except (IndexError, ValueError):
+            raise DSLParseError(f"概率触发器格式错误: {trigger_text}")
+
+    # Check for composite (AND/OR with rules)
+    if trigger_text.upper().startswith("AND:") or trigger_text.upper().startswith("OR:"):
+        op = "AND" if trigger_text.upper().startswith("AND:") else "OR"
+        rules_text = trigger_text[4:].strip()
+        rules = _split_top_level(rules_text, ",")
+        parsed_rules = []
+        for rule in rules:
+            rule = rule.strip()
+            if rule:
+                parsed_rules.append(_parse_trigger_dsl(rule))
+        return {"kind": "composite", "op": op, "rules": parsed_rules}
+
+    # Check for time trigger (weekday/hour expressions)
+    time_keywords = ("weekday", "hour", "minute")
+    if any(kw in trigger_text.lower() for kw in time_keywords):
+        # Simple parsing: "weekday in [1,4] AND hour == 10"
+        # We'll store the raw expression and also try to extract structured parts
+        trigger = {"kind": "time", "expression": trigger_text}
+        # Try to extract weekday
+        wd_match = re.search(r"weekday\s+in\s+\[([^\]]+)\]", trigger_text, re.IGNORECASE)
+        if wd_match:
+            try:
+                days = [int(d.strip()) for d in wd_match.group(1).split(",")]
+                trigger["weekday"] = days
+            except ValueError:
+                pass
+        # Try to extract hour
+        hr_match = re.search(r"hour\s*==\s*(\d+)", trigger_text, re.IGNORECASE)
+        if hr_match:
+            trigger["hour"] = int(hr_match.group(1))
+        # Try to extract minute
+        mn_match = re.search(r"minute\s*==\s*(\d+)", trigger_text, re.IGNORECASE)
+        if mn_match:
+            trigger["minute"] = int(mn_match.group(1))
+        # Default frequency
+        trigger["frequency"] = "daily"
+        return trigger
+
+    # Default: state trigger (field op value)
+    # Format: "field op value" e.g., "mood < 20"
+    state_match = re.match(r"(\w+)\s*(>|>=|<|<=|==|!=)\s*(.+)", trigger_text)
+    if state_match:
+        field, op, value_str = state_match.groups()
+        value_str = value_str.strip()
+        # Try to parse value
+        try:
+            if "." in value_str:
+                value: Any = float(value_str)
+            else:
+                value = int(value_str)
+        except ValueError:
+            value = value_str.strip('"\'')
+        return {"kind": "state", "field": field, "op": op, "value": value}
+
+    raise DSLParseError(f"无法解析触发器表达式: {trigger_text}")
+
+
+# ---------------------------------------------------------------------------
+# Event Factory (C1.1 US-C1.1-02) — define a "class" of events for batch instantiation
+# ---------------------------------------------------------------------------
+
+
+def list_event_factories(work_dir: str, world_id: str) -> list[dict[str, Any]]:
+    """List all event factories for a world."""
+    fpath = _event_factories_path(work_dir, world_id)
+    if not os.path.isfile(fpath):
+        return []
+    try:
+        with open(fpath, encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return []
+
+
+def save_event_factory(work_dir: str, world_id: str, data: dict[str, Any]) -> dict[str, Any]:
+    """Create or update an event factory (template for batch instantiation).
+
+    Factory schema:
+    {
+        "id": "factory_xxx",
+        "name": "随机暴雨事件",
+        "base_trigger": {"kind": "probability", "chance": 0.1},
+        "base_effects": {"weather": "storm", "npc_mood": -10},
+        "instance_pattern": "rainy_day_{n}",
+        "max_instances": 50,
+        "cooldown_seconds": 3600
+    }
+    """
+    if not get_world(work_dir, world_id):
+        raise DevKitError(404, f"世界观 {world_id} 不存在", code="not_found")
+
+    name = (data.get("name") or "").strip()
+    if not name:
+        raise DevKitError(400, "工厂名称不能为空", code="missing_name")
+
+    factories = list_event_factories(work_dir, world_id)
+    factory_id = data.get("id") or f"factory_{secrets.token_hex(8)}"
+    is_new = factory_id not in {f.get("id") for f in factories}
+
+    # Validate base_trigger if present
+    base_trigger = data.get("base_trigger", data.get("trigger", {}))
+    if base_trigger:
+        ok, errors = validate_event_trigger(base_trigger)
+        if not ok:
+            raise DevKitError(400, "；".join(errors), code="bad_factory_trigger")
+
+    record = {
+        "id": factory_id,
+        "world_id": world_id,
+        "name": name,
+        "description": data.get("description", ""),
+        "base_trigger": base_trigger,
+        "base_effects": data.get("base_effects", {}),
+        "instance_pattern": data.get("instance_pattern", "{name}_{n}"),
+        "max_instances": int(data.get("max_instances", 50)),
+        "cooldown_seconds": int(data.get("cooldown_seconds", 3600)),
+        "is_enabled": bool(data.get("is_enabled", True)),
+        "created_at": data.get("created_at", iso_now()) if not is_new else iso_now(),
+        "updated_at": iso_now(),
+    }
+
+    existing_idx = next((i for i, f in enumerate(factories) if f.get("id") == factory_id), -1)
+    if existing_idx >= 0:
+        factories[existing_idx] = record
+    else:
+        factories.append(record)
+
+    _save_event_factories(work_dir, world_id, factories)
+    return record
+
+
+def _save_event_factories(work_dir: str, world_id: str, factories: list[dict[str, Any]]) -> None:
+    world_dir = _world_dir(work_dir, world_id)
+    os.makedirs(world_dir, exist_ok=True)
+    with open(_event_factories_path(work_dir, world_id), "w", encoding="utf-8") as f:
+        json.dump(factories, f, ensure_ascii=False, indent=2)
+
+
+def delete_event_factory(work_dir: str, world_id: str, factory_id: str) -> bool:
+    factories = list_event_factories(work_dir, world_id)
+    before = len(factories)
+    factories = [f for f in factories if f.get("id") != factory_id]
+    if len(factories) < before:
+        _save_event_factories(work_dir, world_id, factories)
+        return True
+    return False
+
+
+def instantiate_event_factory(
+    work_dir: str, world_id: str, factory_id: str, count: int = 1
+) -> list[dict[str, Any]]:
+    """Instantiate events from a factory (batch creation).
+
+    Returns list of created event records.
+    """
+    factories = list_event_factories(work_dir, world_id)
+    factory = next((f for f in factories if f.get("id") == factory_id), None)
+    if not factory:
+        raise DevKitError(404, f"工厂 {factory_id} 不存在", code="not_found")
+
+    events = list_world_events(work_dir, world_id)
+    base_count = len(events)
+
+    # Check capacity
+    if base_count + count > MAX_EVENTS_PER_WORLD:
+        raise DevKitError(
+            400,
+            f"实例化 {count} 个事件将超过单世界上限 {MAX_EVENTS_PER_WORLD}",
+            code="event_cap_exceeded",
+        )
+
+    created = []
+    base_name = factory["name"]
+    pattern = factory["instance_pattern"]
+    base_trigger = factory.get("base_trigger", {})
+    base_effects = factory.get("base_effects", {})
+
+    for i in range(count):
+        n = base_count + i + 1
+        instance_name = pattern.format(name=base_name, n=n, i=i)
+        event_data = {
+            "name": instance_name,
+            "description": f"由工厂「{factory['name']}」批量生成",
+            "kind": "custom",
+            "trigger": base_trigger,
+            "effects": base_effects,
+            "priority": 50,
+            "scene": "",
+            "is_enabled": True,
+        }
+        event = save_world_event(work_dir, world_id, event_data)
+        created.append(event)
+        events.append(event)  # update local list for next iteration
+
+    return created
+
 
 def _events_path(work_dir: str, world_id: str) -> str:
     return os.path.join(_world_dir(work_dir, world_id), "events.json")
@@ -438,7 +992,8 @@ def validate_event_trigger(trigger: dict[str, Any]) -> tuple[bool, list[str]]:
 
     A trigger is one of::
 
-        {"kind": "time", "at": "MON 10:00"}            # scheduled
+        {"kind": "time", "at": "MON 10:00"}            # scheduled (legacy)
+        {"kind": "time", "weekday": [1,4], "hour": 10}  # structured (from DSL)
         {"kind": "state", "field": "mood", "op": "<", "value": 20}
         {"kind": "probability", "chance": 0.1}         # random daily
         {"kind": "composite", "op": "AND", "rules": [...]}
@@ -450,8 +1005,11 @@ def validate_event_trigger(trigger: dict[str, Any]) -> tuple[bool, list[str]]:
     if kind not in _EVENT_TRIGGER_KINDS:
         return False, [f"trigger.kind 必须是 {_EVENT_TRIGGER_KINDS} 之一"]
     if kind == "time":
-        if not trigger.get("at"):
-            errors.append("time 触发器需要 at 字段（如 'MON 10:00'）")
+        # Accept both legacy 'at' format and new structured format
+        has_at = trigger.get("at")
+        has_structured = trigger.get("weekday") is not None or trigger.get("hour") is not None
+        if not has_at and not has_structured:
+            errors.append("time 触发器需要 at 字段或 weekday/hour 字段")
     elif kind == "state":
         if not trigger.get("field"):
             errors.append("state 触发器需要 field 字段")
@@ -476,3 +1034,67 @@ def validate_event_trigger(trigger: dict[str, Any]) -> tuple[bool, list[str]]:
                 ok, sub_errors = validate_event_trigger(sub)
                 errors.extend(sub_errors)
     return (len(errors) == 0), errors
+
+
+# ---------------------------------------------------------------------------
+# World Document Version Management (C1.2 AC-1)
+# ---------------------------------------------------------------------------
+
+
+def list_world_doc_versions(work_dir: str, world_id: str) -> list[dict[str, Any]]:
+    """List all versions of a world document."""
+    return _list_world_doc_versions(work_dir, world_id)
+
+
+def get_world_doc_version(work_dir: str, world_id: str, version: int) -> str | None:
+    """Get a specific version of the world document."""
+    return _get_world_doc_version(work_dir, world_id, version)
+
+
+def restore_world_doc_version(work_dir: str, world_id: str, version: int) -> dict[str, Any]:
+    """Restore a world document to a specific version.
+
+    Saves the restored content as a new version (not overwriting the old one).
+    """
+    content = _get_world_doc_version(work_dir, world_id, version)
+    if content is None:
+        raise DevKitError(404, f"版本 {version} 不存在", code="version_not_found")
+
+    # Save as new version
+    new_version = _save_world_doc_version(work_dir, world_id, content)
+
+    # Update the main world_doc
+    doc_path = _world_doc_path(work_dir, world_id)
+    with open(doc_path, "w", encoding="utf-8") as f:
+        f.write(content)
+
+    # Update world.json record
+    world = get_world(work_dir, world_id)
+    if world:
+        world["world_doc"] = content
+        world["updated_at"] = iso_now()
+        versions = _list_world_doc_versions(work_dir, world_id)
+        world["doc_versions"] = versions
+        with open(_world_path(work_dir, world_id), "w", encoding="utf-8") as f:
+            json.dump(world, f, ensure_ascii=False, indent=2)
+
+    return {"restored_version": version, "new_version": new_version, "content": content}
+
+
+# ---------------------------------------------------------------------------
+# World Document Keywords Extraction (for A4 NPC generation)
+# ---------------------------------------------------------------------------
+
+
+def extract_world_doc_keywords(work_dir: str, world_id: str) -> list[str]:
+    """Extract keywords from world document for A4 NPC generation."""
+    world = get_world(work_dir, world_id)
+    if not world:
+        raise DevKitError(404, f"世界观 {world_id} 不存在", code="not_found")
+
+    doc = world.get("world_doc", "")
+    return _extract_world_doc_keywords(doc)
+
+
+# For backward compatibility - expose internal function
+extract_world_doc_keywords_from_text = _extract_world_doc_keywords
