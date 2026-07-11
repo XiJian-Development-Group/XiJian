@@ -26,6 +26,8 @@ os.environ.setdefault("XIJIAN_OVERLOAD_MONITOR", "0")
 os.environ.setdefault("XIJIAN_STATE_TICK", "0")
 # The events scheduler thread (A4.1) — same posture as A3.2.
 os.environ.setdefault("XIJIAN_EVENT_SCHEDULER", "0")
+# The NPC tick thread (A4.2) — same posture as A3.2 / A4.1.
+os.environ.setdefault("XIJIAN_NPC_TICK", "0")
 
 from xijian_api import auth  # noqa: E402  (import after env setup)
 from xijian_api.app import create_app  # noqa: E402
@@ -91,6 +93,14 @@ def _reset_state(app):
         cs_stub.reset_for_testing()
         from xijian_api.stubs import events as events_stub
         events_stub.reset_for_testing()
+        from xijian_api.stubs import npcs as npcs_stub
+        npcs_stub.reset_for_testing()
+        from xijian_api.stubs import world_audit as wa_stub
+        wa_stub.reset_for_testing()
+        from xijian_api.stubs import world_compute_config as wcc_stub
+        wcc_stub.reset_for_testing()
+        from xijian_api.stubs import world_environment as we_stub
+        we_stub.reset_for_testing()
     yield
 
 

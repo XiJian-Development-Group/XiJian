@@ -21,12 +21,16 @@ from xijian_api.stubs import (
     interactions,
     memory,
     memory_config,
+    npcs,
     overload,
     protection,
     resources,
     sessions,
     settings,
     video,
+    world_audit,
+    world_compute_config,
+    world_environment,
     worlds,
 )
 
@@ -40,7 +44,14 @@ def seed_all() -> None:
     """
     characters.seed_default()
     interactions.seed_default()
+    # Worlds are seeded *first* so the related per-world buckets
+    # (environment, compute_config) can materialise their lazy
+    # defaults against an existing world record.
     worlds.seed_default()
+    # ``npcs.seed_default`` registers the A5.4 overload handler and
+    # starts the background tick thread (if env allows).  It does
+    # NOT seed any default NPCs — operators create them.
+    npcs.seed_default()
     memory.seed_default()
     memory_config.seed_default()  # type: ignore[attr-defined]
     protection.seed_default()
@@ -77,12 +88,16 @@ __all__ = [
     "interactions",
     "memory",
     "memory_config",
+    "npcs",
     "overload",
     "protection",
     "resources",
     "sessions",
     "settings",
     "video",
+    "world_audit",
+    "world_compute_config",
+    "world_environment",
     "worlds",
     "seed_all",
 ]
