@@ -577,15 +577,119 @@
                       <input id="world-event-enabled" type="checkbox" checked />
                     </label>
                   </div>
-                  <label class="field">
-                    <span class="field__label">触发条件（JSON：{kind:"time"|"state"|"probability"|"composite", ...}）</span>
-                    <textarea id="world-event-trigger" class="field__input field__input--code" rows="4" placeholder='{"kind":"probability","chance":0.1}'></textarea>
-                  </label>
-                  <label class="field">
-                    <span class="field__label">关联场景 / 影响（JSON，可选）</span>
-                    <input id="world-event-scene" class="field__input" type="text" placeholder="market_square" />
-                    <textarea id="world-event-effects" class="field__input field__input--code" rows="2" placeholder='{"npc_mood": 5}'></textarea>
-                  </label>
+
+                  <!-- 触发条件结构化输入 -->
+                  <details class="field-group" open>
+                    <summary class="field-group__summary">触发条件</summary>
+                    <div class="field-group__body">
+                      <label class="field">
+                        <span class="field__label">触发类型</span>
+                        <select id="world-event-trigger-kind" class="field__input">
+                          <option value="probability">概率触发（每日随机）</option>
+                          <option value="time">时间触发（特定时间/星期）</option>
+                          <option value="state">状态触发（角色/世界状态满足条件）</option>
+                          <option value="composite">组合触发（多条件 AND/OR）</option>
+                        </select>
+                      </label>
+
+                      <!-- 概率触发字段 -->
+                      <div id="trigger-probability" class="trigger-fields">
+                        <label class="field field--inline">
+                          <span class="field__label">触发概率 (0~1)</span>
+                          <input id="trigger-probability-chance" class="field__input" type="number" step="0.01" min="0" max="1" value="0.1" />
+                        </label>
+                      </div>
+
+                      <!-- 时间触发字段 -->
+                      <div id="trigger-time" class="trigger-fields" hidden>
+                        <label class="field field--inline">
+                          <span class="field__label">星期几 (1=周一, 7=周日，逗号分隔，留空=每天)</span>
+                          <input id="trigger-time-weekday" class="field__input" type="text" placeholder="例如：1,4 或 留空" />
+                        </label>
+                        <label class="field field--inline">
+                          <span class="field__label">小时 (0~23)</span>
+                          <input id="trigger-time-hour" class="field__input" type="number" min="0" max="23" placeholder="例如：10" />
+                        </label>
+                        <label class="field field--inline">
+                          <span class="field__label">分钟 (0~59)</span>
+                          <input id="trigger-time-minute" class="field__input" type="number" min="0" max="59" placeholder="例如：0" />
+                        </label>
+                        <label class="field field--inline">
+                          <span class="field__label">频率</span>
+                          <select id="trigger-time-frequency" class="field__input">
+                            <option value="daily">每天</option>
+                            <option value="weekly">每周</option>
+                            <option value="monthly">每月</option>
+                          </select>
+                        </label>
+                      </div>
+
+                      <!-- 状态触发字段 -->
+                      <div id="trigger-state" class="trigger-fields" hidden>
+                        <label class="field field--inline">
+                          <span class="field__label">监测对象</span>
+                          <select id="trigger-state-target" class="field__input">
+                            <option value="character">角色状态</option>
+                            <option value="world">世界状态</option>
+                            <option value="npc">配角状态</option>
+                          </select>
+                        </label>
+                        <label class="field field--inline">
+                          <span class="field__label">字段名</span>
+                          <input id="trigger-state-field" class="field__input" type="text" placeholder="例如：mood, health, hunger" />
+                        </label>
+                        <label class="field field--inline">
+                          <span class="field__label">比较操作</span>
+                          <select id="trigger-state-op" class="field__input">
+                            <option value="<">小于 (<)</option>
+                            <option value="<=">小于等于 (<=)</option>
+                            <option value=">">大于 (>)</option>
+                            <option value=">=">大于等于 (>=)</option>
+                            <option value="==">等于 (==)</option>
+                            <option value="!=">不等于 (!=)</option>
+                          </select>
+                        </label>
+                        <label class="field field--inline">
+                          <span class="field__label">比较值</span>
+                          <input id="trigger-state-value" class="field__input" type="text" placeholder="例如：20 或 'sunny'" />
+                        </label>
+                      </div>
+
+                      <!-- 组合触发字段 -->
+                      <div id="trigger-composite" class="trigger-fields" hidden>
+                        <label class="field field--inline">
+                          <span class="field__label">组合逻辑</span>
+                          <select id="trigger-composite-op" class="field__input">
+                            <option value="AND">全部满足 (AND)</option>
+                            <option value="OR">任一满足 (OR)</option>
+                          </select>
+                        </label>
+                        <div id="trigger-composite-rules" class="trigger-composite-rules">
+                          <!-- 动态添加的子规则 -->
+                        </div>
+                        <button id="trigger-composite-add-btn" class="btn btn--secondary" type="button">添加子条件</button>
+                      </div>
+                    </div>
+                  </details>
+
+                  <!-- 关联场景 / 影响结构化输入 -->
+                  <details class="field-group" open>
+                    <summary class="field-group__summary">关联场景 / 影响</summary>
+                    <div class="field-group__body">
+                      <label class="field field--inline">
+                        <span class="field__label">关联场景 ID</span>
+                        <input id="world-event-scene" class="field__input" type="text" placeholder="market_square" />
+                      </label>
+                      <label class="field">
+                        <span class="field__label">影响字段（可添加多个）</span>
+                        <div id="effects-list" class="effects-list">
+                          <!-- 动态添加的影响项 -->
+                        </div>
+                        <button id="effects-add-btn" class="btn btn--secondary" type="button">添加影响</button>
+                      </label>
+                    </div>
+                  </details>
+
                   <div class="row row--gap">
                     <button id="world-event-save-btn" class="btn btn--primary" type="button">保存事件</button>
                     <button id="world-event-delete-btn" class="btn btn--ghost btn--danger-ghost" type="button" disabled>删除</button>
