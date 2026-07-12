@@ -691,17 +691,17 @@ class TTSManager:
 
     def get_engine(self, preferred: Optional[str] = None) -> TTSEngine:
         if preferred:
-            for eng in self._engines:
+            for eng in self._tts_engines:
                 if eng.name == preferred and eng.is_available():
                     return eng
-        for eng in self._engines:
+        for eng in self._tts_engines:
             if eng.is_available():
                 return eng
         return FallbackTTSEngine()
 
     def list_all_voices(self) -> list[dict[str, Any]]:
         all_voices = []
-        for eng in self._engines:
+        for eng in self._tts_engines:
             if eng.is_available():
                 for v in eng.list_voices():
                     v = dict(v)

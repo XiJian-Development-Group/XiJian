@@ -214,6 +214,8 @@ from devkit.motion_editor import (
     convert_bvh_to_vrm as _moe_convert_bvh,
     validate_motion_skeleton as _moe_validate_skeleton,
     edit_motion_keyframes as _moe_edit_keyframes,
+    get_motion_keyframes as _moe_get_keyframes,
+    apply_keyframes_to_vrm as _moe_apply_keyframes,
 )
 from devkit.ai_assistant import (
     log_assist_event as _aa_log,
@@ -1981,6 +1983,59 @@ class DevKitApi:
         if not isinstance(character_id, str) or not character_id:
             raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
         return _moe_validate_skeleton(self._work_dir(), motion_id, character_id)
+
+    # --- motion keyframe editing (C2.9) ---------------------------------------
+
+    @_serialize_call
+    def edit_motion_keyframes(
+        self,
+        motion_id: Any = None,
+        character_id: Any = None,
+        keyframes: Any = None,
+    ) -> dict[str, Any]:
+        if not isinstance(motion_id, str) or not motion_id:
+            raise DevKitError(400, "动作 ID 不能为空", code="missing_motion_id")
+        if not isinstance(character_id, str) or not character_id:
+            raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
+        if not isinstance(keyframes, list):
+            raise DevKitError(400, "keyframes 必须是列表", code="bad_keyframes")
+        return _moe_edit_keyframes(motion_id, self._work_dir(), character_id, keyframes)
+
+    @_serialize_call
+    def get_motion_keyframes(
+        self,
+        motion_id: Any = None,
+        character_id: Any = None,
+    ) -> dict[str, Any]:
+        if not isinstance(motion_id, str) or not motion_id:
+            raise DevKitError(400, "动作 ID 不能为空", code="missing_motion_id")
+        if not isinstance(character_id, str) or not character_id:
+            raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
+        keyframes = _moe_get_keyframes(self._work_dir(), character_id, motion_id)
+        return {"keyframes": keyframes}
+
+    @_serialize_call
+    def apply_keyframes_to_vrm(
+        self,
+        motion_id: Any = None,
+        character_id: Any = None,
+        vrm_model_id: Any = None,
+        output_path: Any = None,
+    ) -> dict[str, Any]:
+        if not isinstance(motion_id, str) or not motion_id:
+            raise DevKitError(400, "动作 ID 不能为空", code="missing_motion_id")
+        if not isinstance(character_id, str) or not character_id:
+            raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
+        if not isinstance(vrm_model_id, str) or not vrm_model_id:
+            raise DevKitError(400, "VRM 模型 ID 不能为空", code="missing_vrm_model_id")
+        out_path = _moe_apply_keyframes(
+            self._work_dir(),
+            character_id,
+            motion_id,
+            vrm_model_id,
+            output_path if isinstance(output_path, str) else None,
+        )
+        return {"output_path": out_path, "message": "关键帧已应用到 VRM，生成了带动画的模型文件"}
 
     # --- AI assistant ---------------------------------------------------
 

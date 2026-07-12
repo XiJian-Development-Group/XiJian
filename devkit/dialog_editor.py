@@ -245,40 +245,20 @@ def start_finetuning_job(
     base_model: str = "qwen2.5-7b",
     params: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Stub for fine-tuning/distillation pipeline (C2.7 AC-3).
+    """C2.7 微调/蒸馏管线。
 
-    In a real implementation, this would:
-    1. Export approved dialogs to training format
-    2. Launch a LoRA/QLoRA training job (MLX/LLaMA.cpp)
-    3. Return a job ID for tracking
-
-    Currently returns a placeholder job record.
+    该功能仍在制作中，暂不开放使用——直接以明确提示告知用户。
     """
-    from devkit._vendor import iso_now
-
     # Verify we have approved dialogs
     approved = get_approved_dialogs(work_dir, character_id)
     if not approved:
         raise DevKitError(400, "没有已审核通过的对话样本，无法开始微调", code="no_approved_dialogs")
 
-    job_id = f"ft_{secrets.token_hex(8)}"
-    job = {
-        "job_id": job_id,
-        "character_id": character_id,
-        "base_model": base_model,
-        "training_examples": len(get_approved_dialogs(work_dir, character_id)),
-        "params": params or {},
-        "status": "pending",
-        "created_at": iso_now(),
-        "started_at": None,
-        "completed_at": None,
-        "output_model_path": None,
-    }
-
-    # TODO: Actually launch training job (MLX LoRA, etc.)
-    # For now, just return the job record
-
-    return job
+    raise DevKitError(
+        501,
+        "微调/蒸馏管线功能仍在制作中，暂不开放使用。",
+        code="feature_not_available",
+    )
 
 
 def get_finetuning_job_status(work_dir: str, job_id: str) -> dict[str, Any] | None:

@@ -53,17 +53,12 @@ def register_model(work_dir: str, path: str) -> dict[str, Any]:
         raise DevKitError(400, f"文件不存在: {path}", code="file_not_found")
     ext = os.path.splitext(path)[1].lower()
     if ext == ".fbx":
-        # DevKit does NOT perform FBX→VRM conversion.  Be explicit so the
-        # user knows to convert externally rather than silently accepting a
-        # file we cannot validate or preview.
-        raise DevKitError(
-            400,
-            "DevKit 暂不提供 FBX→VRM 转换功能。请使用 Blender 或 Unity（UniVRM）"
-            "等程序将模型手动转换为 VRM 1.0 后，再导入本工具。",
-            code="fbx_conversion_unavailable",
-        )
-    if ext not in (".vrm", ".glb", ".gltf"):
-        raise DevKitError(400, f"不支持的模型格式: {ext}（仅支持 .vrm / .glb / .gltf）", code="bad_format")
+        # Allow FBX registration but mark it as needing conversion to VRM.
+        # The UI will show a warning that FBX cannot be previewed directly
+        # and must be converted to VRM 1.0 using Blender/Unity (UniVRM) externally.
+        pass  # Continue to register
+    elif ext not in (".vrm", ".glb", ".gltf"):
+        raise DevKitError(400, f"不支持的模型格式: {ext}（仅支持 .vrm / .glb / .gltf / .fbx）", code="bad_format")
     index = _load_index(work_dir)
     for entry in index:
         if entry.get("path") == path:
@@ -75,7 +70,20 @@ def register_model(work_dir: str, path: str) -> dict[str, Any]:
         "name": os.path.basename(path),
         "format": ext.lstrip("."),
         "size_bytes": os.path.getsize(path),
+        "needs_conversion": ext == ".fbx",
     }
+    # C2.8 AC-3: Enforce model size limit (< 50 MB required, < 20 MB recommended)
+    size_mb = entry["size_bytes"] / (1024 * 1024)
+    if size_mb > 50:
+        raise DevKitError(
+            400,
+            f"模型文件过大: {size_mb:.1f} MB，超过 50 MB 上限（推荐 < 20 MB）",
+            code="model_too_large",
+        )
+    elif size_mb > 20:
+        # Warning only - not blocking
+        entry["size_warning"] = f"模型大小 {size_mb:.1f} MB 超过推荐的 20 MB，可能影响加载性能"
+
     index.append(entry)
     _save_index(work_dir, index)
     return entry
@@ -104,6 +112,7 @@ _FORMAT_MIMES = {
     ".vrm": "model/gltf-binary",   # VRM 0.x / 1.0 are GLB with extras
     ".glb": "model/gltf-binary",
     ".gltf": "model/gltf+json",
+    ".fbx": "application/octet-stream",  # FBX not directly viewable in three.js
 }
 
 
@@ -182,24 +191,57 @@ def validate_model_format(work_dir: str, model_id: str) -> dict[str, Any]:
             "errors": ["未检测到 VRM 扩展（extensionsUsed 中缺少 VRM / VRMC_vrm）", "不符合 VRM 1.0 规范"],
             "warnings": [],
         }
+
+    # Deeper VRM 1.0 validation: check required VRM extension fields
+    vrm_ext_key = next((k for k in ("VRM", "VRMC_vrm") if k in gltf.get("extensions", {})), None)
+    if vrm_ext_key:
+        vrm_ext = gltf["extensions"][vrm_ext_key]
+        errors = []
+        warnings = []
+
+        # Check specVersion
+        spec_version = vrm_ext.get("specVersion", "1.0")
+        if not spec_version.startswith("1."):
+            warnings.append(f"VRM 规范版本为 {spec_version}，建议使用 1.0")
+
+        # Check meta (required in VRM 1.0)
+        meta = vrm_ext.get("meta")
+        if not meta:
+            errors.append("缺少 VRM meta 信息（标题、版本、作者等）")
+        else:
+            if not meta.get("title"):
+                warnings.append("VRM meta 缺少 title（标题）")
+            if not meta.get("version"):
+                warnings.append("VRM meta 缺少 version（版本号）")
+            if not meta.get("author"):
+                warnings.append("VRM meta 缺少 author（作者）")
+
+        # Check humanoid (required for animation retargeting)
+        humanoid = vrm_ext.get("humanoid")
+        if not humanoid:
+            warnings.append("缺少 humanoid 信息（动作重定向可能受影响）")
+        else:
+            human_bones = humanoid.get("humanBones", [])
+            if not human_bones:
+                warnings.append("humanoid.humanBones 为空（动作重定向可能受影响）")
+
+        # Check firstPerson (optional but recommended)
+        first_person = vrm_ext.get("firstPerson")
+        if not first_person:
+            warnings.append("缺少 firstPerson 设置（第一人称视角配置）")
+
+        # Check blendShapeMaster (optional but recommended for expressions)
+        blend_shape = vrm_ext.get("blendShapeMaster")
+        if not blend_shape:
+            warnings.append("缺少 blendShapeMaster（表情/BlendShape 可能无法使用）")
+
+        if errors:
+            return {"ok": False, "format": ext.lstrip("."), "errors": errors, "warnings": warnings}
+
+        if warnings:
+            return {"ok": True, "format": ext.lstrip("."), "errors": [], "warnings": warnings}
+
     return {"ok": True, "format": ext.lstrip("."), "errors": [], "warnings": []}
-
-
-def _validate_fbx_rejected() -> dict[str, Any]:
-    """FBX is not accepted — conversion must happen externally.
-
-    Kept as a clear, single-source message so the UI can tell the user to
-    convert with Blender / Unity before importing.
-    """
-    return {
-        "ok": False,
-        "format": "fbx",
-        "errors": [
-            "DevKit 暂不提供 FBX→VRM 转换功能。请使用 Blender 或 Unity（UniVRM）"
-            "将模型手动转换为 VRM 1.0 后再导入。",
-        ],
-        "warnings": [],
-    }
 
 
 def read_model_bytes(work_dir: str, model_id: str) -> dict[str, Any] | None:
@@ -266,65 +308,19 @@ def generate_model_from_text(
     description: str,
     name: str = "",
 ) -> dict[str, Any]:
-    """Generate or download a 3D model from text description (C2.8).
+    """C2.8 AI 生成 3D 模型（VRM 1.0）。
 
-    Supports:
-    1. AI generation via local MLX/Hugging Face (requires mlx_audio/transformers)
-    2. Downloading pre-made models from Hugging Face (with mirror support)
-    3. Importing user-provided model files
-
-    Returns the registered model entry.
+    该功能仍在制作中，暂不开放使用——直接以明确提示告知用户，而非产出
+    占位模型，避免用户误以为已生成可用模型。
     """
     if not description.strip():
         raise DevKitError(400, "描述文本不能为空", code="empty_description")
 
-    # Try to download from Hugging Face first (with mirror)
-    model_path = _download_model_from_hf(description)
-    if model_path is None:
-        # Fallback to placeholder
-        import tempfile
-        model_id = "model_" + secrets.token_hex(8)
-        name = name or f"AI生成_{model_id[:8]}"
-
-        placeholder_path = os.path.join(tempfile.gettempdir(), f"xijian_ai_model_{model_id}.glb")
-        with open(placeholder_path, "w") as f:
-            f.write(json.dumps({
-                "asset": {"version": "2.0", "generator": "XiJian AI Model Generator"},
-                "generated_from": description,
-                "model_id": model_id,
-                "note": "Placeholder — full AI VRM generation requires MLX backend",
-            }))
-
-        index = _load_index(work_dir)
-        entry = {
-            "id": model_id,
-            "path": placeholder_path,
-            "name": name,
-            "format": "glb",
-            "size_bytes": os.path.getsize(placeholder_path),
-            "generated": True,
-            "description": description,
-        }
-        index.append(entry)
-        _save_index(work_dir, index)
-        return entry
-
-    # Register the downloaded model
-    model_id = "model_" + secrets.token_hex(8)
-    name = name or os.path.basename(model_path)
-    index = _load_index(work_dir)
-    entry = {
-        "id": model_id,
-        "path": model_path,
-        "name": name,
-        "format": os.path.splitext(model_path)[1].lstrip("."),
-        "size_bytes": os.path.getsize(model_path),
-        "generated": True,
-        "description": description,
-    }
-    index.append(entry)
-    _save_index(work_dir, index)
-    return entry
+    raise DevKitError(
+        501,
+        "AI 生成 3D 模型（VRM 1.0）功能仍在制作中，暂不开放使用。",
+        code="feature_not_available",
+    )
 
 
 def _download_model_from_hf(description: str) -> str | None:

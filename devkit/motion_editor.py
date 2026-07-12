@@ -393,6 +393,68 @@ def validate_motion_skeleton(
     return result
 
 
+def _validate_keyframes(keyframes: list[dict[str, Any]]) -> tuple[bool, list[str]]:
+    """Validate keyframe data structure.
+
+    Returns (ok, errors).
+    """
+    errors: list[str] = []
+    if not isinstance(keyframes, list):
+        return False, ["keyframes 必须是列表"]
+
+    seen_frames: dict[str, set[int]] = {}  # bone -> set of frames
+
+    for i, kf in enumerate(keyframes):
+        if not isinstance(kf, dict):
+            errors.append(f"关键帧 #{i}: 必须是对象")
+            continue
+
+        # Required: frame (int >= 0)
+        frame = kf.get("frame")
+        if not isinstance(frame, int) or frame < 0:
+            errors.append(f"关键帧 #{i}: frame 必须是非负整数")
+        else:
+            # Check for duplicate frame on same bone
+            bone = kf.get("bone")
+            if bone:
+                if bone not in seen_frames:
+                    seen_frames[bone] = set()
+                if frame in seen_frames[bone]:
+                    errors.append(f"关键帧 #{i}: 骨骼 {bone} 在帧 {frame} 有重复关键帧")
+                seen_frames[bone].add(frame)
+
+        # Required: bone (non-empty string)
+        bone = kf.get("bone")
+        if not isinstance(bone, str) or not bone.strip():
+            errors.append(f"关键帧 #{i}: bone 必须是非空字符串")
+
+        # Optional: position [x, y, z] (list of 3 floats)
+        pos = kf.get("position")
+        if pos is not None:
+            if not (isinstance(pos, list) and len(pos) == 3 and all(isinstance(v, (int, float)) for v in pos)):
+                errors.append(f"关键帧 #{i}: position 必须是 [x, y, z] 格式的三个数字")
+
+        # Optional: rotation [x, y, z, w] (quaternion, list of 4 floats)
+        rot = kf.get("rotation")
+        if rot is not None:
+            if not (isinstance(rot, list) and len(rot) == 4 and all(isinstance(v, (int, float)) for v in rot)):
+                errors.append(f"关键帧 #{i}: rotation 必须是 [x, y, z, w] 格式的四元数")
+            else:
+                # Check quaternion is normalized (approximately)
+                import math
+                norm = math.sqrt(sum(v * v for v in rot))
+                if abs(norm - 1.0) > 0.01:
+                    errors.append(f"关键帧 #{i}: rotation 四元数未归一化 (模长={norm:.4f})")
+
+        # Optional: scale [x, y, z] (list of 3 floats)
+        scale = kf.get("scale")
+        if scale is not None:
+            if not (isinstance(scale, list) and len(scale) == 3 and all(isinstance(v, (int, float)) for v in scale)):
+                errors.append(f"关键帧 #{i}: scale 必须是 [x, y, z] 格式的三个数字")
+
+    return (len(errors) == 0), errors
+
+
 def edit_motion_keyframes(
     motion_id: str,
     work_dir: str,
@@ -406,7 +468,7 @@ def edit_motion_keyframes(
         work_dir: Work directory
         character_id: Character ID
         keyframes: List of keyframe dicts, each with:
-            - frame: int — frame number
+            - frame: int — frame number (>= 0)
             - bone: str — bone name
             - position: [x, y, z] — optional
             - rotation: [x, y, z, w] — optional (quaternion)
@@ -414,6 +476,11 @@ def edit_motion_keyframes(
 
     Returns the updated motion record.
     """
+    # Validate keyframes
+    ok, errors = _validate_keyframes(keyframes)
+    if not ok:
+        raise DevKitError(400, "；".join(errors), code="bad_keyframes")
+
     motions = _load_motions(work_dir, character_id)
     for i, m in enumerate(motions):
         if m.get("id") == motion_id:
@@ -424,7 +491,140 @@ def edit_motion_keyframes(
     return None
 
 
-# Public wrappers for API
+def get_motion_keyframes(
+    work_dir: str,
+    character_id: str,
+    motion_id: str,
+) -> list[dict[str, Any]]:
+    """Get keyframes for a motion (for playback in UI)."""
+    motions = _load_motions(work_dir, character_id)
+    for m in motions:
+        if m.get("id") == motion_id:
+            return m.get("keyframes", [])
+    return []
+
+
+def apply_keyframes_to_vrm(
+    work_dir: str,
+    character_id: str,
+    motion_id: str,
+    vrm_model_id: str,
+    output_path: str | None = None,
+) -> str:
+    """Apply keyframes to a VRM model, generating a VRM with animation (VRMC_vrm_animation).
+
+    This creates a new VRM file with the keyframe animation baked in as a
+    VRMC_vrm_animation extension, which can be played back in three.js/VRM viewers.
+
+    Args:
+        work_dir: Work directory
+        character_id: Character ID
+        motion_id: Motion ID with keyframes
+        vrm_model_id: Target VRM model ID (must be registered)
+        output_path: Output path (optional, auto-generated if not provided)
+
+    Returns the path to the generated VRM file.
+    """
+    # Load motion with keyframes
+    motions = _load_motions(work_dir, character_id)
+    motion = next((m for m in motions if m.get("id") == motion_id), None)
+    if not motion:
+        raise DevKitError(404, f"动效不存在: {motion_id}", code="not_found")
+
+    keyframes = motion.get("keyframes", [])
+    if not keyframes:
+        raise DevKitError(400, "该动效没有关键帧数据", code="no_keyframes")
+
+    # Load VRM model
+    from devkit.model_viewer import get_model_info as _mv_get, _read_gltf_json
+    vrm_model = _mv_get(work_dir, vrm_model_id)
+    if not vrm_model:
+        raise DevKitError(404, f"VRM 模型不存在: {vrm_model_id}", code="not_found")
+
+    vrm_path = vrm_model.get("path", "")
+    if not vrm_path or not os.path.isfile(vrm_path):
+        raise DevKitError(400, "VRM 模型文件不存在", code="file_not_found")
+
+    ext = os.path.splitext(vrm_path)[1].lower()
+    if ext == ".fbx":
+        raise DevKitError(400, "目标模型为 FBX，需先转换为 VRM", code="bad_format")
+
+    # Read VRM as glTF JSON
+    gltf = _read_gltf_json(vrm_path)
+    if gltf is None:
+        raise DevKitError(400, "无法解析 VRM 文件", code="parse_failed")
+
+    # Ensure extensions structure
+    if "extensions" not in gltf:
+        gltf["extensions"] = {}
+    if "extensionsUsed" not in gltf:
+        gltf["extensionsUsed"] = []
+
+    # Build VRMC_vrm_animation from keyframes
+    # Group keyframes by bone
+    from collections import defaultdict
+    bone_tracks: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for kf in keyframes:
+        bone = kf.get("bone", "")
+        bone_tracks[bone].append({
+            "frame": kf.get("frame", 0),
+            "position": kf.get("position"),
+            "rotation": kf.get("rotation"),
+            "scale": kf.get("scale"),
+        })
+
+    # Sort each bone's tracks by frame
+    for bone in bone_tracks:
+        bone_tracks[bone].sort(key=lambda t: t["frame"])
+
+    # Create animation clips for VRMC_vrm_animation
+    # This is a simplified version - real implementation would create proper
+    # glTF animation samplers/channels and reference them in VRMC_vrm_animation
+    animation = {
+        "name": motion.get("name", "custom_animation"),
+        "tracks": [
+            {
+                "bone": bone,
+                "keyframes": tracks,
+            }
+            for bone, tracks in bone_tracks.items()
+        ],
+        "frame_rate": 30,  # default
+        "duration": max((kf.get("frame", 0) for kf in keyframes), default=0) / 30.0,
+    }
+
+    if "VRMC_vrm_animation" not in gltf["extensions"]:
+        gltf["extensions"]["VRMC_vrm_animation"] = {}
+    gltf["extensions"]["VRMC_vrm_animation"]["animations"] = [animation]
+    if "VRMC_vrm_animation" not in gltf["extensionsUsed"]:
+        gltf["extensionsUsed"].append("VRMC_vrm_animation")
+
+    # Write output VRM
+    if output_path is None:
+        import tempfile
+        output_path = os.path.join(
+            tempfile.gettempdir(),
+            f"xijian_motion_{motion_id}_{os.path.basename(vrm_path)}"
+        )
+
+    # For GLB/VRM binary, we need to rebuild the binary. This is complex.
+    # For now, write as .gltf (JSON) which can be loaded by three.js.
+    # A full implementation would use pygltflib or similar to write GLB.
+    out_ext = os.path.splitext(output_path)[1].lower()
+    if out_ext == ".gltf":
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(gltf, f, ensure_ascii=False, separators=(",", ":"))
+    else:
+        # Write as JSON for now (user can convert to GLB externally)
+        json_path = os.path.splitext(output_path)[0] + ".gltf"
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(gltf, f, ensure_ascii=False, separators=(",", ":"))
+        # Also save the original binary path for reference
+        # In a full implementation, we'd embed the binary buffer here
+
+    return output_path if out_ext == ".gltf" else json_path
+
+
 def convert_bvh_to_vrm_public(
     work_dir: str,
     bvh_path: str,

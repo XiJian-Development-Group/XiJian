@@ -213,74 +213,18 @@ def clone_voice_from_file(
     engine: str = "melo",
     params: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """C2.1 声音克隆 - 使用 MeloTTS 进行声音克隆。
+    """C2.1 声音克隆。
 
-    支持引擎：
-    - "melo": 使用 MeloTTS 的说话人适配功能（需要 MeloTTS 模型）
-    - "gguf": 使用 GGUF 声音克隆模型（需用户自行加载模型）
-    - "fallback": 仅保存参考样本，不进行实际克隆
+    该功能仍在制作中，暂不开放使用——直接以明确提示告知用户，
+    避免用户误以为已生成可用语音。
     """
     if not source_path or not os.path.isfile(source_path):
         raise DevKitError(400, f"音频文件不存在: {source_path}", code="file_not_found")
-
-    from devkit.tts_engine import get_tts_manager, MeloTTSEngine
-
-    if engine == "melo":
-        # 使用 MeloTTS 进行声音克隆
-        melo = MeloTTSEngine()
-        if not melo.is_available():
-            if not melo.ensure_model("zh"):
-                raise DevKitError(
-                    503,
-                    "MeloTTS 模型未下载。请先调用 download_melotts_model 下载模型。",
-                    code="model_not_ready",
-                )
-
-        from devkit.tts_engine import TTSRequest
-
-        # 先保存参考音频
-        tts_mgr = get_tts_manager()
-        req = TTSRequest(
-            text="这是一个声音克隆测试，用于训练说话人适配。",
-            voice_id="melo_zh_female_0",
-            language="zh",
-            speed=1.0,
-        )
-
-        # 使用 MeloTTS 的说话人适配功能
-        # 注意：MeloTTS 支持通过 reference audio 进行说话人适配
-        # 这里我们先保存样本，实际克隆在后续合成时使用
-        return save_voice(
-            work_dir=work_dir,
-            character_id=character_id,
-            name=name,
-            sample_path=source_path,
-            engine="melo",
-            params={"cloned": True, "reference_audio": source_path, **(params or {})},
-        )
-
-    elif engine == "gguf":
-        # GGUF 声音克隆需要用户自行加载模型
-        # 这里仅保存参考样本
-        return save_voice(
-            work_dir=work_dir,
-            character_id=character_id,
-            name=name,
-            sample_path=source_path,
-            engine="gguf",
-            params={"cloned": True, "reference_audio": source_path, **(params or {})},
-        )
-
-    else:
-        # fallback: 仅保存参考样本
-        return save_voice(
-            work_dir=work_dir,
-            character_id=character_id,
-            name=name,
-            sample_path=source_path,
-            engine="fallback",
-            params={"cloned": True, "reference_audio": source_path, **(params or {})},
-        )
+    raise DevKitError(
+        501,
+        "声音克隆功能仍在制作中，暂不开放使用。",
+        code="feature_not_available",
+    )
 
 
 def generate_singing(
