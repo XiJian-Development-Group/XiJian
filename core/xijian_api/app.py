@@ -142,7 +142,8 @@ def main(argv: list[str] | None = None) -> int:
     port = _require_port()
     config = Config.from_env(testing=False)
     app = create_app(testing=False, config=config)
-    _serve(app, DEFAULT_HOST, port)
+    _LOGGER.info("starting xijian-api on %s:%s", config.host, port)
+    _serve(app, config.host, port)
     return 0
 
 

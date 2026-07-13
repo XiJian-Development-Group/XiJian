@@ -28,7 +28,7 @@ from typing import Any
 
 
 API_VERSION = "1.0.0"
-DEFAULT_HOST = "127.0.0.1"
+DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 18500
 
 RATE_LIMIT_LIMIT_REQUESTS = 100000
@@ -65,7 +65,7 @@ def _truthy(value: Any) -> bool:
 
 @dataclass(frozen=True)
 class ServerConfig:
-    host: str = DEFAULT_HOST
+    host: str = "0.0.0.0"
     port: int = DEFAULT_PORT
     dev: bool = False
     keep_token_file: bool = False
