@@ -124,6 +124,34 @@ world_compute_config: dict = {}
 world_environment: dict = {}
 world_audit_log: dict = {}
 
+# A4.3 scene / interaction system.  Three buckets mirror the SQL schema
+# in the function list v2:
+#   pois                 — {poi_id: {world_id, parent_id, name, kind,
+#                                  coords, description}}
+#                                 Three-level hierarchy: parent_id=None
+#                                 ⇒ map (e.g. "提瓦特大陆"), parent is
+#                                 a map ⇒ region (e.g. "蒙德"), parent
+#                                 is a region ⇒ POI (e.g. "天使的馈赠").
+#   travel_modes         — {mode_id: {world_id, name, speed_factor,
+#                                     stamina_cost, event_chance}}
+#                                 Per-world transport options.
+#                                 ``speed_factor`` multiplies a base
+#                                 travel time; ``stamina_cost`` is the
+#                                 flat deduction the character takes;
+#                                 ``event_chance`` is the per-trip
+#                                 random-event probability.
+#   scene_interactions   — {interaction_id: {world_id, poi_id,
+#                                            target_type, target_id,
+#                                            action, effects, cooldown_sec}}
+#                                 Scene-level interactions: the user
+#                                 triggers an action against an NPC /
+#                                 object / mechanism at a POI.  ``cooldown_sec``
+#                                 blocks re-triggering for a window so
+#                                 farming / exploitation is bounded.
+pois: dict = {}
+travel_modes: dict = {}
+scene_interactions: dict = {}
+
 # Developer Kit (C5) state lives in ``xijian_api.devkit.state`` — the
 # DevKit is a stand-alone Pywebview application that does not share a
 # Flask server with the main API, so its buckets are intentionally
@@ -178,6 +206,10 @@ def reset_for_testing() -> None:
     world_compute_config.clear()
     world_environment.clear()
     world_audit_log.clear()
+    # A4.3 buckets.
+    pois.clear()
+    travel_modes.clear()
+    scene_interactions.clear()
     files.clear()
     batches.clear()
     fine_tuning_jobs.clear()
@@ -216,6 +248,9 @@ __all__ = [
     "world_compute_config",
     "world_environment",
     "world_audit_log",
+    "pois",
+    "travel_modes",
+    "scene_interactions",
     "files",
     "batches",
     "fine_tuning_jobs",

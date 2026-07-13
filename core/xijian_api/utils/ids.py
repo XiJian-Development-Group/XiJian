@@ -209,6 +209,40 @@ def gen_world_audit_id() -> str:
     return gen_id("waudit_", _SHORT_HEX_LEN)
 
 
+def gen_poi_id() -> str:
+    """Return a point-of-interest id (``poi_<12 hex>``).
+
+    A4.3 scene system: ``pois`` is a 3-level hierarchy (map / region /
+    POI).  Each level shares this id format and is differentiated by
+    the ``kind`` field on the record.
+    """
+    return gen_id("poi_", _SHORT_HEX_LEN)
+
+
+def gen_travel_mode_id() -> str:
+    """Return a travel-mode id (``tmode_<12 hex>``).
+
+    A4.3 travel: per-world transport options like ``walk`` / ``horse``
+    / ``teleport``.  Each option carries ``speed_factor``,
+    ``stamina_cost`` and ``event_chance``.
+    """
+    return gen_id("tmode_", _SHORT_HEX_LEN)
+
+
+def gen_scene_interaction_id() -> str:
+    """Return a scene-interaction id (``sint_<12 hex>``).
+
+    A4.3 scene interactions: the user triggers an action against an
+    NPC / object / mechanism at a POI.  Each definition carries a
+    ``cooldown_sec`` so farming / exploitation is bounded.
+
+    The :func:`gen_interaction_id` helper above (prefix ``int_``) is
+    for the chat-level interaction templates (拥抱/接吻) — different
+    resource, different prefix.
+    """
+    return gen_id("sint_", _SHORT_HEX_LEN)
+
+
 def gen_submission_id() -> str:
     """Return a Developer-Kit submission id (``sub_<12 hex>``).
 
