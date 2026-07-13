@@ -281,15 +281,18 @@ class TestEvaluateProbabilityTrigger:
         assert a == b
 
     def test_sweep_can_find_both_true_and_false(self):
-        # Sweep through enough seconds to see both outcomes.
+        # Sweep through enough seconds to see both outcomes.  With
+        # the default 60 s scheduler interval, 50 consecutive
+        # seconds collapse to a single bucket, so we sample one
+        # second per 60-second bucket across a 2-hour window.
         trigger = {"type": "probability", "per_tick": 0.5}
         outcomes = {
             _evaluate_probability_trigger(trigger, float(s))
-            for s in range(1_700_000_000, 1_700_000_000 + 50)
+            for s in range(1_700_000_000, 1_700_000_000 + 3600 * 2, 60)
         }
-        # With 50 samples and 50/50 odds, we *should* see both.  If
-        # this ever flakes (extremely unlikely), the deterministic
-        # hash distribution has degraded and we should investigate.
+        # With 120 distinct buckets and 50/50 odds, we *should* see
+        # both.  If this ever flakes, the deterministic hash
+        # distribution has degraded and we should investigate.
         assert {True, False}.issubset(outcomes)
 
 

@@ -301,8 +301,29 @@ def _evaluate_probability_trigger(trigger: dict, now: float) -> bool:
     # truncated to the scheduler interval so a tick that runs in the
     # same second gets the same outcome.
     bucket = int(now) // max(int(_current_interval()), 1)
-    h = (hash(("probability", bucket)) & 0xFFFFFFFF) / 0x100000000
+    # Deterministic hash → [0, 1) so tests can pin behaviour without
+    # monkey-patching random.  We seed the hash with a fixed salt so
+    # the outcome doesn't drift with ``PYTHONHASHSEED``; see
+    # :func:`_stable_hash_unit` for the helper.
+    h = _stable_hash_unit(("probability", bucket))
     return h < per_tick
+
+
+def _stable_hash_unit(key: tuple) -> float:
+    """Hash ``key`` to a deterministic float in [0, 1).
+
+    Plain ``hash()`` is seed-randomised by Python (the
+    ``PYTHONHASHSEED`` env), which would make probability-trigger
+    tests fail intermittently.  We use ``hashlib.sha256`` with a
+    fixed salt so the same key always produces the same unit float
+    within a Python process — independent of how the interpreter
+    was launched.
+    """
+    import hashlib
+    import struct
+    encoded = repr(key).encode("utf-8")
+    digest = hashlib.sha256(encoded).digest()
+    return struct.unpack(">I", digest[:4])[0] / 0x100000000
 
 
 def _evaluate_condition_trigger(

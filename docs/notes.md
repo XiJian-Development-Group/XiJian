@@ -471,6 +471,77 @@ C5 之前把 DevKit 挂在 `core/xijian_api/devkit/` 下，作为 xijian_api 的
 
 ---
 
+## 2026-07-11 · A4.3 场景与互动（首次实装 + 顺手修 A4.2 残留 flaky）
+
+### 任务来源
+接 A4.2（已 commit `7f90666`）的下一章节。A4.3 spec 列出 3 张表（`pois` / `travel_modes` / `interactions`），其中 `interactions` 与现有 `xijian_api.stubs.interactions`（chat-level 拥抱/接吻模板）**重名但不重意**——A4.3 spec 把 `interactions` 表明确划在场景侧，命名空间归 `/v1/xijian/scenes/*`，与 chat-level 的 `/v1/xijian/interactions` 隔离。
+
+### 完成清单
+- **stubs**（3 个新文件，全新写）
+  - `stubs/pois.py`（490 行）—— CRUD + 三级父子约束（map → region → leaf）+ tree 渲染 + ancestor chain + descendants + children
+  - `stubs/travel_modes.py`（330 行）—— CRUD + `estimate_trip` 预演（speed_factor 反比、stamina/event_chance 透传、可选 random_roll）
+  - `stubs/scene_interactions.py`（680 行）—— CRUD + `trigger()` 完整流程（per-character cooldown 锁 / character-state interactable gate / NPC 死亡 gate / audit 写入 / A4.1 `fire_event` 联动）
+- **state.py** —— 3 个新 bucket + reset + `__all__`
+- **utils/ids.py** —— `gen_poi_id` / `gen_travel_mode_id` / `gen_scene_interaction_id`，前缀 `poi_` / `tmode_` / `sint_`
+- **routes** —— `xijian_scenes.py` 单 blueprint 管 3 套资源，统一挂 `/v1/xijian/scenes/*`；注册到 `routes/__init__.py` 可选列表
+- **conftest** —— autouse reset 链追加 3 个 stub 的 `reset_for_testing`
+- **测试** —— 148 个新 case
+  - `test_xijian_pois.py`（51 个）：纯函数 9 / CRUD 18 / 树查询 6 / 路由 17 / auth 1
+  - `test_xijian_travel_modes.py`（39 个）：纯函数 11 / CRUD 15 / 路由 13
+  - `test_xijian_scene_interactions.py`（58 个）：纯函数 14 / CRUD 16 / trigger 11 / 路由 17
+
+### 顺手修 A4.2 移交时残留的 4 个 flaky
+- **`conftest.py:130`** —— `_reset_state` 先调 `stubs_state.reset_for_testing()`（re-seed → `npcs.install_overload_handler()`），再调 `ov_stub.reset_for_testing()`（**清空 action-handler 寄存器**），handler 被后者干掉了。在 overload reset 之后**显式 reinstall** 一次 handler。
+- **`stubs/npcs.py:tick_world`** —— 非 suspended 路径缺 `"suspended": False` 键，route 层 `out.get("suspended")` 永远 None。补字段。
+- **`stubs/events.py:_evaluate_probability_trigger`** —— 原本用 `hash(("probability", bucket))`，被 `PYTHONHASHSEED` 随机化。换成 `_stable_hash_unit` 走 `hashlib.sha256(repr(key))`，**完全确定**。
+- **`tests/test_xijian_events.py:test_sweep_can_find_both_true_and_false`** —— sweep 50 个连续 unix second，但默认 scheduler interval=60s，50 sample 折叠到 1 个 bucket，hash 是 `<0.5` 的话**所有 50 个都是 True**。改成 sweep `range(start, start+3600*2, 60)`，覆盖 120 个独立 bucket，3/3 稳定。
+
+### 没动的与原因
+1. **没重命名 `xijian_interactions` (chat-level 拥抱/接吻)** —— spec 把 `interactions` 划给 A4.3（scene-level），但现有 chat-level blueprint + 测试 + 文档都用 `int_` 前缀和 `/v1/xijian/interactions` 路径；改名是 7+ 文件跨多个 commit 的大改。本轮让两套并存：A4.3 走 `sint_` 前缀 + `/v1/xijian/scenes/interactions` 路径，**spec 实际行为与命名空间都对齐**。后续在 A3.2 验收期间统一收编（要么把 chat-level 改名 `xijian_social_actions`，要么给 A4.3 改名 `xijian_scene_actions`），那一轮单独评估。
+2. **没 seed 任何内置 POI / travel_mode / scene_interaction** —— v2 spec 全部写"内置 + 用户自定义"但**没列内置清单**；A4.2 同款问题。等 v2.2/2.3 把内置清单明确下来再 seed。
+3. **场景切换的画面/音效过渡（AC-1 < 2s）** —— 完全在客户端（DevKit / 桌宠）层，Core API 端不沾，**不是这个章节的事**。
+4. **互动结果 → 角色状态 / 记忆** —— spec US-A4.3-03 写"自然反映到后续对话和记忆"，但 A3.2 / A1.2 都还没就绪（character_state 有但 A1.2 memory backfill 没接）。本轮 trigger 只写 audit + A4.1 fire_event，**不**主动改 character_state / memory。等 A1.2 起来时统一接，最自然。
+5. **scene_interaction 没有版本号 / 草稿** —— chat-level interactions 有，scene-level 没加。spec 没说，**v2.1 spec 默认所有 CRUD 资源可被运营任意编辑**，多版本是 Over-engineering。
+6. **effects payload schema 没卡死** —— A4.3 spec 不像 A4.1 有 trigger_config schema 那种结构。`effects` 留作 free-form dict，只约定 4 个 reserved key（`fire_event_id` / `stamina_delta` / `mood_delta` / `world_state`），客户端/运营怎么用随便。**等具体使用方长出来再收紧**。
+7. **travel event 真触发的 dispatcher 没接** —— `estimate_trip` 算 `event_triggered` bool，但本轮没有 `trip_plan` API 把"事件真的发生"接进 A4.1 world_events。属于 A4.3 + A4.1 进一步联动，留给后续 trip-plan 章节。
+8. **NPC target_type 没限制"必须存在"** —— 只在 NPC target 已死时拒绝；target_id 不存在时（运营手抖）不校验（保持 operator-friendly）。等真的被误用触发时再补强校验。
+
+### 跨章节联动点
+- **A4.1** —— `fire_event_id` 走 `events.fire_event` 真触发 world event（best-effort，单测 monkeypatch 验证）；失败不阻塞 trigger 主流程
+- **A3.2** —— character-state read-only 查询 `_character_is_interactable`（health<=0 / status=unconscious/frozen/dead 全挡），**不**改写 character_state
+- **A4.2** —— NPC `is_alive=False` 时 target_type=npc 的 trigger 被拒（`reason=target_dead`）
+- **A2** —— 共用同一个 `world_audit.record` 入口（actor 限制在 ACTORS 集合里，本轮走 `user`/`system`），所有互动结果可回溯
+- **C5** —— DevKit 走的是独立 Pywebview 窗口，**不**经过 `/v1/xijian/scenes/*` 路由；场景侧蓝图对 DevKit 是"只读 + 写入配置"两个 use case，目前没有 DevKit 专用 blueprint
+
+### 真实启动验证
+- 三套端到端（world → POI 三级树 → travel estimate → scene interaction trigger → cooldown 拒绝）走 test_client 全绿
+- 触发 audit 写入 1 条 record
+- cooldown 第二次返回 409 + `error.code=on_cooldown`，与 spec 行为一致
+
+### 改动文件清单
+```
+modified:   core/xijian_api/stubs/state.py                (+26 行：3 bucket + reset + __all__)
+modified:   core/xijian_api/stubs/__init__.py             (+3 import + 3 seed hook + 3 __all__)
+modified:   core/xijian_api/stubs/npcs.py                 (+1 行：tick_world suspended 字段)
+modified:   core/xijian_api/stubs/events.py               (+15 行：_stable_hash_unit helper)
+modified:   core/xijian_api/utils/ids.py                  (+30 行：3 个 gen_*_id)
+modified:   core/xijian_api/routes/__init__.py            (+1 行：xijian_scenes 蓝图注册)
+modified:   core/tests/conftest.py                        (+8 行：npcs handler reinstall + 3 个 reset)
+modified:   core/tests/test_xijian_events.py             (sweep 范围 50→120 bucket)
+modified:   docs/Dev. Function List功能清单v2.md          (changelog 加 v2.5 行)
+new file:   core/xijian_api/stubs/pois.py                 (490 行)
+new file:   core/xijian_api/stubs/travel_modes.py         (330 行)
+new file:   core/xijian_api/stubs/scene_interactions.py   (680 行)
+new file:   core/xijian_api/routes/xijian_scenes.py       (510 行)
+new file:   core/tests/test_xijian_pois.py                (590 行)
+new file:   core/tests/test_xijian_travel_modes.py        (430 行)
+new file:   core/tests/test_xijian_scene_interactions.py  (810 行)
+```
+
+数字：**762 = 614 (基线) + 148 (新增)，3/3 稳定 0 回归**。
+
+---
+
 ## 维护约定
 
 - 每次改完一个章节，**当日**补一条到本文件，格式：日期 + 章节 + 改动清单 + 没动的与原因

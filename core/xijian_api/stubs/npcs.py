@@ -813,6 +813,7 @@ def tick_world(
             fired += 1
     return {
         "world_id": world_id,
+        "suspended": False,
         "fired": fired,
         "demoted": demoted,
         "over_budget": budget_view["over_budget"],

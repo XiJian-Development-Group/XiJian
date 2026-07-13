@@ -95,12 +95,24 @@ def _reset_state(app):
         events_stub.reset_for_testing()
         from xijian_api.stubs import npcs as npcs_stub
         npcs_stub.reset_for_testing()
+        # ``overload.reset_for_testing()`` above cleared the action-handler
+        # registry; reinstall the A4.2 → A5.4 cross-link so the
+        # TestOverloadHandler cases in ``test_xijian_npcs`` see the
+        # ``_suspend_for_overload`` handler.  Idempotent.
+        npcs_stub.install_overload_handler()
         from xijian_api.stubs import world_audit as wa_stub
         wa_stub.reset_for_testing()
         from xijian_api.stubs import world_compute_config as wcc_stub
         wcc_stub.reset_for_testing()
         from xijian_api.stubs import world_environment as we_stub
         we_stub.reset_for_testing()
+        # A4.3 scene system.
+        from xijian_api.stubs import pois as pois_stub
+        pois_stub.reset_for_testing()
+        from xijian_api.stubs import travel_modes as tm_stub
+        tm_stub.reset_for_testing()
+        from xijian_api.stubs import scene_interactions as si_stub
+        si_stub.reset_for_testing()
     yield
 
 

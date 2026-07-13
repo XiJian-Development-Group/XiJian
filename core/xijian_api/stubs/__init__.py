@@ -23,10 +23,13 @@ from xijian_api.stubs import (
     memory_config,
     npcs,
     overload,
+    pois,
     protection,
     resources,
+    scene_interactions,
     sessions,
     settings,
+    travel_modes,
     video,
     world_audit,
     world_compute_config,
@@ -59,6 +62,12 @@ def seed_all() -> None:
     overload.seed_default()
     character_state.seed_default()
     events.seed_default()
+    # A4.3 scene system — no default POIs / travel modes / scene
+    # interactions; the world library is operator-curated.  We still
+    # call the seed hooks so future additions have a stable entry point.
+    pois.seed_default()
+    travel_modes.seed_default()
+    scene_interactions.seed_default()
     # citations module holds no state of its own but exposes its
     # helpers on the package for the chat pipeline to import via
     # ``from xijian_api.stubs import citations``.
@@ -90,10 +99,13 @@ __all__ = [
     "memory_config",
     "npcs",
     "overload",
+    "pois",
     "protection",
     "resources",
+    "scene_interactions",
     "sessions",
     "settings",
+    "travel_modes",
     "video",
     "world_audit",
     "world_compute_config",
