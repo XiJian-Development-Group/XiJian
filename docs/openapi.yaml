@@ -1,0 +1,3665 @@
+openapi: 3.0.3
+info:
+  title: 隙间（XiJian）本地 API 协议规范
+  version: "1.0.0"
+  description: |
+    「隙间」跨平台本地 API 的完整 OpenAPI 3.0 规范。
+
+    ## 架构总览
+    隙间本地 API 是 **「OAI 兼容 + 隙间扩展」** 的双协议栈：
+
+    - **OAI 兼容层** (`/v1/*`)：完整实现 OpenAI 官方 API 表面（chat / embeddings / audio / images / video / models / files / fine-tuning 等），第三方客户端（openai-python、langchain、llama-index）可零修改接入。
+    - **隙间扩展层** (`/v1/xijian/*`)：以命名空间承载项目特有能力（角色、互动、世界、记忆、保护模块等）。
+
+    ## 传输
+    - HTTP + SSE + WebSocket 三栈并行。请求-响应 → HTTP；流式生成 → SSE 或 NDJSON；双向推送（角色主动消息、AI 控制信号）→ WebSocket (`ws://127.0.0.1:{port}/v1/ws`)。
+    - 流式协议 SSE 与 NDJSON 同时支持，由客户端通过 `Accept` 头协商。
+
+    ## 鉴权
+    - Bearer Token，启动时随机生成，仅 `127.0.0.1` 访问。
+
+    ## 错误格式
+    - 双格式共存：`Accept: application/json` 返回 OAI 错误；`Accept: application/json-rpc` 返回 JSON-RPC 2.0 错误。
+
+    ## 参考文档
+    - 详细协议见 `docs/api.md`
+    - 功能清单见 `docs/Dev. Function List功能清单v2.md`
+  license:
+    name: 完全开源、无付费、无广告
+    identifier: MIT
+
+servers:
+  - url: http://127.0.0.1:{port}/v1
+    description: 本地环回地址（仅监听 127.0.0.1，绝不暴露 0.0.0.0）
+    variables:
+      port:
+        default: "8000"
+        description: 由主 UI 进程通过临时文件 /tmp/xijian-<pid>.port 传递
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: root
+    description: 服务端元信息与健康检查
+  - name: models
+    description: OAI 兼容模型管理
+  - name: chat
+    description: OAI 兼容 Chat Completions
+  - name: embeddings
+    description: OAI 兼容 Embeddings
+  - name: audio
+    description: OAI 兼容音频（TTS / STT / 翻译）
+  - name: images
+    description: OAI 兼容图像生成
+  - name: video
+    description: OAI 兼容视频生成
+  - name: files
+    description: OAI 兼容文件管理
+  - name: batches
+    description: OAI 兼容批处理
+  - name: fine-tuning
+    description: OAI 兼容微调
+  - name: assistants
+    description: OAI 兼容 Assistants / Threads / Runs（可选模块）
+  - name: completions-legacy
+    description: OAI 兼容 Legacy Completions
+  - name: abort
+    description: 请求取消与中断
+  - name: xijian.character
+    description: 隙间扩展 - 角色系统
+  - name: xijian.interaction
+    description: 隙间扩展 - 互动系统
+  - name: xijian.world
+    description: 隙间扩展 - 模拟世界系统
+  - name: xijian.memory
+    description: 隙间扩展 - 记忆系统
+  - name: xijian.protection
+    description: 隙间扩展 - 保护模块（安全）
+  - name: xijian.session
+    description: 隙间扩展 - 会话与上下文
+  - name: xijian.settings
+    description: 隙间扩展 - 设置与偏好
+  - name: xijian.resource
+    description: 隙间扩展 - 资源与导入
+  - name: xijian.backup
+    description: 隙间扩展 - 备份与快照
+  - name: xijian.mcp
+    description: 隙间扩展 - MCP 桥接（规划中）
+
+paths:
+  # ===========================================================================
+  # 0. 根信息 & 健康检查
+  # ===========================================================================
+  /:
+    get:
+      tags: [root]
+      operationId: getRoot
+      summary: 查询服务端版本与能力集
+      security: []
+      responses:
+        "200":
+          description: 服务端元信息
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version:
+                    type: string
+                  api_version:
+                    type: string
+                    example: "1.0.0"
+                  capabilities:
+                    type: array
+                    items:
+                      type: string
+                example:
+                  version: "1.0.0"
+                  api_version: "1.0.0"
+                  capabilities: ["oai_compatible", "xijian_extensions", "websocket"]
+
+  /healthz:
+    get:
+      tags: [root]
+      operationId: healthz
+      summary: 进程握手健康检查
+      security: []
+      responses:
+        "200":
+          description: 约定文本（如 XIJIAN_OK_v1）
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: "XIJIAN_OK_v1"
+
+  # ===========================================================================
+  # 1. 模型管理（OAI 兼容）
+  # ===========================================================================
+  /models:
+    get:
+      tags: [models]
+      operationId: listModels
+      summary: 列出当前可用模型
+      responses:
+        "200":
+          description: 模型列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  object:
+                    type: string
+                    example: list
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Model"
+              example:
+                object: list
+                data:
+                  - id: qwen2.5-7b-mlx-4bit
+                    object: model
+                    created: 1718000000
+                    owned_by: xijian
+                    xijian:
+                      backend: mlx
+                      family: qwen2.5
+                      size_b: 7.0
+                      quant: 4bit
+                      context_length: 32768
+                      min_ram_gb: 8
+                      loaded: true
+
+  /models/{model_id}:
+    get:
+      tags: [models]
+      operationId: getModel
+      summary: 获取单个模型详情
+      parameters:
+        - $ref: "#/components/parameters/ModelId"
+      responses:
+        "200":
+          description: 模型详情
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Model"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /models/{model_id}/load:
+    post:
+      tags: [models]
+      operationId: loadModel
+      summary: 触发模型加载（异步）
+      parameters:
+        - $ref: "#/components/parameters/ModelId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                gpu_layers:
+                  type: integer
+                  default: -1
+                context_length:
+                  type: integer
+                  example: 8192
+      responses:
+        "202":
+          description: 加载中
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModelOperation"
+
+  /models/{model_id}/unload:
+    post:
+      tags: [models]
+      operationId: unloadModel
+      summary: 释放模型（同步）
+      parameters:
+        - $ref: "#/components/parameters/ModelId"
+      responses:
+        "200":
+          description: 已卸载
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /models/operations/{op_id}:
+    get:
+      tags: [models]
+      operationId: getModelOperation
+      summary: 查询加载/卸载操作状态
+      parameters:
+        - $ref: "#/components/parameters/OperationId"
+      responses:
+        "200":
+          description: 操作状态
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModelOperation"
+
+  # ===========================================================================
+  # 2. Chat Completions（OAI 兼容）
+  # ===========================================================================
+  /chat/completions:
+    post:
+      tags: [chat]
+      operationId: createChatCompletion
+      summary: 创建对话补全（完整 OAI 兼容，支持流式/工具调用）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChatCompletionRequest"
+      responses:
+        "200":
+          description: 非流式补全
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ChatCompletion"
+            text/event-stream:
+              schema:
+                $ref: "#/components/schemas/ChatCompletionChunk"
+            application/x-ndjson:
+              schema:
+                $ref: "#/components/schemas/ChatCompletionChunk"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  # ===========================================================================
+  # 3. Embeddings（OAI 兼容）
+  # ===========================================================================
+  /embeddings:
+    post:
+      tags: [embeddings]
+      operationId: createEmbedding
+      summary: 创建向量嵌入（用于记忆检索）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmbeddingRequest"
+      responses:
+        "200":
+          description: 嵌入结果
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmbeddingResponse"
+
+  # ===========================================================================
+  # 4. Audio（OAI 兼容）
+  # ===========================================================================
+  /audio/speech:
+    post:
+      tags: [audio]
+      operationId: createSpeech
+      summary: 文本转语音（TTS）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpeechRequest"
+      responses:
+        "200":
+          description: 音频流
+          content:
+            audio/mpeg:
+              schema:
+                type: string
+                format: binary
+
+  /audio/transcriptions:
+    post:
+      tags: [audio]
+      operationId: createTranscription
+      summary: 语音转文字（STT，multipart/form-data）
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                model:
+                  type: string
+                language:
+                  type: string
+                prompt:
+                  type: string
+                response_format:
+                  type: string
+                  enum: [json, text, srt, vtt]
+                  default: json
+                temperature:
+                  type: number
+      responses:
+        "200":
+          description: 转写结果
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transcription"
+
+  /audio/translations:
+    post:
+      tags: [audio]
+      operationId: createTranslation
+      summary: 音频翻译为目标语言（默认英文）
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                model:
+                  type: string
+                language:
+                  type: string
+                prompt:
+                  type: string
+                response_format:
+                  type: string
+                temperature:
+                  type: number
+      responses:
+        "200":
+          description: 翻译结果
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Transcription"
+
+  # ===========================================================================
+  # 5. Images（OAI 兼容）
+  # ===========================================================================
+  /images/generations:
+    post:
+      tags: [images]
+      operationId: createImage
+      summary: 文本生成图像（含角色一致性参考）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ImageGenerationRequest"
+      responses:
+        "200":
+          description: 图像生成结果
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImageGenerationResponse"
+
+  /images/edits:
+    post:
+      tags: [images]
+      operationId: createImageEdit
+      summary: 图像编辑（multipart/form-data）
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                image:
+                  type: string
+                  format: binary
+                mask:
+                  type: string
+                  format: binary
+                prompt:
+                  type: string
+                n:
+                  type: integer
+                size:
+                  type: string
+                response_format:
+                  type: string
+                model:
+                  type: string
+      responses:
+        "200":
+          description: 编辑结果
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImageGenerationResponse"
+
+  /images/variations:
+    post:
+      tags: [images]
+      operationId: createImageVariation
+      summary: 图像变体（multipart/form-data）
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                image:
+                  type: string
+                  format: binary
+                n:
+                  type: integer
+                size:
+                  type: string
+                response_format:
+                  type: string
+                model:
+                  type: string
+      responses:
+        "200":
+          description: 变体结果
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImageGenerationResponse"
+
+  # ===========================================================================
+  # 6. Video（OAI 兼容）
+  # ===========================================================================
+  /videos/generations:
+    post:
+      tags: [video]
+      operationId: createVideo
+      summary: 文本生成视频（默认异步，返回 202）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VideoGenerationRequest"
+      responses:
+        "202":
+          description: 任务已入队
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VideoGeneration"
+
+  /videos:
+    get:
+      tags: [video]
+      operationId: listVideos
+      summary: 分页列出历史视频生成任务
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Order"
+        - $ref: "#/components/parameters/After"
+        - $ref: "#/components/parameters/Before"
+      responses:
+        "200":
+          description: 任务列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VideoList"
+
+  /videos/{video_id}:
+    get:
+      tags: [video]
+      operationId: getVideo
+      summary: 查询视频生成任务状态
+      parameters:
+        - $ref: "#/components/parameters/VideoId"
+      responses:
+        "200":
+          description: 任务状态
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VideoGeneration"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [video]
+      operationId: deleteVideo
+      summary: 删除视频任务与对应文件
+      parameters:
+        - $ref: "#/components/parameters/VideoId"
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+
+  /videos/{video_id}/remix:
+    post:
+      tags: [video]
+      operationId: remixVideo
+      summary: 基于已有视频做二次生成
+      parameters:
+        - $ref: "#/components/parameters/VideoId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                prompt:
+                  type: string
+      responses:
+        "202":
+          description: 二次生成任务已入队
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VideoGeneration"
+
+  # ===========================================================================
+  # 7. Files（OAI 兼容）
+  # ===========================================================================
+  /files:
+    post:
+      tags: [files]
+      operationId: createFile
+      summary: 上传文件（multipart/form-data）
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                purpose:
+                  type: string
+                  enum: [assistants, vision, evals, fine-tune, user_data]
+      responses:
+        "201":
+          description: 已创建
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileObject"
+    get:
+      tags: [files]
+      operationId: listFiles
+      summary: 列出文件
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Order"
+        - $ref: "#/components/parameters/After"
+        - $ref: "#/components/parameters/Before"
+      responses:
+        "200":
+          description: 文件列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileList"
+
+  /files/{file_id}:
+    get:
+      tags: [files]
+      operationId: getFile
+      summary: 获取文件元信息
+      parameters:
+        - $ref: "#/components/parameters/FileId"
+      responses:
+        "200":
+          description: 文件元信息
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FileObject"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [files]
+      operationId: deleteFile
+      summary: 删除文件
+      parameters:
+        - $ref: "#/components/parameters/FileId"
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+
+  /files/{file_id}/content:
+    get:
+      tags: [files]
+      operationId: getFileContent
+      summary: 下载文件二进制内容
+      parameters:
+        - $ref: "#/components/parameters/FileId"
+      responses:
+        "200":
+          description: 二进制内容
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ===========================================================================
+  # 8. Batches（OAI 兼容）
+  # ===========================================================================
+  /batches:
+    post:
+      tags: [batches]
+      operationId: createBatch
+      summary: 创建批处理任务
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [input_file_id, endpoint, completion_window]
+              properties:
+                input_file_id:
+                  type: string
+                endpoint:
+                  type: string
+                  example: /v1/chat/completions
+                completion_window:
+                  type: string
+                  example: "24h"
+                metadata:
+                  type: object
+      responses:
+        "201":
+          description: 已创建
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /batches/{batch_id}:
+    get:
+      tags: [batches]
+      operationId: getBatch
+      summary: 查询批处理任务
+      parameters:
+        - $ref: "#/components/parameters/BatchId"
+      responses:
+        "200":
+          description: 任务状态
+          content:
+            application/json:
+              schema:
+                type: object
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /batches/{batch_id}/results:
+    get:
+      tags: [batches]
+      operationId: getBatchResults
+      summary: 下载批处理结果文件
+      parameters:
+        - $ref: "#/components/parameters/BatchId"
+      responses:
+        "200":
+          description: 结果文件
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+
+  /batches/{batch_id}/cancel:
+    post:
+      tags: [batches]
+      operationId: cancelBatch
+      summary: 取消批处理任务
+      parameters:
+        - $ref: "#/components/parameters/BatchId"
+      responses:
+        "200":
+          description: 已取消
+          content:
+            application/json:
+              schema:
+                type: object
+
+  # ===========================================================================
+  # 9. Fine-tuning（OAI 兼容）
+  # ===========================================================================
+  /fine_tuning/jobs:
+    post:
+      tags: [fine-tuning]
+      operationId: createFineTuningJob
+      summary: 创建微调任务
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: 已创建
+          content:
+            application/json:
+              schema:
+                type: object
+    get:
+      tags: [fine-tuning]
+      operationId: listFineTuningJobs
+      summary: 列出微调任务
+      responses:
+        "200":
+          description: 任务列表
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /fine_tuning/jobs/{job_id}:
+    get:
+      tags: [fine-tuning]
+      operationId: getFineTuningJob
+      summary: 查询微调任务
+      parameters:
+        - $ref: "#/components/parameters/JobId"
+      responses:
+        "200":
+          description: 任务详情
+          content:
+            application/json:
+              schema:
+                type: object
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /fine_tuning/jobs/{job_id}/cancel:
+    post:
+      tags: [fine-tuning]
+      operationId: cancelFineTuningJob
+      summary: 取消微调任务
+      parameters:
+        - $ref: "#/components/parameters/JobId"
+      responses:
+        "200":
+          description: 已取消
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /fine_tuning/jobs/{job_id}/events:
+    get:
+      tags: [fine-tuning]
+      operationId: listFineTuningEvents
+      summary: 查询微调任务事件
+      parameters:
+        - $ref: "#/components/parameters/JobId"
+      responses:
+        "200":
+          description: 事件列表
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /fine_tuning/jobs/{job_id}/checkpoints:
+    get:
+      tags: [fine-tuning]
+      operationId: listFineTuningCheckpoints
+      summary: 查询微调检查点
+      parameters:
+        - $ref: "#/components/parameters/JobId"
+      responses:
+        "200":
+          description: 检查点列表
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /fine_tuning/jobs/{job_id}/checkpoints/permissions:
+    post:
+      tags: [fine-tuning]
+      operationId: createFineTuningCheckpointPermissions
+      summary: 设置微调检查点权限
+      parameters:
+        - $ref: "#/components/parameters/JobId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: 已设置
+          content:
+            application/json:
+              schema:
+                type: object
+
+  # ===========================================================================
+  # 10. Assistants / Threads / Runs（OAI 兼容，可选模块）
+  # ===========================================================================
+  /assistants:
+    post:
+      tags: [assistants]
+      operationId: createAssistant
+      summary: 创建 Assistant
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: 已创建
+          content:
+            application/json:
+              schema:
+                type: object
+    get:
+      tags: [assistants]
+      operationId: listAssistants
+      summary: 列出 Assistant
+      responses:
+        "200":
+          description: 列表
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /assistants/{asst_id}:
+    get:
+      tags: [assistants]
+      operationId: getAssistant
+      summary: 获取 Assistant
+      parameters:
+        - $ref: "#/components/parameters/AssistantId"
+      responses:
+        "200":
+          description: 详情
+          content:
+            application/json:
+              schema:
+                type: object
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [assistants]
+      operationId: modifyAssistant
+      summary: 修改 Assistant
+      parameters:
+        - $ref: "#/components/parameters/AssistantId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: 已修改
+          content:
+            application/json:
+              schema:
+                type: object
+    delete:
+      tags: [assistants]
+      operationId: deleteAssistant
+      summary: 删除 Assistant
+      parameters:
+        - $ref: "#/components/parameters/AssistantId"
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+
+  /threads:
+    post:
+      tags: [assistants]
+      operationId: createThread
+      summary: 创建 Thread
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: 已创建
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /threads/{thread_id}:
+    get:
+      tags: [assistants]
+      operationId: getThread
+      summary: 获取 Thread
+      parameters:
+        - $ref: "#/components/parameters/ThreadId"
+      responses:
+        "200":
+          description: 详情
+          content:
+            application/json:
+              schema:
+                type: object
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [assistants]
+      operationId: modifyThread
+      summary: 修改 Thread
+      parameters:
+        - $ref: "#/components/parameters/ThreadId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: 已修改
+          content:
+            application/json:
+              schema:
+                type: object
+    delete:
+      tags: [assistants]
+      operationId: deleteThread
+      summary: 删除 Thread
+      parameters:
+        - $ref: "#/components/parameters/ThreadId"
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+
+  /threads/{thread_id}/messages:
+    post:
+      tags: [assistants]
+      operationId: createThreadMessage
+      summary: 追加 Thread 消息
+      parameters:
+        - $ref: "#/components/parameters/ThreadId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: 已创建
+          content:
+            application/json:
+              schema:
+                type: object
+    get:
+      tags: [assistants]
+      operationId: listThreadMessages
+      summary: 列出 Thread 消息
+      parameters:
+        - $ref: "#/components/parameters/ThreadId"
+      responses:
+        "200":
+          description: 列表
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /threads/{thread_id}/messages/{msg_id}:
+    get:
+      tags: [assistants]
+      operationId: getThreadMessage
+      summary: 获取 Thread 消息
+      parameters:
+        - $ref: "#/components/parameters/ThreadId"
+        - $ref: "#/components/parameters/MessageId"
+      responses:
+        "200":
+          description: 详情
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /threads/{thread_id}/runs:
+    post:
+      tags: [assistants]
+      operationId: createRun
+      summary: 创建 Run
+      parameters:
+        - $ref: "#/components/parameters/ThreadId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: 已创建
+          content:
+            application/json:
+              schema:
+                type: object
+    get:
+      tags: [assistants]
+      operationId: listRuns
+      summary: 列出 Run
+      parameters:
+        - $ref: "#/components/parameters/ThreadId"
+      responses:
+        "200":
+          description: 列表
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /threads/{thread_id}/runs/{run_id}:
+    get:
+      tags: [assistants]
+      operationId: getRun
+      summary: 获取 Run
+      parameters:
+        - $ref: "#/components/parameters/ThreadId"
+        - $ref: "#/components/parameters/RunId"
+      responses:
+        "200":
+          description: 详情
+          content:
+            application/json:
+              schema:
+                type: object
+    post:
+      tags: [assistants]
+      operationId: modifyRun
+      summary: 修改 Run
+      parameters:
+        - $ref: "#/components/parameters/ThreadId"
+        - $ref: "#/components/parameters/RunId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: 已修改
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /threads/{thread_id}/runs/{run_id}/cancel:
+    post:
+      tags: [assistants]
+      operationId: cancelRun
+      summary: 取消 Run
+      parameters:
+        - $ref: "#/components/parameters/ThreadId"
+        - $ref: "#/components/parameters/RunId"
+      responses:
+        "200":
+          description: 已取消
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /threads/{thread_id}/runs/{run_id}/steps:
+    post:
+      tags: [assistants]
+      operationId: createRunStep
+      summary: 创建 Run Step
+      parameters:
+        - $ref: "#/components/parameters/ThreadId"
+        - $ref: "#/components/parameters/RunId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: 已创建
+          content:
+            application/json:
+              schema:
+                type: object
+    get:
+      tags: [assistants]
+      operationId: listRunSteps
+      summary: 列出 Run Step
+      parameters:
+        - $ref: "#/components/parameters/ThreadId"
+        - $ref: "#/components/parameters/RunId"
+      responses:
+        "200":
+          description: 列表
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /threads/{thread_id}/runs/{run_id}/steps/{step_id}:
+    get:
+      tags: [assistants]
+      operationId: getRunStep
+      summary: 获取 Run Step
+      parameters:
+        - $ref: "#/components/parameters/ThreadId"
+        - $ref: "#/components/parameters/RunId"
+        - $ref: "#/components/parameters/StepId"
+      responses:
+        "200":
+          description: 详情
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /threads/{thread_id}/runs/{run_id}/submit_tool_outputs:
+    post:
+      tags: [assistants]
+      operationId: submitToolOutputs
+      summary: 提交工具输出
+      parameters:
+        - $ref: "#/components/parameters/ThreadId"
+        - $ref: "#/components/parameters/RunId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: 已提交
+          content:
+            application/json:
+              schema:
+                type: object
+
+  # ===========================================================================
+  # 11. Completions（Legacy OAI 兼容）
+  # ===========================================================================
+  /completions:
+    post:
+      tags: [completions-legacy]
+      operationId: createCompletion
+      summary: 创建补全（Legacy）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: 补全结果
+          content:
+            application/json:
+              schema:
+                type: object
+
+  # ===========================================================================
+  # 12. 取消与中断
+  # ===========================================================================
+  /chat/abort:
+    post:
+      tags: [abort]
+      operationId: abortChat
+      summary: 取消流式对话生成（按 request_id 停止）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [request_id]
+              properties:
+                request_id:
+                  type: string
+                  example: req_8f3a2b1c
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+
+  /xijian/generation/abort:
+    post:
+      tags: [abort]
+      operationId: abortGeneration
+      summary: 中断任意进行中的生成任务（TTS/图像/视频）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [request_id]
+              properties:
+                request_id:
+                  type: string
+                scope:
+                  type: string
+                  enum: [all, chat, tts, image, video]
+                  default: all
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+
+  # ===========================================================================
+  # 13. 隙间扩展层 - 角色（Character）
+  # ===========================================================================
+  /xijian/characters:
+    post:
+      tags: [xijian.character]
+      operationId: createCharacter
+      summary: 创建角色（管理员/创作者）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CharacterCreate"
+      responses:
+        "201":
+          description: 已创建
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Character"
+    get:
+      tags: [xijian.character]
+      operationId: listCharacters
+      summary: 分页列出已加载角色
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Order"
+        - $ref: "#/components/parameters/After"
+        - $ref: "#/components/parameters/Before"
+      responses:
+        "200":
+          description: 角色列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CharacterList"
+
+  /xijian/characters/{character_id}:
+    get:
+      tags: [xijian.character]
+      operationId: getCharacter
+      summary: 获取角色详情
+      parameters:
+        - $ref: "#/components/parameters/CharacterId"
+      responses:
+        "200":
+          description: 角色详情
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Character"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [xijian.character]
+      operationId: updateCharacter
+      summary: 更新角色
+      parameters:
+        - $ref: "#/components/parameters/CharacterId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CharacterUpdate"
+      responses:
+        "200":
+          description: 已更新
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Character"
+    delete:
+      tags: [xijian.character]
+      operationId: deleteCharacter
+      summary: 删除角色
+      parameters:
+        - $ref: "#/components/parameters/CharacterId"
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+
+  /xijian/characters/{character_id}/load:
+    post:
+      tags: [xijian.character]
+      operationId: loadCharacter
+      summary: 加载角色到当前 session
+      parameters:
+        - $ref: "#/components/parameters/CharacterId"
+      responses:
+        "200":
+          description: 已加载
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /xijian/characters/{character_id}/unload:
+    post:
+      tags: [xijian.character]
+      operationId: unloadCharacter
+      summary: 卸载角色
+      parameters:
+        - $ref: "#/components/parameters/CharacterId"
+      responses:
+        "200":
+          description: 已卸载
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /xijian/characters/{character_id}/interact:
+    post:
+      tags: [xijian.character]
+      operationId: characterInteract
+      summary: 触发角色互动
+      parameters:
+        - $ref: "#/components/parameters/CharacterId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [interaction_id]
+              properties:
+                interaction_id:
+                  type: string
+                context:
+                  type: object
+                  properties:
+                    location:
+                      type: string
+                    time_of_day:
+                      type: string
+                idempotency_key:
+                  type: string
+      responses:
+        "200":
+          description: 互动结果
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /xijian/characters/{character_id}/state:
+    get:
+      tags: [xijian.character]
+      operationId: getCharacterState
+      summary: 获取角色当前状态（好感度、心情、最近记忆摘要等）
+      parameters:
+        - $ref: "#/components/parameters/CharacterId"
+      responses:
+        "200":
+          description: 状态
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CharacterState"
+    post:
+      tags: [xijian.character]
+      operationId: updateCharacterState
+      summary: 更新角色状态（受保护模块约束）
+      parameters:
+        - $ref: "#/components/parameters/CharacterId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CharacterStateUpdate"
+      responses:
+        "200":
+          description: 已更新
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CharacterState"
+
+  # ===========================================================================
+  # 14. 隙间扩展层 - 互动（Interaction）
+  # ===========================================================================
+  /xijian/interactions:
+    get:
+      tags: [xijian.interaction]
+      operationId: listInteractions
+      summary: 列出可用互动类型
+      responses:
+        "200":
+          description: 互动列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/InteractionList"
+
+  /xijian/interactions/{interaction_id}/trigger:
+    post:
+      tags: [xijian.interaction]
+      operationId: triggerInteraction
+      summary: 手动触发互动（绕过角色自主决策）
+      parameters:
+        - $ref: "#/components/parameters/InteractionId"
+      responses:
+        "200":
+          description: 触发结果
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /xijian/interactions/{interaction_id}/responses:
+    get:
+      tags: [xijian.interaction]
+      operationId: getInteractionResponses
+      summary: 查询某互动下角色可能的所有回应与动作映射
+      parameters:
+        - $ref: "#/components/parameters/InteractionId"
+      responses:
+        "200":
+          description: 回应列表
+          content:
+            application/json:
+              schema:
+                type: object
+
+  # ===========================================================================
+  # 15. 隙间扩展层 - 世界（World）
+  # ===========================================================================
+  /xijian/worlds:
+    get:
+      tags: [xijian.world]
+      operationId: listWorlds
+      summary: 列出已加载世界
+      responses:
+        "200":
+          description: 世界列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorldList"
+
+  /xijian/worlds/{world_id}/transition:
+    post:
+      tags: [xijian.world]
+      operationId: worldTransition
+      summary: 世界内地点切换（交通方式）
+      parameters:
+        - $ref: "#/components/parameters/WorldId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [from_location, to_location]
+              properties:
+                from_location:
+                  type: string
+                to_location:
+                  type: string
+                transport:
+                  type: string
+                  enum: [walking, bicycle, train, taxi, teleport, horse]
+                eta_seconds:
+                  type: integer
+      responses:
+        "200":
+          description: 切换结果
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /xijian/worlds/{world_id}/state:
+    get:
+      tags: [xijian.world]
+      operationId: getWorldState
+      summary: 获取世界状态（经济/健康/饮食/体力/心智等维度）
+      parameters:
+        - $ref: "#/components/parameters/WorldId"
+      responses:
+        "200":
+          description: 世界状态
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorldState"
+    patch:
+      tags: [xijian.world]
+      operationId: updateWorldState
+      summary: 更新世界状态值（受保护模块约束）
+      parameters:
+        - $ref: "#/components/parameters/WorldId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorldStateUpdate"
+      responses:
+        "200":
+          description: 已更新
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorldState"
+
+  /xijian/worlds/{world_id}/event:
+    post:
+      tags: [xijian.world]
+      operationId: injectWorldEvent
+      summary: 注入世界事件（剧情向）
+      parameters:
+        - $ref: "#/components/parameters/WorldId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                kind:
+                  type: string
+                  enum: [common, custom, incident]
+                name:
+                  type: string
+                description:
+                  type: string
+                trigger_config:
+                  type: object
+                priority:
+                  type: integer
+                is_enabled:
+                  type: boolean
+      responses:
+        "200":
+          description: 已注入
+          content:
+            application/json:
+              schema:
+                type: object
+
+  # ===========================================================================
+  # 16. 隙间扩展层 - 记忆（Memory）
+  # ===========================================================================
+  /xijian/memory/entries:
+    post:
+      tags: [xijian.memory]
+      operationId: createMemoryEntry
+      summary: 新增记忆条目
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MemoryEntryCreate"
+      responses:
+        "201":
+          description: 已创建
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemoryEntry"
+    get:
+      tags: [xijian.memory]
+      operationId: listMemoryEntries
+      summary: 分页 + 过滤查询记忆条目
+      parameters:
+        - name: character_id
+          in: query
+          schema:
+            type: string
+        - name: tags
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+        - name: importance
+          in: query
+          schema:
+            type: string
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [long, short]
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Order"
+        - $ref: "#/components/parameters/After"
+        - $ref: "#/components/parameters/Before"
+      responses:
+        "200":
+          description: 记忆条目列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemoryEntryList"
+
+  /xijian/memory/entries/{entry_id}:
+    get:
+      tags: [xijian.memory]
+      operationId: getMemoryEntry
+      summary: 获取单条记忆
+      parameters:
+        - $ref: "#/components/parameters/EntryId"
+      responses:
+        "200":
+          description: 记忆详情
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemoryEntry"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [xijian.memory]
+      operationId: updateMemoryEntry
+      summary: 修改记忆条目（仅 content/importance/tags 可改）
+      parameters:
+        - $ref: "#/components/parameters/EntryId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content:
+                  type: string
+                importance:
+                  type: number
+                  minimum: 0
+                  maximum: 1
+                tags:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        "200":
+          description: 已更新
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemoryEntry"
+    delete:
+      tags: [xijian.memory]
+      operationId: deleteMemoryEntry
+      summary: 软删除记忆条目（写入 deleted_at）
+      parameters:
+        - $ref: "#/components/parameters/EntryId"
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+
+  /xijian/memory/search:
+    post:
+      tags: [xijian.memory]
+      operationId: searchMemory
+      summary: 向量检索记忆
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [query]
+              properties:
+                query:
+                  type: string
+                character_id:
+                  type: string
+                top_k:
+                  type: integer
+                  default: 5
+                min_score:
+                  type: number
+                  default: 0.7
+      responses:
+        "200":
+          description: 检索结果
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /xijian/memory/consolidate:
+    post:
+      tags: [xijian.memory]
+      operationId: consolidateMemory
+      summary: 触发记忆整理（异步），将短期会话提炼为长期记忆
+      responses:
+        "202":
+          description: 已入队
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /xijian/memory/forget:
+    post:
+      tags: [xijian.memory]
+      operationId: forgetMemory
+      summary: 触发遗忘（按衰减策略或指定条目）
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                entry_ids:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        "200":
+          description: 遗忘结果
+          content:
+            application/json:
+              schema:
+                type: object
+
+  # ===========================================================================
+  # 17. 隙间扩展层 - 保护模块（Protection）
+  # ===========================================================================
+  /xijian/protection/status:
+    get:
+      tags: [xijian.protection]
+      operationId: getProtectionStatus
+      summary: 查询保护模块状态
+      responses:
+        "200":
+          description: 状态
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProtectionStatus"
+
+  /xijian/protection/enable:
+    post:
+      tags: [xijian.protection]
+      operationId: enableProtection
+      summary: 启用保护系统（无副作用，默认开启）
+      responses:
+        "200":
+          description: 已启用
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProtectionStatus"
+
+  /xijian/protection/disable:
+    post:
+      tags: [xijian.protection]
+      operationId: disableProtection
+      summary: 关闭保护系统（必须双重确认）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  required: [confirmation]
+                  properties:
+                    confirmation:
+                      type: string
+                      example: "I understand the risks"
+                - type: object
+                  required: [challenge_id, phrase]
+                  properties:
+                    challenge_id:
+                      type: string
+                    phrase:
+                      type: string
+      responses:
+        "200":
+          description: 关闭流程（第一步返回 challenge，第二步返回最终状态）
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/ProtectionChallenge"
+                  - $ref: "#/components/schemas/ProtectionStatus"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+
+  /xijian/protection/snapshots:
+    get:
+      tags: [xijian.protection]
+      operationId: listSnapshots
+      summary: 列出 AI 相关数据的历史版本快照
+      responses:
+        "200":
+          description: 快照列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SnapshotList"
+
+  /xijian/protection/snapshots/{snapshot_id}:
+    get:
+      tags: [xijian.protection]
+      operationId: getSnapshot
+      summary: 获取快照详细 diff
+      parameters:
+        - $ref: "#/components/parameters/SnapshotId"
+      responses:
+        "200":
+          description: 快照详情
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Snapshot"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /xijian/protection/rollback:
+    post:
+      tags: [xijian.protection]
+      operationId: rollbackSnapshot
+      summary: 数据回滚到指定快照
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [snapshot_id]
+              properties:
+                snapshot_id:
+                  type: string
+                scope:
+                  type: string
+                  example: "character:char_yuki"
+                create_backup:
+                  type: boolean
+                  default: true
+      responses:
+        "200":
+          description: 回滚结果
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /xijian/protection/guard/preview:
+    post:
+      tags: [xijian.protection]
+      operationId: guardPreview
+      summary: 输入/输出护栏预览（不绕过保护，仅展示判定结果）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [direction, text]
+              properties:
+                direction:
+                  type: string
+                  enum: [input, output]
+                text:
+                  type: string
+                context:
+                  type: object
+                  properties:
+                    character_id:
+                      type: string
+      responses:
+        "200":
+          description: 护栏判定结果
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GuardPreview"
+
+  /xijian/protection/audit:
+    get:
+      tags: [xijian.protection]
+      operationId: getAuditLog
+      summary: 分页查询审计日志（注入尝试、OOC 检测、授权变更、保护开关等）
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Order"
+        - $ref: "#/components/parameters/After"
+        - $ref: "#/components/parameters/Before"
+      responses:
+        "200":
+          description: 审计日志
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditLog"
+
+  /xijian/protection/audit/export:
+    post:
+      tags: [xijian.protection]
+      operationId: exportAuditLog
+      summary: 导出审计日志（异步，返回 file_id）
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "202":
+          description: 已入队导出任务
+          content:
+            application/json:
+              schema:
+                type: object
+
+  # ===========================================================================
+  # 18. 隙间扩展层 - 会话与上下文
+  # ===========================================================================
+  /xijian/sessions:
+    post:
+      tags: [xijian.session]
+      operationId: createSession
+      summary: 创建新会话
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                character_id:
+                  type: string
+                world_id:
+                  type: string
+      responses:
+        "201":
+          description: 已创建
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+
+  /xijian/sessions/{session_id}/messages:
+    post:
+      tags: [xijian.session]
+      operationId: appendSessionMessage
+      summary: 追加消息到会话
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role:
+                  type: string
+                  enum: [system, user, assistant, tool]
+                content:
+                  type: string
+      responses:
+        "201":
+          description: 已追加
+          content:
+            application/json:
+              schema:
+                type: object
+    get:
+      tags: [xijian.session]
+      operationId: listSessionMessages
+      summary: 列出会话消息
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "200":
+          description: 消息列表
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /xijian/sessions/{session_id}:
+    delete:
+      tags: [xijian.session]
+      operationId: deleteSession
+      summary: 删除会话
+      parameters:
+        - $ref: "#/components/parameters/SessionId"
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+
+  # ===========================================================================
+  # 19. 隙间扩展层 - 设置与偏好
+  # ===========================================================================
+  /xijian/settings:
+    get:
+      tags: [xijian.settings]
+      operationId: getSettings
+      summary: 获取当前设置
+      responses:
+        "200":
+          description: 设置
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+    patch:
+      tags: [xijian.settings]
+      operationId: updateSettings
+      summary: 更新设置（可开启软限流、NSFW 等）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SettingsUpdate"
+      responses:
+        "200":
+          description: 已更新
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Settings"
+
+  /xijian/settings/permissions:
+    get:
+      tags: [xijian.settings]
+      operationId: getSettingsPermissions
+      summary: 查询当前用户已授予的系统权限状态
+      responses:
+        "200":
+          description: 权限状态
+          content:
+            application/json:
+              schema:
+                type: object
+
+  # ===========================================================================
+  # 20. 隙间扩展层 - 资源与导入
+  # ===========================================================================
+  /xijian/resources/import:
+    post:
+      tags: [xijian.resource]
+      operationId: importResource
+      summary: 异步导入角色/世界/场景资源包（zip/7z）
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                kind:
+                  type: string
+                  enum: [character, world, scene]
+      responses:
+        "202":
+          description: 已入队导入任务
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportJob"
+
+  /xijian/resources/imports/{job_id}:
+    get:
+      tags: [xijian.resource]
+      operationId: getImportJob
+      summary: 查询导入任务状态
+      parameters:
+        - $ref: "#/components/parameters/JobId"
+      responses:
+        "200":
+          description: 任务状态
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ImportJob"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  # ===========================================================================
+  # 21. 隙间扩展层 - 备份与恢复（来自功能清单 A1.1 / A5.3）
+  # ===========================================================================
+  /xijian/characters/{character_id}/memory/entries:
+    get:
+      tags: [xijian.backup]
+      operationId: listCharacterMemoryEntries
+      summary: 按角色分页查询记忆条目
+      parameters:
+        - $ref: "#/components/parameters/CharacterId"
+        - name: type
+          in: query
+          schema:
+            type: string
+            enum: [long, short]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+      responses:
+        "200":
+          description: 记忆条目列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemoryEntryList"
+    post:
+      tags: [xijian.backup]
+      operationId: createCharacterMemoryEntry
+      summary: 新增角色记忆条目（type ∈ {long, short}）
+      parameters:
+        - $ref: "#/components/parameters/CharacterId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, content]
+              properties:
+                type:
+                  type: string
+                  enum: [long, short]
+                content:
+                  type: string
+                importance:
+                  type: number
+                  minimum: 0
+                  maximum: 1
+                tags:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        "201":
+          description: 已创建
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemoryEntry"
+
+  /xijian/entries/{entry_id}:
+    patch:
+      tags: [xijian.backup]
+      operationId: patchEntry
+      summary: 修改记忆条目（仅 content/importance/tags 可改）
+      parameters:
+        - $ref: "#/components/parameters/EntryId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                content:
+                  type: string
+                importance:
+                  type: number
+                  minimum: 0
+                  maximum: 1
+                tags:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        "200":
+          description: 已更新
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemoryEntry"
+    delete:
+      tags: [xijian.backup]
+      operationId: softDeleteEntry
+      summary: 软删除记忆条目（写入 deleted_at）
+      parameters:
+        - $ref: "#/components/parameters/EntryId"
+      responses:
+        "204":
+          $ref: "#/components/responses/NoContent"
+
+  /xijian/backups:
+    post:
+      tags: [xijian.backup]
+      operationId: createBackup
+      summary: 触发手动备份
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [character_id]
+              properties:
+                character_id:
+                  type: string
+                scope:
+                  type: string
+                  enum: [all, memory_only, state_only, doc_only]
+                  default: all
+      responses:
+        "201":
+          description: 已创建备份
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ManualBackup"
+
+  /xijian/backups/{backup_id}/restore:
+    post:
+      tags: [xijian.backup]
+      operationId: restoreBackup
+      summary: 恢复备份（可选 scope）
+      parameters:
+        - $ref: "#/components/parameters/BackupId"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                scope:
+                  type: string
+                  enum: [all, memory_only, state_only, doc_only]
+      responses:
+        "200":
+          description: 已恢复
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /xijian/protected-modules:
+    get:
+      tags: [xijian.backup]
+      operationId: listProtectedModules
+      summary: 列出受保护模块
+      responses:
+        "200":
+          description: 受保护模块列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProtectedModuleList"
+
+  # ===========================================================================
+  # 22. 隙间扩展层 - MCP 桥接（规划中，docs/api.md §11）
+  # ===========================================================================
+  /xijian/mcp/tools:
+    get:
+      tags: [xijian.mcp]
+      operationId: listMcpTools
+      summary: 列出可用的 MCP 工具（规划中）
+      responses:
+        "200":
+          description: 工具列表
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /xijian/mcp/tools/{tool_id}/invoke:
+    post:
+      tags: [xijian.mcp]
+      operationId: invokeMcpTool
+      summary: 调用 MCP 工具（规划中，受 MCP 防护约束）
+      parameters:
+        - name: tool_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: 调用结果
+          content:
+            application/json:
+              schema:
+                type: object
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: 启动时随机生成，写入 /tmp/xijian-<pid>.token，仅 127.0.0.1 访问
+
+  parameters:
+    ModelId:
+      name: model_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: 模型 ID
+    OperationId:
+      name: op_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: 加载/卸载操作 ID
+    VideoId:
+      name: video_id
+      in: path
+      required: true
+      schema:
+        type: string
+    FileId:
+      name: file_id
+      in: path
+      required: true
+      schema:
+        type: string
+    BatchId:
+      name: batch_id
+      in: path
+      required: true
+      schema:
+        type: string
+    JobId:
+      name: job_id
+      in: path
+      required: true
+      schema:
+        type: string
+    AssistantId:
+      name: asst_id
+      in: path
+      required: true
+      schema:
+        type: string
+    ThreadId:
+      name: thread_id
+      in: path
+      required: true
+      schema:
+        type: string
+    MessageId:
+      name: msg_id
+      in: path
+      required: true
+      schema:
+        type: string
+    RunId:
+      name: run_id
+      in: path
+      required: true
+      schema:
+        type: string
+    StepId:
+      name: step_id
+      in: path
+      required: true
+      schema:
+        type: string
+    CharacterId:
+      name: character_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: 角色 ID
+    InteractionId:
+      name: interaction_id
+      in: path
+      required: true
+      schema:
+        type: string
+    WorldId:
+      name: world_id
+      in: path
+      required: true
+      schema:
+        type: string
+    EntryId:
+      name: entry_id
+      in: path
+      required: true
+      schema:
+        type: string
+    SnapshotId:
+      name: snapshot_id
+      in: path
+      required: true
+      schema:
+        type: string
+    SessionId:
+      name: session_id
+      in: path
+      required: true
+      schema:
+        type: string
+    BackupId:
+      name: backup_id
+      in: path
+      required: true
+      schema:
+        type: string
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+      description: 每页数量（默认 20，最大 100）
+    Order:
+      name: order
+      in: query
+      schema:
+        type: string
+        enum: [asc, desc]
+        default: desc
+    After:
+      name: after
+      in: query
+      schema:
+        type: string
+      description: 游标（上一页 last_id）
+    Before:
+      name: before
+      in: query
+      schema:
+        type: string
+      description: 游标（下一页 first_id）
+
+  responses:
+    BadRequest:
+      description: 请求参数错误
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/OAIError"
+    Unauthorized:
+      description: 鉴权失败
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/OAIError"
+    Forbidden:
+      description: 权限不足（如关闭保护系统前未双重确认）
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/OAIError"
+    NotFound:
+      description: 资源不存在（角色/模型/文件）
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/OAIError"
+    NoContent:
+      description: 成功无 body（abort、delete）
+
+  schemas:
+    # -------------------------------------------------------------------------
+    # 通用错误
+    # -------------------------------------------------------------------------
+    OAIError:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            message:
+              type: string
+            type:
+              type: string
+              example: invalid_request_error
+            param:
+              type: string
+            code:
+              type: string
+              example: invalid_value
+      example:
+        error:
+          message: "Invalid value for 'temperature': must be between 0 and 2"
+          type: invalid_request_error
+          param: temperature
+          code: invalid_value
+
+    JSONRPCError:
+      type: object
+      properties:
+        jsonrpc:
+          type: string
+          example: "2.0"
+        id:
+          type: string
+        error:
+          type: object
+          properties:
+            code:
+              type: integer
+              example: -32602
+            message:
+              type: string
+            data:
+              type: object
+
+    # -------------------------------------------------------------------------
+    # 模型
+    # -------------------------------------------------------------------------
+    Model:
+      type: object
+      properties:
+        id:
+          type: string
+        object:
+          type: string
+          example: model
+        created:
+          type: integer
+        owned_by:
+          type: string
+        xijian:
+          type: object
+          properties:
+            backend:
+              type: string
+              enum: [mlx, gguf]
+            family:
+              type: string
+            size_b:
+              type: number
+            quant:
+              type: string
+            context_length:
+              type: integer
+            min_ram_gb:
+              type: integer
+            loaded:
+              type: boolean
+
+    ModelOperation:
+      type: object
+      properties:
+        id:
+          type: string
+        object:
+          type: string
+          example: model.load
+        status:
+          type: string
+          enum: [loading, unloading, completed, failed]
+        progress_url:
+          type: string
+
+    # -------------------------------------------------------------------------
+    # Chat
+    # -------------------------------------------------------------------------
+    ChatMessage:
+      type: object
+      properties:
+        role:
+          type: string
+          enum: [system, user, assistant, tool]
+        content:
+          type: string
+        name:
+          type: string
+
+    XiJianChatExtension:
+      type: object
+      description: 隙间特有扩展字段，不影响 OAI 客户端
+      properties:
+        character_id:
+          type: string
+          description: 当前角色 ID，启用角色系统 Prompt 注入
+        world_id:
+          type: string
+          description: 当前世界 ID，注入世界状态
+        nsfw_allowed:
+          type: boolean
+          default: false
+        inject_memory:
+          type: boolean
+          default: true
+          description: 是否自动检索长期记忆并注入
+        memory_top_k:
+          type: integer
+          default: 5
+          description: 注入的记忆条数
+        guard_level:
+          type: string
+          enum: [strict, standard, relaxed]
+          default: standard
+
+    ChatCompletionRequest:
+      type: object
+      required: [model, messages]
+      properties:
+        model:
+          type: string
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChatMessage"
+        temperature:
+          type: number
+          minimum: 0
+          maximum: 2
+          default: 0.7
+        top_p:
+          type: number
+          default: 1.0
+        max_tokens:
+          type: integer
+        stream:
+          type: boolean
+          default: false
+        stop:
+          type: array
+          items:
+            type: string
+        presence_penalty:
+          type: number
+          default: 0
+        frequency_penalty:
+          type: number
+          default: 0
+        n:
+          type: integer
+          default: 1
+        user:
+          type: string
+        tools:
+          type: array
+          items:
+            type: object
+        tool_choice:
+          type: string
+        response_format:
+          type: object
+        logprobs:
+          type: boolean
+        stream_options:
+          type: object
+        xijian:
+          $ref: "#/components/schemas/XiJianChatExtension"
+
+    ChatCompletion:
+      type: object
+      properties:
+        id:
+          type: string
+        object:
+          type: string
+          example: chat.completion
+        created:
+          type: integer
+        model:
+          type: string
+        choices:
+          type: array
+          items:
+            type: object
+            properties:
+              index:
+                type: integer
+              message:
+                type: object
+                properties:
+                  role:
+                    type: string
+                  content:
+                    type: string
+              finish_reason:
+                type: string
+              logprobs:
+                type: object
+                nullable: true
+        usage:
+          type: object
+          properties:
+            prompt_tokens:
+              type: integer
+            completion_tokens:
+              type: integer
+            total_tokens:
+              type: integer
+        xijian:
+          type: object
+          properties:
+            backend:
+              type: string
+            guard_triggered:
+              type: boolean
+            memory_hits:
+              type: integer
+
+    ChatCompletionChunk:
+      type: object
+      properties:
+        id:
+          type: string
+        object:
+          type: string
+          example: chat.completion.chunk
+        created:
+          type: integer
+        model:
+          type: string
+        choices:
+          type: array
+          items:
+            type: object
+            properties:
+              index:
+                type: integer
+              delta:
+                type: object
+                properties:
+                  role:
+                    type: string
+                  content:
+                    type: string
+              finish_reason:
+                type: string
+                nullable: true
+        usage:
+          type: object
+          nullable: true
+
+    # -------------------------------------------------------------------------
+    # Embeddings
+    # -------------------------------------------------------------------------
+    EmbeddingRequest:
+      type: object
+      required: [model, input]
+      properties:
+        model:
+          type: string
+          example: bge-m3
+        input:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string
+        encoding_format:
+          type: string
+          enum: [float, base64]
+          default: float
+        dimensions:
+          type: integer
+          example: 1024
+
+    EmbeddingResponse:
+      type: object
+      properties:
+        object:
+          type: string
+          example: list
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              object:
+                type: string
+              index:
+                type: integer
+              embedding:
+                type: array
+                items:
+                  type: number
+        model:
+          type: string
+        usage:
+          type: object
+          properties:
+            prompt_tokens:
+              type: integer
+            total_tokens:
+              type: integer
+
+    # -------------------------------------------------------------------------
+    # Audio
+    # -------------------------------------------------------------------------
+    SpeechRequest:
+      type: object
+      required: [model, input, voice]
+      properties:
+        model:
+          type: string
+          example: cosyvoice-tts
+        input:
+          type: string
+        voice:
+          type: string
+        response_format:
+          type: string
+          default: mp3
+        speed:
+          type: number
+          default: 1.0
+        xijian:
+          type: object
+          properties:
+            voice_clone_ref:
+              type: string
+            emotion:
+              type: string
+
+    Transcription:
+      type: object
+      properties:
+        text:
+          type: string
+
+    # -------------------------------------------------------------------------
+    # Images
+    # -------------------------------------------------------------------------
+    ImageGenerationRequest:
+      type: object
+      required: [model, prompt]
+      properties:
+        model:
+          type: string
+        prompt:
+          type: string
+        n:
+          type: integer
+          default: 1
+        size:
+          type: string
+          default: "1024x1024"
+        response_format:
+          type: string
+          enum: [url, b64_json]
+          default: b64_json
+        xijian:
+          type: object
+          properties:
+            negative_prompt:
+              type: string
+            seed:
+              type: integer
+            nsfw_allowed:
+              type: boolean
+
+    ImageGenerationResponse:
+      type: object
+      properties:
+        created:
+          type: integer
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              url:
+                type: string
+              b64_json:
+                type: string
+
+    # -------------------------------------------------------------------------
+    # Video
+    # -------------------------------------------------------------------------
+    VideoGenerationRequest:
+      type: object
+      required: [model, prompt]
+      properties:
+        model:
+          type: string
+        prompt:
+          type: string
+        input_reference:
+          type: string
+        seconds:
+          type: integer
+          default: 4
+        size:
+          type: string
+          default: "1280x720"
+        fps:
+          type: integer
+          default: 24
+        xijian:
+          type: object
+          properties:
+            seed:
+              type: integer
+            nsfw_allowed:
+              type: boolean
+
+    VideoGeneration:
+      type: object
+      properties:
+        id:
+          type: string
+        object:
+          type: string
+          example: video.generation
+        status:
+          type: string
+          enum: [queued, in_progress, completed, failed]
+        created_at:
+          type: integer
+        completed_at:
+          type: integer
+          nullable: true
+        expires_at:
+          type: integer
+        error:
+          type: object
+          nullable: true
+        url:
+          type: string
+          nullable: true
+        remixed_from_video_id:
+          type: string
+          nullable: true
+
+    VideoList:
+      type: object
+      properties:
+        object:
+          type: string
+          example: list
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/VideoGeneration"
+        has_more:
+          type: boolean
+
+    # -------------------------------------------------------------------------
+    # Files
+    # -------------------------------------------------------------------------
+    FileObject:
+      type: object
+      properties:
+        id:
+          type: string
+        object:
+          type: string
+          example: file
+        bytes:
+          type: integer
+        created_at:
+          type: integer
+        filename:
+          type: string
+        purpose:
+          type: string
+        status:
+          type: string
+        status_details:
+          type: string
+          nullable: true
+
+    FileList:
+      type: object
+      properties:
+        object:
+          type: string
+          example: list
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/FileObject"
+        has_more:
+          type: boolean
+
+    # -------------------------------------------------------------------------
+    # 角色
+    # -------------------------------------------------------------------------
+    CharacterCreate:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        display_name:
+          type: string
+        persona_doc:
+          type: string
+        voice_profile:
+          type: string
+        live2d_model:
+          type: string
+        default_emotion:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+
+    CharacterUpdate:
+      type: object
+      properties:
+        display_name:
+          type: string
+        persona_doc:
+          type: string
+        voice_profile:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+
+    Character:
+      type: object
+      properties:
+        id:
+          type: string
+        object:
+          type: string
+          example: character
+        name:
+          type: string
+        display_name:
+          type: string
+        persona_doc:
+          type: string
+        voice_profile:
+          type: string
+        default_emotion:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        created_at:
+          type: integer
+        updated_at:
+          type: integer
+        is_archived:
+          type: boolean
+
+    CharacterList:
+      type: object
+      properties:
+        object:
+          type: string
+          example: list
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Character"
+        has_more:
+          type: boolean
+        first_id:
+          type: string
+        last_id:
+          type: string
+
+    CharacterState:
+      type: object
+      properties:
+        character_id:
+          type: string
+        hunger:
+          type: number
+        thirst:
+          type: number
+        health:
+          type: number
+        mood:
+          type: number
+        max_hunger:
+          type: number
+        max_thirst:
+          type: number
+        max_health:
+          type: number
+        max_mood:
+          type: number
+        intimacy:
+          type: number
+        recent_memory_summary:
+          type: string
+
+    CharacterStateUpdate:
+      type: object
+      properties:
+        hunger:
+          type: number
+        thirst:
+          type: number
+        health:
+          type: number
+        mood:
+          type: number
+        intimacy:
+          type: number
+
+    # -------------------------------------------------------------------------
+    # 互动
+    # -------------------------------------------------------------------------
+    Interaction:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        nsfw_level:
+          type: string
+          enum: [safe, soft, explicit]
+        category:
+          type: string
+        cooldown_seconds:
+          type: integer
+        requires_state:
+          type: object
+
+    InteractionList:
+      type: object
+      properties:
+        object:
+          type: string
+          example: list
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Interaction"
+        has_more:
+          type: boolean
+
+    # -------------------------------------------------------------------------
+    # 世界
+    # -------------------------------------------------------------------------
+    WorldState:
+      type: object
+      properties:
+        world_id:
+          type: string
+        economy:
+          type: object
+        health:
+          type: number
+        food:
+          type: number
+        stamina:
+          type: number
+        mental:
+          type: number
+        environment:
+          type: object
+          properties:
+            weather:
+              type: string
+            time_of_day:
+              type: integer
+            light_level:
+              type: number
+
+    WorldStateUpdate:
+      type: object
+      properties:
+        health:
+          type: number
+        food:
+          type: number
+        stamina:
+          type: number
+        mental:
+          type: number
+
+    WorldList:
+      type: object
+      properties:
+        object:
+          type: string
+          example: list
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: string
+              name:
+                type: string
+              is_active:
+                type: boolean
+        has_more:
+          type: boolean
+
+    # -------------------------------------------------------------------------
+    # 记忆
+    # -------------------------------------------------------------------------
+    MemoryEntryCreate:
+      type: object
+      required: [character_id, content]
+      properties:
+        character_id:
+          type: string
+        content:
+          type: string
+        attributes:
+          type: object
+          properties:
+            importance:
+              type: string
+              enum: [low, medium, high]
+            decay:
+              type: string
+              enum: [never, slow, normal, fast]
+            category:
+              type: string
+        tags:
+          type: array
+          items:
+            type: string
+
+    MemoryEntry:
+      type: object
+      properties:
+        id:
+          type: string
+        character_id:
+          type: string
+        type:
+          type: string
+          enum: [long, short]
+        content:
+          type: string
+        importance:
+          type: number
+          minimum: 0
+          maximum: 1
+        source:
+          type: string
+          enum: [dialogue, manual, world_event, derived]
+        tags:
+          type: array
+          items:
+            type: string
+        access_count:
+          type: integer
+        decay_score:
+          type: number
+        created_at:
+          type: integer
+        deleted_at:
+          type: integer
+          nullable: true
+
+    MemoryEntryList:
+      type: object
+      properties:
+        object:
+          type: string
+          example: list
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/MemoryEntry"
+        has_more:
+          type: boolean
+        first_id:
+          type: string
+        last_id:
+          type: string
+
+    # -------------------------------------------------------------------------
+    # 保护模块
+    # -------------------------------------------------------------------------
+    ProtectionStatus:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        guard_level:
+          type: string
+          enum: [strict, standard, relaxed]
+        audit_log_size:
+          type: integer
+        version:
+          type: string
+
+    ProtectionChallenge:
+      type: object
+      properties:
+        challenge_id:
+          type: string
+        expires_at:
+          type: integer
+        challenge_phrase:
+          type: string
+
+    Snapshot:
+      type: object
+      properties:
+        id:
+          type: string
+        created_at:
+          type: integer
+        scope:
+          type: string
+        hash:
+          type: string
+        size_bytes:
+          type: integer
+        auto:
+          type: boolean
+        diff:
+          type: object
+
+    SnapshotList:
+      type: object
+      properties:
+        object:
+          type: string
+          example: list
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Snapshot"
+        has_more:
+          type: boolean
+
+    GuardPreview:
+      type: object
+      properties:
+        verdict:
+          type: string
+          enum: [pass, warn, blocked, allow_with_exception]
+        reasons:
+          type: array
+          items:
+            type: string
+        sanitized_text:
+          type: string
+          nullable: true
+        score:
+          type: number
+
+    AuditEntry:
+      type: object
+      properties:
+        id:
+          type: string
+        ts:
+          type: integer
+        kind:
+          type: string
+        severity:
+          type: string
+        source:
+          type: string
+        details:
+          type: object
+
+    AuditLog:
+      type: object
+      properties:
+        object:
+          type: string
+          example: list
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditEntry"
+        has_more:
+          type: boolean
+
+    # -------------------------------------------------------------------------
+    # 会话
+    # -------------------------------------------------------------------------
+    Session:
+      type: object
+      properties:
+        id:
+          type: string
+        character_id:
+          type: string
+        world_id:
+          type: string
+        created_at:
+          type: integer
+
+    # -------------------------------------------------------------------------
+    # 设置
+    # -------------------------------------------------------------------------
+    Settings:
+      type: object
+      properties:
+        nsfw_allowed:
+          type: boolean
+        rate_limit:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+            requests_per_min:
+              type: integer
+            tokens_per_min:
+              type: integer
+        guard_level:
+          type: string
+          enum: [strict, standard, relaxed]
+        language:
+          type: string
+          enum: [zh_CN, en_US]
+
+    SettingsUpdate:
+      type: object
+      properties:
+        nsfw_allowed:
+          type: boolean
+        rate_limit:
+          type: object
+          properties:
+            enabled:
+              type: boolean
+            requests_per_min:
+              type: integer
+            tokens_per_min:
+              type: integer
+        guard_level:
+          type: string
+          enum: [strict, standard, relaxed]
+        language:
+          type: string
+          enum: [zh_CN, en_US]
+
+    # -------------------------------------------------------------------------
+    # 资源导入
+    # -------------------------------------------------------------------------
+    ImportJob:
+      type: object
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+          enum: [queued, in_progress, completed, failed]
+        kind:
+          type: string
+        created_at:
+          type: integer
+        error:
+          type: object
+          nullable: true
+
+    # -------------------------------------------------------------------------
+    # 备份（功能清单 A1.1 / A5.3）
+    # -------------------------------------------------------------------------
+    ManualBackup:
+      type: object
+      properties:
+        id:
+          type: string
+        character_id:
+          type: string
+        scope:
+          type: string
+          enum: [all, memory_only, state_only, doc_only]
+        file_path:
+          type: string
+        size_bytes:
+          type: integer
+        created_at:
+          type: integer
+        created_by:
+          type: string
+          enum: [user, system]
+
+    ProtectedModule:
+      type: object
+      properties:
+        id:
+          type: string
+        module_name:
+          type: string
+        description:
+          type: string
+        enabled:
+          type: boolean
+        updated_at:
+          type: integer
+
+    ProtectedModuleList:
+      type: object
+      properties:
+        object:
+          type: string
+          example: list
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProtectedModule"
+        has_more:
+          type: boolean
+
+  # -------------------------------------------------------------------------
+  # WebSocket 通道（仅作文档说明，OpenAPI 3.0 无原生 WS 定义）
+  # -------------------------------------------------------------------------
+  examples:
+    characterProactiveMessage:
+      summary: 角色主动消息
+      value:
+        id: evt_001
+        type: character.proactive_message
+        ts: 1718000000
+        data:
+          character_id: char_yuki
+          message: 你今天还好吗？
+          suggested_replies: ["我很好", "有点累"]
+          emotion: concerned
+
+x-webhooks:
+  # OpenAPI 3.0 通过 x-webhooks 描述 WebSocket 推送事件
+  character.proactive_message:
+    post:
+      summary: 角色主动消息推送（server→client）
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                id:
+                  type: string
+                type:
+                  type: string
+                  example: character.proactive_message
+                ts:
+                  type: integer
+                data:
+                  type: object
+      responses:
+        "200":
+          description: 接收确认
+  world.state_changed:
+    post:
+      summary: 世界状态变化推送（server→client）
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: 接收确认
+
+x-xijian-ws-events:
+  # WebSocket 事件类型总表（ws://127.0.0.1:{port}/v1/ws）
+  connection:
+    protocol: "xijian.v1, bearer.<token>"
+  events:
+    - { type: hello, direction: server→client, desc: 连接建立成功 }
+    - { type: ping, direction: bidirectional, desc: 心跳（30s 间隔） }
+    - { type: pong, direction: bidirectional, desc: 心跳响应 }
+    - { type: auth.ok, direction: server→client, desc: 鉴权结果 }
+    - { type: auth.failed, direction: server→client, desc: 鉴权失败 }
+    - { type: character.proactive_message, direction: server→client, desc: 角色主动消息 }
+    - { type: character.emotion_changed, direction: server→client, desc: 角色情感变化 }
+    - { type: character.action_triggered, direction: server→client, desc: 角色动作触发 }
+    - { type: world.event_occurred, direction: server→client, desc: 世界事件 }
+    - { type: world.state_changed, direction: server→client, desc: 世界状态变化 }
+    - { type: memory.consolidated, direction: server→client, desc: 记忆整理完成 }
+    - { type: protection.alert, direction: server→client, desc: 保护模块告警 }
+    - { type: generation.progress, direction: server→client, desc: 异步生成进度 }
+    - { type: generation.completed, direction: server→client, desc: 异步生成完成 }
+    - { type: generation.failed, direction: server→client, desc: 异步生成失败 }
+    - { type: desktop_pet.emergency_pause, direction: client→server, desc: 桌宠紧急暂停 }
+    - { type: desktop_pet.command, direction: client→server, desc: 桌宠控制指令 }
+    - { type: client.cancel_request, direction: client→server, desc: 客户端主动取消某 request_id }

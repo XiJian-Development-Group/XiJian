@@ -935,6 +935,9 @@ const callApi = async (method, ...args) => {
   // World custom events
   let _selectedWorldEventId = null;
 
+  // Trigger kind constants (match backend _EVENT_TRIGGER_KINDS)
+  const TRIGGER_KINDS = ["time", "state", "probability", "composite"];
+
   const renderWorldEvents = async (worldId) => {
     const resp = await callApi("list_world_events", worldId);
     if (!resp.ok) { renderItemList("world-event-list", [], () => ""); return; }
@@ -943,15 +946,251 @@ const callApi = async (method, ...args) => {
     );
   };
 
+  // Build trigger object from new structured UI
+  const buildTriggerFromUI = () => {
+    const kind = $("#world-event-trigger-kind")?.value;
+    switch (kind) {
+      case "time":
+        return {
+          kind: "time",
+          weekday: $("#trigger-time-weekday").value.split(",").map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n)),
+          hour: parseInt($("#trigger-time-hour").value, 10) || 0,
+          minute: parseInt($("#trigger-time-minute").value, 10) || 0,
+          frequency: $("#trigger-time-frequency").value || "daily",
+        };
+      case "state":
+        return {
+          kind: "state",
+          target: $("#trigger-state-target").value,
+          field: $("#trigger-state-field").value.trim(),
+          op: $("#trigger-state-op").value,
+          value: (() => {
+            const v = $("#trigger-state-value").value.trim();
+            // Try to parse as number
+            if (!isNaN(v) && v !== "") return parseFloat(v);
+            return v;
+          })(),
+        };
+      case "probability":
+        return {
+          kind: "probability",
+          chance: parseFloat($("#trigger-probability-chance").value) || 0,
+        };
+      case "composite":
+        const rules = [];
+        $("#trigger-composite-rules .composite-rule").forEach((el) => {
+          const subKind = el.querySelector(".composite-sub-kind").value;
+          const subTrigger = {};
+          switch (subKind) {
+            case "time":
+              subTrigger.kind = "time";
+              subTrigger.weekday = el.querySelector(".composite-time-weekday").value.split(",").map(s => parseInt(s.trim(), 10)).filter(n => !isNaN(n));
+              subTrigger.hour = parseInt(el.querySelector(".composite-time-hour").value, 10) || 0;
+              subTrigger.frequency = el.querySelector(".composite-time-frequency").value || "daily";
+              break;
+            case "state":
+              subTrigger.kind = "state";
+              subTrigger.target = el.querySelector(".composite-state-target").value;
+              subTrigger.field = el.querySelector(".composite-state-field").value.trim();
+              subTrigger.op = el.querySelector(".composite-state-op").value;
+              {
+                const v = el.querySelector(".composite-state-value").value.trim();
+                subTrigger.value = (!isNaN(v) && v !== "") ? parseFloat(v) : v;
+              }
+              break;
+            case "probability":
+              subTrigger.kind = "probability";
+              subTrigger.chance = parseFloat(el.querySelector(".composite-probability-chance").value) || 0;
+              break;
+          }
+          rules.push(subTrigger);
+        });
+        return {
+          kind: "composite",
+          op: $("#trigger-composite-op").value,
+          rules,
+        };
+    }
+    return {};
+  };
+
+  // Populate UI from trigger object
+  const populateTriggerUI = (trigger) => {
+    if (!trigger || !trigger.kind) {
+      // Reset to default
+      $("#world-event-trigger-kind").value = "probability";
+      onTriggerKindChange();
+      return;
+    }
+    const kind = trigger.kind;
+    $("#world-event-trigger-kind").value = kind;
+    onTriggerKindChange();
+
+    switch (kind) {
+      case "time":
+        $("#trigger-time-weekday").value = (trigger.weekday || []).join(",");
+        $("#trigger-time-hour").value = trigger.hour || 0;
+        $("#trigger-time-minute").value = trigger.minute || 0;
+        $("#trigger-time-frequency").value = trigger.frequency || "daily";
+        break;
+      case "state":
+        $("#trigger-state-target").value = trigger.target || "character";
+        $("#trigger-state-field").value = trigger.field || "";
+        $("#trigger-state-op").value = trigger.op || "<";
+        $("#trigger-state-value").value = trigger.value !== undefined ? String(trigger.value) : "";
+        break;
+      case "probability":
+        $("#trigger-probability-chance").value = trigger.chance || 0.1;
+        break;
+      case "composite":
+        $("#trigger-composite-op").value = trigger.op || "AND";
+        const container = $("#trigger-composite-rules");
+        container.innerHTML = "";
+        (trigger.rules || []).forEach((rule) => addCompositeRuleRow(rule));
+        break;
+    }
+  };
+
+  // Trigger kind change handler
+  const onTriggerKindChange = () => {
+    const kind = $("#world-event-trigger-kind").value;
+    // Hide all trigger field sections
+    $$(".trigger-fields").forEach(el => el.hidden = true);
+    // Show the selected one
+    const target = $(`#trigger-${kind}`);
+    if (target) target.hidden = false;
+  };
+
+  // Composite rule management
+  const addCompositeRuleRow = (rule = {}) => {
+    const container = $("#trigger-composite-rules");
+    const div = document.createElement("div");
+    div.className = "composite-rule";
+    div.innerHTML = `
+      <div class="row row--gap">
+        <label class="field field--inline">
+          <span class="field__label">类型</span>
+          <select class="field__input composite-sub-kind">
+            <option value="time">时间</option>
+            <option value="state">状态</option>
+            <option value="probability">概率</option>
+          </select>
+        </label>
+        <button class="btn btn--ghost btn--sm" type="button" data-action="remove">移除</button>
+      </div>
+      <div class="composite-rule-fields">
+        <!-- Time sub-fields -->
+        <div class="trigger-fields" data-kind="time" hidden>
+          <label class="field field--inline"><span class="field__label">星期 (1-7, 逗号分隔)</span><input class="field__input composite-time-weekday" type="text" placeholder="1,3,5" /></label>
+          <label class="field field--inline"><span class="field__label">小时 (0-23)</span><input class="field__input composite-time-hour" type="number" min="0" max="23" value="0" /></label>
+          <label class="field field--inline"><span class="field__label">频率</span><select class="field__input composite-time-frequency"><option value="daily">每天</option><option value="weekly">每周</option><option value="monthly">每月</option></select></label>
+        </div>
+        <!-- State sub-fields -->
+        <div class="trigger-fields" data-kind="state" hidden>
+          <label class="field field--inline"><span class="field__label">目标</span><select class="field__input composite-state-target"><option value="character">角色状态</option><option value="world">世界状态</option><option value="npc">配角状态</option></select></label>
+          <label class="field field--inline"><span class="field__label">字段</span><input class="field__input composite-state-field" type="text" placeholder="mood" /></label>
+          <label class="field field--inline"><span class="field__label">比较</span><select class="field__input composite-state-op"><option value="<"><</option><option value="<="><=</option><option value=">">></option><option value=">=">>=</option><option value="==">==</option><option value="!=">!=</option></select></label>
+          <label class="field field--inline"><span class="field__label">值</span><input class="field__input composite-state-value" type="text" placeholder="20" /></label>
+        </div>
+        <!-- Probability sub-fields -->
+        <div class="trigger-fields" data-kind="probability" hidden>
+          <label class="field field--inline"><span class="field__label">概率 (0-1)</span><input class="field__input composite-probability-chance" type="number" min="0" max="1" step="0.01" value="0.1" /></label>
+        </div>
+      </div>
+    `;
+    container.appendChild(div);
+
+    // Bind sub-kind change
+    const subKindSelect = div.querySelector(".composite-sub-kind");
+    subKindSelect.value = rule.kind || "time";
+    subKindSelect.addEventListener("change", () => {
+      div.querySelectorAll(".trigger-fields").forEach(f => f.hidden = f.dataset.kind !== subKindSelect.value);
+    });
+    // Trigger initial show
+    subKindSelect.dispatchEvent(new Event("change"));
+
+    // Bind remove
+    div.querySelector("[data-action=remove]").addEventListener("click", () => div.remove());
+
+    // Populate if rule provided
+    if (rule.kind) {
+      subKindSelect.value = rule.kind;
+      subKindSelect.dispatchEvent(new Event("change"));
+      if (rule.kind === "time") {
+        div.querySelector(".composite-time-weekday").value = (rule.weekday || []).join(",");
+        div.querySelector(".composite-time-hour").value = rule.hour || 0;
+        div.querySelector(".composite-time-frequency").value = rule.frequency || "daily";
+      } else if (rule.kind === "state") {
+        div.querySelector(".composite-state-target").value = rule.target || "character";
+        div.querySelector(".composite-state-field").value = rule.field || "";
+        div.querySelector(".composite-state-op").value = rule.op || "<";
+        div.querySelector(".composite-state-value").value = rule.value !== undefined ? String(rule.value) : "";
+      } else if (rule.kind === "probability") {
+        div.querySelector(".composite-probability-chance").value = rule.chance || 0.1;
+      }
+    }
+  };
+
+  // Effects list management
+  const addEffectRow = (effect = {}) => {
+    const container = $("#effects-list");
+    const div = document.createElement("div");
+    div.className = "effect-row";
+    div.innerHTML = `
+      <label class="field field--inline"><span class="field__label">目标类型</span><select class="field__input effect-target-kind"><option value="character">角色</option><option value="world">世界</option><option value="npc">配角</option></select></label>
+      <label class="field field--inline"><span class="field__label">目标 ID</span><input class="field__input effect-target-id" type="text" placeholder="留空表示当前" /></label>
+      <label class="field field--inline"><span class="field__label">字段</span><input class="field__input effect-field" type="text" placeholder="mood" /></label>
+      <label class="field field--inline"><span class="field__label">操作</span><select class="field__input effect-op"><option value="add">增加 (+)</option><option value="set">设置 (=)</option><option value="mul">乘以 (*)</option></select></label>
+      <label class="field field--inline"><span class="field__label">值</span><input class="field__input effect-value" type="text" placeholder="5" /></label>
+      <button class="btn btn--ghost btn--sm" type="button" data-action="remove">移除</button>
+    `;
+    container.appendChild(div);
+    div.querySelector("[data-action=remove]").addEventListener("click", () => div.remove());
+
+    // Populate if provided
+    if (effect.target_kind) div.querySelector(".effect-target-kind").value = effect.target_kind;
+    if (effect.target_id) div.querySelector(".effect-target-id").value = effect.target_id;
+    if (effect.field) div.querySelector(".effect-field").value = effect.field;
+    if (effect.op) div.querySelector(".effect-op").value = effect.op;
+    if (effect.value !== undefined) div.querySelector(".effect-value").value = String(effect.value);
+  };
+
+  const buildEffectsFromUI = () => {
+    const effects = {};
+    $("#effects-list .effect-row").forEach((row) => {
+      const targetKind = row.querySelector(".effect-target-kind").value;
+      const targetId = row.querySelector(".effect-target-id").value.trim();
+      const field = row.querySelector(".effect-field").value.trim();
+      const op = row.querySelector(".effect-op").value;
+      const valueStr = row.querySelector(".effect-value").value.trim();
+      if (!field) return;
+      const value = (!isNaN(valueStr) && valueStr !== "") ? parseFloat(valueStr) : valueStr;
+      const key = `${targetKind}:${targetId || "current"}:${field}`;
+      effects[key] = { target_kind: targetKind, target_id: targetId || null, field, op, value };
+    });
+    return effects;
+  };
+
+  const populateEffectsUI = (effects) => {
+    const container = $("#effects-list");
+    container.innerHTML = "";
+    if (!effects) return;
+    Object.values(effects).forEach(e => addEffectRow(e));
+    if (Object.keys(effects).length === 0) addEffectRow();
+  };
+
   const loadWorldEventEditor = (ev) => {
     _selectedWorldEventId = ev?.id || null;
     $("#world-event-editing-id").value = ev?.id || "";
     $("#world-event-name").value = ev?.name || "";
     $("#world-event-priority").value = ev?.priority ?? 50;
     $("#world-event-enabled").checked = ev ? !!ev.is_enabled : true;
-    $("#world-event-trigger").value = ev?.trigger ? JSON.stringify(ev.trigger, null, 2) : "";
+    // Populate new trigger UI
+    populateTriggerUI(ev?.trigger || {});
+    // Scene
     $("#world-event-scene").value = ev?.scene || "";
-    $("#world-event-effects").value = ev?.effects ? JSON.stringify(ev.effects) : "";
+    // Effects
+    populateEffectsUI(ev?.effects || {});
     $("#world-event-delete-btn").disabled = !ev;
   };
 
@@ -959,12 +1198,15 @@ const callApi = async (method, ...args) => {
 
   const onWorldEventSave = async () => {
     if (!_selectedWorldId) { toast("请先选择或保存世界观", "err"); return; }
-    let trigger = {};
-    try { const t = $("#world-event-trigger").value.trim(); if (t) trigger = JSON.parse(t); }
-    catch { toast("触发器 JSON 格式错误", "err"); return; }
-    let effects = {};
-    try { const e = $("#world-event-effects").value.trim(); if (e) effects = JSON.parse(e); }
-    catch { toast("影响 JSON 格式错误", "err"); return; }
+    const trigger = buildTriggerFromUI();
+    // Validate trigger
+    const validation = await callApi("validate_event_trigger", trigger);
+    if (!validation.ok) {
+      const errs = validation.data?.errors || [validation.message];
+      toast("触发器校验失败：" + errs.join("；"), "err");
+      return;
+    }
+    const effects = buildEffectsFromUI();
     const data = {
       id: $("#world-event-editing-id").value || undefined,
       world_id: _selectedWorldId,
@@ -2477,6 +2719,9 @@ const callApi = async (method, ...args) => {
     on("#world-event-refresh-btn", "click", () => { if (_selectedWorldId) renderWorldEvents(_selectedWorldId); });
     on("#world-event-save-btn", "click", onWorldEventSave);
     on("#world-event-delete-btn", "click", onWorldEventDelete);
+    on("#world-event-trigger-kind", "change", onTriggerKindChange);
+    on("#trigger-composite-add-btn", "click", () => addCompositeRuleRow());
+    on("#effects-add-btn", "click", () => addEffectRow());
     on("#world-event-list", "click", async (e) => {
       const li = e.target.closest(".item-list__item");
       if (li && li.dataset.id && _selectedWorldId) {

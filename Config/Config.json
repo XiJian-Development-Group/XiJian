@@ -21,7 +21,7 @@
   "Version": {
     "Main": "v0.0.1-Beta",
     "CoreApi": "v1.2.0-Alpha",
-    "DevKit": "v1.5.0",
+    "DevKit": "v1.6.0",
     "macOSUIApp": "Unavailable",
     "iOSUIApp": "Unavailable",
     "CommonUIApp": "Unavailable"
