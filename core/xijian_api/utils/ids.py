@@ -243,6 +243,49 @@ def gen_scene_interaction_id() -> str:
     return gen_id("sint_", _SHORT_HEX_LEN)
 
 
+def gen_currency_id() -> str:
+    """Return a currency id (``curr_<12 hex>``).
+
+    A4.4 economy: each per-world currency definition (``mora`` /
+    ``credit`` / ``gold`` etc.) gets its own id.  The ``world_currencies``
+    table is keyed on ``(world_id, code)`` — this id is the *internal*
+    handle so admin tools can reference a currency record without
+    round-tripping the natural key.
+    """
+    return gen_id("curr_", _SHORT_HEX_LEN)
+
+
+def gen_wallet_id() -> str:
+    """Return a wallet id (``wlt_<12 hex>``).
+
+    A4.4 economy: a wallet is the (owner_kind, owner_id, world_id,
+    currency_code) tuple materialized as a single record.  The id is
+    the internal handle; the natural composite key is what callers
+    use to look it up.
+    """
+    return gen_id("wlt_", _SHORT_HEX_LEN)
+
+
+def gen_transaction_id() -> str:
+    """Return a transaction id (``txn_<12 hex>``).
+
+    A4.4 economy: every money movement writes one record.  The id is
+    the only mutable handle — wallets are looked up by composite key
+    but every individual transaction is referenced by this id.
+    """
+    return gen_id("txn_", _SHORT_HEX_LEN)
+
+
+def gen_economy_state_id() -> str:
+    """Return an economy-state id (``eco_<12 hex>``).
+
+    A4.4 economy: there's at most one state record per world; the id
+    is for the storage layer's convenience (the bucket is keyed on
+    ``world_id`` but the id gives a stable handle for audit logs).
+    """
+    return gen_id("eco_", _SHORT_HEX_LEN)
+
+
 def gen_submission_id() -> str:
     """Return a Developer-Kit submission id (``sub_<12 hex>``).
 

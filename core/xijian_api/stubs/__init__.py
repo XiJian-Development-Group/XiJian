@@ -13,6 +13,7 @@ from xijian_api.stubs import (
     characters,
     chat,
     citations,
+    economy,
     embedding,
     events,
     files,
@@ -29,10 +30,14 @@ from xijian_api.stubs import (
     scene_interactions,
     sessions,
     settings,
+    transactions,
     travel_modes,
     video,
+    wallets,
     world_audit,
     world_compute_config,
+    world_currencies,
+    world_economy_state,
     world_environment,
     worlds,
 )
@@ -68,6 +73,15 @@ def seed_all() -> None:
     pois.seed_default()
     travel_modes.seed_default()
     scene_interactions.seed_default()
+    # A4.4 economy — no default currencies / wallets / transactions;
+    # operators define currencies per world and grant initial balances
+    # through the route layer.  We still call the seed hooks so
+    # future additions have a stable entry point.
+    world_currencies.seed_default()
+    world_economy_state.seed_default()
+    wallets.seed_default()
+    transactions.seed_default()
+    economy.seed_default()
     # citations module holds no state of its own but exposes its
     # helpers on the package for the chat pipeline to import via
     # ``from xijian_api.stubs import citations``.
@@ -89,6 +103,7 @@ __all__ = [
     "characters",
     "chat",
     "citations",
+    "economy",
     "embedding",
     "events",
     "files",
@@ -105,10 +120,14 @@ __all__ = [
     "scene_interactions",
     "sessions",
     "settings",
+    "transactions",
     "travel_modes",
     "video",
+    "wallets",
     "world_audit",
     "world_compute_config",
+    "world_currencies",
+    "world_economy_state",
     "world_environment",
     "worlds",
     "seed_all",

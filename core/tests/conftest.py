@@ -113,6 +113,17 @@ def _reset_state(app):
         tm_stub.reset_for_testing()
         from xijian_api.stubs import scene_interactions as si_stub
         si_stub.reset_for_testing()
+        # A4.4 economy system.
+        from xijian_api.stubs import world_currencies as wc_stub
+        wc_stub.reset_for_testing()
+        from xijian_api.stubs import world_economy_state as wes_stub
+        wes_stub.reset_for_testing()
+        from xijian_api.stubs import wallets as wallets_stub
+        wallets_stub.reset_for_testing()
+        from xijian_api.stubs import transactions as tx_stub
+        tx_stub.reset_for_testing()
+        from xijian_api.stubs import economy as economy_stub
+        economy_stub.reset_for_testing()
     yield
 
 

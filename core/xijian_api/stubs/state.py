@@ -152,6 +152,37 @@ pois: dict = {}
 travel_modes: dict = {}
 scene_interactions: dict = {}
 
+# A4.4 economy system.  Four buckets mirror the SQL schema in the
+# function list v2:
+#   world_currencies        — {(world_id, code): {world_id, code,
+#                                            name, symbol, decimals}}
+#                                Per-world currency definitions.
+#                                Composite key because spec says
+#                                PRIMARY KEY(world_id, code).
+#   wallets                — {(owner_kind, owner_id, world_id,
+#                              currency_code): {..., balance}}
+#                                Balance sheet: every user / NPC
+#                                has one wallet per (world, currency).
+#                                Composite key keeps lookups O(1).
+#   transactions           — {transaction_id: {world_id, from_kind,
+#                                              from_id, to_kind, to_id,
+#                                              currency_code, amount,
+#                                              kind, ref_id, created_at}}
+#                                Append-only money-movement log.
+#                                Every wallet mutation must write
+#                                one of these (AC-1).
+#   world_economy_state    — {world_id: {world_id, inflation_rate,
+#                                        liquidity_index, last_tick_at,
+#                                        allow_illegal, allow_overdraft,
+#                                        updated_at}}
+#                                Per-world macro state plus the
+#                                per-world toggles AC-3 cares about
+#                                (allow_illegal, allow_overdraft).
+world_currencies: dict = {}
+wallets: dict = {}
+transactions: dict = {}
+world_economy_state: dict = {}
+
 # Developer Kit (C5) state lives in ``xijian_api.devkit.state`` — the
 # DevKit is a stand-alone Pywebview application that does not share a
 # Flask server with the main API, so its buckets are intentionally
@@ -210,6 +241,11 @@ def reset_for_testing() -> None:
     pois.clear()
     travel_modes.clear()
     scene_interactions.clear()
+    # A4.4 buckets.
+    world_currencies.clear()
+    wallets.clear()
+    transactions.clear()
+    world_economy_state.clear()
     files.clear()
     batches.clear()
     fine_tuning_jobs.clear()
@@ -251,6 +287,10 @@ __all__ = [
     "pois",
     "travel_modes",
     "scene_interactions",
+    "world_currencies",
+    "wallets",
+    "transactions",
+    "world_economy_state",
     "files",
     "batches",
     "fine_tuning_jobs",
