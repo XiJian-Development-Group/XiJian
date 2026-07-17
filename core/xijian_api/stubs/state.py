@@ -183,6 +183,32 @@ wallets: dict = {}
 transactions: dict = {}
 world_economy_state: dict = {}
 
+# A5.1 output-safety system.  Two buckets mirror the SQL schema in
+# the function list v2:
+#   safety_audit_log    — {log_id: {id, character_id, world_id,
+#                                     stage, verdict, reason,
+#                                     snippet, created_at}}
+#                                Append-only per-event audit.  Every
+#                                scan (input pre-screen / output
+#                                post-screen) lands one record so
+#                                the operator can answer "what did
+#                                the safety layer do?" without
+#                                grepping through observability
+#                                tooling.
+#                                AC-3 ("所有拦截事件必须可查询")
+#                                is satisfied by ``list_log``.
+#   safety_rules        — {rule_id: {id, rule_kind, pattern,
+#                                     severity, is_active}}
+#                                The hot-path rulebook.  Each rule
+#                                is one of three flavours
+#                                (ooc_pattern / injection_pattern /
+#                                forbidden_word) and carries a
+#                                1..5 severity.  Inactive rules
+#                                are skipped without being deleted
+#                                so operators can A/B.
+safety_audit_log: dict = {}
+safety_rules: dict = {}
+
 # Developer Kit (C5) state lives in ``xijian_api.devkit.state`` — the
 # DevKit is a stand-alone Pywebview application that does not share a
 # Flask server with the main API, so its buckets are intentionally

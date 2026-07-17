@@ -5,6 +5,123 @@
 
 ---
 
+## 2026-07-15 · A4.4 经济系统实装（从零起）
+
+### 任务来源
+v2 spec §A4.4 列了 4 张表 (`world_currencies` / `wallets` / `transactions` / `world_economy_state`) + 4 个验收标准（AC-1 资金变动必写 transactions / AC-2 NPC 偷骗合理判定+冷却 / AC-3 用户可配是否允许非法手段 + 边界场景余额为负赊账 + 经济系统崩溃触发重置）。盘点代码：state.py **完全没有**这 4 个 bucket，没有 stub、没有路由、没有测试——**100% 从零起**。
+
+### 已完成（实测一遍）
+
+#### 新建 stub
+- `stubs/world_currencies.py`（148 行）：按 `(world_id, code)` 复合主键，code 限定 `[A-Za-z0-9_]{1,16}`，decimals ∈ [0, 6]，cascade delete 检测 wallet / transaction 引用，`ensure_currency` 懒物化（orchestrator 兜底用）
+- `stubs/wallets.py`（487 行）：按 `(owner_kind, owner_id, world_id, currency_code)` 复合主键，deposit / withdraw / transfer 三个底层操作，overdraft policy 默认禁用（按世界 `allow_overdraft` toggle 走），`delete_for_world` / `delete_for_owner` 级联删除
+- `stubs/transactions.py`（294 行）：追加 only，8 种 `kind` (purchase / sale / theft / scam / reward / transfer / fine / repair)，FIFO `TXN_KEEP_PER_WORLD=5000` 限流，per-world / per-owner / per-kind / 全局 4 种 list，`summary` 聚合（total / total_volume / by_kind）
+- `stubs/world_economy_state.py`（256 行）：每世界懒物化，`inflation_rate ∈ [-0.5, +0.5]` 锁死，`liquidity_index ∈ [0.5, 2.0]` 锁死，持有 `allow_illegal` / `allow_overdraft` 两个 per-world 政策开关，tick 函数按 `volume_delta` 推通胀 + 按 0.1 系数向 1.0 均值回归流动性
+- `stubs/economy.py`（602 行）：orchestrator 统一 trade/crime 入口
+  - **Trade verbs**: `purchase` / `sale` / `reward` / `transfer_user_to_user`，每个成功调用都写一条 `txn_stub.record`（AC-1）
+  - **Crime verbs**: `attempt_theft` / `attempt_scam` 共享 `_attempt_crime` 内部，按 NPC `state_json.crime_theft_skill` / `crime_scam_skill` 算概率（默认 0.30 / 0.40），确定性 `hash(("economy_crime", npc_id, world_id, bucket))` 概率，30s per-NPC cooldown（**总是先消耗再判 roll**——防 pin 命中）
+  - 偷盗目标 amount 自动 cap 到用户余额（防过载 overdraft）
+  - 偷骗被 A5.4 overload recovery 短路（玩家不被过载惩罚）
+  - 偷骗被世界 `allow_illegal` 政策 gate
+
+#### 接入
+- `state.py`：加 4 个 bucket（`world_currencies` / `wallets` / `transactions` / `world_economy_state`）+ `reset_for_testing` 清空
+- `utils/ids.py`：加 `gen_currency_id` / `gen_wallet_id` / `gen_transaction_id` / `gen_economy_state_id`（前缀 `curr_` / `wlt_` / `txn_` / `eco_`）
+- `stubs/__init__.py`：加 4 个新子模块到 import 列表 + `seed_all()` 调用 + `__all__`
+- `routes/__init__.py`：`xijian_api.routes.xijian_economy` 加进可选路由表
+- `routes/xijian_economy.py`（537 行）：3 套资源路由 + 6 个 trade/crime 端点 + dev-only tick 端点 + per-world economy summary
+- `tests/conftest.py`：加 4 个新 stub 的 `reset_for_testing`（在 autouse `_reset_state` fixture 里）
+
+#### 测试（282 个新 case）
+- `test_xijian_world_currencies.py`（72）：纯函数（code/name/decimals validation）/ CRUD / 跨世界同 code 允许 / cascade delete / lazy default / HTTP 完整 round-trip / 鉴权
+- `test_xijian_wallets.py`（67）：纯函数 / CRUD / `ensure_wallet` 幂等 / deposit 副作用 / withdraw 余额 + overdraft policy / transfer 原子性 + self-transfer 拒绝 / cascading delete / HTTP / 鉴权
+- `test_xijian_transactions.py`（43）：纯函数（amount validation）/ CRUD / 7 种 list 路径 / FIFO 限流 / cascading delete / HTTP / 鉴权
+- `test_xijian_economy.py`（100）：economy_state 纯函数 + 通胀流动性 tick + 政策 toggle + 4 个 trade verb 全路径（含 no_wallet / npc 余额不足 / currency 缺失） + 2 个 crime verb 全分支（allow_illegal_disabled / overload_active / cooldown / user_empty / no_user_wallet / failed_roll / success） + probability 辅助 + HTTP（purchase / sale / reward / transfer / theft / scam + state CRUD + dev tick + summary）/ 鉴权
+
+#### 真实启动验证
+跑了一遍端到端：world → currency → wallets (user 1000 + npc 0) → reward 500 to npc → purchase 100 → sale 50 → enable allow_illegal → summary 正确显示 1 reward + 1 purchase + 1 sale，total_volume=650。
+
+### 没动的（与原因）
+
+#### 1. 没做"商品 / 库存"系统
+**现状**：spec §A4.4 提了"商品上架/购买/出售"，但 SQL schema 里**没有 goods / items 表**——4 张表里只有 currencies / wallets / transactions / economy_state。
+**为什么留**：v2 没说商品的"哪个世界 / 谁持有 / 数量 / 单价"长什么样。做了就是发明 spec，可能跟 C1.1 创作者侧商品定义冲突。等 C1.1 起的时候再问设计决策（自创世界可能完全不需要商品概念——原神里没"背包"系统，崩铁也没）。
+**接谁做**：C1.1 创作者工具 + US-A4.4-02（购买物品）起来时。这是**真正的设计决策**而不是工程活儿——不要猜。
+
+#### 2. 没做 NPC 的 economy scheduler 主动偷骗循环
+**现状**：`attempt_theft` / `attempt_scam` 是被动调用——得有人 POST 进来 / LLM agent 决定调用。
+**为什么留**：spec §A4.4 流程图说 "N -> E: 决策：尝试盗窃/诈骗"——这步的"决策"归属 A4.2 NPC tick（NPC 算"我要不要偷"）还是 A1 chat pipeline（"模型决定偷"）？v2 没规定。
+**接谁做**：A4.2 NPC tick 起背景线程时，每个 high_active NPC 每 tick 跑一次 "是否尝试犯罪" 决策（基于 personality 字段 + 随机）。或 A1 模型自己调 `attempt_theft`——A2 chat pipeline 加 tool 入口。当前不接。
+
+#### 3. 没做"经济系统崩溃"的世界重置联动
+**现状**：spec 边界场景"经济系统崩溃（极端通胀）→ 触发世界重置确认"。`tick()` 函数会写 `inflation_rate`，但**没监控**这个值。
+**为什么留**：什么算"崩溃"？spec 没给阈值。`MAX_INFLATION_RATE=0.5` 是设计上的"绝不超"硬限，但"超过 0.3 持续 1 小时"这种业务阈值完全没定。
+**接谁做**：业务阈值定下来后（约 2 行代码 + 1 个 `safety_snapshots` 写入）就接，路线：
+```python
+if state.world_economy_state[wid]["inflation_rate"] > 0.3:
+    # 触发 A4.2 world 重置确认流程
+    worlds_stub.preview_reset(wid)
+```
+
+#### 4. AC-1 写 transactions 强一致性靠 orchestrator
+**现状**：钱包的 `deposit` / `withdraw` / `transfer` 是**直接**操作 `state.wallets`，**不**自动写 `state.transactions`。
+**为什么留**：分两层 —— 低层是 wallet helpers（testable + 可被 admin tool 单独调用），高层是 economy orchestrator（保证 AC-1）。如果 wallet helpers 也写 transaction，会让"调整余额但不产生交易"的操作（admin 工具、测试）变得很难做。
+**风险**：如果未来有人在 economy orchestrator **之外**直接调 wallet helpers，AC-1 会破。要么靠代码审查，要么未来给 wallet helpers 加个可选 `record=True` 参数兜底。
+**接谁做**：文档已写明；如果未来真的出现绕过，orchestrator 改造成"所有余额变更必须经过它"的门面模式。
+
+#### 5. 没做赃款 / 罚款 / 缴税系统
+**现状**：8 种 `kind` 里 fine / repair 留了位但**没有 orchestrator 入口**。
+**为什么留**：spec §A4.4 提了"非合法手段"（抢劫/诈骗/盗窃），但没提罚款 / 缴税 / 赃款追踪——这是监管类需求，v2 没规定。
+**接谁做**：等设计决策（哪种"罚款"算合法操作？NPC 偷到的钱算"赃款"吗？谁有权没收？）。C1.1 创作者可能会需要——交给他们。
+
+#### 6. transfer_user_to_user 是 no-op（只记一条 transaction）
+**现状**：当前模型只一个 user（`user_local`），所以 "user-to-user transfer" 实质是同钱包 withdraw + deposit，余额不变，但 transaction 还是会写。
+**为什么留**：多用户（multi-tenant / 多角色扮演）模型是 forward-compat 路径——接外部用户系统时不用大改 orchestrator。
+**接谁做**：等真有多用户需求时，扩 `wallets.LOCAL_USER_ID` → 真实 user id，A1 chat pipeline / 鉴权层传入。
+
+#### 7. 通胀 tick 的 `volume_delta` 现在是手动传参
+**现状**：`tick(world_id, volume_delta=0.0, seasonal_factor=0.0)` 不自己算交易量。
+**为什么留**：算"上一窗口的净交易量"需要维护一个 per-world 滚动窗口（跟 overload 的 sliding deque 类似）——又是一个后台线程 / 内存对象。spec 没说 tick 是自动的还是被动的。
+**接谁做**：跟 A4.2 / A1.2 一样，看是否需要常驻后台线程。如果要，`volume_delta = sum(txn_stub.list_for_world(wid, since=last_tick))`——5 行代码。
+
+#### 8. dev tick endpoint 没真在线
+**现状**：`POST /v1/xijian/economy/state/<wid>/tick` 需要 `XIJIAN_DEV=1`，否则 403。conftest 把 `XIJIAN_DEV` pop 掉，所以测试默认拒绝。
+**为什么留**：跟 A3.2 / A4.1 / A4.3 同样口径——macro tick 应该是被动调（不是后台线程自己跑），dev flag 防 production 误调。
+**接谁做**：起后台 tick 时把 dev 端点换 `XIJIAN_ECONOMY_TICK=0` 关闭模式。
+
+### 跨章节联动点（之后模块会碰 A4.4 的）
+
+- **A1.2 记忆写入**：偷骗交易应异步触发 `memory.append(source="economy_event", ref_id=txn_id, payload=...)`——用户聊到"昨天被偷了"时 AI 知道发生过。**本轮没接**
+- **A2 chat pipeline**：NPC 主动偷骗的"决策"应该由 chat 模型决定——A2 tool calling 暴露 `attempt_theft` / `attempt_scam`。**本轮没接**
+- **A3.2 角色状态**：NPC 偷盗成功 / 失败后应当更新 `state_json.illegal_acts_today` / `state_json.failed_attempts_today`（影响后续行为）。**本轮没接**
+- **A4.1 事件调度**：fire `kind=incident` 的事件可能联动 economy（如 "market_day" 事件触发所有 NPC 的 `reward` 流入）。A4.1 已经支持 `ref_id`，但 stub 间没串。**本轮没接**
+- **A4.2 NPC 调度**：tick_world 时高活跃 NPC 应当有机会调 `attempt_theft`（基于 state_json.personality）。**本轮没接**（见"没动的 #2"）
+- **A4.3 场景与互动**：scene_interaction 可能联动 economy（如 "buy_item" 互动触发 `purchase`）。**本轮没接**
+- **A5.1 OOC 评测**：chat 里模型说"我现在有 1000 摩拉"——但 orchestrator 实际余额是 100，OOC 检测器要能识别这种不一致。**本轮没接**
+- **A5.4 过载防护**：本轮已接——`attempt_theft` / `attempt_scam` 在 overload recovery 窗口内短路，trade verbs 放行（玩家不应被过载惩罚）。见 `economy.py:_is_overload_active`
+- **A6 实时通话**：通话中的商品交易应该走 `purchase`（不是绕过）。**本轮没接**——A6 起来时把 chat-time trade 走 orchestrator 路径
+- **A7 主动发起**：NPC 主动发起的"想跟你做交易"消息应带交易细节（amount / currency_code）作为 ref_id。**本轮没接**
+- **A8 桌宠 / 壁纸**：UI 上显示用户余额时，调 `GET /v1/xijian/wallets/user/user_local?world_id=<wid>` 拿数据（已就绪）
+
+### 文档里的 `[TODO]` 状态
+本轮**没改 v2 文档的 [TODO] 列表**——A4.4 spec 段落没有遗留 [TODO]，是干净的。changelog 加 v2.6 2026-07-15。
+
+### 测试覆盖情况
+
+- `world_currencies` stub 72 个 case：纯函数 18 + CRUD 22 + HTTP 18 + 鉴权 5 + lazy 9
+- `wallets` stub 67 个 case：纯函数 14 + CRUD 21 + mutations 18 + cascading 4 + HTTP 12 + 鉴权 7
+- `transactions` stub 43 个 case：纯函数 12 + CRUD 16 + FIFO 1 + cascading 2 + HTTP 8 + 鉴权 3
+- `world_economy_state` stub 22 个 case（在 economy 测试里）：纯函数 16 + CRUD 4 + tick 5 + accessors 6
+- `economy` orchestrator 78 个 case：trade verbs 16 + crime verbs 21（含全部 blocked 路径） + probability helpers 8 + convenience 4 + summary 1 + HTTP 25 + 鉴权 10
+- 总：282 个新 case（72 + 67 + 43 + 22 + 78），1044 总（762 基线 + 282 新），0 回归
+
+**缺口**：
+- economy orchestrator 跟 A1.2 / A4.2 联动没测（因为没接）。等下个章节起来时补"event.fired → memory.append" "tick_world 触发 attempt_theft" 这类链路测试
+- 多用户（multi-tenant）没测——单用户模型是当前限制
+- "经济系统崩溃" 检测器没接——`inflation_rate > 0.3` 持续 X 时间这条链路完全空白
+
+---
+
 ## 2026-07-10 · A4.1 事件调度接入落地
 
 ### 任务来源

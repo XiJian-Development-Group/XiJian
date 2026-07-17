@@ -307,9 +307,15 @@ def sale(
             "user wallet does not exist for currency %r in world %r"
             % (currency_code, world_id)
         )
-    wallet_stub.withdraw(
-        wallet_stub.OWNER_NPC, npc_id, world_id, currency_code, amount,
-    )
+    try:
+        wallet_stub.withdraw(
+            wallet_stub.OWNER_NPC, npc_id, world_id, currency_code, amount,
+        )
+    except wallet_stub.WalletError as exc:
+        # Re-raise as EconomyError so callers have a single
+        # exception type to catch.  The original message is
+        # preserved for debugging.
+        raise EconomyError(str(exc)) from exc
     wallet_stub.deposit(
         wallet_stub.OWNER_USER, wallet_stub.LOCAL_USER_ID,
         world_id, currency_code, amount,

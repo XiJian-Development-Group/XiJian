@@ -14,7 +14,7 @@ XiJian Core 是一个基于 Flask 的 OpenAI 兼容 API 服务端，提供：
 - WebSocket 实时事件流
 - 模型管理、过载防护、安全审查等运维能力
 
-**默认监听地址**：`0.0.0.0`（全网卡，**允许外部访问**）  
+**默认监听地址**：127.0.0.1（全网卡，**允许外部访问**）  
 **必须通过环境变量指定端口**：`XIJIAN_API_PORT`
 
 ---
@@ -22,13 +22,15 @@ XiJian Core 是一个基于 Flask 的 OpenAI 兼容 API 服务端，提供：
 ## 2. 环境准备
 
 ### 2.1 系统要求
-| 平台 | 最低版本 | 推荐配置 |
+| 平台 | 最低版本 | 推荐配置 [TODO: 补充详细的配置信息] |
 |------|----------|----------|
-| macOS | 13.0 (Ventura) | Apple Silicon M1/M2/M3/M4，16GB+ 统一内存 |
-| Windows | 10 1909+ / 11 | NVIDIA GPU (CUDA 12.1+) + 16GB+ 显存/内存 |
-| Linux | Ubuntu 22.04+ / Debian 12+ | 同上 |
+| macOS | 13.0 (Ventura) | **等待填写** |
+| Windows | Windows >= 24H2 | **等待填写** |
+| iOS | iOS >= 26.0 | 良好的网络连接 |
+| Android | Android >= 12.0 | 良好的网络连接 |
 
 ### 2.2 Python 环境
+
 ```bash
 # 推荐 Python 3.11 或 3.12
 python3 --version  # >= 3.11
