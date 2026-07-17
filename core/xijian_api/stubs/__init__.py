@@ -27,6 +27,8 @@ from xijian_api.stubs import (
     pois,
     protection,
     resources,
+    safety,
+    safety_rules,
     scene_interactions,
     sessions,
     settings,
@@ -82,6 +84,11 @@ def seed_all() -> None:
     wallets.seed_default()
     transactions.seed_default()
     economy.seed_default()
+    # A5.1 output-safety — no default rules (operator-curated);
+    # no default audit entries.  Seed hooks are wired so future
+    # rule-bundle imports have a stable entry point.
+    safety.seed_default()
+    safety_rules.seed_default()
     # citations module holds no state of its own but exposes its
     # helpers on the package for the chat pipeline to import via
     # ``from xijian_api.stubs import citations``.
@@ -117,6 +124,8 @@ __all__ = [
     "pois",
     "protection",
     "resources",
+    "safety",
+    "safety_rules",
     "scene_interactions",
     "sessions",
     "settings",

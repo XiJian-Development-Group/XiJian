@@ -272,6 +272,9 @@ def reset_for_testing() -> None:
     wallets.clear()
     transactions.clear()
     world_economy_state.clear()
+    # A5.1 buckets.
+    safety_audit_log.clear()
+    safety_rules.clear()
     files.clear()
     batches.clear()
     fine_tuning_jobs.clear()
@@ -317,6 +320,8 @@ __all__ = [
     "wallets",
     "transactions",
     "world_economy_state",
+    "safety_audit_log",
+    "safety_rules",
     "files",
     "batches",
     "fine_tuning_jobs",

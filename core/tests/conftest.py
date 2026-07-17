@@ -124,6 +124,11 @@ def _reset_state(app):
         tx_stub.reset_for_testing()
         from xijian_api.stubs import economy as economy_stub
         economy_stub.reset_for_testing()
+        # A5.1 output-safety system.
+        from xijian_api.stubs import safety_rules as safety_rules_stub
+        safety_rules_stub.reset_for_testing()
+        from xijian_api.stubs import safety as safety_stub
+        safety_stub.reset_for_testing()
     yield
 
 

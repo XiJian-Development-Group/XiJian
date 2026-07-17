@@ -286,6 +286,28 @@ def gen_economy_state_id() -> str:
     return gen_id("eco_", _SHORT_HEX_LEN)
 
 
+def gen_safety_audit_id() -> str:
+    """Return a safety-audit log id (``saf_<12 hex>``).
+
+    A5.1 output-safety: every scan (input pre-screen / output
+    post-screen) lands one of these.  Operators query ``list_log``
+    by id to answer "why did the safety layer block that?" — see
+    AC-3 ("所有拦截事件必须可查询").
+    """
+    return gen_id("saf_", _SHORT_HEX_LEN)
+
+
+def gen_safety_rule_id() -> str:
+    """Return a safety-rule id (``rule_<12 hex>``).
+
+    A5.1 output-safety: each rule is one of three flavours
+    (``ooc_pattern`` / ``injection_pattern`` / ``forbidden_word``)
+    and carries a 1..5 severity.  Inactive rules are skipped
+    without being deleted so operators can A/B.
+    """
+    return gen_id("rule_", _SHORT_HEX_LEN)
+
+
 def gen_submission_id() -> str:
     """Return a Developer-Kit submission id (``sub_<12 hex>``).
 
