@@ -127,6 +127,12 @@ _WORLD_DANGEROUS: dict[str, bool] = {}
 #: :data:`DEFAULT_SAFETY_THRESHOLD`.
 _WORLD_THRESHOLDS: dict[str, int] = {}
 
+#: Monotonic insert-sequence counter.  Used as a tiebreaker so
+#: that ``list_log`` returns entries in true insertion order
+#: even when multiple entries land in the same unix second.
+#: ``record_audit`` increments this on every call.
+_AUDIT_SEQUENCE: int = 0
+
 
 # ---------------------------------------------------------------------------
 # Exceptions
@@ -293,6 +299,9 @@ def record_audit(
             % (sorted(VALID_VERDICTS), verdict)
         )
     record_id = gen_safety_audit_id()
+    global _AUDIT_SEQUENCE
+    _AUDIT_SEQUENCE += 1
+    sequence = _AUDIT_SEQUENCE
     entry = {
         "id": record_id,
         "character_id": character_id,
@@ -303,6 +312,7 @@ def record_audit(
         "snippet": _truncate(snippet) if snippet else None,
         "rule_id": rule_id,
         "created_at": _now_or(now),
+        "_seq": sequence,
     }
     state.safety_audit_log[record_id] = entry
     return entry
@@ -328,7 +338,7 @@ def list_log(
         if verdict is not None and entry.get("verdict") != verdict:
             continue
         out.append(entry)
-    out.sort(key=lambda e: e.get("created_at", 0.0), reverse=True)
+    out.sort(key=lambda e: (e.get("created_at", 0.0), e.get("_seq", 0)), reverse=True)
     if limit < 1:
         limit = 1
     return out[:limit]
@@ -624,6 +634,8 @@ def seed_default() -> None:
 def reset_for_testing() -> None:
     """Wipe audit log, rulebook (caller's responsibility — see
     :mod:`safety_rules`), and per-world policy."""
+    global _AUDIT_SEQUENCE
+    _AUDIT_SEQUENCE = 0
     state.safety_audit_log.clear()
     _WORLD_DANGEROUS.clear()
     _WORLD_THRESHOLDS.clear()

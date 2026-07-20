@@ -308,6 +308,64 @@ def gen_safety_rule_id() -> str:
     return gen_id("rule_", _SHORT_HEX_LEN)
 
 
+def gen_mcp_rule_id() -> str:
+    """Return an MCP-rule id (``mcpr_<12 hex>``).
+
+    A5.2 MCP-protection: the rulebook that the ``check()`` gate
+    consults before any desktop-control action runs.  Each rule
+    carries an ``action_kind`` (file_delete / file_write /
+    file_read / shell / network / app_launch / settings_modify /
+    system_cmd), a ``pattern`` (regex or literal depending on
+    kind), a ``mode`` (blacklist / whitelist), and a
+    1..5 severity.  The handle is ``mcpr_<12 hex>`` to keep it
+    visually distinct from A5.1's ``rule_`` prefix.
+    """
+    return gen_id("mcpr_", _SHORT_HEX_LEN)
+
+
+def gen_mcp_audit_id() -> str:
+    """Return an MCP-audit id (``mcpa_<12 hex>``).
+
+    A5.2 MCP-protection: every ``check()`` call lands one
+    entry here so AC-1 ("黑名单动作 100% 拦截") is observable.
+    Verdict is ``allowed`` / ``denied`` / ``denied_lockout`` /
+    ``denied_crashed`` — the lockout / crashed variants carry
+    the safety-stop state-machine reason so an operator
+    looking at the log can tell "blocked because a rule
+    matched" from "blocked because the system is in
+    lockout".
+    """
+    return gen_id("mcpa_", _SHORT_HEX_LEN)
+
+
+def gen_mcp_freeze_id() -> str:
+    """Return a safety-stop (MCP freeze) id (``mcpf_<12 hex>``).
+
+    A5.2 MCP-protection: every safety-stop the desktop client
+    triggers (or that comes in via the ``POST /safety_stop``
+    endpoint) lands a record here.  Status walks through
+    ``frozen`` → ``awaiting_confirm`` → ``sanitizing`` →
+    ``restored`` / ``cancelled`` / ``lockout``.  Three freezes
+    within 60 s flip the world to ``lockout`` and refuse
+    further freezes until cold restart.
+    """
+    return gen_id("mcpf_", _SHORT_HEX_LEN)
+
+
+def gen_mcp_snapshot_id() -> str:
+    """Return an MCP-snapshot id (``mcpsnap_<12 hex>``).
+
+    A5.2 MCP-protection: the "专用备份文件夹" payload.  Every
+    safety-stop dumps the world/character/memory/session bundle
+    to one of these so the restore step can hydrate the live
+    state from a known-good checkpoint.  The file path is
+    server-controlled — the request never lands in
+    ``file_path`` — so the request body can never escape the
+    backup directory.
+    """
+    return gen_id("mcpsnap_", _SHORT_HEX_LEN)
+
+
 def gen_submission_id() -> str:
     """Return a Developer-Kit submission id (``sub_<12 hex>``).
 

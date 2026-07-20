@@ -129,6 +129,16 @@ def _reset_state(app):
         safety_rules_stub.reset_for_testing()
         from xijian_api.stubs import safety as safety_stub
         safety_stub.reset_for_testing()
+        # A5.2 MCP-protection system.  Reset order matters:
+        # ``mcp.reset_for_testing()`` clears the audit / freeze
+        # / snapshot / rule buckets AND the per-world policy
+        # store; the rulebook reset has to come first so the
+        # sanitize pass on the next test starts with no
+        # active ``forbidden_word`` rules.
+        from xijian_api.stubs import mcp_rules as mcp_rules_stub
+        mcp_rules_stub.reset_for_testing()
+        from xijian_api.stubs import mcp as mcp_stub
+        mcp_stub.reset_for_testing()
     yield
 
 

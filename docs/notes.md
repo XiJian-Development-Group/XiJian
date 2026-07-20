@@ -5,6 +5,106 @@
 
 ---
 
+## 2026-07-19 · A5.1 输出审查实装（从零起）
+
+### 任务来源
+v2 spec §A5.1 列了 2 张表（`safety_audit_log` / `safety_rules`）+ 5 个产品故事（OOC / 危险场景 / 帕姆严格度 / 输出后审 / 输入预审 / 人设保护 / 例外机制 / 工具调用审计）+ 3 个验收标准（AC-1 OOC 触发率 < 1%（**带 [TODO] 评测集**）/ AC-2 危险场景例外必须显式记录 / AC-3 所有拦截事件可查询）+ 边界场景（审查模块自身崩溃 → 降级为最严格档）。盘点代码：state.py **完全没有** `safety_audit_log` / `safety_rules` 这 2 个 bucket，没有 stub、没有路由、没有测试——**100% 从零起**。
+
+### 已完成（实测一遍）
+
+#### 新建 stub
+- `stubs/safety_rules.py`（307 行）：3 种 `rule_kind`（`ooc_pattern` / `injection_pattern` / `forbidden_word`），`severity ∈ [1, 5]`，`is_active` A/B 开关，pattern 上限 4 KB，broken-regex 静默跳过（不 crash scan），`match_active_rules` 热路径按 severity desc 排序
+- `stubs/safety.py`（567 行）：
+  - **`scan_input`** 决策树：injection 必 block（不区分 severity）/ forbidden word 按 severity 分 `warn` / `block` / `hard_block`（threshold+2）/ clean → `pass`；A5.4 overload recovery 窗口内短路放行
+  - **`scan_output`** 决策树：OOC 在 `world.is_dangerous=True` **且** `event_tags ⊇ {dangerous / danger / extreme / fatal / catastrophic}` 时转 `allow_with_exception`（AC-2 显式记录 reason `ooc_in_dangerous_scene`）否则 block（**双信号必须同时满足**，单信号 default-deny）
+  - **Self-crash fallback**：scan 内部 try/except，任何异常 → `verdict=hard_block` + `blocked=scan_crashed`（spec 边界场景"审查模块自身崩溃 → 降级为最严格档，不绕过"）
+  - **Audit log** 每次 scan 写一条，5 个 verdict（`pass` / `warn` / `block` / `hard_block` / `allow_with_exception`），2 个 stage（`pre_input` / `post_output`），`_seq` 单调计数器保证同秒插入的稳定排序，snippet 240 字符截断
+  - **World policy**：`is_world_dangerous(world_id)` / `set_world_dangerous(world_id, bool)` + per-world `set_safety_threshold(world_id, int)`，in-memory `reset_world_policy(world_id)` 给 A4.2 world-reset 调
+
+#### 接入
+- `state.py`：加 2 个 bucket（`safety_audit_log` / `safety_rules`）+ `reset_for_testing` 清空
+- `utils/ids.py`：加 `gen_safety_audit_id` / `gen_safety_rule_id`（前缀 `saf_` / `rule_`）
+- `stubs/__init__.py`：加 2 个新子模块到 import 列表 + `seed_all()` 调用 + `__all__`
+- `routes/__init__.py`：`xijian_api.routes.xijian_safety` 加进可选路由表
+- `routes/xijian_safety.py`（275 行）：scan input/output + rules CRUD + audit list/count + per-world policy get/put/delete + dev crash 演练端点
+- `tests/conftest.py`：加 2 个新 stub 的 `reset_for_testing`
+
+#### 测试（150 个新 case）
+- `test_xijian_safety_rules.py`（71）：纯函数（kind/pattern/severity 验证 + literal vs regex 编译）/ CRUD / list_active 按 severity desc 排序 / match_active_rules 各种场景（inactive skip / kind 过滤 / broken regex 跳过 / forbidden word case-insensitive）/ HTTP / 鉴权
+- `test_xijian_safety.py`（79）：纯函数（snippet 截断 / verdict-from-match / event_is_dangerous 6 种 tag）/ audit record+list+count（filter / limit / newest-first）/ scan_input 全分支（clean / injection 5/3/1 severity / forbidden word 4/1 / overload）/ scan_output 全分支（clean / OOC in safe / OOC in dangerous + tag / OOC in dangerous + wrong tag / OOC in dangerous but world not dangerous / forbidden word / overload）/ **scan 自身崩 fallback `hard_block`**（monkeypatch `match_active_rules` raise RuntimeError，验证 input + output 都降级为 `hard_block`）/ world policy / HTTP（scan / audit / policy / dev crash）/ 鉴权
+
+#### 真实启动验证
+端到端跑通：world → 3 rules 创建 → clean input pass / injection block / forbidden word block / OOC in safe block / 切 `is_dangerous=True` + dangerous tag → OOC 改 `allow_with_exception`（reason 写 `ooc_in_dangerous_scene`）/ audit list 5 条 / block count 3 条。
+
+### 没动的（与原因）
+
+#### 1. AC-1 评测集（"OOC 触发率 < 1%"）**没接**
+**现状**：v2 spec AC-1 写 "[TODO: 用评测集验证]"。本轮给了 `count_for(verdict=...)` + `count_for(character_id=...)` 的 API 供评测工具调，但**评测集本身没建**——不是 stub 范畴。
+**为什么留**：评测集是 C1.1 创作者域（"哪些回复算 OOC"需要人工标注）和 A1.2 / A2 chat pipeline 数据（"哪些 prompt 算 prompt injection"）的交集。两个下游都没起，建出来也是空架子。
+**接谁做**：A2 chat pipeline + 评测工具起的时候（约 5-10 行 + 评测集 JSONL 文件），调 `safety_stub.count_for(character_id=cid, verdict='block') / count_for(character_id=cid)` 算 per-character OOC 触发率，spec 是 `< 1%`。
+
+#### 2. 没改 `stubs/chat.py`（A2 chat pipeline 集成点）
+**现状**：本轮提供的 `scan_input` / `scan_output` 是**独立 API**，**没有**直接接到 `stubs/chat.py` 的 `complete()` / `stream_chunks()`。意味着即使规则配齐，模型输出**目前**也不走审查。
+**为什么留**：`stubs/chat.py` 815 行，修改它会动到 recall pipeline / `_run_recall_pipeline` / 后端选择 / streaming 等多处。A2 chat pipeline 是另一个章节的工作（"A2 chat 真实接入"），不在 A5.1 scope。
+**接谁做**：A2 chat pipeline 章节起时，在 `complete()` 入口（line 698）调 `safety_stub.scan_input(text=last_user_msg, character_id=cid, world_id=wid)`，在返回前调 `safety_stub.scan_output(text=full_reply, character_id=cid, world_id=wid, event_tags=event_tags)`——`verdict == 'pass' | 'allow_with_exception'` 放行，其它 verdict 改 `safe_completion` 走 fallback 模板。约 30 行代码 + 1 个 tool call 走查（spec 功能清单第 5 条 "工具调用审计"）。
+
+#### 3. 工具调用审计（spec 功能清单第 5 条）**没接**
+**现状**：v2 §A5.1 提"所有 tool_call 必须可被审计"，但 A5.1 的 audit log schema (`safety_audit_log`) 是**按 scan 写一条**——没专门为 tool_call 设计。tool_call 的审计**天然应该**在 A5.2（MCP 防护）那章节落，因为 A5.2 要做黑名单 / 安全终止 / MCP 冻结 / sanitize 等，tool_call 在 MCP 进程里执行，不是 LLM 输出。
+**为什么留**：A5.2 是更大范围（电脑控制防护），本轮只做"输出审查"这一档。
+**接谁做**：A5.2 起来时，在 `safety_audit_log` 同一 bucket 加 `stage='tool_call'` 的写入路径（schema 扩展），共享 `record_audit()` 入口。预计 5 行代码。
+
+#### 4. severity 跟 "verdict=block vs hard_block" 的映射规则是启发式
+**现状**：`_verdict_from_match(severity, threshold)` 用 `severity >= threshold+2 → hard_block` 这种线性映射。这是 spec 没说清的——v2 只说 "severity 1~5" + "默认严格档"，没规定"多少分 = 硬 block"。
+**为什么留**：现实里需要的是**可调**，不是写死。本轮给的是起点，操作员可以微调。
+**接谁做**：等 A1.x 评测集跑出来有数据后，把这个映射换成数据驱动的（"severity 4 + 短文本 + OOC 出现 3 次以上 = 硬 block"）。约 10 行 + 评测结果。
+
+#### 5. 帕姆严格度（US-A5.1-03）**没量化**
+**现状**：spec US-A5.1-03 说"参考崩坏：星穹铁道的帕姆 AI 的审查严格度"。这是**主观**的：帕姆严格度 = ?
+**为什么留**：帕姆的严格度本身是个**校准**问题，不是 stub 工程问题。本轮给了 `set_safety_threshold(world_id, int)` 跟 `DEFAULT_SAFETY_THRESHOLD=3` 起点，operator 可以调到 5（最严）来近似帕姆。
+**接谁做**：跟评测集一起来——跑 A5.1 评测集，调 `threshold` 看哪个值下 OOC 触发率符合帕姆的标准。
+
+#### 6. `_AUDIT_SEQUENCE` 模块全局计数器不会跨进程
+**现状**：在单进程 stub 里 `_AUDIT_SEQUENCE` 永远单调递增。生产里换数据库后端时会**完全重写**这一段。
+**为什么留**：spec 没说审计日志的存储；当前是 in-memory，跨进程用不上的就是单进程内排序。
+**接谁做**：换数据库后端时（spec 没明说，但 stub-in-memory 是过渡），sort key 改 `created_at + rowid` 或者 `created_at + auto_increment_id`。
+
+#### 7. dev crash 端点用 monkeypatch 注入 boom
+**现状**：`POST /v1/xijian/safety/dev/crash` 把 `rules_stub.match_active_rules` 替换成抛 RuntimeError 的函数，跑一次 scan，然后恢复。
+**为什么留**：spec 要"审查模块自身崩溃"路径可测，又**不能**真让 review 崩（生产环境影响大）。用临时 monkeypatch 注入是最干净的演练手段。
+**接谁做**：不需要动——这个端点本来就是 dev-only，标 `XIJIAN_DEV=1` 才放行。
+
+### 跨章节联动点（之后模块会碰 A5.1 的）
+
+- **A1.2 记忆写入**：OOC 触发时，记忆模块应该知道"这次回复没发出"——避免后续 chat 时模型把"被 block 的回复"当成已说出口的。**本轮没接**
+- **A2 chat pipeline**：见"没动的 #2"——这是最大一个口子
+- **A3.2 角色状态**：sick 状态的 NPC 输出 OOC 概率高——`apply_field_change` 触发 sick 状态时**应**自动调 `set_safety_threshold(world_id, +1)`（更严格）。**本轮没接**
+- **A4.1 事件调度**：fire `kind=incident` 的事件，A4.1 已经把 `affected_npcs` 填好——A5.1 应该让 `event_tags` 把 `incident` 算进 dangerous set。**本轮没接**（event_tags 现在只识别 5 个硬编码 tag，incident 不在列）
+- **A4.2 NPC 调度**：NPC 算"我要说什么"时，OOC 模式的 NPC（高随机性）应该被**显式**打 "high_ooc_risk" 标签，让 `event_tags` 注入。A5.1 这边**只需** `set_safety_threshold(world_id, +1)` 收紧。**本轮没接**
+- **A4.3 场景与互动**：scene_interaction 的某些 effect 可能让用户输入带新 prompt injection 模式——scan_input 已经在拦，但**没区分**"用户正常输入" vs "用户刚接受了 scene_interaction 暴露的文本"。**本轮没接**
+- **A4.4 经济系统**：被偷骗后用户情绪可能转向，scan_output 的 OOC 检测应考虑"刚发生了情绪事件"作为 dangerous context 的一部分（event_tags 里加 `after_theft` / `after_scam`）。**本轮没接**
+- **A5.2 电脑控制防护（MCP）**：见"没动的 #3"——本轮 A5.1 没做 tool_call stage
+- **A5.3 自动备份**：safety_audit_log 是否需要被纳入自动备份范围？spec 没明说。本轮**默认**不纳入（体积可能爆炸），但需要 operator 决策
+- **A5.4 过载防护**：本轮已接——A5.4 recovery 窗口内 scan_input / scan_output 短路放行（"overload_active_short_circuit" reason）。见 `safety.py:_is_overload_active`
+- **A6 实时通话**：实时通话的 chat 输出比普通 chat 严格一档（语音语气难精确控制）——`scan_output` 应该在 call 阶段把 threshold 自动 -1 收紧。**本轮没接**
+- **A7 主动发起**：主动发起的消息是 AI 自己起的，OOC 风险更高——`scan_output` 应该在 `source='character_initiated'` 时自动 +1 严格。**本轮没接**
+- **A8 桌宠 / 壁纸**：桌宠气泡框内容是 chat 输出复用，scan_output 自动 cover。**不需要单独接**
+
+### 文档里的 `[TODO]` 状态
+v2 §A5.1 有 1 个 `[TODO]`："AC-1: OOC 触发率 < 1%（[TODO: 用评测集验证]）"——**本轮没摘除**。评测集是 C1.1 + A1.2 / A2 域的产物，A5.1 stub 只提供 `count_for` API。
+
+### 测试覆盖情况
+- `safety_rules` stub 71 个 case：纯函数 22（kind/pattern/severity validation + literal vs regex compile + VALID_KINDS）/ CRUD 22 / match_active_rules 8 / HTTP 14 / 鉴权 5
+- `safety` stub 79 个 case：纯函数 22（truncate / worst_match / verdict_from_match / event_is_dangerous 8）/ audit 8 / scan_input 11 / scan_output 9 / self-crash 2 / world policy 8 / HTTP 16 / 鉴权 8
+- 总：150 个新 case，**1194** 总（1044 基线 + 150 新），0 回归
+
+**缺口**：
+- **没接 A2 chat pipeline**（最大缺口）——见"没动的 #2"。一旦接，scan_input / scan_output 才有"实际作用"，本轮 A5.1 实质是"地基+API"
+- **AC-1 评测集没跑**——见"没动的 #1"
+- **没接 tool_call stage**——见"没动的 #3"
+- **severity → verdict 的线性映射是启发式**——见"没动的 #4"
+
+---
+
 ## 2026-07-15 · A4.4 经济系统实装（从零起）
 
 ### 任务来源

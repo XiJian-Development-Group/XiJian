@@ -209,6 +209,66 @@ world_economy_state: dict = {}
 safety_audit_log: dict = {}
 safety_rules: dict = {}
 
+# A5.2 computer-control protection (MCP 防护).  Four buckets mirror
+# the SQL schema in the function list v2:
+#   mcp_rules        — {rule_id: {id, action_kind, pattern, mode,
+#                                  severity, is_active, created_at,
+#                                  updated_at}}
+#                                The MCP rulebook — operator-curated
+#                                blacklist / whitelist that the
+#                                ``check()`` gate consults before any
+#                                desktop-control action is taken.
+#                                action_kind is one of file_delete /
+#                                file_write / file_read / shell /
+#                                network / app_launch /
+#                                settings_modify / system_cmd.
+#                                mode=blacklist says "block on hit";
+#                                mode=whitelist says "only allow on
+#                                hit" (the per-world policy picks
+#                                the overall default when no rule
+#                                matches).
+#   mcp_audit        — {log_id: {id, action_kind, args_summary,
+#                                  verdict, rule_id, world_id,
+#                                  created_at}}
+#                                Append-only per-call audit.  Every
+#                                ``check()`` lands one entry so
+#                                AC-1 ("黑名单动作 100% 拦截")
+#                                is observable: blocked actions
+#                                show up here with verdict=denied.
+#   mcp_freezes      — {freeze_id: {id, reason, requested_at,
+#                                    confirmed_at, cancelled_at,
+#                                    snapshot_id, status, lockout_at,
+#                                    lockout_count, source,
+#                                    restore_summary}}
+#                                The safety-stop state machine.
+#                                A5.2 US-A5.2-02 path: the global
+#                                hotkey triggers a freeze, the
+#                                server-side orchestrator (this
+#                                bucket) tracks the lifecycle
+#                                (frozen → awaiting_confirm →
+#                                sanitizing → restored / cancelled).
+#                                Three safety_stops within 60 s
+#                                flip the world to status=lockout
+#                                and refuse further freezes until
+#                                a cold restart reset.
+#   mcp_snapshots    — {snap_id: {id, world_id, scope, file_path,
+#                                  size_bytes, reason, includes_protected,
+#                                  sanitized, created_at, payload}}
+#                                The "专用备份文件夹" payloads.
+#                                file_path is server-controlled
+#                                (operator cannot inject paths via
+#                                the request); payload is the
+#                                in-memory world/character/memory/
+#                                session bundle at dump time.  AC-4
+#                                ("受保护模块覆盖") is satisfied by
+#                                the dump always including the
+#                                state.{worlds,characters,memory,
+#                                sessions} dicts.
+mcp_rules: dict = {}
+mcp_audit: dict = {}
+mcp_freezes: dict = {}
+mcp_snapshots: dict = {}
+
 # Developer Kit (C5) state lives in ``xijian_api.devkit.state`` — the
 # DevKit is a stand-alone Pywebview application that does not share a
 # Flask server with the main API, so its buckets are intentionally
@@ -275,6 +335,11 @@ def reset_for_testing() -> None:
     # A5.1 buckets.
     safety_audit_log.clear()
     safety_rules.clear()
+    # A5.2 MCP-protection buckets.
+    mcp_rules.clear()
+    mcp_audit.clear()
+    mcp_freezes.clear()
+    mcp_snapshots.clear()
     files.clear()
     batches.clear()
     fine_tuning_jobs.clear()
@@ -322,6 +387,10 @@ __all__ = [
     "world_economy_state",
     "safety_audit_log",
     "safety_rules",
+    "mcp_rules",
+    "mcp_audit",
+    "mcp_freezes",
+    "mcp_snapshots",
     "files",
     "batches",
     "fine_tuning_jobs",

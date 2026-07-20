@@ -20,6 +20,8 @@ from xijian_api.stubs import (
     fine_tuning,
     image,
     interactions,
+    mcp,
+    mcp_rules,
     memory,
     memory_config,
     npcs,
@@ -89,6 +91,11 @@ def seed_all() -> None:
     # rule-bundle imports have a stable entry point.
     safety.seed_default()
     safety_rules.seed_default()
+    # A5.2 MCP-protection — no default rules, freezes, or
+    # snapshots (operator-curated).  Seed hooks are wired so
+    # future rule-bundle imports have a stable entry point.
+    mcp_rules.seed_default()
+    mcp.seed_default()
     # citations module holds no state of its own but exposes its
     # helpers on the package for the chat pipeline to import via
     # ``from xijian_api.stubs import citations``.
@@ -117,6 +124,8 @@ __all__ = [
     "fine_tuning",
     "image",
     "interactions",
+    "mcp",
+    "mcp_rules",
     "memory",
     "memory_config",
     "npcs",
