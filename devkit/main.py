@@ -158,10 +158,14 @@ def run(argv: Sequence[str] | None = None) -> int:
 
         _devkit_mod.DEV_SUBMIT_SMTP_USER = args.smtp_user
     if args.recipient:
-        os.environ["XIJIAN_DEV_RECIPIENT"] = args.recipient
-        import devkit as _devkit_mod
+        # The submission recipient is hard-coded in code and cannot be
+        # overridden (config file or CLI).  Ignore this flag silently.
+        import sys as _sys
 
-        _devkit_mod.DEV_SUBMIT_RECIPIENT = args.recipient
+        print(
+            "warning: --recipient is ignored; the submission recipient is fixed in code.",
+            file=_sys.stderr,
+        )
 
     if args.headless:
         _print_config()

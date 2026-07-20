@@ -39,7 +39,10 @@ _KEY_FILENAME = "devkit_config.key"
 #: This is *not* a credential; it is the fixed recipient the DevKit
 #: delivers packaged submissions to.  The developer fills in their own
 #: SMTP server / login via the UI.
-DEFAULT_RECIPIENT = "submissions@example.com"
+#:
+#: The recipient is hard-coded here and is **intentionally not** read from
+#: the per-project ``devkit_config.json`` file — see :func:`get_recipient`.
+DEFAULT_RECIPIENT = "panmofan@icloud.com"
 
 #: Default config structure.  Every SMTP *credential* field is empty —
 #: the developer must supply their own account.  Nothing is hard-coded.
@@ -194,9 +197,13 @@ def get_smtp_config(work_dir: str) -> dict[str, Any]:
 
 
 def get_recipient(work_dir: str) -> str:
-    """Get recipient email (the XiJian developer-group inbox)."""
-    config = load_config(work_dir)
-    return config.get("recipient", DEFAULT_CONFIG["recipient"])
+    """Return the recipient email (the XiJian developer-group inbox).
+
+    The recipient is fixed in code (:data:`DEFAULT_RECIPIENT`) and is
+    **deliberately not** read from the per-project ``devkit_config.json``
+    file, so it can never be changed via configuration.
+    """
+    return DEFAULT_RECIPIENT
 
 
 def get_rate_limit(work_dir: str) -> int:

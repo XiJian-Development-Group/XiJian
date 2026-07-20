@@ -67,7 +67,7 @@ Constant                        Env override
 ``DEV_SUBMIT_SMTP_USE_TLS``     ``XIJIAN_DEV_SMTP_USE_TLS``
 ``DEV_SUBMIT_SMTP_USER``        ``XIJIAN_DEV_SMTP_USER``
 ``DEV_SUBMIT_SMTP_PASSWORD``    ``XIJIAN_DEV_SMTP_PASSWORD``
-``DEV_SUBMIT_RECIPIENT``        ``XIJIAN_DEV_RECIPIENT``
+``DEV_SUBMIT_RECIPIENT``        *(fixed in code; not overridable)*
 ``DEV_SUBMIT_FROM_ADDR``        ``XIJIAN_DEV_FROM_ADDR``
 ``DEV_SUBMIT_MAX_BYTES``        ``XIJIAN_DEV_MAX_BYTES``
 ``DEV_SUBMIT_COOLDOWN``         ``XIJIAN_DEV_COOLDOWN_SECONDS``
@@ -138,10 +138,10 @@ DEV_SUBMIT_SMTP_USER: str = os.environ.get("XIJIAN_DEV_SMTP_USER", "")
 #: SMTP authentication password (developer-supplied; never hard-coded).
 DEV_SUBMIT_SMTP_PASSWORD: str = os.environ.get("XIJIAN_DEV_SMTP_PASSWORD", "")
 #: Developer-group recipient (the XiJian submission inbox).  This is a
-#: routing destination, not a login credential.
-DEV_SUBMIT_RECIPIENT: str = os.environ.get(
-    "XIJIAN_DEV_RECIPIENT", "submissions@example.com"
-)
+#: routing destination, not a login credential.  Hard-coded and fixed in
+#: :data:`devkit.config.DEFAULT_RECIPIENT` (the single source of truth,
+#: never read from the per-project config file).
+DEV_SUBMIT_RECIPIENT: str = config.DEFAULT_RECIPIENT
 #: From address on the outgoing email (developer-supplied).
 DEV_SUBMIT_FROM_ADDR: str = os.environ.get("XIJIAN_DEV_FROM_ADDR", "submissions@example.com")
 
