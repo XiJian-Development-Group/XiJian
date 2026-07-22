@@ -23,6 +23,7 @@ from xijian_api.stubs import (
     mcp,
     mcp_rules,
     memory,
+    snapshots,
     memory_config,
     npcs,
     overload,
@@ -96,6 +97,10 @@ def seed_all() -> None:
     # future rule-bundle imports have a stable entry point.
     mcp_rules.seed_default()
     mcp.seed_default()
+    # A5.3 automatic backup — seeds the policy record if
+    # missing; no default snapshots (operators trigger the
+    # first dump via the route or a key event).
+    snapshots.seed_default()
     # citations module holds no state of its own but exposes its
     # helpers on the package for the chat pipeline to import via
     # ``from xijian_api.stubs import citations``.
@@ -136,6 +141,7 @@ __all__ = [
     "safety",
     "safety_rules",
     "scene_interactions",
+    "snapshots",
     "sessions",
     "settings",
     "transactions",

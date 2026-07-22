@@ -269,6 +269,43 @@ mcp_audit: dict = {}
 mcp_freezes: dict = {}
 mcp_snapshots: dict = {}
 
+# A5.3 automatic backup system.  Two buckets mirror the SQL
+# schema in the function list v2:
+#   safety_snapshots   — {snap_id: {id, scope, target_id,
+#                                   file_path, size_bytes, reason,
+#                                   compressed, original_size_bytes,
+#                                   compression_ratio, created_at,
+#                                   expires_at, payload, ref_id,
+#                                   _seq}}
+#                                The unified backup store.  Every
+#                                automatic + on-demand snapshot
+#                                lands here regardless of trigger
+#                                source (scheduled / overload /
+#                                safety_stop / manual).  Note
+#                                A5.2 keeps its own
+#                                ``mcp_snapshots`` bucket because
+#                                the safety-stop flow owns the
+#                                dump + sanitize + restore cycle;
+#                                the A5.3 bucket is the
+#                                "store-and-forget" half.  See
+#                                notes.md 2026-07-20 for the
+#                                decision rationale.
+#   backup_policies    — {policy_id: {id, max_total_bytes,
+#                                     auto_compress_enabled,
+#                                     compression_target,
+#                                     backup_interval_seconds,
+#                                     updated_at}}
+#                                The single-row (id="default")
+#                                policy that gates the capacity
+#                                + auto-compress behaviour.
+#                                Defaults per spec: 5 GiB
+#                                ceiling, auto-compress on,
+#                                compression_target 0.7 (compress
+#                                the oldest until the total drops
+#                                below 70% of the ceiling).
+safety_snapshots: dict = {}
+backup_policies: dict = {}
+
 # Developer Kit (C5) state lives in ``xijian_api.devkit.state`` — the
 # DevKit is a stand-alone Pywebview application that does not share a
 # Flask server with the main API, so its buckets are intentionally
@@ -340,6 +377,9 @@ def reset_for_testing() -> None:
     mcp_audit.clear()
     mcp_freezes.clear()
     mcp_snapshots.clear()
+    # A5.3 backup buckets.
+    safety_snapshots.clear()
+    backup_policies.clear()
     files.clear()
     batches.clear()
     fine_tuning_jobs.clear()
@@ -391,6 +431,8 @@ __all__ = [
     "mcp_audit",
     "mcp_freezes",
     "mcp_snapshots",
+    "safety_snapshots",
+    "backup_policies",
     "files",
     "batches",
     "fine_tuning_jobs",

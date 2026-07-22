@@ -366,6 +366,31 @@ def gen_mcp_snapshot_id() -> str:
     return gen_id("mcpsnap_", _SHORT_HEX_LEN)
 
 
+def gen_safety_snapshot_id() -> str:
+    """Return an A5.3 safety-snapshot id (``sas_<12 hex>``).
+
+    A5.3 automatic backup: every scheduled / overload /
+    safety_stop / manual snapshot lands one of these.
+    Independent of A5.2's ``mcp_snapshots`` — the two
+    buckets serve different purposes (A5.3 = "store and
+    forget" archive, A5.2 = the safety-stop dump +
+    sanitize + restore cycle).  See notes.md 2026-07-20
+    for the split decision.
+    """
+    return gen_id("sas_", _SHORT_HEX_LEN)
+
+
+def gen_backup_policy_id() -> str:
+    """Return a backup-policy id (``bkpol_<12 hex>``).
+
+    A5.3 automatic backup: there's at most one policy
+    record (id="default"); the id is the storage layer's
+    handle so the route can PUT the policy without knowing
+    the natural key.
+    """
+    return gen_id("bkpol_", _SHORT_HEX_LEN)
+
+
 def gen_submission_id() -> str:
     """Return a Developer-Kit submission id (``sub_<12 hex>``).
 

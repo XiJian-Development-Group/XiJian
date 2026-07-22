@@ -139,6 +139,12 @@ def _reset_state(app):
         mcp_rules_stub.reset_for_testing()
         from xijian_api.stubs import mcp as mcp_stub
         mcp_stub.reset_for_testing()
+        # A5.3 automatic backup.  ``reset_for_testing()``
+        # wipes the snapshot bucket AND the policy record
+        # so the next test starts from the spec's default
+        # (5 GiB ceiling etc.).
+        from xijian_api.stubs import snapshots as snap_stub
+        snap_stub.reset_for_testing()
     yield
 
 
