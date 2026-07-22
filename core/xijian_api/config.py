@@ -267,6 +267,10 @@ class Config:
             object.__setattr__(
                 config.server, "port", int(os.environ["XIJIAN_API_PORT"])
             )
+        if "XIJIAN_HOST" in os.environ:
+            object.__setattr__(
+                config.server, "host", os.environ["XIJIAN_HOST"]
+            )
         if "XIJIAN_DEV" in os.environ:
             object.__setattr__(
                 config.server, "dev", _truthy(os.environ["XIJIAN_DEV"])

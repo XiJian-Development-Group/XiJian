@@ -8,4 +8,6 @@ from xijian_api.app import main
 
 
 if __name__ == "__main__":
-    raise SystemExit(main(sys.argv))
+    # ``sys.argv[0]`` is the script path; argparse expects the args
+    # *after* the program name.
+    raise SystemExit(main(sys.argv[1:]))
