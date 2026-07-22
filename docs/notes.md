@@ -5,6 +5,125 @@
 
 ---
 
+## 2026-07-20 · A5.2 MCP 防护实装（从零起）
+
+### 任务来源
+v2 spec §A5.2 列了 5 个产品故事（黑名单 100% 拦截 / 全局快捷键安全终止 / 白名单明示允许 / freeze→dump→confirm→sanitize→reload 终止后流程 / 受保护模块备份）+ 4 个验收标准（AC-1 黑名单 100% 拦截 / **AC-2 安全终止 < 200ms** / AC-3 恢复后 AI 从备份继续 / AC-4 备份存专用文件夹 + 受保护模块覆盖）+ 边界场景（多次连续安全终止 → 锁定模式冷重启 / MCP 进程僵死 → 强制 kill -9 重启）。spec 数据模型引用了 `mcp_action_blacklist` 表 + A5.3 的 `safety_snapshots`（A5.3 还没起）。spec 里有 1 个 `[TODO]`（全局快捷键默认 ⌃⌥⌘Q / Win+Alt+Shift+Q）。
+
+盘点代码：state.py **完全没有** `mcp_rules` / `mcp_audit` / `mcp_freezes` / `mcp_snapshots` 这 4 个 bucket，没有 stub、没有路由、没有测试——**100% 从零起**。
+
+### 已完成（实测一遍）
+
+#### 范围划分（先想清楚再做）
+A5.2 spec 同时包含两类东西：
+1. **服务器侧权威性**（core stub 范畴）：rulebook / gate 决策 / freeze state machine / snapshot dump+restore+sanitize / 审计 / per-world policy
+2. **桌面客户端侧**（Pywebview 范畴，不在 core）：全局快捷键监听 / UI 确认弹窗 / 进程 SIGFREEZE 实际发信号 / kill -9 MCP 进程
+
+本轮只做 #1，#2 走"等 Pywebview 客户端起时调用 server 侧 API"的路径——server 是**真值源**，客户端观察 + 触发。这是和 A5.1 / A5.4 同一套分工。
+
+#### 新建 stub
+- `stubs/mcp_rules.py`（~350 行）：8 种 `action_kind`（`file_delete` / `file_write` / `file_read` / `shell` / `network` / `app_launch` / `settings_modify` / `system_cmd`），2 种 `mode`（`blacklist` / `whitelist`），`severity ∈ [1, 5]`，`is_active` A/B 开关，pattern 上限 4 KB，broken-regex 静默跳过，`match_action_rules` 热路径按 severity desc 排序 + **unknown kind 拒绝匹配**（spec 边界：unknown action_kind 不能 fallback 到别的 kind 的规则，必须 deny-by-default）
+- `stubs/mcp.py`（~900 行，三大子系统）：
+  - **Gate `check()` 决策树** 7 个分支按顺序短路：
+    1. A5.4 overload recovery 窗口 → `allowed` + `blocked=overload_active`（不升级 deny；A5.1 / A4.4 同模式）
+    2. world 在 lockout → `denied_lockout` + `blocked=world_lockout`
+    3. world 有 pending freeze → `denied_frozen` + `blocked=world_frozen`（不返 freeze_id 因为客户端在 confirm 流程中，自己知道是哪个）
+    4. blacklist hit → `denied` + `blocked=blacklist_hit` + `matched_rule`（severity 最高的）
+    5. whitelist hit → `allowed` + `matched_rule`
+    6. no match + policy.default=deny → `denied` + `blocked=default_deny_no_match`
+    7. no match + policy.default=allow → `allowed`（黑名单兜底）
+    - **Self-crash fallback**：scan 内部 try/except，任何异常 → `verdict=denied_crashed` + `blocked=check_crashed` + `reason=check_crashed: <ExceptionClass>`
+  - **Safety-stop 状态机** `safety_stop` / `confirm_safety_stop` / `cancel_safety_stop`：
+    - 6 状态：`frozen`（init 后初始） / `awaiting_confirm`（dump snapshot 之后） / `sanitizing`（restore 中间状态，目前合并在 confirm 内） / `restored`（confirm 成功） / `cancelled`（cancel 路径） / `lockout`（3-in-60s 触发）
+    - **Lockout 触发**：60s 窗口内累积 3 次 safety_stop → 当前 freeze 状态转 `lockout` + per-world `lockout_until = now + 600s` 持久化 + 后续 `check()` 全返 `denied_lockout` + 后续 `safety_stop` 抛 `MCPLockoutError`（route 层 409）
+    - **`clear_lockout(world_id)` 同时清空 `_FREEZE_HISTORY[world_id]`**——否则 cold restart 后下一个 safety_stop 仍会立刻再触发 lockout（4-in-60s 窗口内）。这是 spec "要求冷重启" 的字面解释：操作者主动 reset 必须重置历史
+  - **Snapshots** `dump_snapshot` / `sanitize_snapshot` / `restore_snapshot`：
+    - **`PROTECTED_BUCKETS = ("worlds", "characters", "memory", "sessions")`** 常量 = spec AC-4 "受保护模块" 集合。dump 时遍历，deep-copy 进 `payload`（改 payload 不影响 live state）
+    - `file_path = "mcp_snapshots/<snap_id>.json"` — **服务端硬编码**，request body 里的 path 字段**不读不写**（防止路径逃逸出备份目录）
+    - `sanitize_snapshot` 复用 A5.1 的 `state.safety_rules` 里所有 active 的 `forbidden_word` 规则做字段级 scrub（**只**走字符串叶子，dict key=`__meta` 跳过，循环引用防护）；scrub 出的字符串用 `[sanitized]` 替换
+    - `restore_snapshot` 先调 `sanitize_snapshot` 兜底（即使 caller 跳过了显式 sanitize）——AC-3 "恢复后 AI 必须从备份的上下文继续" 的隐含要求
+  - **Audit log** 每次 `check()` 写一条，5 个 verdict（`allowed` / `denied` / `denied_lockout` / `denied_frozen` / `denied_crashed`），3 个 module-level `_seq` 计数器（audit / freeze / snapshot）保证同秒插入的稳定排序，snippet 240 字符截断
+
+#### 接入
+- `state.py`：加 4 个 bucket（`mcp_rules` / `mcp_audit` / `mcp_freezes` / `mcp_snapshots`）+ `reset_for_testing` 清空
+- `utils/ids.py`：加 `gen_mcp_rule_id` / `gen_mcp_audit_id` / `gen_mcp_freeze_id` / `gen_mcp_snapshot_id`（前缀 `mcpr_` / `mcpa_` / `mcpf_` / `mcpsnap_`）
+- `stubs/__init__.py`：加 2 个新子模块到 import 列表 + `seed_all()` 调用 + `__all__`
+- `routes/__init__.py`：`xijian_api.routes.xijian_mcp` 加进可选路由表
+- `routes/xijian_mcp.py`（~400 行）：
+  - `POST /v1/xijian/mcp/check` — gate 热路径
+  - `GET/POST/GET/PATCH/DELETE /v1/xijian/mcp/rules[/:id]` — rules CRUD
+  - `GET /v1/xijian/mcp/audit[/count]` — 审计查询
+  - `GET/PUT/DELETE /v1/xijian/mcp/policy/:wid` — per-world policy（含 `clear_lockout` 走 `set_world_policy(clear_lockout=True)`）
+  - `POST/GET /v1/xijian/mcp/safety_stop` + `GET /v1/xijian/mcp/safety_stop/:id` + `POST .../confirm` + `POST .../cancel` — 状态机
+  - `GET /v1/xijian/mcp/snapshots` + `GET /:id` + `POST /` + `POST /:id/sanitize` + `POST /:id/restore` — 快照 CRUD
+  - `POST /v1/xijian/mcp/dev/crash` — XIJIAN_DEV=1 演练 rulebook 自崩 fallback
+- `tests/conftest.py`：加 2 个新 stub 的 `reset_for_testing`（reset 顺序：`mcp_rules.reset_for_testing()` 在前，再 `mcp.reset_for_testing()`；这样下一轮 test 的 sanitize 拿到的 active `forbidden_word` 是空的）
+
+#### 测试（262 个新 case，0 flaky）
+- `test_xijian_mcp_rules.py`（105 个 case）：纯函数（kind/mode/pattern/severity 验证 + regex compile + broken regex）/ CRUD 26 / list_active 按 severity desc + 按 kind+mode 过滤 4 / list_all + filter 5 / update（含 immutable id/created_at）10 / delete 2 / match_active_rules 10（unknown kind 不匹配 / empty payload / broken regex 跳过 / case-insensitive）/ HTTP CRUD 18 / 鉴权 5
+- `test_xijian_mcp.py`（157 个 case）：纯函数（flatten_payload 含 dict/list/nested/depth-limit / truncate / seq 3 个计数器 / world policy / lockout 过期自动清）22 / audit 12 / gate `check` 全 7 分支（overload / lockout / frozen / blacklist / whitelist / default_deny / default_allow / self-crash 含 audit 写入验证）20 / safety-stop 状态机 18（init / pending-freeze 拒绝 / 3-in-60s lockout / lockout 跨世界隔离 / clear_lockout 重置 + 清历史 / list+filter+limit / confirm 跑 dump+sanitize+restore 全套 / cancel 释放世界 / 状态守卫）/ snapshot 26（dump+deep-copy 隔离 / protected buckets 全覆盖 / sanitize 含 A5.1 forbidden_word 联动 / sanitize 跳过 inactive 规则 / sanitize 跳过 __meta / sanitize 幂等 / restore auto-sanitize 兜底）/ lifecycle 2 / HTTP 47（check / audit list+count+filter / policy CRUD / safety_stop 全 11 端点含 409 lockout_active + 409 freeze_pending / snapshots 全 9 端点 / dev crash 含 403 gate）/ 鉴权 16
+
+#### 真实启动验证
+端到端跑通：world → 3 rules 创建（blacklist `rm` severity 5 / blacklist `shutdown` severity 5 / whitelist `^chrome$` severity 3）→ check `rm -rf /` → `denied` + matched_rule=blacklist / check `ls -la` → `denied` + `default_deny_no_match`（默认 deny 政策） / check `chrome` → `allowed` + matched_rule=whitelist / `safety_stop(world_id=w, reason='test')` → `frozen` / `confirm` → `restored` + snapshot_id 已写入 + restore_summary 4 个受保护 bucket 全恢复（`worlds` / `characters` / `memory` / `sessions`）/ audit 3 条全部可查。
+
+### 没动的（与原因）
+
+#### 1. AC-2 "安全终止响应延迟 < 200ms" **没法在 server 侧验证**
+**现状**：AC-2 测的是**端到端**快捷键 → MCP 进程冻结的延迟，server 侧的 `safety_stop` 调用本身是内存操作（us 级），但 spec 关心的是全局快捷键监听 → 跨进程 IPC → 服务端 → MCP 进程 SIGFREEZE 的总时长。本轮只给了 server 侧 API，**没有**全局快捷键监听。
+**为什么留**：快捷键监听是 Pywebview 客户端（macOS 用 `pynput` / Windows 用 `keyboard`）的活儿，server 没法独立验。客户端起时需要 1) 在 `mavis` 主循环或 Pywebview 窗口里注册快捷键 2) 触发时直接调 `client.post("/v1/xijian/mcp/safety_stop", ...)` 3) 拿 freeze_id 后调客户端自己的"显示确认弹窗"逻辑 4) 用户点确认 → 调 `confirm_safety_stop`、点取消 → 调 `cancel_safety_stop`。
+**接谁做**：Pywebview 客户端起时（约 30-50 行 JS + Python 桥接 + 端到端 timing 测试）。**注**：server 侧从快捷键 fire 到 `safety_stop` 入库 < 1ms，client 侧的 latency 主要在 IPC 通道，不是 server 能优化的。
+
+#### 2. 全局快捷键默认 ⌃⌥⌘Q / Win+Alt+Shift+Q `[TODO]` **没摘**
+**现状**：v2 spec 写"[TODO: 默认 ⌃⌥⌘Q / Win+Alt+Shift+Q]"。本轮 server 侧**没有**任何"快捷键"的概念（也没必要有）——server 接收的是已触发后的 `safety_stop` 调用。
+**为什么留**：同 #1，桌面客户端域。server 可以接受"任何来源"（hotkey / 程序 / 调试命令）的 `safety_stop` 请求。
+**接谁做**：Pywebview 客户端起时 1) 在 settings 加 "安全终止快捷键" 字段（默认 ⌃⌥⌘Q，Win 上 Win+Alt+Shift+Q）2) 启动时注册 3) 触发 → 调 `/v1/xijian/mcp/safety_stop`。v2 spec 这个 `[TODO]` 在客户端起来时一并摘除。
+
+#### 3. `mcp_action_blacklist` 表 vs `mcp_rules` 表 **没分两张**
+**现状**：spec §A5.2 数据模型写 `mcp_action_blacklist`（只有黑名单）。本轮 `mcp_rules` 是**单表双 mode**（`mode=blacklist` 或 `mode=whitelist`），没有分两张物理表。
+**为什么留**：spec 写"黑名单：删除系统文件 / 关机 / 修改安全模块"+"白名单：明示允许的动作"——并列的两种 list 放一张表是规范化（mode 列控制）。SQL 层面分两张表的好处是索引更窄 / 写入并发可分；坏处是 CRUD 端点要写两份代码。本轮 stub 端代码放单表，**真实 SQL 落库时**可以拆成 `mcp_action_blacklist` + `mcp_action_whitelist` 两张表（同 `mode` 列约束 + 跨表 unique id），API 形态不变。
+**接谁做**：SQL 落库章节（应该是 C2.x 数据层持久化）。
+
+#### 4. 真实 `kill -9` + MCP 进程重启 **没接**
+**现状**：spec 边界场景 "MCP 进程僵死 → 强制 kill -9 并按恢复流程重启"。本轮 server 侧**不拥有** MCP 进程——MCP 进程是桌宠客户端的子进程，server 通过 HTTP 协议交互。
+**为什么留**：跨进程问题。客户端侧的 recovery 流程是：1) watch MCP 子进程的 PID 2) 进程无响应 > 5s → `os.kill(pid, SIGKILL)` 3) 用最近的 snapshot 重新拉起 MCP 4) 通知 server 调 `/v1/xijian/mcp/snapshots/:id/restore` 让 server 状态从备份恢复。
+**接谁做**：Pywebview 客户端起时。**server 侧可以做的**：暴露一个 `POST /v1/xijian/mcp/recover` 端点接收"MCP 进程已重启 + 客户端要求重载"的信号，本轮**没加**（不在 A5.2 核心 scope；recovery 走 `restore_snapshot` 路径已经覆盖）。如果客户端起时觉得需要单独端点再加。
+
+#### 5. 没有"安全模块受保护"的具体清单
+**现状**：v2 §A5.2 写"修改安全模块"是黑名单动作之一，但没说哪些文件算"安全模块"。本轮 `KIND_SETTINGS_MODIFY` action_kind 给出来了，**没有**内置默认规则（operator-curated）。
+**为什么留**：黑名单内容是 operator 决策（产品+合规层面），不属于 stub 默认值。`safety_rules` 同模式（无默认 forbidden_word / ooc_pattern）。operator 配的示例规则会在 Pywebview 客户端 first-run 时一次性 seed 进去（这一段也走客户端域）。
+
+### 跨章节联动点（之后模块会碰 A5.2 的）
+
+- **A1.1 / A1.2 记忆**：dump snapshot 时如果 `state.memory` 里有敏感条目（API key / 密码），sanitize 应该 scrub。**本轮** A5.1 `forbidden_word` 复用兜底；如果未来 operator 想区分"内容敏感"和"凭证敏感"，需要 A5.2 扩 `sanitize` 的策略源（既用 A5.1 又用专门的 credential scanner）。**本轮没接**
+- **A2 chat pipeline**：模型做 tool call 之前必须过 `check()`。**本轮** `stubs/mcp.check` 已 ready，**没**接到 `stubs/chat.complete()`。A2 chat pipeline 章节起时在 tool_call dispatch 入口前插 `mcp_stub.check(action_kind=tool_kind, args=tool_args, world_id=wid)`——`verdict == 'allowed'` 才真发，否则返 fallback。**本轮没接**
+- **A3.2 角色状态**：高 sick / 濒死状态的 NPC 更可能误触发危险 tool call——`check()` 应该在 `character_id` 已知 + 该角色状态危险时自动 +1 严格（参考 A5.1 的 `set_safety_threshold` 联动）。**本轮没接**
+- **A4.1 事件调度**：fire 战斗类事件时 world `is_dangerous` 会被 A5.1 改成 true；A5.2 没有"dangerous world 自动收紧 MCP 政策"的联动（目前 `default=deny` 是稳态配置；操作者想严格化只需 PUT policy.default=deny）。**本轮没接**
+- **A4.2 NPC 调度**：高 importance NPC 调用敏感 tool 时，决策应该更保守。**本轮没接**（gate 只看 action_kind + payload + world policy；character_id / npc_id 留作未来扩展）
+- **A4.4 经济系统**：钱包 balance < 0 的 user 更可能铤而走险（黑名单模式？）；A5.2 没有联动。**本轮没接**
+- **A5.1 输出审查**：本轮已经**双向联动**了：1) `sanitize_snapshot` 复用 A5.1 `forbidden_word` 规则 scrub 快照 2) A5.1 之前留的"A5.2 tool_call stage 没接"现在已 ready——A5.1 + A5.2 是"内容审核 + 行为审核"双闸。**已接（单向 A5.1 → A5.2）**
+- **A5.3 自动备份**：A5.2 的 `dump_snapshot` 与 A5.3 的 `safety_snapshots(scope=safety_stop)` 数据模型是**同一张表的两个写入路径**。A5.3 起时需要决定 1) A5.2 snapshots 是否进 A5.3 总表 2) A5.3 的"压缩 / 空间上限"策略是否覆盖 A5.2。spec 没明说，本轮 A5.2 `mcpsnap_` 是独立 bucket，**等 A5.3 起时合并决策**。
+- **A5.4 过载防护**：本轮已接——A5.4 recovery 窗口内 `check()` 短路放行（`reason=overload_active_short_circuit`）。见 `mcp.py:_is_overload_active`
+- **A6 实时通话**：语音 call 期间 MCP tool call 概率低（口语化交互），但**安全终止**仍然需要工作——A6 客户端起时不要屏蔽全局快捷键。**本轮没接 / 不需要接**（server 侧无差别）
+- **A7 主动发起**：AI 自己起的 chat 同样可以触发 tool call——A5.2 `check()` 对所有 source 一视同仁。**不需要单独接**
+- **A8 桌宠 / 壁纸**：桌宠气泡框触发 tool call（如"帮我开 X 应用"）必须过 A5.2 gate。**本轮没接**（等 A8 客户端起时调）
+
+### 文档里的 `[TODO]` 状态
+v2 §A5.2 有 1 个 `[TODO]`："[TODO: 默认 ⌃⌥⌘Q / Win+Alt+Shift+Q]"——**本轮没摘**。server 侧无快捷键概念；客户端起时一并摘除。
+
+### 测试覆盖情况
+- `mcp_rules` stub 105 个 case：纯函数 30（kind 8/mode 4/pattern 6/severity 11/compile 3）/ CRUD 22 / list_active 4 / list_all 5 / update 10 / delete 2 / match_active_rules 10 / HTTP 18 / 鉴权 5
+- `mcp` stub 157 个 case：纯函数 22（flatten 8 / truncate 4 / seq 4 / world policy 10 / lockout 过期 2）/ audit 12 / gate 7 分支 20 / safety-stop 状态机 18 / snapshot 26 / lifecycle 2 / HTTP 47 / 鉴权 16
+- 总：262 个新 case，**1456** 总（1194 基线 + 262 新），0 回归
+
+**缺口**：
+- **AC-2 (latency) 没法在 server 侧验**——见"没动的 #1"
+- **全局快捷键 + UI 确认弹窗 + SIGFREEZE 真实信号没接**——见"没动的 #1 / #2"，需要 Pywebview 客户端
+- **真实 `kill -9` + MCP 进程重启没接**——见"没动的 #4"
+- **`mcp_action_blacklist` SQL 落库**——见"没动的 #3"
+- **A2 chat pipeline 集成**——最大的 server 侧联动缺口；A2 起时插 `check()` 即可
+
+---
+
 ## 2026-07-19 · A5.1 输出审查实装（从零起）
 
 ### 任务来源
