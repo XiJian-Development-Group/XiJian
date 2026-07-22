@@ -412,3 +412,8 @@ devkit/__pycache__/
 devkit/*/__pycache__/
 devkit/.ruff_cache/
 devkit/.pytest_cache/
+
+### Third-party dependencies (deps/)
+# deps/ contains large third-party projects (Applio, GPT-SoVITS) with
+# pretrained model weights (>5 GB).  Exclude from git; manage separately.
+deps/
