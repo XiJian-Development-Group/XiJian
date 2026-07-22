@@ -387,7 +387,15 @@ def clear_lockout(world_id: str) -> dict:
     """Operator-driven "cold restart" — drop the lockout
     state.  The spec's 边界场景 calls for a full restart but
     for the stub we expose the explicit clear (mirrors the
-    "kill -9 + restart" recovery)."""
+    "kill -9 + restart" recovery).
+
+    Also wipes the per-world freeze history so the operator
+    can safety_stop again from a clean slate.  Without this,
+    a world that hit lockout would retrigger on the very
+    next safety_stop (the 60 s window still has 3 entries).
+    """
+    with _LOCK:
+        _FREEZE_HISTORY.pop(world_id, None)
     return set_world_policy(world_id, clear_lockout=True)
 
 

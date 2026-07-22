@@ -155,7 +155,9 @@ def list_rules():
         return jsonify({"rules": rules_stub.list_active(
             action_kind=action_kind, mode=mode,
         )})
-    return jsonify({"rules": rules_stub.list_all()})
+    return jsonify({"rules": rules_stub.list_all(
+        action_kind=action_kind, mode=mode,
+    )})
 
 
 @bp.post("/v1/xijian/mcp/rules")

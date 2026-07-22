@@ -261,10 +261,20 @@ def list_active(
     return out
 
 
-def list_all() -> list[dict]:
+def list_all(
+    *,
+    action_kind: str | None = None,
+    mode: str | None = None,
+) -> list[dict]:
     """Return every rule (active + inactive), sorted by created_at
-    asc.  Used by the operator dashboard."""
-    out = list(state.mcp_rules.values())
+    asc.  Used by the operator dashboard.  Optional filter
+    args narrow the result set the same way as
+    :func:`list_active`."""
+    out = [
+        r for r in state.mcp_rules.values()
+        if (action_kind is None or r.get("action_kind") == action_kind)
+        and (mode is None or r.get("mode") == mode)
+    ]
     out.sort(key=lambda r: r.get("created_at", 0.0))
     return out
 
