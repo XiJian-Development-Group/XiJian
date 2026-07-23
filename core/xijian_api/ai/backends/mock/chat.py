@@ -102,14 +102,43 @@ def _build_chunk(
     )
 
 
+def _content_text(content) -> str:
+    """Extract plain text from possibly-multimodal content (str or list)."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: list[str] = []
+        for p in content:
+            if isinstance(p, dict) and p.get("type") == "text":
+                t = p.get("text", "")
+                if isinstance(t, str):
+                    parts.append(t)
+        return "".join(parts)
+    return ""
+
+
+def _msg_text(m) -> str:
+    """Extract text from a ChatMessage or dict, handling multimodal content."""
+    if isinstance(m, ChatMessage):
+        return _content_text(m.content)
+    if isinstance(m, dict):
+        return _content_text(m.get("content"))
+    return ""
+
+
+def _msg_role(m) -> str:
+    if isinstance(m, ChatMessage):
+        return m.role
+    if isinstance(m, dict):
+        return str(m.get("role", ""))
+    return ""
+
+
 def _last_user_text(messages: Sequence) -> str:
     """Return the most recent user message's text.  Empty string if none."""
     for m in reversed(messages):
-        if isinstance(m, ChatMessage):
-            if m.role == "user":
-                return m.content or ""
-        elif isinstance(m, dict) and m.get("role") == "user":
-            return str(m.get("content") or "")
+        if _msg_role(m) == "user":
+            return _msg_text(m)
     return ""
 
 
@@ -117,13 +146,7 @@ def _system_has_recall_instruction(messages: Sequence) -> bool:
     """True when the system message mentions the recall_memory tool."""
     needle = "recall_memory"
     for m in messages:
-        if isinstance(m, ChatMessage):
-            content = m.content or ""
-            role = m.role
-        else:
-            content = str((m or {}).get("content", ""))
-            role = str((m or {}).get("role", ""))
-        if role == "system" and needle in content:
+        if _msg_role(m) == "system" and needle in _msg_text(m):
             return True
     return False
 
@@ -131,14 +154,9 @@ def _system_has_recall_instruction(messages: Sequence) -> bool:
 def _latest_tool_result(messages: Sequence) -> dict | None:
     """Return the most recent ``role=tool`` message's parsed JSON content."""
     for m in reversed(messages):
-        if isinstance(m, ChatMessage):
-            role = m.role
-            content = m.content or ""
-        else:
-            role = str((m or {}).get("role", ""))
-            content = str((m or {}).get("content", ""))
-        if role != "tool":
+        if _msg_role(m) != "tool":
             continue
+        content = _msg_text(m)
         try:
             return json.loads(content)
         except (json.JSONDecodeError, TypeError):
@@ -154,13 +172,7 @@ _MCP_TOOLS_MARKER = "你可以使用以下工具来完成用户的请求"
 def _system_has_mcp_tools_instruction(messages: Sequence) -> bool:
     """True when the system message contains the MCP tools instruction."""
     for m in messages:
-        if isinstance(m, ChatMessage):
-            content = m.content or ""
-            role = m.role
-        else:
-            content = str((m or {}).get("content", ""))
-            role = str((m or {}).get("role", ""))
-        if role == "system" and _MCP_TOOLS_MARKER in content:
+        if _msg_role(m) == "system" and _MCP_TOOLS_MARKER in _msg_text(m):
             return True
     return False
 
@@ -169,14 +181,9 @@ def _extract_tool_names_from_system(messages: Sequence) -> list[str]:
     """Parse tool names from ``### name`` headers in the tools system prompt."""
     names: list[str] = []
     for m in messages:
-        if isinstance(m, ChatMessage):
-            content = m.content or ""
-            role = m.role
-        else:
-            content = str((m or {}).get("content", ""))
-            role = str((m or {}).get("role", ""))
-        if role != "system":
+        if _msg_role(m) != "system":
             continue
+        content = _msg_text(m)
         for line in content.splitlines():
             line = line.strip()
             if line.startswith("### "):
@@ -194,14 +201,8 @@ def _latest_tool_text(messages: Sequence) -> str | None:
     right helper for the MCP tools path.
     """
     for m in reversed(messages):
-        if isinstance(m, ChatMessage):
-            role = m.role
-            content = m.content or ""
-        else:
-            role = str((m or {}).get("role", ""))
-            content = str((m or {}).get("content", ""))
-        if role == "tool":
-            return content
+        if _msg_role(m) == "tool":
+            return _msg_text(m)
     return None
 
 

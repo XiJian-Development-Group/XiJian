@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from flask import Blueprint, g, jsonify, request
+from flask import Blueprint, g, jsonify, request, stream_with_context
 
 from xijian_api import abort as abort_registry
 from xijian_api.errors import ApiError
@@ -78,7 +78,7 @@ def chat_completions():
         finally:
             abort_registry.cleanup(request_id)
 
-    response = build_stream_response(_gen())
+    response = build_stream_response(stream_with_context(_gen()))
     response.headers["X-XiJian-Model-Id"] = model
     response.headers["X-XiJian-Backend"] = (xijian_ext or {}).get("backend", "stub")
     return response

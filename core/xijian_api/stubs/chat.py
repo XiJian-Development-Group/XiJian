@@ -122,11 +122,26 @@ def _select_default_backend() -> ChatBackend:
             type_="backend_unavailable",
             code="backend_unavailable",
         ) from exc
-    # The mock backend is "always available" but starts unloaded.
     # Free-form ids (e.g. ``stub-model``) don't carry a model entry,
-    # so load against a sentinel path the mock accepts blindly.
-    if backend.name == "mock" and not backend.is_loaded():
-        backend.load("/mock/default")
+    # so there's no checkpoint path to load into a real backend.
+    # When the selected backend is available but not loaded (e.g.
+    # mlx_lm is installed but no model has been loaded via
+    # ``/v1/models/<id>/load``), fall through to mock so smoke
+    # checks keep working without a real checkpoint on disk.
+    if backend.name == "mock":
+        if not backend.is_loaded():
+            backend.load("/mock/default")
+        return backend
+    if not backend.is_loaded():
+        # Try mock as a last resort for free-form ids.
+        try:
+            mock = get_chat_backend("mock", ())
+        except AIBackendUnavailable:
+            mock = None
+        if mock is not None:
+            if not mock.is_loaded():
+                mock.load("/mock/default")
+            return mock
     return backend
 
 

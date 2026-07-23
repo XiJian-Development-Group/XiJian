@@ -183,6 +183,20 @@ class ModelRegistry:
             if entry.context_length and "context_length" not in load_kwargs:
                 load_kwargs["context_length"] = entry.context_length
 
+            # For ``backend = "openai"`` models, pass the global
+            # ``[backends.openai]`` section so :func:`resolve_config`
+            # can merge per-model overrides with global defaults.
+            if entry.backend == "openai":
+                oai = config.backends.openai
+                load_kwargs["_openai_section"] = {
+                    "base_url": oai.base_url,
+                    "api_key": oai.api_key,
+                    "default_model": oai.default_model,
+                    "transport": oai.transport,
+                    "headers": dict(oai.headers),
+                    "video_endpoint": oai.video_endpoint,
+                }
+
             try:
                 instance.load(absolute_path, **load_kwargs)
             except BackendError:

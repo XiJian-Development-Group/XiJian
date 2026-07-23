@@ -140,6 +140,23 @@ class BackendConfig:
 
 
 @dataclass(frozen=True)
+class OpenAIBackendConfig:
+    """Global defaults for ``backend = "openai"`` models.
+
+    Per-model ``[[models]].extra`` fields override these.  When a field
+    is empty the :func:`resolve_config` helper falls back to the
+    matching ``OPENAI_*`` environment variable.
+    """
+
+    base_url: str = ""
+    api_key: str = ""
+    default_model: str = ""
+    transport: str = "httpx"  # "httpx" | "openai_sdk"
+    headers: dict = field(default_factory=dict)
+    video_endpoint: str = "/video/generations"
+
+
+@dataclass(frozen=True)
 class BackendsConfig:
     chat: BackendConfig = field(default_factory=lambda: BackendConfig(default="mlx", fallbacks=("gguf",)))
     embeddings: BackendConfig = field(default_factory=lambda: BackendConfig(default="mlx"))
@@ -147,6 +164,7 @@ class BackendsConfig:
     stt: BackendConfig = field(default_factory=lambda: BackendConfig(default="mlx"))
     image: BackendConfig = field(default_factory=lambda: BackendConfig(default="mlx"))
     video: BackendConfig = field(default_factory=lambda: BackendConfig(default="mlx"))
+    openai: OpenAIBackendConfig = field(default_factory=OpenAIBackendConfig)
 
 
 @dataclass(frozen=True)
@@ -380,6 +398,16 @@ def _build_backends(data: dict[str, Any]) -> BackendsConfig:
             default=block.get("default", ""),
             fallbacks=tuple(block.get("fallbacks", []) or ()),
         )
+    # Optional [backends.openai] global section.
+    oai_block = dict(data.get("openai", {}))
+    kwargs["openai"] = OpenAIBackendConfig(
+        base_url=str(oai_block.get("base_url", "") or ""),
+        api_key=str(oai_block.get("api_key", "") or ""),
+        default_model=str(oai_block.get("default_model", "") or ""),
+        transport=str(oai_block.get("transport", "httpx") or "httpx"),
+        headers=dict(oai_block.get("headers", {}) or {}),
+        video_endpoint=str(oai_block.get("video_endpoint", "/video/generations") or "/video/generations"),
+    )
     return BackendsConfig(**kwargs)
 
 
@@ -465,6 +493,7 @@ __all__ = [
     "StorageConfig",
     "BackendConfig",
     "BackendsConfig",
+    "OpenAIBackendConfig",
     "ModelEntry",
     "AIConfig",
     "FeaturesConfig",

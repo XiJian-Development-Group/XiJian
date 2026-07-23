@@ -74,6 +74,29 @@ default = "mlx"
 fallbacks = ["gguf"]
 
 # ---------------------------------------------------------------------------
+# OpenAI-compatible remote backend — global defaults.
+#
+# Any [[models]] entry with ``backend = "openai"`` inherits these.
+# Per-model ``[[models]].extra`` fields override them.  Env vars
+# (``OPENAI_API_KEY``, ``OPENAI_BASE_URL``) are the last fallback so
+# secrets don't need to live in config files.
+#
+# ``transport`` selects the HTTP client: ``httpx`` (default, always
+# available) or ``openai_sdk`` (requires the ``openai`` package).
+#
+# ``video_endpoint`` is the path appended to ``base_url`` for video
+# generation.  Set to empty string to disable video on remote backends.
+# ---------------------------------------------------------------------------
+
+[backends.openai]
+base_url = ""              # empty = https://api.openai.com/v1
+api_key = ""               # empty = $OPENAI_API_KEY
+default_model = ""         # e.g. "gpt-4o" — usually overridden per-model
+transport = "httpx"
+headers = {}
+video_endpoint = "/video/generations"
+
+# ---------------------------------------------------------------------------
 # AI runtime defaults — used when a request does not specify one.
 # ---------------------------------------------------------------------------
 
@@ -150,6 +173,23 @@ quant = "q4_k_m"
 context_length = 8192
 min_ram_gb = 8
 loaded = false
+
+# Example: remote OpenAI-compatible chat model.  Uncomment and fill in
+# your base_url + api_key (or set $OPENAI_API_KEY) to use a remote
+# endpoint instead of a local backend.
+#
+# [[models]]
+# id = "gpt-4o-remote"
+# type = "chat"
+# backend = "openai"
+# filename = ""               # unused for remote; keep empty
+# family = "gpt-4o"
+# context_length = 128000
+# loaded = false
+# [models.extra]
+# model_name = "gpt-4o"
+# base_url = "https://api.openai.com/v1"   # or your compatible endpoint
+# api_key = ""                              # or set $OPENAI_API_KEY
 
 # ---------------------------------------------------------------------------
 # Feature toggles

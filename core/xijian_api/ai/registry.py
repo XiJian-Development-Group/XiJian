@@ -114,6 +114,7 @@ _BUILTIN_IMPORTS: dict[str, dict[str, str]] = {
     "chat": {
         "mlx": "xijian_api.ai.backends.mlx.chat",
         "gguf": "xijian_api.ai.backends.gguf.chat",
+        "openai": "xijian_api.ai.backends.openai.chat",
         # The mock backend is for tests and local development only; it
         # never loads real weights and is always ``is_available()``.
         "mock": "xijian_api.ai.backends.mock.chat",
@@ -121,22 +122,27 @@ _BUILTIN_IMPORTS: dict[str, dict[str, str]] = {
     "embeddings": {
         "mlx": "xijian_api.ai.backends.mlx.embedding",
         "gguf": "xijian_api.ai.backends.gguf.embedding",
+        "openai": "xijian_api.ai.backends.openai.embedding",
     },
     "tts": {
         "mlx": "xijian_api.ai.backends.mlx.tts",
         "gguf": "xijian_api.ai.backends.gguf.tts",
+        "openai": "xijian_api.ai.backends.openai.tts",
     },
     "stt": {
         "mlx": "xijian_api.ai.backends.mlx.stt",
         "gguf": "xijian_api.ai.backends.gguf.stt",
+        "openai": "xijian_api.ai.backends.openai.stt",
     },
     "image": {
         "mlx": "xijian_api.ai.backends.mlx.image",
         "gguf": "xijian_api.ai.backends.gguf.image",
+        "openai": "xijian_api.ai.backends.openai.image",
     },
     "video": {
         "mlx": "xijian_api.ai.backends.mlx.video",
         "gguf": "xijian_api.ai.backends.gguf.video",
+        "openai": "xijian_api.ai.backends.openai.video",
     },
 }
 

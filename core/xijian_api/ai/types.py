@@ -1,11 +1,17 @@
 from dataclasses import dataclass, field
-from typing import Sequence
+from typing import Sequence, Union
+
+
+#: Multimodal content: either a plain string (text-only) or a list of
+#: OAI content parts (``{"type": "text", "text": ...}`` /
+#: ``{"type": "image_url", "image_url": {"url": ...}}`` etc.).
+Content = Union[str, list]
 
 
 @dataclass
 class ChatMessage:
     role: str
-    content: str
+    content: Content
     name: str | None = None
     tool_call_id: str | None = None
     tool_calls: list | None = None
@@ -19,6 +25,26 @@ class ChatMessage:
         if self.tool_calls:
             out["tool_calls"] = self.tool_calls
         return out
+
+    @property
+    def text_content(self) -> str:
+        """Best-effort extraction of plain text from possibly-multimodal content.
+
+        Returns the string as-is when ``content`` is a string; when it's
+        a list of parts, concatenates the ``text`` fields of every
+        ``{"type": "text"}`` part.  Non-text parts are skipped.
+        """
+        if isinstance(self.content, str):
+            return self.content
+        if isinstance(self.content, list):
+            parts: list[str] = []
+            for p in self.content:
+                if isinstance(p, dict) and p.get("type") == "text":
+                    t = p.get("text", "")
+                    if isinstance(t, str):
+                        parts.append(t)
+            return "".join(parts)
+        return ""
 
 
 @dataclass
