@@ -691,6 +691,410 @@ def _run_recall_pipeline(
 
 
 # ---------------------------------------------------------------------------
+# MCP tools pipeline (A2 — tool calling)
+# ---------------------------------------------------------------------------
+
+
+#: System instruction appended when MCP tools are enabled.  Tells the
+#: model it has access to XiJian tools and should use them for real
+#: actions rather than fabricating results.
+_TOOLS_SYSTEM_PROMPT = (
+    "你可以使用以下工具来完成用户的请求。工具调用规则：\n"
+    "1. 当需要执行实际操作（创建角色、查询记忆、读写文件等）时，**必须**调用相应工具。\n"
+    "2. 不要捏造工具调用的结果——必须等待工具返回后再继续回复。\n"
+    "3. 工具可能被安全策略（A5.2）拒绝，此时请告知用户操作被拦截，不要尝试绕过。\n"
+    "4. 对于查询类工具，调用后将结果整理为用户友好的格式再回复。\n"
+    "5. 可以在一次回复中调用多个工具，但每个 tool_call 必须有独立的 id。"
+)
+
+
+def _mcp_tool_to_oai(tool_spec: dict[str, Any]) -> dict[str, Any]:
+    """Convert an MCP tool spec to the OAI ``tools`` array entry shape."""
+    return {
+        "type": "function",
+        "function": {
+            "name": tool_spec["name"],
+            "description": tool_spec.get("description", ""),
+            "parameters": tool_spec.get("inputSchema", {"type": "object", "properties": {}}),
+        },
+    }
+
+
+def _should_enable_tools(xijian: dict | None, user_tools: list | None) -> bool:
+    """Return True if the MCP tools pipeline should run.
+
+    Triggered by either:
+    * ``xijian.tools.enabled = true``  → inject all MCP tools
+    * ``tools`` field is a non-empty list → use provided tools, execute
+      MCP tool names through the registry / A5.2 gate
+    """
+    if isinstance(user_tools, list) and len(user_tools) > 0:
+        return True
+    if isinstance(xijian, dict):
+        tools_cfg = xijian.get("tools")
+        if isinstance(tools_cfg, dict) and tools_cfg.get("enabled"):
+            return True
+    return False
+
+
+def _build_oai_tools(
+    xijian: dict | None,
+    user_tools: list | None,
+) -> tuple[list[dict[str, Any]], set[str]]:
+    """Build the OAI tools list and return ``(tools, mcp_names)``.
+
+    * If ``xijian.tools.enabled`` is true, every registered MCP tool
+      is injected.
+    * If ``user_tools`` (the OAI ``tools`` field) is provided, those
+      entries are added as-is.
+    * ``mcp_names`` is the set of tool names that should be executed
+      through the MCP registry (i.e. names that exist in the MCP
+      registry).  Non-MCP tools in ``user_tools`` are passed to the
+      model but can't be executed by the server — the model would
+      need to handle them client-side.
+    """
+    # Lazy import to avoid circular dependency at module load time.
+    from xijian_api.mcp.registry import list_tool_names, list_tools
+
+    oai_tools: list[dict[str, Any]] = []
+    mcp_names: set[str] = set()
+
+    # 1) Inject all MCP tools if xijian.tools.enabled is true.
+    if isinstance(xijian, dict):
+        tools_cfg = xijian.get("tools")
+        if isinstance(tools_cfg, dict) and tools_cfg.get("enabled"):
+            all_mcp = list_tools()
+            include = tools_cfg.get("include")
+            exclude = set(tools_cfg.get("exclude") or [])
+            for spec in all_mcp:
+                name = spec["name"]
+                if name in exclude:
+                    continue
+                if include and name not in set(include):
+                    continue
+                oai_tools.append(_mcp_tool_to_oai(spec))
+                mcp_names.add(name)
+
+    # 2) Merge user-provided OAI tools.
+    if isinstance(user_tools, list):
+        registered = set(list_tool_names())
+        for entry in user_tools:
+            if not isinstance(entry, dict):
+                continue
+            # Standardise the entry shape.
+            fn = entry.get("function") or entry
+            name = fn.get("name")
+            if name and name in registered:
+                mcp_names.add(name)
+                # Skip if already injected from MCP.
+                if any(
+                    t.get("function", {}).get("name") == name for t in oai_tools
+                ):
+                    continue
+            oai_tools.append(entry)
+
+    return oai_tools, mcp_names
+
+
+def _execute_mcp_tool_call(
+    name: str,
+    arguments: dict[str, Any],
+    *,
+    world_id: str | None = None,
+) -> dict[str, Any]:
+    """Execute an MCP tool call through the registry (A5.2 gate).
+
+    Returns a dict with ``{"content": str, "isError": bool, ...}``.
+    """
+    from xijian_api.mcp.registry import (
+        ToolError as MCPToolError,
+        ToolGateError,
+        ToolNotFoundError,
+        call_tool,
+    )
+
+    try:
+        result = call_tool(name, arguments, world_id=world_id)
+    except ToolNotFoundError:
+        return {
+            "content": "错误：工具 %s 不存在" % name,
+            "isError": True,
+            "error_type": "tool_not_found",
+        }
+    except ToolGateError as exc:
+        return {
+            "content": exc.message,
+            "isError": True,
+            "error_type": "gate_denied",
+            "gate": exc.data,
+        }
+    except MCPToolError as exc:
+        return {
+            "content": exc.message,
+            "isError": True,
+            "error_type": "tool_error",
+            "data": exc.data,
+        }
+
+    # Flatten the MCP content envelope into a plain string for the
+    # tool message.  The OAI tool message content is a string.
+    content_parts: list[str] = []
+    for item in result.get("content", []):
+        if isinstance(item, dict):
+            content_parts.append(item.get("text", ""))
+        elif isinstance(item, str):
+            content_parts.append(item)
+    return {
+        "content": "\n".join(content_parts) or "(empty result)",
+        "isError": result.get("isError", False),
+        "_meta": result.get("_meta"),
+    }
+
+
+def _run_tools_pipeline(
+    backend: ChatBackend,
+    messages: list[Any],
+    *,
+    model: str,
+    xijian: dict | None,
+    user_tools: list | None,
+    tool_choice: Any,
+    params: GenerationParams,
+) -> dict[str, Any]:
+    """Drive the MCP tools pipeline and return the OAI envelope.
+
+    The flow:
+
+    1. Build the OAI tools list from MCP tools + user-provided tools.
+    2. Inject the tools system instruction.
+    3. First backend call with tools attached.
+    4. If the model emits tool_calls, execute each one through the
+       MCP registry (routes through A5.2 gate for desktop-control
+       tools).  Feed results back as ``tool`` messages.
+    5. Re-call the backend for the final answer.
+    6. Record tool calls in ``xijian.tools`` block.
+
+    The pipeline supports multiple rounds of tool calls: if the
+    second backend response also contains tool_calls, we execute
+    them and call again, up to ``_MAX_TOOL_ROUNDS`` iterations.
+    """
+    _MAX_TOOL_ROUNDS = 5
+
+    world_id = (xijian or {}).get("world_id")
+    oai_tools, mcp_names = _build_oai_tools(xijian, user_tools)
+    if not oai_tools:
+        # No tools to inject — fall through to a direct call.
+        try:
+            result = backend.chat(
+                _normalise_messages(messages),
+                params,
+                stream=False,
+            )
+        except AIBackendError as exc:
+            raise ApiBackendError(
+                status=503,
+                message=str(exc) or "backend error",
+                type_="backend_unavailable",
+                code=getattr(exc, "code", "backend_error"),
+            ) from exc
+        return _to_oai_response(result, model=model)
+
+    # Inject tool descriptions into the system prompt text (NOT as
+    # backend kwargs) — the ChatBackend interface is a low-level
+    # text-generation contract that doesn't accept tools/tool_choice.
+    # This mirrors the recall pipeline's system-prompt approach.
+    prepared_messages = _inject_tools_system(
+        messages, oai_tools=oai_tools, tool_choice=tool_choice,
+    )
+
+    all_tool_calls_log: list[dict[str, Any]] = []
+    current_messages = list(prepared_messages)
+
+    for round_num in range(_MAX_TOOL_ROUNDS):
+        try:
+            iter_chunks = backend.chat(
+                _chat_messages_for_backend(current_messages),
+                params,
+                stream=False,
+            )
+        except AIBackendError as exc:
+            raise ApiBackendError(
+                status=503,
+                message=str(exc) or "backend error",
+                type_="backend_unavailable",
+                code=getattr(exc, "code", "backend_error"),
+            ) from exc
+
+        chunks = list(iter_chunks)
+        tool_calls = _extract_tool_calls(chunks)
+
+        # Collect text content from this round.
+        round_text_parts: list[str] = []
+        for chunk in chunks:
+            for choice in getattr(chunk, "choices", []) or []:
+                delta = choice.delta if isinstance(choice.delta, dict) else {}
+                text = _content_to_text(delta.get("content"))
+                if text:
+                    round_text_parts.append(text)
+
+        if not tool_calls:
+            # No more tool calls — this is the final answer.
+            response = _to_oai_response(chunks, model=model)
+            response.setdefault("xijian", {})
+            response["xijian"]["tools"] = {
+                "enabled": True,
+                "rounds": round_num + 1,
+                "tool_calls": all_tool_calls_log,
+            }
+            return response
+
+        # Execute each tool call.
+        tool_messages: list[dict[str, Any]] = []
+        for tc in tool_calls:
+            name = tc.get("function", {}).get("name", "")
+            args_str = tc.get("function", {}).get("arguments", "{}")
+            try:
+                args = json.loads(args_str) if args_str else {}
+            except json.JSONDecodeError:
+                args = {}
+
+            if name in mcp_names:
+                exec_result = _execute_mcp_tool_call(
+                    name, args, world_id=world_id,
+                )
+                all_tool_calls_log.append({
+                    "tool_call_id": tc.get("id"),
+                    "name": name,
+                    "arguments": args_str,
+                    "result": exec_result["content"],
+                    "is_error": exec_result.get("isError", False),
+                    "error_type": exec_result.get("error_type"),
+                })
+                tool_messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc.get("id"),
+                    "name": name,
+                    "content": exec_result["content"],
+                })
+            else:
+                # Non-MCP tool — can't execute server-side.  Return
+                # an error message so the model knows.
+                all_tool_calls_log.append({
+                    "tool_call_id": tc.get("id"),
+                    "name": name,
+                    "arguments": args_str,
+                    "result": "server cannot execute non-MCP tool",
+                    "is_error": True,
+                    "error_type": "non_mcp_tool",
+                })
+                tool_messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc.get("id"),
+                    "name": name,
+                    "content": "错误：服务端无法执行此工具（非 MCP 注册工具）。",
+                })
+
+        # Append the assistant's tool_calls message + tool results.
+        current_messages = [
+            *current_messages,
+            {
+                "role": "assistant",
+                "content": "".join(round_text_parts) or "",
+                "tool_calls": [
+                    {
+                        "id": tc.get("id"),
+                        "type": tc.get("type", "function"),
+                        "function": tc.get("function", {}),
+                    }
+                    for tc in tool_calls
+                ],
+            },
+            *tool_messages,
+        ]
+
+    # Exhausted rounds — return what we have with a note.
+    try:
+        final_iter = backend.chat(
+            _chat_messages_for_backend(current_messages),
+            params,
+            stream=False,
+        )
+    except AIBackendError as exc:
+        raise ApiBackendError(
+            status=503,
+            message=str(exc) or "backend error",
+            type_="backend_unavailable",
+            code=getattr(exc, "code", "backend_error"),
+        ) from exc
+
+    final_chunks = list(final_iter)
+    response = _to_oai_response(final_chunks, model=model)
+    response.setdefault("xijian", {})
+    response["xijian"]["tools"] = {
+        "enabled": True,
+        "rounds": _MAX_TOOL_ROUNDS,
+        "tool_calls": all_tool_calls_log,
+        "truncated": True,
+        "note": "tool call rounds exhausted; returning last response",
+    }
+    return response
+
+
+def _inject_tools_system(
+    messages: list[dict],
+    oai_tools: list[dict[str, Any]] | None = None,
+    tool_choice: Any = None,
+) -> list[dict]:
+    """Prepend/merge the tools system instruction.
+
+    When ``oai_tools`` is provided, the tool descriptions (name +
+    description + parameter schema) are embedded as text in the
+    system prompt so any text-generation backend (mlx / gguf / mock)
+    can surface them to the model.  The model is expected to emit
+    ``tool_calls`` in the OAI streaming delta format when it decides
+    to call a tool — the pipeline parses those via
+    :func:`_extract_tool_calls`.
+
+    This mirrors the recall pipeline's approach (system-prompt
+    injection rather than backend kwargs) because the
+    :class:`ChatBackend` interface is a low-level text-generation
+    contract that does not accept ``tools`` / ``tool_choice``.
+    """
+    parts = [_TOOLS_SYSTEM_PROMPT]
+    if tool_choice in ("required", "tool"):
+        parts.append("\n**本次请求要求必须调用至少一个工具。**")
+    elif isinstance(tool_choice, dict):
+        fn = tool_choice.get("function") or {}
+        forced_name = fn.get("name")
+        if forced_name:
+            parts.append(f"\n**本次请求要求必须调用工具 `{forced_name}`。**")
+    if oai_tools:
+        parts.append("\n## 可用工具列表：")
+        for t in oai_tools:
+            fn = t.get("function") or t
+            name = fn.get("name", "")
+            desc = fn.get("description", "")
+            schema = fn.get("parameters", {})
+            parts.append(
+                f"\n### {name}\n{desc}\n"
+                f"参数 schema: {json.dumps(schema, ensure_ascii=False)}"
+            )
+        parts.append(
+            "\n调用工具时，请在回复中使用 OAI tool_calls 格式：包含 "
+            '"tool_calls" 数组，每个调用含独立 "id" 和 "function" '
+            '（"name" + "arguments" JSON 字符串）。不需要调用工具时正常文本回复即可。'
+        )
+    instruction = "\n".join(parts)
+    out = list(messages)
+    if not out or out[0].get("role") != "system":
+        return [{"role": "system", "content": instruction}, *out]
+    first = dict(out[0])
+    first["content"] = (first.get("content") or "") + "\n\n" + instruction
+    out[0] = first
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Public entry points — called by the chat route
 # ---------------------------------------------------------------------------
 
@@ -706,6 +1110,8 @@ def complete(
     n: int = 1,
     user: str | None = None,
     xijian: dict | None = None,
+    tools: list | None = None,
+    tool_choice: Any = None,
 ) -> dict[str, Any]:
     """Return a non-streaming OAI chat completion payload via the backend.
 
@@ -714,6 +1120,12 @@ def complete(
     the recall system instruction, attaches the ``recall_memory`` tool,
     executes any tool calls against the memory store, and audits the
     final response for citation faithfulness.
+
+    When ``xijian.tools.enabled`` is true or the OAI ``tools`` field
+    is provided, the MCP tools pipeline (A2) intercepts the call
+    instead: it injects the MCP tool descriptions, lets the model
+    decide which tools to call, executes them through the A5.2 gate,
+    and feeds the results back for a final answer.
     """
     _ = user  # accepted for OAI parity; backends consume the rest
     n = max(1, int(n or 1))
@@ -725,6 +1137,21 @@ def complete(
         stop=stop,
         n=n,
     )
+
+    # MCP tools pipeline (A2) — checked before recall so that
+    # xijian.tools.enabled takes precedence.  The tools pipeline
+    # includes memory_recall as one of the MCP tools, so it
+    # subsumes the recall pipeline when both are requested.
+    if _should_enable_tools(xijian, tools):
+        return _run_tools_pipeline(
+            backend,
+            messages,
+            model=model,
+            xijian=xijian,
+            user_tools=tools,
+            tool_choice=tool_choice,
+            params=params,
+        )
 
     if _should_enable_recall(xijian):
         # The pipeline walks n-times for parity but most callers pass n=1.

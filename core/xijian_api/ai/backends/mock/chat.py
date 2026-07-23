@@ -146,6 +146,65 @@ def _latest_tool_result(messages: Sequence) -> dict | None:
     return None
 
 
+#: Marker injected by the MCP tools pipeline (A2) in the system prompt.
+#: Mirrors the first line of ``_TOOLS_SYSTEM_PROMPT`` in chat_stub.py.
+_MCP_TOOLS_MARKER = "你可以使用以下工具来完成用户的请求"
+
+
+def _system_has_mcp_tools_instruction(messages: Sequence) -> bool:
+    """True when the system message contains the MCP tools instruction."""
+    for m in messages:
+        if isinstance(m, ChatMessage):
+            content = m.content or ""
+            role = m.role
+        else:
+            content = str((m or {}).get("content", ""))
+            role = str((m or {}).get("role", ""))
+        if role == "system" and _MCP_TOOLS_MARKER in content:
+            return True
+    return False
+
+
+def _extract_tool_names_from_system(messages: Sequence) -> list[str]:
+    """Parse tool names from ``### name`` headers in the tools system prompt."""
+    names: list[str] = []
+    for m in messages:
+        if isinstance(m, ChatMessage):
+            content = m.content or ""
+            role = m.role
+        else:
+            content = str((m or {}).get("content", ""))
+            role = str((m or {}).get("role", ""))
+        if role != "system":
+            continue
+        for line in content.splitlines():
+            line = line.strip()
+            if line.startswith("### "):
+                name = line[4:].strip()
+                if name:
+                    names.append(name)
+    return names
+
+
+def _latest_tool_text(messages: Sequence) -> str | None:
+    """Return the most recent ``role=tool`` message's raw text, or ``None``.
+
+    Unlike :func:`_latest_tool_result` this does not attempt JSON
+    parsing — MCP tool results are plain strings, so this is the
+    right helper for the MCP tools path.
+    """
+    for m in reversed(messages):
+        if isinstance(m, ChatMessage):
+            role = m.role
+            content = m.content or ""
+        else:
+            role = str((m or {}).get("role", ""))
+            content = str((m or {}).get("content", ""))
+        if role == "tool":
+            return content
+    return None
+
+
 def _build_echo_prefix(messages: Sequence) -> str:
     """Return a short ``[echo: ...]`` prefix from the last user message."""
     text = _last_user_text(messages).strip()
@@ -212,6 +271,46 @@ class MockChatBackend(ChatBackend):
         max_tokens = _resolve_max_tokens(params)
         chunk_id = f"chatcmpl-mock-{int(time.time() * 1000)}"
         model_id = str(self._model_path) if self._model_path else "mock"
+
+        # MCP tools path (A2): when the pipeline injects the MCP tools
+        # system instruction, the mock simulates a model that calls the
+        # first available tool on turn 1, then echoes the tool result as
+        # the final answer on turn 2.  This lets the tools pipeline be
+        # exercised end-to-end without a real model.
+        if _system_has_mcp_tools_instruction(messages):
+            available = _extract_tool_names_from_system(messages)
+            tool_text = _latest_tool_text(messages)
+            if tool_text is None and available:
+                # First turn — emit a tool call for the first tool.
+                tool_name = available[0]
+                if stream:
+                    return self._streaming_mcp_tool_call(
+                        tool_name=tool_name,
+                        chunk_id=chunk_id,
+                        model_id=model_id,
+                        abort_signal=abort_signal,
+                    )
+                return self._blocking_mcp_tool_call(
+                    tool_name=tool_name,
+                    chunk_id=chunk_id,
+                    model_id=model_id,
+                    abort_signal=abort_signal,
+                )
+            # Second turn (or no tools available) — emit the final answer.
+            full_content = self._mcp_final_turn(tool_text, messages)
+            if stream:
+                return self._streaming(
+                    full_content=full_content,
+                    chunk_id=chunk_id,
+                    model_id=model_id,
+                    abort_signal=abort_signal,
+                )
+            return self._blocking(
+                full_content=full_content,
+                chunk_id=chunk_id,
+                model_id=model_id,
+                abort_signal=abort_signal,
+            )
 
         # Forced-recall path (A1.2): when the pipeline injects the
         # recall system instruction, the mock behaves like a real
@@ -389,6 +488,105 @@ class MockChatBackend(ChatBackend):
                     {
                         "index": 0,
                         "function": {"arguments": arguments[10:]},
+                    }
+                ]
+            },
+        )
+        # Final chunk.
+        if abort_signal is not None:
+            abort_signal.raise_if_aborted()
+        yield _build_chunk(
+            chunk_id=chunk_id,
+            model=model_id,
+            delta={},
+            finish_reason="tool_calls",
+            usage=ChatUsage(prompt_tokens=0, completion_tokens=1, total_tokens=1),
+        )
+
+    # -- mcp-tools-pipeline helpers ---------------------------------------
+
+    def _mcp_final_turn(self, tool_text: str | None, messages: Sequence) -> str:
+        """Compose the final reply using the MCP tool's result text.
+
+        Echoes a snippet of the tool result so tests can verify the
+        pipeline fed the result back correctly.  When no tool was
+        called (``tool_text`` is ``None``) the mock emits a plain
+        acknowledgement.
+        """
+        user_text = _last_user_text(messages)
+        if tool_text is None:
+            return f"[mcp:no-call] For '{user_text}', no tool was called."
+        snippet = tool_text[:200]
+        return f"[mcp:result] For '{user_text}', the tool returned: {snippet}"
+
+    def _blocking_mcp_tool_call(
+        self,
+        *,
+        tool_name: str,
+        chunk_id: str,
+        model_id: str,
+        abort_signal,
+    ) -> Iterator[ChatChunk]:
+        if abort_signal is not None:
+            abort_signal.raise_if_aborted()
+        tool_call_id = f"call_{chunk_id}"
+        # Empty arguments — the pipeline executes the tool and the
+        # registry applies per-tool defaults.  Most MCP tools accept
+        # an empty dict and return a sensible default (e.g. list_all).
+        arguments = json.dumps({}, ensure_ascii=False)
+        usage = ChatUsage(
+            prompt_tokens=0,
+            completion_tokens=1,
+            total_tokens=1,
+        )
+        yield _build_chunk(
+            chunk_id=chunk_id,
+            model=model_id,
+            delta={
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": tool_call_id,
+                        "type": "function",
+                        "index": 0,
+                        "function": {"name": tool_name, "arguments": arguments},
+                    }
+                ],
+            },
+            finish_reason="tool_calls",
+            usage=usage,
+        )
+
+    def _streaming_mcp_tool_call(
+        self,
+        *,
+        tool_name: str,
+        chunk_id: str,
+        model_id: str,
+        abort_signal,
+    ) -> Iterator[ChatChunk]:
+        if abort_signal is not None:
+            abort_signal.raise_if_aborted()
+        tool_call_id = f"call_{chunk_id}"
+        arguments = json.dumps({}, ensure_ascii=False)
+        # Role chunk.
+        yield _build_chunk(
+            chunk_id=chunk_id,
+            model=model_id,
+            delta={"role": "assistant"},
+        )
+        # Tool-call delta chunk.
+        yield _build_chunk(
+            chunk_id=chunk_id,
+            model=model_id,
+            delta={
+                "tool_calls": [
+                    {
+                        "id": tool_call_id,
+                        "type": "function",
+                        "index": 0,
+                        "function": {"name": tool_name, "arguments": arguments},
                     }
                 ]
             },

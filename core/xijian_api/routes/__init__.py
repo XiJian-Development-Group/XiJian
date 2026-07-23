@@ -58,6 +58,7 @@ _OPTIONAL_ROUTE_MODULES: tuple[str, ...] = (
     "xijian_api.routes.xijian_overload",
     "xijian_api.routes.xijian_safety",
     "xijian_api.routes.xijian_mcp",
+    "xijian_api.routes.mcp_server",
     "xijian_api.routes.xijian_backups",
     "xijian_api.routes.xijian_scenes",
     "xijian_api.routes.ws_routes",

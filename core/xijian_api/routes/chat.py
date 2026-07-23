@@ -32,6 +32,8 @@ def chat_completions():
     n = int(payload.get("n", 1))
     user = payload.get("user")
     xijian_ext = payload.get("xijian")
+    tools = payload.get("tools")
+    tool_choice = payload.get("tool_choice")
 
     stream = bool(payload.get("stream", False))
     stream_options = payload.get("stream_options") or {}
@@ -48,6 +50,8 @@ def chat_completions():
             n=n,
             user=user,
             xijian=xijian_ext,
+            tools=tools,
+            tool_choice=tool_choice,
         )
         resp = jsonify(response)
         resp.headers["X-XiJian-Model-Id"] = model
