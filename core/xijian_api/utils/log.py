@@ -90,6 +90,12 @@ def _apply_handlers(
 
     if log_file:
         try:
+            # Ensure the parent directory exists so a non-existent log
+            # file (including one in a not-yet-created directory) is
+            # auto-created instead of raising FileNotFoundError.
+            parent = os.path.dirname(os.path.abspath(log_file))
+            if parent and not os.path.isdir(parent):
+                os.makedirs(parent, exist_ok=True)
             file_handler = logging.FileHandler(log_file, encoding="utf-8")
             file_handler.setLevel(level)
             file_handler.setFormatter(formatter)
