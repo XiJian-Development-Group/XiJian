@@ -976,3 +976,30 @@ class TestCrossSystemTrigger:
         ov_stub.simulate_overload(METRIC_MEM)
         scope_matches = [s for s in stubs_state.snapshots.values() if s.get("scope") == "overload"]
         assert scope_matches
+
+    def test_a53_backup_snapshot_written(self):
+        """A5.3 cross-link: overload trigger also lands a
+        ``reason=overload`` entry in the A5.3 backup bucket.
+
+        Closes the A5.2 notes-2026-07-20 open item ("A5.2
+        snapshots 与 A5.3 safety_snapshots 同表不同写入
+        路径 — A5.3 起时要把这个决策收掉").  The decision
+        landed as: A5.3 stays independent (different
+        lifecycle) but A5.4 (and A5.2 confirm, in a
+        follow-up) writes both buckets on key events.
+        """
+        from xijian_api.stubs.snapshots import list_snapshots as _list
+        # Empty before the trigger.
+        assert _list(reason="overload") == []
+        ov_stub.simulate_overload(METRIC_MEM)
+        archive = _list(reason="overload")
+        assert len(archive) == 1
+        record = archive[0]
+        assert record["scope"] == "mixed"
+        assert record["reason"] == "overload"
+        # The payload is the same shape as the
+        # protection.snapshot entry.
+        payload = record["payload"]
+        assert "tier" in payload
+        assert "triggered_metrics" in payload
+        assert "action" in payload

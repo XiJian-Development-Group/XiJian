@@ -893,6 +893,37 @@ def _record_trigger(result: dict, sample: Sample, tier: str) -> None:
         )
     except Exception as exc:  # noqa: BLE001
         _LOGGER.warning("overload snapshot failed: %s", exc)
+    # A5.3 cross-link: also write a backup-snapshot entry
+    # into the unified ``safety_snapshots`` bucket so the
+    # archive half of A5.3 (capacity accounting, prunable,
+    # file-backed) gets the overload event.  This is the
+    # "关键事件触发" path the spec AC-1 mentions; the
+    # protection module's snapshot above is the
+    # rollback-style hand-off, this is the long-term
+    # archive hand-off.  See ``docs/notes.md`` 2026-07-20
+    # for the split rationale.
+    try:
+        from xijian_api.stubs.snapshots import (
+            REASON_OVERLOAD, SCOPE_MIXED, create_snapshot as _backup_snapshot,
+        )
+        _backup_snapshot(
+            scope=SCOPE_MIXED,
+            target_id=event["id"],
+            payload={
+                "event_id": event["id"],
+                "tier": tier,
+                "triggered_metrics": event["triggered_metrics"],
+                "action": event["action"],
+            },
+            reason=REASON_OVERLOAD,
+            ref_id=event["id"],
+        )
+    except Exception as exc:  # noqa: BLE001
+        # Capacity-exceeded is a normal, expected outcome
+        # when the backup bucket is at the ceiling — log
+        # it as a warning rather than a failure.  Anything
+        # else is a real bug.
+        _LOGGER.warning("overload A5.3 backup snapshot failed: %s", exc)
     # Begin the recovery handshake — the 20 s wait + double confirm.
     start_recovery(event)
     # Fan out to subsystem-specific handlers.  This is where the

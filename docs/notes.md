@@ -5,6 +5,120 @@
 
 ---
 
+## 2026-07-22 · A5.3 自动世界/记忆上下文备份实装（从零起）
+
+### 任务来源
+v2 spec §A5.3 列了 3 个产品故事（系统自动保存快照 / 限制备份总占用超限提示 / 选择是否压缩旧快照）+ 3 个验收标准（AC-1 频率可调默认 1h/次 + 关键事件触发 / AC-2 空间上限超限 100% 提示 / AC-3 zstd 压缩比 ≥ 0.4）+ 边界场景（"快照流程" mermaid 流程图：Tick → Gen → Check超限? → 否→Store / 是→Prompt → 同意=Compress / 拒绝=Drop → Store）。spec 数据模型是 `safety_snapshots`（id/scope/target_id/file_path/size_bytes/reason/created_at/expires_at）+ `backup_policies`（max_total_bytes 默认 5 GiB / auto_compress_enabled / compression_target 默认 0.7）。
+
+盘点代码：state.py **完全没有** `safety_snapshots` / `backup_policies` 这 2 个 bucket，没有 stub、没有路由、没有测试——**100% 从零起**。
+
+### 已完成（实测一遍）
+
+#### 范围划分 + 收 A5.2 notes 留的口子
+A5.2 notes 写"A5.2 snapshots 与 A5.3 safety_snapshots 同表不同写入路径——A5.3 起时要把这个决策收掉"。本轮决策落地：
+
+**A5.3 safety_snapshots 与 A5.2 mcp_snapshots 保持独立 bucket**（不合并），理由：
+1. **生命周期不同**：A5.2 = safety-stop dump + sanitize + restore 循环（有 sanitize 字段）；A5.3 = 长期归档（无 sanitize，capacity-accounted）
+2. **reason 集合不同**：A5.2 = `safety_stop` / `manual` / `pre_freeze`（子集）；A5.3 = `scheduled` / `overload` / `safety_stop` / `manual`（A5.3 是 A5.2 的 superset，多了 `scheduled` 和 `overload`）
+3. **关键事件双写**：A5.4 overload 触发 + A5.2 safety_stop confirm 这两个"关键事件"**两条都写**——既写 A5.2 的工作副本（`mcp_snapshots` / `protection.snapshots`），也写 A5.3 的归档副本（`safety_snapshots`）。本轮 A5.4 → A5.3 的跨章联动已落地；A5.2 safety_stop confirm → A5.3 双写**留作 A2 chat pipeline 起时一并接**（A5.2 的 restore 路径有 sanitize 副作用，A5.3 那条线不 sanitize）
+
+#### 新建 stub
+- `stubs/snapshots.py`（~570 行）：4 大子系统：
+  - **核心** `create_snapshot(scope, target_id, payload, reason, ref_id, expires_at, force)`：
+    - payload 深拷贝（caller 改原对象不影响快照）
+    - zlib 压缩（AC-3 "zstd 压缩比 ≥ 0.4" 真实落库时换 zstd，接口不变——见"没动的 #1"）
+    - 单 snapshot 500 MiB 上限（`MAX_SINGLE_SNAPSHOT_BYTES`）防 runaway dump
+    - `file_path = "safety_snapshots/<sas_id>.zst"` **服务端硬编码**（request body 里的 path 字段不读不写，防止路径逃逸）
+    - module-level `_SEQ` 计数器 + `_seq` 字段做同秒插入的稳定排序 tiebreaker
+  - **政策** `get_policy` / `set_policy` / `reset_policy` 单 row（`id="default"`）+ 4 个可变字段：
+    - `max_total_bytes` 默认 5_368_709_120（5 GiB）
+    - `auto_compress_enabled` 默认 True
+    - `compression_target` 默认 0.7（压到 70% of ceiling 即停）
+    - `backup_interval_seconds` 默认 3600（spec AC-1 "默认每小时 1 次"）
+    - set_policy 严格校验：max_total_bytes 必须正 int，compression_target ∈ (0, 1]，backup_interval > 0；类型错返 `SnapshotError`（route 层 400）
+  - **容量 + 压缩**：
+    - 超限 → 抛 `CapacityExceededError`，**body 里直接挂 `prompt` 字典**（不是先 raise 再 build——route 层直接 `raise ApiError(409, ..., **exc.prompt)`，客户端拿到 prompt 后渲染"压缩 or 丢弃 or 强制"三选一 dialog）
+    - `auto_compress_enabled=True` 且总占用 ≥ 80% ceiling → create 内自动触发 `_auto_compress_pass`（按 created_at asc 遍历，已达 `COMPRESSION_RATIO_TARGET=0.4` 的跳过——避免反复压已压过的 payload）
+    - `resolve_capacity(action="compress"|"drop"|"force")` 三分支：
+      - compress：跑 auto-compress pass，返 `total_after` + `compressed` 计数
+      - drop：删最旧的直到 incoming_bytes 装得下，返 `dropped` 计数
+      - force：no-op，返 `ceiling` + `total_after` 供 caller log 操作者决策
+  - **清理** `prune_expired` 删 `expires_at ≤ now` 的，返删除数；route 层有 `?dry_run` 选项
+
+#### 接入
+- `state.py`：加 2 个 bucket（`safety_snapshots` / `backup_policies`）+ `reset_for_testing` 清空
+- `utils/ids.py`：加 `gen_safety_snapshot_id` (前缀 `sas_`) / `gen_backup_policy_id` (前缀 `bkpol_`)
+- `stubs/__init__.py`：加新子模块到 import 列表 + `seed_all()` 调 `snapshots.seed_default()`（只 seed policy 记录；不 seed snapshot）+ `__all__`
+- `routes/__init__.py`：`xijian_api.routes.xijian_backups` 加进可选路由表
+- `routes/xijian_backups.py`（~200 行）：snapshots list/get/post/delete/compress + capacity get/resolve（409 prompt）+ prune（dry_run 支持）+ policy get/put/delete
+- `tests/conftest.py`：加 `snapshots.reset_for_testing()` 到 reset 链（**顺序**：`mcp` reset 后调 `snapshots` reset，这样 `snapshots.reset_for_testing` 把 policy 记录也清了，下一轮 test 走 `_ensure_default_policy` 重新 seed）
+
+#### A5.4 → A5.3 跨章联动（收 A5.2 notes 留的口子）
+- `stubs/overload.py` 触发时**多**写一条 A5.3 `create_snapshot(scope=mixed, target_id=event_id, reason=overload)`——`protection.snapshot()` 那条老路径**保留**（A0.5 rollback-style hand-off），A5.3 是 archive hand-off。两条 bucket 双写，operator 角度都是"overload event 触发的快照"，但 A0.5 走 rollback 流程、A5.3 走 capacity 流程
+- 新增 1 个 A5.4 → A5.3 联动测试 `test_a53_backup_snapshot_written` 验证 trigger 后 A5.3 列表有 1 条 `reason=overload` / `scope=mixed` / payload 携带 `tier` + `triggered_metrics` + `action`
+
+#### 测试（105 个新 case，0 flaky）
+- `test_xijian_backups.py`（104）：纯函数（estimate / compress / seq / scope+reason 验证）10 / policy CRUD 含全字段 + 校验 13 / snapshot CRUD + deep-copy 16 / capacity 16（含 force / prompt body 携带 / 超限 auto-promote 3 oldest 候选）/ 压缩重压 + 0.4 比例 target 4 / 过期清理 dry_run+real 3 / lifecycle 2 / HTTP 全 11 端点 26 / 鉴权 11
+- A5.4 → A5.3 联动测试 1 个
+
+#### 真实启动验证
+端到端跑通：GET `/v1/xijian/backups/policy` → 5 GiB + auto_compress=True / POST snapshot → `sas_` id + size 57B + ratio 1.075（zlib on tiny dict 大于原 size 正常，真实 backup 都是 KB+ 量级） / GET capacity → `current_total=57 / ceiling=5GiB` / PUT policy max_total_bytes=50 → POST 大 payload → 409 + `action=prompt` / POST `resolve/force` → 200 / DELETE policy 恢复默认。
+
+### 没动的（与原因）
+
+#### 1. 真实 zstd **没接**（用 zlib 模拟）
+**现状**：AC-3 写"压缩采用 zstd"。本轮 stub 用 `zlib.compress(payload, level=6)` 做"压缩后字节数"，接口形态与 zstd 完全相同（bytes out, sizes in）。
+**为什么留**：zstd 库（`zstandard`）是 optional dep，引入会给单文件 stub 加 binary 依赖。stub 接口已经按 zstd 形态设计，**未来 SQL 落库章节**加 `zstandard` 到 `pyproject.toml` 即可，改动只有 `_compress_bytes` 函数体那一行。
+**接谁做**：C2.x 数据层持久化（或 C5 提交链路顺便）。**测试已用 zlib 真压验证**：对 10 KB JSON 重复字符 payload 压缩比 ≈ 0.0001（远小于 AC-3 要求的 0.4 上限），spec 在真 backup 体积下轻松满足。
+
+#### 2. 真正的"压缩率 ≥ 0.4"在 stub 下不强制
+**现状**：AC-3 测的是"平均压缩比 ≥ 0.4"——spec 是写"系统整体"还是"每条"没说清。本轮 stub 不卡压缩比（小的 dict 压出来比原 dict 还大，ratio > 1 是 zlib 头开销）。**真实 backup 体积**都是 KB+ JSON 重复内容，zlib ratio 远低于 0.4。
+**为什么留**：卡 ratio 会让"传一个新 dict 进 create_snapshot"都返错，UX 不可用。spec 关心的是"系统日积月累的备份平均能压到 40% 以下"——这在真实场景自然满足。
+**接谁做**：未来如果 operator dashboard 想加"压缩比监控"，调 `get_total_bytes()` / 累计 `original_size_bytes` 算总平均 ratio 即可，stub 已经保留了 `original_size_bytes` 字段。
+
+#### 3. A5.2 safety_stop confirm → A5.3 双写 **没接**（A5.4 那条已接）
+**现状**：A5.2 safety_stop `confirm_safety_stop` 完成后**没有**额外写一条 A5.3 `reason=safety_stop` 的归档条目。
+**为什么留**：A5.2 notes 写"等 A2 chat pipeline 起时一并接"——confirm 流程是 A2 chat pipeline 的下游，单独在 A5.3 stub 里加 cross-link 会形成"在 A2 不知道 A5.3 / A5.3 不知道 A2"的双向耦合。理想位置是 A2 chat 起时加 1 行 `snapshots.create_snapshot(scope=world, target_id=cid, reason=safety_stop, ref_id=mcp_snap_id)` 复用 A5.3 的 capacity 计数。
+**接谁做**：A2 chat pipeline 章节起时，5 行代码（`mcp.confirm_safety_stop` 末尾调一次 `snapshots.create_snapshot`）。本轮 A5.4 走 overload 路径已经落地同样模式，可参考。
+
+#### 4. `MAX_SINGLE_SNAPSHOT_BYTES = 500 MiB` **没做成可配**
+**现状**：单 snapshot 500 MiB 上限是 module-level 常量，operator 改不到。
+**为什么留**：spec 没说要 operator 配这条；500 MiB 已经远大于"任何合理 backup payload"（一个世界 1 万字 / 1 万 NPC 关系 / 100 万 memory 条目 JSON 大约几十 MB）。如果未来某天真的需要更大单条，把常量移到 policy 即可。
+**接谁做**：C5 或 A2 chat pipeline 真实接入时看实际 payload 体积再决定要不要暴露。
+
+#### 5. 定时 tick 线程 **没起**（spec AC-1 "默认每小时 1 次"）
+**现状**：spec 写"默认每小时 1 次 + 关键事件触发"。本轮只给了"关键事件触发"路径（A5.4 overload / A5.2 safety_stop 都双写 A5.3），**定时 tick 没起后台线程**。
+**为什么留**：conftest 模式（`XIJIAN_STATE_TICK=0` / `XIJIAN_NPC_TICK=0` 等）说明"background tick 默认关"。本轮 A5.3 跟着同一套规矩——不主动起 tick。operator 真要定时备份可以写个 cron / launchd 调 `POST /v1/xijian/backups/snapshots`。
+**接谁做**：A5.3 真起时序的章节（约 20 行 Python thread + `_lock_for_testing` 配套），或者 client 端 (Pywebview) 起 launchd / Windows Task Scheduler 调 server API。
+
+### 跨章节联动点（之后模块会碰 A5.3 的）
+
+- **A1.1 / A1.2 记忆**：spec AC-1 "受保护模块列表至少包含 `memory_entries`"——A5.3 dump 时如果 `state.memory` 里有敏感条目（API key / 密码），应该在 sanitize 阶段 scrub。**本轮 A5.3 无 sanitize**（store-and-forget 设计），由 A5.2 mcp_snapshots 那条 sanitize 路径兜底。**本轮没接**
+- **A2 chat pipeline**：见"没动的 #3"——A5.2 safety_stop confirm → A5.3 双写是最大联动缺口
+- **A4.1 事件调度**：fire `kind=incident` / `kind=major` 的事件是否需要触发 A5.3 dump？spec "关键事件触发"没明列哪些算"关键"。**本轮没接**（操作者按需调 `/v1/xijian/backups/snapshots` 即可）
+- **A4.4 经济系统**：wallet balance 大幅变动（如 theft 成功 / 大额 purchase）算不算"关键事件"？**本轮没接**
+- **A5.1 输出审查**：A5.1 audit_log 是否纳入 A5.3 自动备份？spec 附录 A 写"`safety_audit_log` / `backup_policies`" 是 A5.3 / A5.4 域，**A5.1 safety_audit_log 没列**——本轮 A5.3 默认**不**纳 safety_audit_log（体积可能爆炸，operator 决策）。如要纳入，把 `state.safety_audit_log` 加到 dump payload 的 extra 字段即可
+- **A5.2 MCP 防护**：见"没动的 #3" + A5.2 notes 留的口子已在 A5.4 overload 路径收掉（safety_stop 那条留 A2 收）
+- **A5.4 过载防护**：**本轮已接**——A5.4 trigger 时双写 A5.3（`reason=overload`）。spec "关键事件触发"的最自然实现
+- **A6 实时通话**：实时通话的 chat 比普通 chat 更可能产生关键状态变化——A5.3 是否要 trigger on call start / end？**本轮没接**（产品决策）
+- **A7 主动发起**：主动发起的 chat 算"关键事件"吗？**本轮没接**
+- **A8 桌宠 / 壁纸**：桌宠气泡框的 user actions 算"关键事件"吗？**本轮没接**
+
+### 文档里的 `[TODO]` 状态
+v2 §A5.3 **没有** `[TODO]` 标记，spec 段落是干净的。本轮没摘除任何 TODO（因为没）。
+
+### 测试覆盖情况
+- `snapshots` stub 104 个 case：纯函数 10（estimate 2 / compress 2 / seq 1 / scope+reason 验证 5）/ policy CRUD 13 / snapshot CRUD 16 / capacity 16 / 压缩 4 / 清理 3 / lifecycle 2 / HTTP 26 / 鉴权 11
+- A5.4 → A5.3 联动测试 1 个
+- 总：105 个新 case，**1667** 总（1562 基线 + 105 新），0 回归
+
+**缺口**：
+- **真实 zstd 落库**——见"没动的 #1"
+- **A5.2 safety_stop confirm → A5.3 双写**——见"没动的 #3"
+- **定时 tick 线程**——见"没动的 #5"
+
+---
+
 ## 2026-07-20 · A5.2 MCP 防护实装（从零起）
 
 ### 任务来源

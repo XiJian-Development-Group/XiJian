@@ -245,9 +245,13 @@ class TestCreateSnapshot:
         # incompressible data to trip — too slow for unit
         # tests.
         monkeypatch.setattr(snap_stub, "MAX_SINGLE_SNAPSHOT_BYTES", 64)
-        # A payload whose compressed size exceeds 64 bytes.
-        # Random-looking text compresses poorly.
-        payload = {"big": "".join(chr(ord("a") + (i % 26)) for i in range(512))}
+        # Use ``os.urandom`` so the bytes are truly random
+        # (and therefore don't compress).  1 KiB of random
+        # data won't compress below 64 bytes — but a few
+        # hundred bytes might, so we use 4 KiB to leave
+        # headroom.
+        import os
+        payload = {"big": os.urandom(4 * 1024)}
         with pytest.raises(SnapshotError, match="too large"):
             snap_stub.create_snapshot(
                 scope=SCOPE_WORLD,
@@ -269,8 +273,10 @@ class TestCreateSnapshot:
         # Set a tiny ceiling and push past it with one
         # well-sized payload; a second write without
         # force → CapacityExceededError.
-        big = {"a": "x" * 5000}  # well > 100 compressed
-        snap_stub.set_policy(max_total_bytes=100)
+        # 5000 'x' chars compresses to ~58 bytes; 2 of
+        # them is 116 which is > 50.
+        big = {"a": "x" * 5000}
+        snap_stub.set_policy(max_total_bytes=50)
         snap_stub.create_snapshot(
             scope=SCOPE_WORLD, target_id="x",
             payload=big, reason=REASON_MANUAL, force=True,
@@ -279,18 +285,18 @@ class TestCreateSnapshot:
         with pytest.raises(CapacityExceededError):
             snap_stub.create_snapshot(
                 scope=SCOPE_WORLD, target_id="y",
-                payload={"b": 1}, reason=REASON_MANUAL,
+                payload={"b": "x" * 5000}, reason=REASON_MANUAL,
             )
         # With force → succeeds.
         record = snap_stub.create_snapshot(
             scope=SCOPE_WORLD, target_id="y",
-            payload={"b": 1}, reason=REASON_MANUAL, force=True,
+            payload={"b": "x" * 5000}, reason=REASON_MANUAL, force=True,
         )
         assert record is not None
 
     def test_capacity_exceeded_carries_prompt(self):
         big = {"a": "x" * 5000}
-        snap_stub.set_policy(max_total_bytes=100)
+        snap_stub.set_policy(max_total_bytes=50)
         snap_stub.create_snapshot(
             scope=SCOPE_WORLD, target_id="x",
             payload=big, reason=REASON_MANUAL, force=True,
@@ -298,10 +304,10 @@ class TestCreateSnapshot:
         with pytest.raises(CapacityExceededError) as exc_info:
             snap_stub.create_snapshot(
                 scope=SCOPE_WORLD, target_id="y",
-                payload={"b": 1}, reason=REASON_MANUAL,
+                payload={"b": "x" * 5000}, reason=REASON_MANUAL,
             )
         assert exc_info.value.prompt["action"] == "prompt"
-        assert exc_info.value.prompt["ceiling"] == 100
+        assert exc_info.value.prompt["ceiling"] == 50
 
 
 class TestGetSnapshot:
@@ -605,7 +611,7 @@ class TestHTTPSnapshots:
             json={
                 "scope": SCOPE_WORLD,
                 "target_id": "y",
-                "payload": {"b": 1},
+                "payload": {"b": "x" * 5000},
                 "reason": REASON_MANUAL,
             },
         )
@@ -626,7 +632,7 @@ class TestHTTPSnapshots:
             json={
                 "scope": SCOPE_WORLD,
                 "target_id": "y",
-                "payload": {"b": 1},
+                "payload": {"b": "x" * 5000},
                 "reason": REASON_MANUAL,
                 "force": True,
             },
