@@ -29,6 +29,11 @@ from xijian_api.errors import register_error_handlers
 from xijian_api.handshake import register_healthz
 from xijian_api.middleware import install_middleware
 from xijian_api.routes import register_routes
+from xijian_api.runtime import (
+    ensure_runtime_dirs,
+    is_frozen,
+    setup_external_libs,
+)
 from xijian_api.utils.log import (
     configure_logging,
     get_logger,
@@ -275,6 +280,8 @@ def _print_banner(
     log_file: Optional[str],
 ) -> None:
     """Emit a startup banner summarising the resolved configuration."""
+    from xijian_api.runtime import print_environment_info
+
     bar = "=" * 64
     _LOGGER.info(bar)
     _LOGGER.info("XiJian Core API 启动")
@@ -292,6 +299,9 @@ def _print_banner(
         _LOGGER.info("日志文件      : %s", log_file)
     else:
         _LOGGER.info("日志文件      : (仅 stderr)")
+    # 运行时环境信息（打包模式/开发模式）
+    for line in print_environment_info().splitlines():
+        _LOGGER.info(line)
     _LOGGER.info(bar)
 
 
@@ -344,6 +354,10 @@ def main(argv: list[str] | None = None) -> int:
     the process exit code.  Every recoverable error is logged and the
     server is kept in a stable state whenever possible.
     """
+    # 打包模式下的早期初始化（开发模式下为空操作）
+    setup_external_libs()
+    ensure_runtime_dirs()
+
     args = parse_args(argv)
 
     # --version short-circuits before any heavy setup.

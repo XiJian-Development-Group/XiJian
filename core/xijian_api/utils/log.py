@@ -122,6 +122,10 @@ def configure_logging(
 
     When ``level`` is ``None`` the level is resolved from the
     ``XIJIAN_LOG_LEVEL`` environment variable (default ``INFO``).
+
+    When ``log_file`` is ``None`` the file is resolved from
+    ``XIJIAN_LOG_FILE``; in 打包模式(frozen) 下若仍未指定，则
+    默认写入 ``<exe_dir>/logs/xijian-api.log``。
     """
     global _configured, _current_level, _current_log_file
     logger = logging.getLogger(_LOGGER_NAME)
@@ -130,6 +134,11 @@ def configure_logging(
 
     resolved_level = resolve_level(level)
     resolved_file = log_file or os.environ.get("XIJIAN_LOG_FILE") or None
+    # 打包模式下，若未指定日志文件，使用可执行文件同级的 logs/ 目录
+    if resolved_file is None:
+        from xijian_api.runtime import is_frozen, default_log_file
+        if is_frozen():
+            resolved_file = str(default_log_file())
     _apply_handlers(logger, resolved_level, resolved_file)
 
     _configured = True

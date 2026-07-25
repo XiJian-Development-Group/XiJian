@@ -44,6 +44,10 @@ def _config_search_paths() -> list[Path]:
     env = os.environ.get("XIJIAN_CONFIG")
     if env:
         paths.append(Path(env))
+    # 打包模式：可执行文件同级目录的 config.toml 优先
+    from xijian_api.runtime import is_frozen, executable_dir
+    if is_frozen():
+        paths.append(executable_dir() / "config.toml")
     paths.append(Path.cwd() / "config.toml")
     repo_root = Path(__file__).resolve().parent.parent.parent
     paths.append(repo_root / "config.toml")
@@ -476,8 +480,13 @@ def _build_models(items: list[Any]) -> tuple[ModelEntry, ...]:
 def token_file_path(pid: int | None = None, template: str | None = None) -> Path:
     if pid is None:
         pid = os.getpid()
-    tmpl = template or "/tmp/xijian-{pid}.token"
-    return Path(tmpl.format(pid=pid))
+    if template:
+        return Path(template.format(pid=pid))
+    # 打包模式：使用可执行文件同级的 run/ 目录，避免 /tmp 被系统清理
+    from xijian_api.runtime import is_frozen, default_token_file
+    if is_frozen():
+        return default_token_file(pid)
+    return Path(f"/tmp/xijian-{pid}.token")
 
 
 __all__ = [
