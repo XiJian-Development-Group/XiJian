@@ -93,16 +93,17 @@ def test_character_interact_nsfw_blocked_by_default(client, auth_headers):
 
 
 def test_character_state_update_blocked_when_protection_off(client, auth_headers):
-    from xijian_api.stubs import safety as safety_stub
-
-    # Disable protection (two-step) via the stub API — the legacy
-    # ``/v1/xijian/protection/*`` HTTP aliases have been retired, but
-    # the underlying gate (``safety_stub.is_enabled``) is still
-    # consulted by the character-state route.
-    start = safety_stub.start_disable({"confirmation": "I understand the risks"})
-    challenge_id = start["challenge_id"]
-    safety_stub.confirm_disable(
-        {"challenge_id": challenge_id, "phrase": "关闭保护 Yuki"}
+    # Disable protection (two-step) via the unified /safety/gate/* API.
+    start = client.post(
+        "/v1/xijian/safety/gate/disable",
+        headers=auth_headers,
+        json={"confirmation": "I understand the risks"},
+    )
+    challenge_id = start.get_json()["challenge_id"]
+    client.post(
+        "/v1/xijian/safety/gate/disable",
+        headers=auth_headers,
+        json={"challenge_id": challenge_id, "phrase": "关闭保护 Yuki"},
     )
 
     blocked = client.post(
@@ -114,4 +115,4 @@ def test_character_state_update_blocked_when_protection_off(client, auth_headers
     assert blocked.get_json()["error"]["type"] == "protection_error"
 
     # Restore.
-    safety_stub.enable()
+    client.post("/v1/xijian/safety/gate/enable", headers=auth_headers)

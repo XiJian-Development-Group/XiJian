@@ -699,6 +699,113 @@ class TestHttpDevCrash:
 
 
 # ---------------------------------------------------------------------------
+# Protection gate (enable / disable two-step challenge / status)
+# ---------------------------------------------------------------------------
+
+
+class TestHttpGate:
+    def test_status_enabled_by_default(self, client, auth_headers):
+        res = client.get(
+            "/v1/xijian/safety/gate/status", headers=auth_headers
+        )
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["enabled"] is True
+        assert data["guard_level"] == "standard"
+        assert "audit_log_size" in data
+        assert "version" in data
+
+    def test_enable_is_idempotent(self, client, auth_headers):
+        # Default is enabled; enabling again should stay enabled.
+        res = client.post(
+            "/v1/xijian/safety/gate/enable", headers=auth_headers
+        )
+        assert res.status_code == 200
+        assert res.get_json()["enabled"] is True
+
+    def test_disable_two_step_flow(self, client, auth_headers):
+        # Step 1 — start the challenge.
+        start = client.post(
+            "/v1/xijian/safety/gate/disable",
+            headers=auth_headers,
+            json={"confirmation": "I understand the risks"},
+        )
+        assert start.status_code == 200
+        start_body = start.get_json()
+        assert "challenge_id" in start_body
+        assert "expires_at" in start_body
+        assert start_body["challenge_phrase"] == "关闭保护 Yuki"
+
+        # Wrong phrase → phrase_mismatch, still enabled.
+        challenge_id = start_body["challenge_id"]
+        wrong = client.post(
+            "/v1/xijian/safety/gate/disable",
+            headers=auth_headers,
+            json={"challenge_id": challenge_id, "phrase": "nope"},
+        )
+        assert wrong.status_code == 200
+        assert wrong.get_json()["enabled"] is True
+        assert wrong.get_json()["error"] == "phrase_mismatch"
+
+        # A fresh challenge (the wrong one consumed the first).
+        start2 = client.post(
+            "/v1/xijian/safety/gate/disable",
+            headers=auth_headers,
+            json={"confirmation": "ok"},
+        )
+        cid2 = start2.get_json()["challenge_id"]
+        ok = client.post(
+            "/v1/xijian/safety/gate/disable",
+            headers=auth_headers,
+            json={"challenge_id": cid2, "phrase": "关闭保护 Yuki"},
+        )
+        assert ok.status_code == 200
+        assert ok.get_json()["enabled"] is False
+        assert "disabled_at" in ok.get_json()
+
+        # status reflects the change.
+        status_res = client.get(
+            "/v1/xijian/safety/gate/status", headers=auth_headers
+        )
+        assert status_res.get_json()["enabled"] is False
+
+        # Re-enable.
+        client.post("/v1/xijian/safety/gate/enable", headers=auth_headers)
+        assert client.get(
+            "/v1/xijian/safety/gate/status", headers=auth_headers
+        ).get_json()["enabled"] is True
+
+    def test_disable_step2_expired_challenge(self, client, auth_headers):
+        # An unknown challenge_id → challenge_expired.
+        res = client.post(
+            "/v1/xijian/safety/gate/disable",
+            headers=auth_headers,
+            json={"challenge_id": "chal_nonexistent", "phrase": "x"},
+        )
+        assert res.status_code == 200
+        assert res.get_json()["error"] == "challenge_expired"
+
+
+# ---------------------------------------------------------------------------
+# Audit export
+# ---------------------------------------------------------------------------
+
+
+class TestHttpAuditExport:
+    def test_export_returns_file_id(self, client, auth_headers):
+        # Produce at least one audit entry first.
+        safety_stub.scan_input(text="hello", world_id="w1")
+        res = client.post(
+            "/v1/xijian/safety/audit/export", headers=auth_headers
+        )
+        assert res.status_code == 200
+        data = res.get_json()
+        assert "file_id" in data
+        assert isinstance(data["bytes"], int)
+        assert data["bytes"] > 0
+
+
+# ---------------------------------------------------------------------------
 # Auth coverage
 # ---------------------------------------------------------------------------
 
@@ -711,6 +818,10 @@ class TestAuthCoverage:
             ("POST", "/v1/xijian/safety/scan/output"),
             ("GET", "/v1/xijian/safety/audit"),
             ("GET", "/v1/xijian/safety/audit/count"),
+            ("POST", "/v1/xijian/safety/audit/export"),
+            ("GET", "/v1/xijian/safety/gate/status"),
+            ("POST", "/v1/xijian/safety/gate/enable"),
+            ("POST", "/v1/xijian/safety/gate/disable"),
             ("GET", "/v1/xijian/safety/policy/world_modern_tokyo"),
             ("PUT", "/v1/xijian/safety/policy/world_modern_tokyo"),
             ("DELETE", "/v1/xijian/safety/policy/world_modern_tokyo"),

@@ -690,7 +690,7 @@ multipart/form-data：`file`（必填）、`purpose`（必填：`assistants` / `
 
 ### 3.5 安全模块（Safety）
 
-> **已废弃**：原 `/v1/xijian/protection/*` 别名路由已全部移除。安全能力统一走 `/v1/xijian/safety/*` 端点；AI 数据快照与回滚走 `/v1/xijian/backups/*`（A5.3）。原 `protection` 模块的状态桶 `state.protection` 已重命名为 `state.safety_state`，由 `safety` stub 管理的 enable/disable 闸门函数（`is_enabled` / `enable` / `start_disable` / `confirm_disable`）仍保留供内部调用，但不再通过 HTTP 暴露——保护默认开启（`enabled=True`）。
+> **已废弃**：原 `/v1/xijian/protection/*` 别名路由已全部移除。安全能力统一走 `/v1/xijian/safety/*` 端点；AI 数据快照与回滚走 `/v1/xijian/backups/*`（A5.3）。原 `protection` 模块的状态桶 `state.protection` 已重命名为 `state.safety_state`；enable/disable 闸门（含两步挑战）与 audit 导出能力已迁移到 `/v1/xijian/safety/gate/*` 与 `/v1/xijian/safety/audit/export`。保护默认开启（`enabled=True`）。
 
 **所有 safety 端点都受安全模块自身监控**——任何尝试绕过安全系统的请求都会写入审计日志。
 
@@ -701,6 +701,64 @@ multipart/form-data：`file`（必填）、`purpose`（必填：`assistants` / `
 #### `POST /v1/xijian/safety/scan/output`
 
 后检助手输出。参见 A5.1 安全模块的统一扫描端点。
+
+#### `GET /v1/xijian/safety/gate/status`
+
+返回保护闸门状态。
+
+```json
+{
+  "enabled": true,
+  "guard_level": "standard",
+  "audit_log_size": 1234,
+  "version": "1.0.0"
+}
+```
+
+#### `POST /v1/xijian/safety/gate/enable`
+
+启用保护闸门（幂等，默认开启）。返回与 `gate/status` 相同的状态快照。
+
+#### `POST /v1/xijian/safety/gate/disable`
+
+**关闭保护闸门**，必须双重确认：
+
+**Step 1**（请求体不含 `challenge_id`）：
+
+```json
+// Request
+{ "confirmation": "I understand the risks" }
+
+// Response 200
+{
+  "challenge_id": "chal_abc",
+  "expires_at": 1718000900,
+  "challenge_phrase": "关闭保护 Yuki"
+}
+```
+
+**Step 2**（必须在 60s 内，请求体含 `challenge_id` + `phrase`）：
+
+```json
+// Request
+{
+  "challenge_id": "chal_abc",
+  "phrase": "关闭保护 Yuki"
+}
+
+// Response 200
+{ "enabled": false, "disabled_at": 1718000050 }
+```
+
+短语错误返回 `{ "enabled": true, "error": "phrase_mismatch" }`；挑战过期或未知返回 `{ "enabled": true, "error": "challenge_expired" }`。
+
+#### `POST /v1/xijian/safety/audit/export`
+
+导出审计日志（legacy `state.audits` + 统一 `state.safety_audit_log`）为 JSONL 文件，返回 `file_id`，可通过 `GET /v1/files/{file_id}` 下载。
+
+```json
+{ "file_id": "file_abc", "bytes": 4096 }
+```
 
 ### 3.6 会话与上下文
 

@@ -20,6 +20,22 @@ Audit query
 
 * ``GET    /v1/xijian/safety/audit``          — list (?world_id, ?character_id, ?stage, ?verdict, ?limit)
 * ``GET    /v1/xijian/safety/audit/count``    — count (same filter args)
+* ``POST   /v1/xijian/safety/audit/export``   — export legacy + unified
+                                                audit logs as JSONL
+                                                (returns ``file_id``)
+
+Protection gate
+================
+
+* ``GET    /v1/xijian/safety/gate/status``    — read enabled / guard_level
+* ``POST   /v1/xijian/safety/gate/enable``   — re-enable the gate
+* ``POST   /v1/xijian/safety/gate/disable``  — two-step challenge flow:
+                                                step 1 ``{confirmation}`` →
+                                                ``{challenge_id, expires_at,
+                                                challenge_phrase}``;
+                                                step 2 ``{challenge_id,
+                                                phrase}`` → ``{enabled: false,
+                                                disabled_at}``.
 
 World policy
 ============
@@ -236,6 +252,19 @@ def count_audit():
     return jsonify({"count": n})
 
 
+@bp.post("/v1/xijian/safety/audit/export")
+def export_audit():
+    """Export the legacy + unified audit logs as a JSONL file.
+
+    Writes both ``state.audits`` (legacy list) and
+    ``state.safety_audit_log`` (unified dict) into a single JSONL
+    file so operators get a complete audit trail.  Returns the
+    ``file_id`` that :mod:`xijian_api.stubs.files` registers — the
+    caller can fetch the content via ``GET /v1/files/{file_id}``.
+    """
+    return jsonify(safety_stub.export_audit())
+
+
 # ---------------------------------------------------------------------------
 # World policy
 # ---------------------------------------------------------------------------
@@ -276,6 +305,39 @@ def reset_policy(world_id: str):
     _require_world(world_id)
     removed = safety_stub.reset_world_policy(world_id)
     return jsonify({"reset": True, "removed_entries": removed, "world_id": world_id})
+
+
+# ---------------------------------------------------------------------------
+# Protection gate — enable/disable with two-step challenge
+# ---------------------------------------------------------------------------
+
+
+@bp.get("/v1/xijian/safety/gate/status")
+def gate_status():
+    """Return the protection-gate snapshot."""
+    return jsonify(safety_stub.status())
+
+
+@bp.post("/v1/xijian/safety/gate/enable")
+def gate_enable():
+    """Re-enable the protection gate (idempotent, default on)."""
+    return jsonify(safety_stub.enable())
+
+
+@bp.post("/v1/xijian/safety/gate/disable")
+def gate_disable():
+    """Two-step disable flow.
+
+    Step 1 (no ``challenge_id`` in body): starts a challenge,
+    returns ``{challenge_id, expires_at, challenge_phrase}``.
+
+    Step 2 (``challenge_id`` + ``phrase`` in body): confirms the
+    challenge and flips ``enabled`` to False.
+    """
+    payload = request.get_json(silent=True) or {}
+    if "challenge_id" in payload and "phrase" in payload:
+        return jsonify(safety_stub.confirm_disable(payload))
+    return jsonify(safety_stub.start_disable(payload))
 
 
 # ---------------------------------------------------------------------------
