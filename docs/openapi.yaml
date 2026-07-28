@@ -9240,8 +9240,6 @@ components:
           type: string
         voice_profile:
           type: string
-        live2d_model:
-          type: string
         default_emotion:
           type: string
         tags:

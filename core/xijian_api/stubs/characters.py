@@ -37,7 +37,6 @@ def seed_default() -> None:
             "她会用轻柔的语气回应主人的日常点滴，偶尔主动问候。"
         ),
         "voice_profile": "melo_zh_female_warm_v1",
-        "live2d_model": None,
         "default_emotion": "neutral",
         "tags": ["demo", "default", "ai-companion"],
         "loaded": False,
@@ -56,7 +55,6 @@ def create(payload: dict) -> dict:
         "display_name": payload.get("display_name", payload.get("name", "Unnamed")),
         "persona_doc": payload.get("persona_doc", ""),
         "voice_profile": payload.get("voice_profile"),
-        "live2d_model": payload.get("live2d_model"),
         "default_emotion": payload.get("default_emotion", "neutral"),
         "tags": list(payload.get("tags", [])),
         "loaded": False,
@@ -80,7 +78,7 @@ def update(character_id: str, patch: dict) -> dict | None:
     if record is None:
         return None
     for key in ("name", "display_name", "persona_doc", "voice_profile",
-                "live2d_model", "default_emotion", "tags"):
+                "default_emotion", "tags"):
         if key in patch:
             record[key] = patch[key]
     record["updated_at"] = now_ts()

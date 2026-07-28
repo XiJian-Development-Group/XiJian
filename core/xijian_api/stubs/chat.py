@@ -1200,6 +1200,71 @@ def complete(
     return _to_oai_response(result, model=model)
 
 
+def _response_to_stream(
+    response: dict[str, Any],
+    *,
+    model: str,
+    include_usage: bool,
+) -> Iterator[dict[str, Any]]:
+    """Convert a non-streaming OAI completion into streaming chunks.
+
+    The recall / tools pipelines require multiple round-trips (tool
+    detection → execution → final answer), so they are inherently
+    non-streaming.  This helper re-emits their final response as a
+    sequence of OAI ``chat.completion.chunk`` dicts so the streaming
+    route can consume them transparently.
+    """
+    completion_id = response.get("id") or gen_chat_id()
+    created = response.get("created") or 0
+    choices = response.get("choices") or []
+    for choice in choices:
+        idx = choice.get("index", 0)
+        message = choice.get("message") or {}
+        content = message.get("content") or ""
+        # First chunk: announce role + deliver content.
+        yield {
+            "id": completion_id,
+            "object": "chat.completion.chunk",
+            "created": created,
+            "model": model,
+            "choices": [
+                {
+                    "index": idx,
+                    "delta": {"role": "assistant", "content": content},
+                    "finish_reason": None,
+                }
+            ],
+        }
+        # Trailing chunk: finish_reason only.
+        yield {
+            "id": completion_id,
+            "object": "chat.completion.chunk",
+            "created": created,
+            "model": model,
+            "choices": [
+                {
+                    "index": idx,
+                    "delta": {},
+                    "finish_reason": choice.get("finish_reason") or "stop",
+                }
+            ],
+        }
+    if include_usage:
+        usage = response.get("usage") or {
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_tokens": 0,
+        }
+        yield {
+            "id": completion_id,
+            "object": "chat.completion.chunk",
+            "created": created,
+            "model": model,
+            "choices": [],
+            "usage": usage,
+        }
+
+
 def stream_chunks(
     messages: list[dict],
     *,
@@ -1210,13 +1275,42 @@ def stream_chunks(
     stop: list[str] | None = None,
     signal=None,
     include_usage: bool = False,
+    xijian: dict | None = None,
+    tools: list | None = None,
+    tool_choice: Any = None,
 ) -> Iterator[dict[str, Any]]:
     """Yield OAI streaming chunks via the backend.
 
     The backend yields :class:`ChatChunk` instances; this function
     serialises them into OAI ``chat.completion.chunk`` JSON.  The
     ``signal`` is forwarded so client cancels abort generation.
+
+    When ``xijian`` carries ``character_id`` and ``recall.enabled``,
+    the forced-recall pipeline (A1.2) runs first (non-streaming:
+    memory load → tool detection → execution → citation audit),
+    then the final response is re-emitted as streaming chunks.
+    When ``xijian.tools.enabled`` is true or the OAI ``tools`` field
+    is provided, the MCP tools pipeline (A2) runs first instead.
     """
+    # A1.2 recall / A2 tools pipelines — multiple round-trips, so
+    # run non-streaming via complete() and re-emit as chunks.
+    if _should_enable_tools(xijian, tools) or _should_enable_recall(xijian):
+        response = complete(
+            messages,
+            model=model,
+            temperature=temperature,
+            top_p=top_p,
+            max_tokens=max_tokens,
+            stop=stop,
+            xijian=xijian,
+            tools=tools,
+            tool_choice=tool_choice,
+        )
+        yield from _response_to_stream(
+            response, model=model, include_usage=include_usage
+        )
+        return
+
     backend = _resolve_backend_for(model)
     params = GenerationParams(
         temperature=temperature,

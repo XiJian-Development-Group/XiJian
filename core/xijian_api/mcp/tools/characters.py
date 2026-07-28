@@ -48,7 +48,7 @@ def _character_create(args: dict[str, Any], ctx: dict[str, Any]) -> dict:
     payload: dict[str, Any] = {"name": name}
     for key in (
         "display_name", "persona_doc", "voice_profile",
-        "live2d_model", "default_emotion", "tags",
+        "default_emotion", "tags",
     ):
         if key in args:
             payload[key] = args[key]
@@ -71,7 +71,7 @@ def _character_get(args: dict[str, Any], ctx: dict[str, Any]) -> dict:
 
 _CHARACTER_PATCH_FIELDS = (
     "name", "display_name", "persona_doc", "voice_profile",
-    "live2d_model", "default_emotion", "tags",
+    "default_emotion", "tags",
 )
 
 
@@ -159,7 +159,7 @@ def _character_state_summary(args: dict[str, Any], ctx: dict[str, Any]) -> dict:
 
 register_tool(
     name="character_create",
-    description="Create a new character with persona, voice, and Live2D settings.",
+    description="Create a new character with persona, voice, and emotion settings.",
     input_schema={
         "type": "object",
         "properties": {
@@ -167,7 +167,6 @@ register_tool(
             "display_name": {"type": "string", "description": "Display name shown to users."},
             "persona_doc": {"type": "string", "description": "Persona / background document text."},
             "voice_profile": {"type": "string", "description": "Voice profile identifier."},
-            "live2d_model": {"type": "string", "description": "Live2D model identifier."},
             "default_emotion": {"type": "string", "description": "Default emotion label."},
             "tags": {"type": "array", "items": {"type": "string"}, "description": "Free-form tags."},
         },
@@ -206,7 +205,7 @@ register_tool(
 
 register_tool(
     name="character_update",
-    description="Patch mutable character fields (name, persona, voice, Live2D, tags, ...).",
+    description="Patch mutable character fields (name, persona, voice, emotion, tags, ...).",
     input_schema={
         "type": "object",
         "properties": {
@@ -215,7 +214,6 @@ register_tool(
             "display_name": {"type": "string"},
             "persona_doc": {"type": "string"},
             "voice_profile": {"type": "string"},
-            "live2d_model": {"type": "string"},
             "default_emotion": {"type": "string"},
             "tags": {"type": "array", "items": {"type": "string"}},
         },

@@ -72,6 +72,9 @@ def chat_completions():
                 stop=stop,
                 signal=signal,
                 include_usage=include_usage,
+                xijian=xijian_ext,
+                tools=tools,
+                tool_choice=tool_choice,
             ):
                 signal.raise_if_aborted()
                 yield chunk

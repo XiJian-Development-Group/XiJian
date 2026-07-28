@@ -537,7 +537,6 @@ multipart/form-data：`file`（必填）、`purpose`（必填：`assistants` / `
   "display_name": "Yuki",
   "persona_doc": "...",
   "voice_profile": "voice_ref_abc",
-  "live2d_model": "models/yuki/runtime.moc3",
   "default_emotion": "neutral",
   "tags": ["tsundere", "student"]
 }
@@ -555,7 +554,7 @@ multipart/form-data：`file`（必填）、`purpose`（必填：`assistants` / `
 
 #### `POST /v1/xijian/characters/{character_id}/load`
 
-加载角色到当前 session（启动 Live2D、加载人设）。
+加载角色到当前 session（加载人设与状态）。
 
 #### `POST /v1/xijian/characters/{character_id}/unload`
 
