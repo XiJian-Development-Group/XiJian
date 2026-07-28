@@ -829,7 +829,7 @@ def finalize_recovery() -> dict:
     # Note the finalised event in the audit log via the global
     # protection audit — keeps the surface uniform.
     try:
-        from xijian_api.stubs.protection import _append_audit
+        from xijian_api.stubs.safety import _append_legacy_audit as _append_audit
         _append_audit(
             "overload_recovery_finalized",
             "info",
@@ -880,7 +880,7 @@ def _record_trigger(result: dict, sample: Sample, tier: str) -> None:
     # Drop a context snapshot so the AI can resume from the trigger
     # point.  The snapshot helper handles deduplication.
     try:
-        from xijian_api.stubs.protection import snapshot
+        from xijian_api.stubs.safety import snapshot
         snapshot(
             scope="overload",
             payload={

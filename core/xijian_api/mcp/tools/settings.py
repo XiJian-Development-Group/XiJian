@@ -62,6 +62,8 @@ def _settings_update(args: dict[str, Any], ctx: dict[str, Any]) -> dict:
 
 def _settings_reset(args: dict[str, Any], ctx: dict[str, Any]) -> dict:
     key = args.get("key")
+    # Settings live in the protection-state bucket (managed by the
+    # merged safety module); read straight from state for the reset.
     bucket = state.protection.get("settings")
     if bucket is None:
         # Lazy container not yet created — nothing to reset.

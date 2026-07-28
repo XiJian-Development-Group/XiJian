@@ -688,26 +688,30 @@ multipart/form-data：`file`（必填）、`purpose`（必填：`assistants` / `
 
 触发遗忘（按衰减策略或指定条目）。
 
-### 3.5 保护模块（Protection）
+### 3.5 安全模块（Safety）
 
-**所有 protection 端点都受保护模块自身监控**——任何尝试绕过保护系统的请求都会写入审计日志。
+> **合并说明**：原 `protection` 模块已合并到 `safety`（A5.1）。`/v1/xijian/protection/*` 路由保留为向后兼容别名，全部委托到 `safety` stub 实现。新代码请使用 `/v1/xijian/safety/*` 端点。
 
-#### `GET /v1/xijian/protection/status`
+**所有 safety 端点都受安全模块自身监控**——任何尝试绕过安全系统的请求都会写入审计日志。
+
+#### `GET /v1/xijian/protection/status`（别名）
+
+返回保护系统状态。已迁移到 `safety` 模块，但路径保留为向后兼容别名。
 
 ```json
 {
   "enabled": true,
   "guard_level": "standard",
   "audit_log_size": 1234,
-  "version": "1.2.0"
+  "version": "1.0.0"
 }
 ```
 
-#### `POST /v1/xijian/protection/enable`
+#### `POST /v1/xijian/protection/enable`（别名）
 
 启用保护系统（无副作用，默认开启）。
 
-#### `POST /v1/xijian/protection/disable`
+#### `POST /v1/xijian/protection/disable`（别名）
 
 **关闭保护系统**，必须双重确认：
 
@@ -738,9 +742,9 @@ multipart/form-data：`file`（必填）、`purpose`（必填：`assistants` / `
 { "enabled": false, "disabled_at": 1718000050 }
 ```
 
-#### `GET /v1/xijian/protection/snapshots`
+#### `GET /v1/xijian/protection/snapshots`（别名）
 
-列出 AI 相关数据的历史版本快照。
+列出 AI 相关数据的历史版本快照。已委托到 A5.3 `snapshots` 模块统一容量管理。
 
 ```json
 {
@@ -758,11 +762,11 @@ multipart/form-data：`file`（必填）、`purpose`（必填：`assistants` / `
 }
 ```
 
-#### `GET /v1/xijian/protection/snapshots/{snapshot_id}`
+#### `GET /v1/xijian/protection/snapshots/{snapshot_id}`（别名）
 
 获取快照详细 diff。
 
-#### `POST /v1/xijian/protection/rollback`
+#### `POST /v1/xijian/protection/rollback`（别名）
 
 ```json
 {
@@ -772,9 +776,9 @@ multipart/form-data：`file`（必填）、`purpose`（必填：`assistants` / `
 }
 ```
 
-#### `POST /v1/xijian/protection/guard/preview`
+#### `POST /v1/xijian/protection/guard/preview`（别名）
 
-**输入/输出护栏预览**（不绕过保护，仅展示护栏判定结果）：
+**输入/输出护栏预览**（不绕过安全，仅展示护栏判定结果）。已适配到 `scan_input` / `scan_output` 统一规则引擎：
 
 ```json
 {
@@ -792,9 +796,9 @@ multipart/form-data：`file`（必填）、`purpose`（必填：`assistants` / `
 }
 ```
 
-#### `GET /v1/xijian/protection/audit`
+#### `GET /v1/xijian/protection/audit`（别名）
 
-分页查询审计日志（注入尝试、OOC 检测、授权变更、保护开关等）。
+分页查询审计日志（注入尝试、OOC 检测、授权变更、安全开关等）。合并后同时返回 legacy `state.audits` 与统一 `state.safety_audit_log` 条目。
 
 ```json
 {
@@ -813,9 +817,17 @@ multipart/form-data：`file`（必填）、`purpose`（必填：`assistants` / `
 }
 ```
 
-#### `POST /v1/xijian/protection/audit/export`
+#### `POST /v1/xijian/protection/audit/export`（别名）
 
-导出审计日志（异步，返回 file_id）。
+导出审计日志（返回 file_id）。合并后导出包含 legacy + 统一两个日志源的完整 JSONL。
+
+#### `POST /v1/xijian/safety/scan/input`
+
+预检用户输入。参见 A5.1 安全模块的统一扫描端点。
+
+#### `POST /v1/xijian/safety/scan/output`
+
+后检助手输出。参见 A5.1 安全模块的统一扫描端点。
 
 ### 3.6 会话与上下文
 

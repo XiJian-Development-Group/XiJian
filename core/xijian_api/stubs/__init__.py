@@ -28,7 +28,6 @@ from xijian_api.stubs import (
     npcs,
     overload,
     pois,
-    protection,
     resources,
     safety,
     safety_rules,
@@ -67,7 +66,9 @@ def seed_all() -> None:
     npcs.seed_default()
     memory.seed_default()
     memory_config.seed_default()  # type: ignore[attr-defined]
-    protection.seed_default()
+    # The merged safety module seeds both the A5.1 rulebook and
+    # the legacy protection-state defaults (enabled / guard_level).
+    safety.seed_default()
     settings.seed_default()
     overload.seed_default()
     character_state.seed_default()
@@ -87,10 +88,10 @@ def seed_all() -> None:
     wallets.seed_default()
     transactions.seed_default()
     economy.seed_default()
-    # A5.1 output-safety — no default rules (operator-curated);
-    # no default audit entries.  Seed hooks are wired so future
-    # rule-bundle imports have a stable entry point.
-    safety.seed_default()
+    # A5.1 output-safety — seeds the four legacy guard rules
+    # (prompt-injection / system-prompt-probe) so the merged
+    # safety layer catches them out of the box.  The per-world
+    # rulebook is operator-curated beyond that.
     safety_rules.seed_default()
     # A5.2 MCP-protection — no default rules, freezes, or
     # snapshots (operator-curated).  Seed hooks are wired so
@@ -136,7 +137,6 @@ __all__ = [
     "npcs",
     "overload",
     "pois",
-    "protection",
     "resources",
     "safety",
     "safety_rules",

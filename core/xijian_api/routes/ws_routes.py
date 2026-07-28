@@ -8,7 +8,7 @@ Highlights:
   a first-frame ``{"type": "auth", "token": "..."}`` envelope.
 * Heartbeat (``ping`` / ``pong``) every 30 s.
 * In-process pub/sub fan-out for the events the spec calls out
-  (``character.*``, ``world.*``, ``memory.*``, ``protection.*``,
+  (``character.*``, ``world.*``, ``memory.*``, ``safety.*``,
   ``generation.*``).
 * Optional dev hook ``POST /v1/xijian/_test/emit`` calls
   :func:`publish_event`.

@@ -16,7 +16,7 @@ characters   ``{character_id: dict}``
 interactions ``{interaction_id: dict}``
 worlds       ``{world_id: dict}``
 memory       ``{memory_id: dict}``
-protection   ``dict`` — single object (status / settings)
+protection   ``dict`` — single object (status / settings); managed by :mod:`safety`
 sessions     ``{session_id: dict}``
 files        ``{file_id: dict}``
 batches      ``{batch_id: dict}``

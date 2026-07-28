@@ -30,7 +30,7 @@ from xijian_api.pagination import paginate
 from xijian_api.stubs import character_state as cs_stub
 from xijian_api.stubs import characters as chars_stub
 from xijian_api.stubs import interactions as inter_stub
-from xijian_api.stubs import protection as prot_stub
+from xijian_api.stubs import safety as prot_stub
 
 
 bp = Blueprint("xijian_characters", __name__)

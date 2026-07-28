@@ -58,7 +58,7 @@ from flask import Blueprint, jsonify, request
 from xijian_api.errors import ApiError
 from xijian_api.pagination import paginate
 from xijian_api.stubs import npcs as npcs_stub
-from xijian_api.stubs import protection as prot_stub
+from xijian_api.stubs import safety as prot_stub
 from xijian_api.stubs import world_audit as audit_stub
 from xijian_api.stubs import world_compute_config as wcc_stub
 from xijian_api.stubs import world_environment as env_stub
