@@ -52,7 +52,7 @@ xijian-api/                    # 解压后的根目录
 
 ### 3.1 环境要求
 
-- **macOS**: Apple Silicon (arm64)，macOS 12+
+- **macOS**: Apple Silicon (arm64)，macOS 26.0+
 - **Windows**: Windows 10/11 x64
 - **conda**: Anaconda/Miniconda/Miniforge
 - **Python**: 3.12（由 conda 环境提供）
@@ -181,7 +181,7 @@ UI 程序（如 Electron / Tauri / 原生应用）的工作流程：
 
 ### 6.2 就绪检测
 
-服务启动后，日志会输出 `waitress 服务启动: 0.0.0.0:<port>`。
+服务启动后，日志会输出 `waitress 服务启动: 127.0.0.1:<port>`。
 UI 程序可通过以下方式检测就绪：
 
 ```javascript

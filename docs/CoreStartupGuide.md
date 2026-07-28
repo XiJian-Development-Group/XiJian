@@ -14,7 +14,7 @@ XiJian Core 是一个基于 Flask 的 OpenAI 兼容 API 服务端，提供：
 - WebSocket 实时事件流
 - 模型管理、过载防护、安全审查等运维能力
 
-**默认监听地址**：`0.0.0.0:18500`（**无需任何环境变量即可启动**）  
+**默认监听地址**：`127.0.0.1:18500`（**无需任何环境变量即可启动**）  
 端口、主机、开发模式、日志级别等均支持 **命令行参数 > 环境变量 > config.toml > 内置默认值** 的优先级，零配置即可运行。
 
 ---
@@ -24,7 +24,7 @@ XiJian Core 是一个基于 Flask 的 OpenAI 兼容 API 服务端，提供：
 ### 2.1 系统要求
 | 平台 | 最低版本 | 推荐配置 [TODO: 补充详细的配置信息] |
 |------|----------|----------|
-| macOS | 13.0 (Ventura) | **等待填写** |
+| macOS | 26.0 | **等待填写** |
 | Windows | Windows >= 24H2 | **等待填写** |
 | iOS | iOS >= 26.0 | 良好的网络连接 |
 | Android | Android >= 12.0 | 良好的网络连接 |
@@ -137,7 +137,7 @@ XiJian Core **没有任何必须设置的环境变量**——所有配置都有�
 | 变量名 | 默认值 | 说明 |
 |--------|--------|------|
 | `XIJIAN_API_PORT` | `18500` | 监听端口 (1-65535) |
-| `XIJIAN_HOST` | `0.0.0.0` | 监听地址 |
+| `XIJIAN_HOST` | `127.0.0.1` | 监听地址（默认仅本地环回；如需外部访问请显式设为 `0.0.0.0`） |
 | `XIJIAN_DEV` | `false` | 开发模式：保留 token 文件、启用测试路由 |
 | `XIJIAN_DEV_TOKEN_FILE` | `false` | 开发模式下不删除 token 文件 |
 | `XIJIAN_LOG_LEVEL` | `INFO` | 日志级别：`DEBUG`/`INFO`/`WARNING`/`ERROR`/`CRITICAL` |
@@ -164,7 +164,7 @@ XiJian Core **没有任何必须设置的环境变量**——所有配置都有�
 
 ```toml
 [server]
-host = "0.0.0.0"      # 已默认开放外部访问
+host = "127.0.0.1"    # 仅监听本地环回，避免未授权外部访问
 port = 18500          # 文档默认，实际以 XIJIAN_API_PORT 为准
 dev = false           # 生产环境必须 false
 keep_token_file = false
@@ -204,7 +204,7 @@ dev_test_emit = false
 
 ### 5.1 零配置启动（最简）
 
-无需任何环境变量即可启动，默认监听 `0.0.0.0:18500`：
+无需任何环境变量即可启动，默认监听 `127.0.0.1:18500`：
 
 ```bash
 python -m xijian_api
@@ -234,14 +234,14 @@ python -m xijian_api --version
 ```
 [xijian-api] 2026-07-22 21:54:56 INFO  [xijian_api] ================================================================
 [xijian-api] 2026-07-22 21:54:56 INFO  [xijian_api] XiJian Core API 启动
-[xijian-api] 2026-07-22 21:54:56 INFO  [xijian_api] 监听地址      : 0.0.0.0:18600
+[xijian-api] 2026-07-22 21:54:56 INFO  [xijian_api] 监听地址      : 127.0.0.1:18600
 [xijian-api] 2026-07-22 21:54:56 INFO  [xijian_api] 开发模式      : True
 [xijian-api] 2026-07-22 21:54:56 INFO  [xijian_api] 配置文件      : /path/to/config.toml
 [xijian-api] 2026-07-22 21:54:56 INFO  [xijian_api] 存储根目录    : /Users/.../.xijian
 [xijian-api] 2026-07-22 21:54:56 INFO  [xijian_api] 已注册模型    : 3 个
 [xijian-api] 2026-07-22 21:54:56 INFO  [xijian_api] 日志级别      : DEBUG
 [xijian-api] 2026-07-22 21:54:56 INFO  [xijian_api] ================================================================
-[xijian-api] 2026-07-22 21:54:56 INFO  [xijian_api] waitress 服务启动: 0.0.0.0:18600
+[xijian-api] 2026-07-22 21:54:56 INFO  [xijian_api] waitress 服务启动: 127.0.0.1:18600
 ```
 
 ### 5.3 开发/调试模式
@@ -372,12 +372,21 @@ curl -s -X POST http://localhost:18500/v1/chat/completions \
   }'
 ```
 
-### 6.5 外部访问测试（验证 0.0.0.0 监听生效）
+### 6.5 外部访问（需显式开启）
+
+默认仅监听 `127.0.0.1`，外部无法直接访问。如确需局域网访问，请显式配置：
+
 ```bash
-# 在局域网另一台机器上执行
+# 通过环境变量显式开放外部访问（请确保网络环境可信）
+XIJIAN_HOST=0.0.0.0 python -m xijian_api
+
+# 或在 config.toml 中设置 [server] host = "0.0.0.0"
+# 随后在局域网另一台机器上执行
 curl -s http://<SERVER_IP>:18500/healthz
 # 应返回 {"status":"ok"}
 ```
+
+> **安全提示**：开放外部访问前请确认已配置 Token 鉴权、防火墙规则及网络环境可信。
 
 ---
 
@@ -389,7 +398,7 @@ curl -s http://<SERVER_IP>:18500/healthz
 | 日志出现「已降级为开发模式启动」 | 生产模式未预置 token 文件 | 已自动修正；正式部署请预置 token 文件或检查 `XIJIAN_DEV` |
 | 日志出现「waitress 未安装」 | 未安装 waitress | `pip install waitress`（已自动回退 Flask 开发服务器） |
 | 日志出现「配置加载失败」 | config.toml 缺失或语法错误 | 已自动回退默认配置；检查 TOML 语法 |
-| 外部无法访问 | 防火墙拦截 | 放行端口：`ufw allow 18500` / `firewall-cmd --add-port=18500/tcp` / Windows 防火墙入站规则 |
+| 外部无法访问 | 默认仅监听 `127.0.0.1`（安全基线） | 如确需外部访问，显式设置 `XIJIAN_HOST=0.0.0.0` 并放行端口与防火墙 |
 | `ImportError: No module named 'mlx'` | macOS 非 Apple Silicon / Windows/Linux | 配置 `backends.*.default = "gguf"` |
 | Token 认证失败 401 | Token 过期/错误 | 重读 token_file 或重启服务获取新 token |
 | 模型加载 OOM | 显存/内存不足 | 减小 `gguf_n_ctx`、量化等级、或换更小模型 |

@@ -116,7 +116,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
     Every option is optional — the server can start with no flags at
     all, falling back to sensible defaults (port ``18500``,
-    ``0.0.0.0``, non-dev).  Environment variables
+    ``127.0.0.1``, non-dev).  Environment variables
     (``XIJIAN_API_PORT`` / ``XIJIAN_HOST`` / ``XIJIAN_DEV`` /
     ``XIJIAN_LOG_LEVEL`` / ``XIJIAN_LOG_FILE`` / ``XIJIAN_CONFIG``)
     fill the gap between CLI flags and defaults.

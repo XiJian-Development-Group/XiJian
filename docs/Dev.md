@@ -16,7 +16,7 @@
 
 | 平台       | 状态     | UI 实现          | AI 推理                | 备注                                                                                |
 | ---------- | -------- | ---------------- | ---------------------- | ----------------------------------------------------------------------------------- |
-| macOS      | 主目标   | Swift / SwiftUI  | MLX（mlx-swift）       | 推荐 macOS 26 Tahoe，最低 macOS 13 Ventura；推荐内存 64–128 GB；可用磁盘 ≥ 32 GB     |
+| macOS      | 主目标   | Swift / SwiftUI  | MLX（mlx-swift）       | 最低 macOS 26.0（推荐 macOS 26 Tahoe）；推荐内存 64–128 GB；可用磁盘 ≥ 32 GB     |
 | iOS / iPad | 暂不支持 | —                | —                      | 目前项目无 iOS 上架计划                                                              |
 | Windows    | 副目标   | Python + Pywebview | GGUF（llama.cpp / Ollama） | 最低 Windows 11；推荐显存 128 GB；可用磁盘 ≥ 64 GB                                  |
 | Linux      | 副目标   | Python + Pywebview | GGUF（llama.cpp / Ollama） | 同 Windows                                                                          |
