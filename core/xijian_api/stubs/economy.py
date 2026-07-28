@@ -78,6 +78,7 @@ from xijian_api.stubs import transactions as txn_stub
 from xijian_api.stubs import wallets as wallet_stub
 from xijian_api.stubs import world_currencies as currency_stub
 from xijian_api.stubs import world_economy_state as eco_stub
+from xijian_api.stubs.events import _stable_hash_unit
 from xijian_api.utils.time import now_ts
 
 
@@ -199,13 +200,19 @@ def _probability_hit(npc_id: str, world_id: str, probability: float) -> bool:
     Mirrors the A4.1 probability-trigger strategy: hash a tuple
     that includes the actor and a time bucket so a test can pin
     the outcome with a known clock value.
+
+    Uses :func:`xijian_api.stubs.events._stable_hash_unit`
+    (``hashlib.sha256``) instead of the built-in ``hash()`` so the
+    result is independent of ``PYTHONHASHSEED`` — the same
+    ``(npc_id, world_id, bucket)`` always yields the same roll
+    across processes and interpreter launches.
     """
     if probability <= 0.0:
         return False
     if probability >= 1.0:
         return True
     bucket = int(time.time()) // max(int(CRIME_COOLDOWN_SECONDS), 1)
-    h = (hash(("economy_crime", npc_id, world_id, bucket)) & 0xFFFFFFFF) / 0x100000000
+    h = _stable_hash_unit(("economy_crime", npc_id, world_id, bucket))
     return h < probability
 
 

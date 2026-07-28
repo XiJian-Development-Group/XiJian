@@ -57,7 +57,6 @@ MODULE_TAG: dict[str, str] = {
     "xijian_interactions": "xijian.interaction",
     "xijian_worlds": "xijian.world",
     "xijian_memory": "xijian.memory",
-    "xijian_protection": "xijian.protection",
     "xijian_sessions": "xijian.session",
     "xijian_settings": "xijian.settings",
     "xijian_resources": "xijian.resource",

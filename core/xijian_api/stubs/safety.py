@@ -25,7 +25,7 @@ surface:
 * **Enable/disable gate** — :func:`is_enabled` / :func:`status` /
   :func:`enable` / :func:`start_disable` / :func:`confirm_disable`.
   The two-step challenge flow (challenge_id + phrase, 60s TTL,
-  ``state.protection["enabled"]``) is preserved verbatim so callers
+  ``state.safety_state["enabled"]``) is preserved verbatim so callers
   that gate on ``prot_stub.is_enabled()`` keep working.
 * **Guard preview** — :func:`guard_preview` is kept as a thin
   adapter that maps the legacy ``(direction, text, context)`` API
@@ -710,9 +710,9 @@ def seed_default() -> None:
     legacy guard rules are **not** auto-seeded here — they would
     pollute the unified rulebook and break A5.1 scan tests that
     assert on exact match counts.  Instead, :func:`guard_preview`
-    seeds them on first call so the legacy
-    ``/v1/xijian/protection/guard/preview`` endpoint keeps
-    catching the same prompt-injection patterns out of the box.
+    seeds them on first call so callers invoking the adapter
+    keep catching the same prompt-injection patterns out of the
+    box.
     """
     _ensure_protection_record()
 
@@ -726,7 +726,7 @@ def reset_for_testing() -> None:
     state.safety_audit_log.clear()
     state.audits.clear()
     state.snapshots.clear()
-    state.protection.clear()
+    state.safety_state.clear()
     _WORLD_DANGEROUS.clear()
     _WORLD_THRESHOLDS.clear()
     with _CHALLENGE_LOCK:
@@ -739,11 +739,11 @@ def reset_for_testing() -> None:
 #
 # These functions preserve the legacy protection module's
 # enable/disable-with-double-confirm flow.  The state lives in
-# ``state.protection`` (a single dict) so existing callers that
+# ``state.safety_state`` (a single dict) so existing callers that
 # gate on ``prot_stub.is_enabled()`` keep working after the
 # module rename.
 #
-# A few legacy fields are mirrored into ``state.protection``:
+# A few legacy fields are mirrored into ``state.safety_state``:
 #   - ``enabled``       (bool, default True)
 #   - ``guard_level``   (str, default "standard")
 #   - ``version``       (str, default "1.0.0")
@@ -759,7 +759,7 @@ _CHALLENGE_LOCK = threading.Lock()
 
 def _ensure_protection_record() -> dict:
     """Return the protection-state dict, applying lazy defaults."""
-    record = state.protection
+    record = state.safety_state
     record.setdefault("enabled", True)
     record.setdefault("guard_level", "standard")
     record.setdefault("version", "1.0.0")
@@ -769,10 +769,8 @@ def _ensure_protection_record() -> dict:
 def status() -> dict:
     """Return the protection-state snapshot.
 
-    Mirrors the legacy ``protection.status()`` shape so clients
-    polling ``GET /v1/xijian/protection/status`` (or the merged
-    ``/v1/xijian/safety/protection/status`` alias) see the same
-    fields.
+    Mirrors the legacy ``protection.status()`` shape so callers
+    reading the gate via :func:`status` see the same fields.
     """
     record = _ensure_protection_record()
     return {
@@ -825,7 +823,7 @@ def confirm_disable(payload: dict) -> dict:
     """Stage 2 of the two-step disable flow.
 
     Validates ``challenge_id`` + ``phrase`` against the pending
-    challenge; on success flips ``state.protection.enabled`` to
+    challenge; on success flips ``state.safety_state.enabled`` to
     False and records the disabled timestamp.
     """
     _ensure_protection_record()
@@ -833,16 +831,16 @@ def confirm_disable(payload: dict) -> dict:
     phrase = (payload or {}).get("phrase", "")
     with _CHALLENGE_LOCK:
         record = _CHALLENGES.pop(challenge_id, None)
-    enabled = bool(state.protection.get("enabled", True))
+    enabled = bool(state.safety_state.get("enabled", True))
     if record is None:
         return {"enabled": enabled, "error": "challenge_expired"}
     if time.time() > record["expires_at"]:
         return {"enabled": enabled, "error": "challenge_expired"}
     if phrase != record["phrase"]:
         return {"enabled": enabled, "error": "phrase_mismatch"}
-    state.protection["enabled"] = False
+    state.safety_state["enabled"] = False
     disabled_at = now_ts()
-    state.protection["disabled_at"] = disabled_at
+    state.safety_state["disabled_at"] = disabled_at
     _append_legacy_audit(
         "protection_disabled", "critical", source="api",
     )
@@ -857,7 +855,7 @@ def is_enabled() -> bool:
     mutations behind the protection state.
     """
     _ensure_protection_record()
-    return bool(state.protection.get("enabled", True))
+    return bool(state.safety_state.get("enabled", True))
 
 
 # ---------------------------------------------------------------------------
@@ -905,9 +903,8 @@ def guard_preview(direction: str, text: str, context: dict | None = None) -> dic
     rulebook handles detection.  The legacy "blocked/safe"
     verdicts are derived from the scan's ``verdict``.
 
-    Mirrors the legacy return shape so existing clients (and
-    the ``/v1/xijian/protection/guard/preview`` alias) keep
-    working without modification.
+    Mirrors the legacy return shape so existing callers of the
+    adapter keep working without modification.
     """
     # Lazy-seed the four legacy guard substrings on first call
     # so the rulebook isn't empty on a fresh install.  This is
@@ -1100,7 +1097,7 @@ def _append_legacy_audit(
         "details": details or {},
     }
     state.audits.append(entry)
-    state.protection["audit_log_size"] = len(state.audits) + len(state.safety_audit_log)
+    state.safety_state["audit_log_size"] = len(state.audits) + len(state.safety_audit_log)
     # Mirror into the unified audit log.
     verdict_map = {
         "info": VERDICT_PASS,

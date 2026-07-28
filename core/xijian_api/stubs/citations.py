@@ -24,7 +24,7 @@ The chat pipeline feeds the assistant's final response text plus the
 3. Returns a verdict — ``"pass"`` / ``"warn"`` — plus the warning list
    and the (de-duplicated) audited entry id set.
 4. Appends an audit event to :data:`xijian_api.stubs.state.audits` so the
-   protection module can surface it via ``GET /v1/xijian/protection/audit``.
+   safety module can surface it via ``GET /v1/xijian/safety/audit``.
 
 The audit is intentionally deterministic and local: no LLM is
 involved.  Real production deployments would swap :func:`audit` for a

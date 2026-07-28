@@ -16,7 +16,7 @@ characters   ``{character_id: dict}``
 interactions ``{interaction_id: dict}``
 worlds       ``{world_id: dict}``
 memory       ``{memory_id: dict}``
-protection   ``dict`` — single object (status / settings); managed by :mod:`safety`
+safety_state ``dict`` — single object (status / settings); managed by :mod:`safety`
 sessions     ``{session_id: dict}``
 files        ``{file_id: dict}``
 batches      ``{batch_id: dict}``
@@ -45,7 +45,7 @@ interactions: dict = {}
 worlds: dict = {}
 memory: dict = {}
 memory_configs: dict = {}
-protection: dict = {}
+safety_state: dict = {}
 sessions: dict = {}
 snapshots: dict = {}
 import_jobs: dict = {}
@@ -343,7 +343,7 @@ def reset_for_testing() -> None:
     worlds.clear()
     memory.clear()
     memory_configs.clear()
-    protection.clear()
+    safety_state.clear()
     sessions.clear()
     snapshots.clear()
     import_jobs.clear()
@@ -402,7 +402,7 @@ __all__ = [
     "worlds",
     "memory",
     "memory_configs",
-    "protection",
+    "safety_state",
     "sessions",
     "snapshots",
     "import_jobs",

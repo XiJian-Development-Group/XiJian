@@ -17,14 +17,16 @@ Highlights:
 from __future__ import annotations
 
 import json
+import os
 import threading
 import time
 from typing import Any, Iterable
 
-from flask import Blueprint, current_app, request
+from flask import Blueprint, current_app, jsonify, request
 from flask_sock import Sock
 
 from xijian_api import auth
+from xijian_api.errors import ApiError
 from xijian_api.utils.ids import gen_id
 from xijian_api.utils.time import now_ts
 
@@ -271,6 +273,26 @@ def init_app(app) -> None:
     # which strict WS clients (e.g. ``websocket-client``) reject.
     app.config.setdefault("SOCK_SERVER_OPTIONS", {"subprotocols": ["xijian.v1"]})
     sock.init_app(app)
+
+
+# ---------------------------------------------------------------------------
+# Dev-only WS event injector
+# ---------------------------------------------------------------------------
+
+
+@bp.post("/v1/xijian/_test/emit")
+def dev_emit():
+    """Dev-only endpoint to publish a fake WS event.
+
+    Guarded by ``XIJIAN_DEV=1`` so it never ships in production.
+    """
+    if os.environ.get("XIJIAN_DEV") != "1":
+        raise ApiError(404, "not found", "not_found_error", code="route_not_found")
+    payload = request.get_json(silent=True) or {}
+    event_type = payload.get("type", "ping")
+    data = payload.get("data", {})
+    publish_event(event_type, data)
+    return jsonify({"published": True, "type": event_type})
 
 
 __all__ = ["bp", "init_app", "publish_event"]

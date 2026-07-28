@@ -400,7 +400,7 @@ class TestRecoveryHandshake:
         ov_stub.first_confirm()
         ov_stub.finalize_recovery()
         # ``_append_audit`` writes to ``state.audits`` (the append-only
-        # global audit log), not to ``state.protection``.  Pull the
+        # global audit log), not to ``state.safety_state``.  Pull the
         # match from there.
         match = [a for a in stubs_state.audits if a.get("kind") == "overload_recovery_finalized"]
         assert match, "expected an overload_recovery_finalized audit entry"
@@ -963,7 +963,7 @@ class TestCrossSystemTrigger:
 
     def test_trigger_writes_to_audit_log(self):
         ov_stub.simulate_overload(METRIC_MEM)
-        audit = stubs_state.protection.get("audit", [])
+        audit = stubs_state.safety_state.get("audit", [])
         # Overload audit entries land via _record_trigger; check we
         # at least have a recently appended record.
         kinds = [a.get("kind") for a in audit]

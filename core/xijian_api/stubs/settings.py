@@ -31,7 +31,7 @@ def seed_default() -> None:
 
 def _settings_bucket() -> dict:
     """Return the settings dict, creating an empty one on first use."""
-    return state.protection.setdefault("settings", {})
+    return state.safety_state.setdefault("settings", {})
 
 
 def get_settings() -> dict:

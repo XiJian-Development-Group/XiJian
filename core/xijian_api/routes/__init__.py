@@ -50,7 +50,6 @@ _OPTIONAL_ROUTE_MODULES: tuple[str, ...] = (
     "xijian_api.routes.xijian_economy",
     "xijian_api.routes.xijian_events",
     "xijian_api.routes.xijian_memory",
-    "xijian_api.routes.xijian_protection",
     "xijian_api.routes.xijian_sessions",
     "xijian_api.routes.xijian_settings",
     "xijian_api.routes.xijian_resources",

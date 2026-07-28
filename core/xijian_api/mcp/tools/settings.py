@@ -2,7 +2,7 @@
 
 Wraps the in-memory settings stub (:mod:`xijian_api.stubs.settings`) as
 MCP tools registered with :mod:`xijian_api.mcp.registry`.  The settings
-store is a lazily-created dict inside ``state.protection`` that holds
+store is a lazily-created dict inside ``state.safety_state`` that holds
 operator-tunable preferences; the stub ships with no pre-populated
 defaults (operators configure them via ``settings_update``).
 
@@ -62,9 +62,9 @@ def _settings_update(args: dict[str, Any], ctx: dict[str, Any]) -> dict:
 
 def _settings_reset(args: dict[str, Any], ctx: dict[str, Any]) -> dict:
     key = args.get("key")
-    # Settings live in the protection-state bucket (managed by the
+    # Settings live in the safety-state bucket (managed by the
     # merged safety module); read straight from state for the reset.
-    bucket = state.protection.get("settings")
+    bucket = state.safety_state.get("settings")
     if bucket is None:
         # Lazy container not yet created — nothing to reset.
         return {"reset": True, "key": key, "settings": {}}
