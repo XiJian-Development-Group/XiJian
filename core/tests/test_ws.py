@@ -1,4 +1,6 @@
-"""Tests for the WebSocket ``/v1/ws`` endpoint."""
+"""Tests for the WebSocket ``/v1/ws`` endpoint.
+(WebSocket ``/v1/ws`` 端点的测试。)
+"""
 
 from __future__ import annotations
 
@@ -6,7 +8,9 @@ import json
 
 
 def test_ws_hello_then_auth_ok(app, auth_headers, token):
-    """Connect with a valid Bearer subprotocol → receive ``hello`` then ``auth.ok``."""
+    """Connect with a valid Bearer subprotocol → receive ``hello`` then ``auth.ok``.
+    (使用有效 Bearer 子协议连接 → 接收 ``hello`` 然后 ``auth.ok``。)
+    """
     import threading
 
     from werkzeug.serving import make_server
@@ -29,6 +33,7 @@ def test_ws_hello_then_auth_ok(app, auth_headers, token):
             auth_ok = json.loads(ws.recv())
             assert auth_ok["type"] == "auth.ok"
             # After auth, ping → pong.
+            # (认证后，ping → pong。)
             ws.send(json.dumps({"type": "ping"}))
             pong = json.loads(ws.recv())
             assert pong["type"] == "pong"
@@ -39,7 +44,9 @@ def test_ws_hello_then_auth_ok(app, auth_headers, token):
 
 
 def test_ws_auth_failed_with_bad_token(app):
-    """A wrong token in the subprotocol yields ``auth.failed``."""
+    """A wrong token in the subprotocol yields ``auth.failed``.
+    (子协议中的错误 token 产生 ``auth.failed``。)
+    """
     import threading
 
     from werkzeug.serving import make_server
@@ -67,7 +74,9 @@ def test_ws_auth_failed_with_bad_token(app):
 
 
 def test_ws_first_frame_auth(app, token):
-    """A token sent in the first frame yields ``auth.ok``."""
+    """A token sent in the first frame yields ``auth.ok``.
+    (在第一帧中发送的 token 产生 ``auth.ok``。)
+    """
     import threading
 
     from werkzeug.serving import make_server

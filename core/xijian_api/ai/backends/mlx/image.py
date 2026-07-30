@@ -1,4 +1,18 @@
-"""MLX image-generation backend.
+"""MLX 图像生成后端。
+
+MLX image-generation backend.
+
+支持两条实现路径：
+
+1. ``mlx_stable_diffusion`` — Apple Silicon 原生 SD 库
+   （优先使用；不在 PyPI 上，需从源码构建）。
+2. ``diffusers``（HuggingFace）+ MPS（Metal）后端 —
+   始终可安装的回退方案。Diffusers 可在 Apple Silicon 上通过
+   ``torch.device("mps")`` 运行 SD 1.5、SDXL、SD3 及许多其他
+   扩散检查点。
+
+当两者都未安装时，:meth:`is_available` 返回 ``False``，注册表
+回退到下一个配置的后端（通常是 GGUF 或 OpenAI 远程）。
 
 Supports two implementation paths:
 
@@ -29,7 +43,11 @@ from xijian_api.ai.types import ImageGenBackend
 
 
 def _probe() -> tuple[bool, str]:
-    """Return ``(available, library)`` for the preferred image library.
+    """返回首选的图像库 ``(available, library)``。
+
+    先尝试 ``mlx_stable_diffusion``，再试 ``diffusers``。
+
+    Return ``(available, library)`` for the preferred image library.
 
     Tries ``mlx_stable_diffusion`` first, then ``diffusers``.
     """
@@ -51,7 +69,10 @@ def _probe() -> tuple[bool, str]:
 
 
 def _torch_device() -> str:
-    """Pick the best torch device: MPS on Apple Silicon, else CPU."""
+    """选择最佳 torch 设备：Apple Silicon 用 MPS，否则用 CPU。
+
+    Pick the best torch device: MPS on Apple Silicon, else CPU.
+    """
     try:
         import torch
         if torch.backends.mps.is_available():
@@ -63,6 +84,7 @@ def _torch_device() -> str:
 
 @register_image("mlx")
 class MLXImageBackend(ImageGenBackend):
+    """MLX 图像生成后端。MLX image generation backend."""
     name = "mlx"
 
     def __init__(self) -> None:
@@ -71,8 +93,8 @@ class MLXImageBackend(ImageGenBackend):
         self._pipeline: Any = None
         self._torch_device: str = ""
 
-        # ``diffusers`` cache for the loaded pipeline; ``None`` for
-        # ``mlx_stable_diffusion`` (which is lazy and re-loads per call).
+        # ``diffusers`` 缓存已加载的 pipeline；``mlx_stable_diffusion``
+        # 用 ``None``（它惰性地在每次调用时重新加载）。
         self._diffusers_pipe: Any = None
 
     def is_available(self) -> bool:
@@ -97,10 +119,13 @@ class MLXImageBackend(ImageGenBackend):
 
         if self._lib == "diffusers":
             self._load_diffusers(path, **kwargs)
-        # ``mlx_stable_diffusion`` is lazy — defer to generate time.
+        # ``mlx_stable_diffusion`` 惰性加载 —— 推迟到生成时。
 
     def _load_diffusers(self, path: Path, **kwargs) -> None:
-        """Eagerly build a ``diffusers`` pipeline from ``path``."""
+        """从 ``path`` 急切构建 ``diffusers`` pipeline。
+
+        Eagerly build a ``diffusers`` pipeline from ``path``.
+        """
         try:
             import torch
             from diffusers import StableDiffusionPipeline
@@ -112,16 +137,15 @@ class MLXImageBackend(ImageGenBackend):
         self._torch_device = _torch_device()
         torch_dtype = torch.float16 if self._torch_device == "mps" else torch.float32
         try:
-            # ``path`` may be a directory (HF model layout) or a single
-            # checkpoint file.  Diffusers' ``from_pretrained`` handles
-            # directories; for files we hand off to
-            # ``FromSingleFileMixin``.
+            # ``path`` 可以是目录（HF 模型布局）或单个检查点文件。
+            # Diffusers 的 ``from_pretrained`` 处理目录；文件则交
+            # 由 ``FromSingleFileMixin`` 处理。
             if path.is_dir():
                 self._diffusers_pipe = StableDiffusionPipeline.from_pretrained(
                     str(path), torch_dtype=torch_dtype,
                 )
             else:
-                # ``from_single_file`` is the SD-WebUI-checkpoint path.
+                # ``from_single_file`` 是 SD-WebUI 检查点路径。
                 try:
                     self._diffusers_pipe = StableDiffusionPipeline.from_single_file(
                         str(path), torch_dtype=torch_dtype,
@@ -140,7 +164,7 @@ class MLXImageBackend(ImageGenBackend):
         try:
             self._diffusers_pipe = self._diffusers_pipe.to(self._torch_device)
         except Exception:
-            # CPU fallback if MPS fails (some checkpoints don't support half).
+            # 若 MPS 失败则 CPU 回退（某些检查点不支持半精度）。
             self._diffusers_pipe = self._diffusers_pipe.to("cpu")
             self._torch_device = "cpu"
 
@@ -149,7 +173,7 @@ class MLXImageBackend(ImageGenBackend):
         self._pipeline = None
         self._diffusers_pipe = None
         self._torch_device = ""
-        # Best-effort cache clear.
+        # 尽力缓存清理。
         try:
             import mlx.core as mx
             mx.metal.clear_cache()
@@ -201,24 +225,27 @@ class MLXImageBackend(ImageGenBackend):
             ) from exc
         return _normalise_outputs(images, n=n)
 
-    def edit(self, *args, **kwargs):  # pragma: no cover - delegated to stub
+    def edit(self, *args, **kwargs):  # pragma: no cover - 委托给 stub
         raise BackendError(
             "MLX image backend does not implement edit; fall back to generate",
             code="backend_error",
         )
 
-    def variation(self, *args, **kwargs):  # pragma: no cover - delegated to stub
+    def variation(self, *args, **kwargs):  # pragma: no cover - 委托给 stub
         raise BackendError(
             "MLX image backend does not implement variation; fall back to generate",
             code="backend_error",
         )
 
-    # -- internals ----------------------------------------------------------
+    # -- internals / 内部 ----------------------------------------------------------
 
     def _call_mlx_sd(
         self, *, prompt, n, width, height, negative_prompt, seed,
     ) -> list[Any]:
-        """Invoke ``mlx_stable_diffusion.generate`` (or pipeline)."""
+        """调用 ``mlx_stable_diffusion.generate``（或 pipeline）。
+
+        Invoke ``mlx_stable_diffusion.generate`` (or pipeline).
+        """
         import importlib
 
         try:
@@ -253,7 +280,10 @@ class MLXImageBackend(ImageGenBackend):
     def _call_diffusers(
         self, *, prompt, n, width, height, negative_prompt, seed,
     ) -> list[Any]:
-        """Invoke the loaded ``diffusers`` pipeline."""
+        """调用已加载的 ``diffusers`` pipeline。
+
+        Invoke the loaded ``diffusers`` pipeline.
+        """
         if self._diffusers_pipe is None:
             raise ModelNotLoaded("diffusers pipeline not loaded")
         import torch
@@ -271,7 +301,7 @@ class MLXImageBackend(ImageGenBackend):
             generator = generator.manual_seed(int(seed))
             gen_kwargs["generator"] = generator
         output = self._diffusers_pipe(**gen_kwargs)
-        # ``StableDiffusionPipeline`` returns an ``images`` attribute.
+        # ``StableDiffusionPipeline`` 返回 ``images`` 属性。
         images = getattr(output, "images", None)
         if images is None and isinstance(output, dict):
             images = output.get("images")
@@ -292,10 +322,13 @@ def _parse_size(size: str) -> tuple[int, int]:
 
 
 def _normalise_outputs(images: list, *, n: int) -> list[dict]:
-    """Convert the library's output into the OAI ``b64_json``/``url`` shape."""
+    """将库的输出转换为 OAI ``b64_json``/``url`` 形状。
+
+    Convert the library's output into the OAI ``b64_json``/``url`` shape.
+    """
     out: list[dict] = []
     for img in images[: max(1, n)]:
-        # PIL.Image is the most common return type.
+        # PIL.Image 是最常见的返回类型。
         try:
             from PIL import Image
             if isinstance(img, Image.Image):

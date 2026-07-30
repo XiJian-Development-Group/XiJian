@@ -10,6 +10,9 @@ Covers:
 * **Hot path** — :func:`match_active_rules` returns sorted hits;
   broken regex is logged + skipped.
 * **Auth** — every endpoint requires a Bearer token.
+
+  测试安全规则引擎和策略评估。
+  验证规则匹配条件和动作执行。
 """
 
 from __future__ import annotations
@@ -115,6 +118,7 @@ class TestValidKinds:
 
 
 # ---------------------------------------------------------------------------
+# CRUD
 # CRUD
 # ---------------------------------------------------------------------------
 
@@ -448,6 +452,7 @@ class TestHttpListPatchDelete:
 
 # ---------------------------------------------------------------------------
 # Auth coverage
+# 认证 — coverage
 # ---------------------------------------------------------------------------
 
 

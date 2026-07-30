@@ -1,4 +1,4 @@
-"""File routes — upload, list, get, content, delete."""
+"""File routes — upload, list, get, content, delete. / 文件路由 — 上传、列表、获取、内容、删除。"""
 
 from __future__ import annotations
 
@@ -21,8 +21,13 @@ bp = Blueprint("files", __name__)
 def upload_file():
     """Upload via multipart or raw body.
 
-    Multipart form expects ``file`` and ``purpose``.  Raw bodies use
+    Multipart form expects ``file`` and ``purpose``. Raw bodies use
     the ``filename`` query parameter and default ``purpose="user_data"``.
+
+    通过 multipart 或原始 body 上传。
+
+    Multipart 表单期望 ``file`` 和 ``purpose``。原始 body 使用
+    ``filename`` 查询参数并默认 ``purpose="user_data"``。
     """
     purpose = "user_data"
     filename = "upload.bin"
@@ -80,11 +85,13 @@ def upload_file():
 
 @bp.get("/v1/files")
 def list_files():
+    """List uploaded files. / 列出已上传的文件。"""
     return jsonify(paginate(files_stub.list_public()).to_dict())
 
 
 @bp.get("/v1/files/<file_id>")
 def get_file(file_id: str):
+    """Retrieve file metadata by ID. / 根据 ID 检索文件元数据。"""
     record = files_stub.public_view(file_id)
     if record is None:
         raise ApiError(404, f"file not found: {file_id}", "not_found_error", code="file_not_found")
@@ -93,6 +100,7 @@ def get_file(file_id: str):
 
 @bp.get("/v1/files/<file_id>/content")
 def get_file_content(file_id: str):
+    """Download file content. / 下载文件内容。"""
     payload = files_stub.content(file_id)
     if payload is None:
         raise ApiError(404, f"file not found: {file_id}", "not_found_error", code="file_not_found")
@@ -106,6 +114,7 @@ def get_file_content(file_id: str):
 
 @bp.delete("/v1/files/<file_id>")
 def delete_file(file_id: str):
+    """Delete a file. / 删除文件。"""
     if not files_stub.delete(file_id):
         raise ApiError(404, f"file not found: {file_id}", "not_found_error", code="file_not_found")
     return ("", 204)

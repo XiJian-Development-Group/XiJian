@@ -1,30 +1,34 @@
 """MCP tools for the character domain.
+MCP 字符域工具。
 
 Wraps the in-memory character CRUD stub (:mod:`xijian_api.stubs.characters`)
 and the A3.2 character-state stub (:mod:`xijian_api.stubs.character_state`)
 as MCP tools registered with :mod:`xijian_api.mcp.registry`.
+将内存角色 CRUD 桩层 (:mod:`xijian_api.stubs.characters`) 和 A3.2 角色状态桩层
+(:mod:`xijian_api.stubs.character_state`) 封装为 MCP 工具，注册到 :mod:`xijian_api.mcp.registry`。
 
 These are internal domain tools (``action_kind=None``): they only touch
 in-memory state, so they skip the A5.2 gate and rely on the stubs' own
 input validation.
+这些是内部领域工具 (``action_kind=None``)：仅操作内存状态，因此绕过 A5.2 门禁，依赖桩层自身的输入验证。
 
-Tools registered
+Tools registered / 已注册工具
 ----------------
 
-Character CRUD:
+Character CRUD / 角色增删改查:
 
-* ``character_create``      — create a character
-* ``character_list``        — list every character
-* ``character_get``         — fetch a character by id
-* ``character_update``      — patch mutable character fields
-* ``character_delete``      — delete a character
-* ``character_set_loaded``  — toggle the character's ``loaded`` flag
+* ``character_create``      — create a character / 创建角色
+* ``character_list``        — list every character / 列出所有角色
+* ``character_get``         — fetch a character by id / 按 ID 获取角色
+* ``character_update``      — patch mutable character fields / 修补可变角色字段
+* ``character_delete``      — delete a character / 删除角色
+* ``character_set_loaded``  — toggle the character's ``loaded`` flag / 切换角色的 ``loaded`` 标志
 
-Character state (A3.2):
+Character state (A3.2) / 角色状态 (A3.2):
 
-* ``character_state_get``     — read the raw state record
-* ``character_state_update``  — apply a numeric state patch
-* ``character_state_summary`` — read the JSON-friendly state summary
+* ``character_state_get``     — read the raw state record / 读取原始状态记录
+* ``character_state_update``  — apply a numeric state patch / 应用数字状态修补
+* ``character_state_summary`` — read the JSON-friendly state summary / 读取 JSON 友好状态摘要
 """
 
 from __future__ import annotations
@@ -37,7 +41,7 @@ from xijian_api.stubs import characters as characters_stub
 
 
 # ---------------------------------------------------------------------------
-# Character CRUD handlers
+# Character CRUD handlers / 角色增删改查处理器
 # ---------------------------------------------------------------------------
 
 
@@ -108,7 +112,7 @@ def _character_set_loaded(args: dict[str, Any], ctx: dict[str, Any]) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Character state (A3.2) handlers
+# Character state (A3.2) handlers / 角色状态处理器
 # ---------------------------------------------------------------------------
 
 
@@ -153,22 +157,22 @@ def _character_state_summary(args: dict[str, Any], ctx: dict[str, Any]) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Registration
+# Registration / 注册
 # ---------------------------------------------------------------------------
 
 
 register_tool(
     name="character_create",
-    description="Create a new character with persona, voice, and emotion settings.",
+    description="Create a new character with persona, voice, and emotion settings. / 创建带人设、语音和情绪设置的新角色。",
     input_schema={
         "type": "object",
         "properties": {
-            "name": {"type": "string", "description": "Internal character name."},
-            "display_name": {"type": "string", "description": "Display name shown to users."},
-            "persona_doc": {"type": "string", "description": "Persona / background document text."},
-            "voice_profile": {"type": "string", "description": "Voice profile identifier."},
-            "default_emotion": {"type": "string", "description": "Default emotion label."},
-            "tags": {"type": "array", "items": {"type": "string"}, "description": "Free-form tags."},
+            "name": {"type": "string", "description": "Internal character name. / 内部角色名称。"},
+            "display_name": {"type": "string", "description": "Display name shown to users. / 向用户展示的显示名称。"},
+            "persona_doc": {"type": "string", "description": "Persona / background document text. / 人设/背景文档文本。"},
+            "voice_profile": {"type": "string", "description": "Voice profile identifier. / 语音配置文件标识符。"},
+            "default_emotion": {"type": "string", "description": "Default emotion label. / 默认情绪标签。"},
+            "tags": {"type": "array", "items": {"type": "string"}, "description": "Free-form tags. / 自由格式标签。"},
         },
         "required": ["name"],
     },
@@ -179,7 +183,7 @@ register_tool(
 
 register_tool(
     name="character_list",
-    description="List every character record.",
+    description="List every character record. / 列出所有角色记录。",
     input_schema={"type": "object", "properties": {}, "required": []},
     handler=_character_list,
     action_kind=None,
@@ -189,11 +193,11 @@ register_tool(
 
 register_tool(
     name="character_get",
-    description="Fetch a single character by id.",
+    description="Fetch a single character by id. / 按 ID 获取单个角色。",
     input_schema={
         "type": "object",
         "properties": {
-            "character_id": {"type": "string", "description": "The character id to fetch."},
+            "character_id": {"type": "string", "description": "The character id to fetch. / 要获取的角色 ID。"},
         },
         "required": ["character_id"],
     },
@@ -205,11 +209,11 @@ register_tool(
 
 register_tool(
     name="character_update",
-    description="Patch mutable character fields (name, persona, voice, emotion, tags, ...).",
+    description="Patch mutable character fields (name, persona, voice, emotion, tags, ...). / 修补可变角色字段（名称、人设、语音、情绪、标签等）。",
     input_schema={
         "type": "object",
         "properties": {
-            "character_id": {"type": "string", "description": "The character id to update."},
+            "character_id": {"type": "string", "description": "The character id to update. / 要更新的角色 ID。"},
             "name": {"type": "string"},
             "display_name": {"type": "string"},
             "persona_doc": {"type": "string"},
@@ -226,11 +230,11 @@ register_tool(
 
 register_tool(
     name="character_delete",
-    description="Delete a character by id.",
+    description="Delete a character by id. / 按 ID 删除角色。",
     input_schema={
         "type": "object",
         "properties": {
-            "character_id": {"type": "string", "description": "The character id to delete."},
+            "character_id": {"type": "string", "description": "The character id to delete. / 要删除的角色 ID。"},
         },
         "required": ["character_id"],
     },
@@ -242,12 +246,12 @@ register_tool(
 
 register_tool(
     name="character_set_loaded",
-    description="Set a character's loaded (active) flag.",
+    description="Set a character's loaded (active) flag. / 设置角色的加载（活跃）标志。",
     input_schema={
         "type": "object",
         "properties": {
-            "character_id": {"type": "string", "description": "The character id to update."},
-            "loaded": {"type": "boolean", "description": "Whether the character is loaded/active."},
+            "character_id": {"type": "string", "description": "The character id to update. / 要更新的角色 ID。"},
+            "loaded": {"type": "boolean", "description": "Whether the character is loaded/active. / 角色是否已加载/活跃。"},
         },
         "required": ["character_id", "loaded"],
     },
@@ -258,11 +262,11 @@ register_tool(
 
 register_tool(
     name="character_state_get",
-    description="Read a character's raw A3.2 state record (hunger/thirst/health/mood/status).",
+    description="Read a character's raw A3.2 state record (hunger/thirst/health/mood/status). / 读取角色原始 A3.2 状态记录（饥饿/口渴/健康/心情/状态）。",
     input_schema={
         "type": "object",
         "properties": {
-            "character_id": {"type": "string", "description": "The character id to read state for."},
+            "character_id": {"type": "string", "description": "The character id to read state for. / 要读取状态的角色 ID。"},
         },
         "required": ["character_id"],
     },
@@ -274,11 +278,11 @@ register_tool(
 
 register_tool(
     name="character_state_update",
-    description="Apply a numeric state patch (hunger/thirst/health/mood and max values) with clamping and logging.",
+    description="Apply a numeric state patch (hunger/thirst/health/mood and max values) with clamping and logging. / 应用数字状态修补（饥饿/口渴/健康/心情及最大值），带钳制和日志记录。",
     input_schema={
         "type": "object",
         "properties": {
-            "character_id": {"type": "string", "description": "The character id to update state for."},
+            "character_id": {"type": "string", "description": "The character id to update state for. / 要更新状态的角色 ID。"},
             "hunger": {"type": "number"},
             "thirst": {"type": "number"},
             "health": {"type": "number"},
@@ -287,8 +291,8 @@ register_tool(
             "max_thirst": {"type": "number"},
             "max_health": {"type": "number"},
             "max_mood": {"type": "number"},
-            "reason": {"type": "string", "description": "Reason tag written to the state log (default 'manual')."},
-            "ref_id": {"type": "string", "description": "Optional traceability ref id."},
+            "reason": {"type": "string", "description": "Reason tag written to the state log (default 'manual'). / 写入状态日志的原因标签（默认 'manual'）。"},
+            "ref_id": {"type": "string", "description": "Optional traceability ref id. / 可选的可追溯性引用 ID。"},
         },
         "required": ["character_id"],
     },
@@ -299,11 +303,11 @@ register_tool(
 
 register_tool(
     name="character_state_summary",
-    description="Read a character's JSON-friendly state summary (values, status, active behavior, modifiers).",
+    description="Read a character's JSON-friendly state summary (values, status, active behavior, modifiers). / 读取角色 JSON 友好的状态摘要（数值、状态、活跃行为、修正器）。",
     input_schema={
         "type": "object",
         "properties": {
-            "character_id": {"type": "string", "description": "The character id to summarize."},
+            "character_id": {"type": "string", "description": "The character id to summarize. / 要摘要的角色 ID。"},
         },
         "required": ["character_id"],
     },

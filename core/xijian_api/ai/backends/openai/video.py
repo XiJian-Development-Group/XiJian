@@ -1,4 +1,20 @@
-"""OpenAI-compatible remote video-generation backend.
+"""OpenAI 兼容远程视频生成后端。
+
+标准 OpenAI API 没有视频生成端点，但许多兼容提供商（如 Runway、
+Kling、MiniMax 包装器）在 ``/video/generations`` 或类似路径暴露了该功能。
+本后端在加载时探测配置的 ``base_url`` 下的视频端点；若未配置则报告
+``is_available() = False``，以便注册表回退到本地后端。
+
+配置（在 ``[[models]].extra`` 或 ``[backends.openai]`` 中）：
+
+* ``video_endpoint`` — 追加到 ``base_url`` 的路径（默认：``/video/generations``）。
+  设为空字符串可禁用。
+* ``video_poll_interval`` — 轮询间隔秒数（默认：5）。
+
+提交/轮询契约与 :class:`VideoGenBackend` 一致：
+``submit`` 返回任务 ID，``poll`` 返回状态字典。
+
+OpenAI-compatible remote video-generation backend.
 
 The standard OpenAI API does not have a video-generation endpoint, but
 many OpenAI-compatible providers (e.g. Runway, Kling, MiniMax wrappers)
@@ -38,6 +54,7 @@ from xijian_api.ai.types import VideoGenBackend
 
 @register_video("openai")
 class OpenAIVideoBackend(VideoGenBackend):
+    """OpenAI 兼容视频生成后端实现。OpenAI-compatible video generation backend implementation."""
     name = "openai"
 
     def __init__(self) -> None:
@@ -46,6 +63,7 @@ class OpenAIVideoBackend(VideoGenBackend):
         self._poll_interval: float = 5.0
 
     def is_available(self) -> bool:
+        # 仅当显式配置了视频端点时可用。
         # Available only when an explicit video endpoint is configured.
         return self._cfg is not None and bool(self._endpoint)
 
@@ -55,14 +73,14 @@ class OpenAIVideoBackend(VideoGenBackend):
     def load(self, model_path, **kwargs) -> None:
         section = kwargs.pop("_openai_section", None)
         cfg = resolve_config(kwargs, section=section, default_model="")
-        # ``video_endpoint`` controls whether video is enabled at all.
-        # Per-model extra overrides the global section.
+        # ``video_endpoint`` 控制视频功能是否启用。
+        # 逐模型 extra 覆盖全局段。
         endpoint = (
             kwargs.get("video_endpoint")
             or (section or {}).get("video_endpoint")
             or "/video/generations"
         )
-        # Empty string → explicitly disabled.
+        # 空字符串 → 显式禁用。
         if endpoint == "":
             self._endpoint = ""
             self._cfg = cfg

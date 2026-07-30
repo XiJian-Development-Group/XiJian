@@ -1,4 +1,21 @@
-"""Shared HTTP client for OpenAI-compatible remote backends.
+"""OpenAI 兼容远程后端的共享 HTTP 客户端。
+
+提供一层薄传输层，``httpx``（默认，始终可用）和可选的 ``openai`` SDK
+都可以接入。本包中的后端调用 :func:`remote_chat_completion`、
+:func:`remote_embeddings` 等，从不直接接触 HTTP ——
+这样切换传输方式就变成了一个配置层面的决策。
+
+配置解析顺序（逐模型）：
+
+1. ``[[models]].extra`` 字段（``base_url``、``api_key``、
+   ``model_name``、``transport``）—— 最高优先级，逐模型配置。
+2. ``config.toml`` 中的 ``[backends.openai]`` 段 —— 每个
+   ``backend = "openai"`` 模型共享的全局默认值。
+3. 环境变量（``OPENAI_API_KEY``、``OPENAI_BASE_URL``）——
+   回退方案，运维人员无需将密钥放入配置文件。
+4. 硬编码默认值（``https://api.openai.com/v1``，空密钥）。
+
+Shared HTTP client for OpenAI-compatible remote backends.
 
 Provides a thin transport layer that both ``httpx`` (default, always
 available) and the optional ``openai`` SDK can plug into.  The
@@ -27,7 +44,7 @@ from xijian_api.ai.base import BackendError
 
 
 # ---------------------------------------------------------------------------
-# Config resolution
+# Config resolution / 配置解析
 # ---------------------------------------------------------------------------
 
 
@@ -36,7 +53,10 @@ _DEFAULT_BASE_URL = "https://api.openai.com/v1"
 
 @dataclass
 class RemoteConfig:
-    """Resolved connection settings for a single remote call."""
+    """单次远程调用的已解析连接设置。
+
+    Resolved connection settings for a single remote call.
+    """
 
     base_url: str
     api_key: str
@@ -58,8 +78,11 @@ def resolve_config(
     section: dict[str, Any] | None = None,
     default_model: str = "",
 ) -> RemoteConfig:
-    """Merge per-model ``extra`` with the global ``[backends.openai]`` section.
+    """合并逐模型 ``extra`` 与全局 ``[backends.openai]`` 段。
 
+    ``model_extra`` 优先，然后 ``section``，然后环境变量，最后默认值。
+
+    Merge per-model ``extra`` with the global ``[backends.openai]`` section.
     ``model_extra`` wins, then ``section``, then env, then defaults.
     """
     extra = model_extra or {}
@@ -88,7 +111,7 @@ def resolve_config(
         or sec.get("transport")
         or "httpx"
     )
-    # Strip trailing slash so URL join is predictable.
+    # 去除尾部斜杠，使 URL join 可预测。
     base_url = base_url.rstrip("/")
     return RemoteConfig(
         base_url=base_url,
@@ -100,7 +123,7 @@ def resolve_config(
 
 
 # ---------------------------------------------------------------------------
-# Transport: httpx (default)
+# Transport: httpx (default / 默认)
 # ---------------------------------------------------------------------------
 
 
@@ -130,7 +153,12 @@ def _httpx_post_stream(
     json_body: dict,
     timeout: float = 300.0,
 ) -> Iterator[dict]:
-    """Yield parsed SSE ``data:`` lines as dicts.
+    """将解析的 SSE ``data:`` 行作为字典产生。
+
+    httpx 的 ``stream()`` 上下文提供原始行；我们解析 OAI
+    SSE 格式（``data: {json}\n\n``，以 ``data: [DONE]`` 终止）。
+
+    Yield parsed SSE ``data:`` lines as dicts.
 
     httpx's ``stream()`` context gives us raw lines; we parse the OAI
     SSE format (``data: {json}\n\n``, terminated by ``data: [DONE]``).
@@ -178,9 +206,9 @@ def _httpx_post_multipart(
     import httpx
 
     try:
-        # httpx wants headers WITHOUT content-type for multipart
-        # (it sets the boundary itself).  Drop any manually-set
-        # content-type so the boundary is correct.
+        # httpx 希望 multipart 请求不带 content-type 头
+        #（它自己设置 boundary）。删除手动设置的 content-type
+        # 以保证 boundary 正确。
         clean_headers = {k: v for k, v in headers.items()
                          if k.lower() != "content-type"}
         resp = httpx.post(
@@ -219,7 +247,10 @@ def _httpx_post_raw(
     json_body: dict,
     timeout: float = 120.0,
 ) -> bytes:
-    """POST and return raw response bytes (for audio/image downloads)."""
+    """POST 并返回原始响应字节（用于音频/图像下载）。
+
+    POST and return raw response bytes (for audio/image downloads).
+    """
     import httpx
 
     try:
@@ -233,7 +264,10 @@ def _httpx_post_raw(
 
 
 def _raise_for_status(resp) -> None:
-    """Translate HTTP errors into :class:`BackendError`."""
+    """将 HTTP 错误转换为 :class:`BackendError`。
+
+    Translate HTTP errors into :class:`BackendError`.
+    """
     status = resp.status_code
     if status < 400:
         return
@@ -248,12 +282,15 @@ def _raise_for_status(resp) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Transport: openai SDK (optional)
+# Transport: openai SDK (optional / 可选)
 # ---------------------------------------------------------------------------
 
 
 def _openai_client(cfg: RemoteConfig):
-    """Construct an ``openai.OpenAI`` client (or raise if not installed)."""
+    """构建 ``openai.OpenAI`` 客户端（若未安装则抛出异常）。
+
+    Construct an ``openai.OpenAI`` client (or raise if not installed).
+    """
     try:
         from openai import OpenAI
     except Exception as exc:
@@ -264,7 +301,7 @@ def _openai_client(cfg: RemoteConfig):
 
 
 # ---------------------------------------------------------------------------
-# High-level API used by the backends
+# High-level API used by the backends / 后端使用的高级 API
 # ---------------------------------------------------------------------------
 
 
@@ -275,7 +312,11 @@ def remote_chat_completion(
     stream: bool = False,
     **kwargs,
 ) -> dict | Iterator[dict]:
-    """Call ``POST /chat/completions`` on the remote endpoint.
+    """在远程端点上调用 ``POST /chat/completions``。
+
+    返回解析后的 JSON 字典（非流式）或 SSE chunk 字典的迭代器（流式）。
+
+    Call ``POST /chat/completions`` on the remote endpoint.
 
     Returns the parsed JSON dict (non-stream) or an iterator of SSE
     chunk dicts (stream).
@@ -336,9 +377,8 @@ def remote_stt(
         data["language"] = language
     if prompt:
         data["prompt"] = prompt
-    # Multipart uploads must NOT carry an Authorization header with
-    # content-type — httpx sets the boundary.  The auth bearer token
-    # is still sent.
+    # Multipart 上传不能带 content-type Authorization 头——httpx 设置 boundary。
+    # Bearer token 认证仍会发送。
     return _httpx_post_multipart(
         url, headers=cfg.auth_header, files=files, data=data,
     )

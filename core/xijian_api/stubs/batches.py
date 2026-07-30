@@ -1,4 +1,4 @@
-"""Stub OAI batches."""
+"""Stub OAI batches. 存根 OAI 批处理。"""
 
 from __future__ import annotations
 
@@ -13,7 +13,9 @@ _PROGRESS_DELAY_SECONDS = 0.05  # 50 ms
 
 
 def schedule_completion(batch_id: str) -> None:
-    """Walk the batch through validating → in_progress → completed."""
+    """Walk the batch through validating → in_progress → completed.
+    将批处理从 validating 推进到 in_progress 再到 completed。
+    """
     def _run():
         time.sleep(_PROGRESS_DELAY_SECONDS)
         record = state.batches.get(batch_id)
@@ -28,6 +30,7 @@ def schedule_completion(batch_id: str) -> None:
         record["completed_at"] = now_ts()
         record["request_counts"] = {"total": 1, "completed": 1, "failed": 0}
         # Snapshot the request payload as a result file id.
+        # 将请求载荷快照为结果文件 ID。
         from xijian_api.stubs.files import persist
         from xijian_api.utils.ids import gen_file_id
         results_id = gen_file_id()

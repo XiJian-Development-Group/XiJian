@@ -1,4 +1,4 @@
-"""Embeddings route — ``POST /v1/embeddings``."""
+"""Embeddings route — ``POST /v1/embeddings``. / Embeddings 路由 — ``POST /v1/embeddings``。"""
 
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ bp = Blueprint("embeddings", __name__)
 
 @bp.post("/v1/embeddings")
 def embeddings():
+    """Create embeddings for the given input. / 为给定输入创建嵌入向量。"""
     payload = request.get_json(silent=True) or {}
     if "input" not in payload:
         raise ApiError(

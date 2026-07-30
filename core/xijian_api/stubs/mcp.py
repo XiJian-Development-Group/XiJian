@@ -226,12 +226,16 @@ class MCPError(ValueError):
 class MCPLockoutError(MCPError):
     """Raised when the world is in lockout and the caller is
     asking for a new safety_stop.  Route layer turns this
+    路由层。
+
     into a 409."""
 
 
 class MCPFrozenError(MCPError):
     """Raised when the world has a pending safety_stop and the
     caller is asking for a new one.  Route layer turns this
+    路由层。
+
     into a 409."""
 
 

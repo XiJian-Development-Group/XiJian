@@ -63,6 +63,8 @@ Test surface
 * :func:`summary` — JSON-friendly per-world overview
 * :func:`_set_cooldown` / :func:`_cooldown_remaining` — test hooks
 * :func:`seed_default` / :func:`reset_for_testing`
+成功概率，确定性，犯罪动词，交易动词，相同形状，冷却。
+
 """
 
 from __future__ import annotations
@@ -143,6 +145,8 @@ def _is_overload_active() -> bool:
     """True if the A5.4 overload protection is in a recovery
     window.  We read :data:`state.overload` directly to avoid a
     hard import (avoids a circular dep).  Mirrors the A4.1
+    循环依赖，镜像。
+
     helper."""
     recovery = (state.overload or {}).get("recovery")
     if not recovery:
@@ -206,6 +210,8 @@ def _probability_hit(npc_id: str, world_id: str, probability: float) -> bool:
     result is independent of ``PYTHONHASHSEED`` — the same
     ``(npc_id, world_id, bucket)`` always yields the same roll
     across processes and interpreter launches.
+    镜像。
+
     """
     if probability <= 0.0:
         return False
@@ -386,6 +392,8 @@ def transfer_user_to_user(
     """User-to-user transfer.  Currently the local model only has
     one user, so this is a no-op except for the transaction
     record — but the helper exists so multi-user (multi-tenant)
+    无操作。
+
     variants don't have to refactor later."""
     _require_world(world_id)
     _require_currency(world_id, currency_code)
@@ -553,6 +561,8 @@ def attempt_theft(
     Cooldown is **always** consumed (we set it before the roll)
     so a stream of failed attempts doesn't pin a hit-rate that's
     higher than the spec's intent.
+    冷却。
+
     """
     return _attempt_crime(
         world_id=world_id,
@@ -578,6 +588,8 @@ def attempt_scam(
 
     Same shape as :func:`attempt_theft`; default probability is
     higher (scams rely on verbal trickery, not physical stealth).
+    相同形状。
+
     """
     return _attempt_crime(
         world_id=world_id,

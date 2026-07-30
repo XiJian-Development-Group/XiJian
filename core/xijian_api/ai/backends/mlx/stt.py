@@ -1,4 +1,10 @@
-"""MLX speech-to-text backend.
+"""MLX 语音转文本后端。
+
+MLX speech-to-text backend.
+
+包装可选的 ``mlx_audio``（或 ``mlx_whisper``）安装。
+两者都在 Apple Silicon 上提供 Whisper 风格的转录。我们优先尝试
+``mlx_audio``，因为它是更高级的 API，然后回退到 ``mlx_whisper``。
 
 Wraps an optional ``mlx_audio`` (or ``mlx_whisper``) installation.
 Both expose Whisper-style transcription on Apple Silicon.  We try
@@ -20,13 +26,16 @@ from xijian_api.ai.types import STTBackend
 
 
 def _probe_mlx_audio() -> tuple[bool, str | None]:
-    """Return ``(available, attribute)`` for the optional ``mlx_audio`` STT."""
+    """返回可选的 ``mlx_audio`` STT 的 ``(available, attribute)``。
+
+    Return ``(available, attribute)`` for the optional ``mlx_audio`` STT.
+    """
     try:
         import mlx_audio
     except Exception:
         return False, None
-    # ``mlx_audio.stt.generate`` was added in 0.2; older releases only
-    # exposed TTS.  We accept either.
+    # ``mlx_audio.stt.generate`` 在 0.2 中添加；旧版本只暴露 TTS。
+    # 我们接受任一接口。
     if hasattr(mlx_audio, "stt") and hasattr(mlx_audio.stt, "generate"):
         return True, "mlx_audio.stt.generate"
     if hasattr(mlx_audio, "transcribe"):
@@ -44,6 +53,7 @@ def _probe_mlx_whisper() -> bool:
 
 @register_stt("mlx")
 class MLXSTTBackend(STTBackend):
+    """MLX 语音转文本后端。MLX speech-to-text backend."""
     name = "mlx"
 
     def __init__(self) -> None:
@@ -90,7 +100,7 @@ class MLXSTTBackend(STTBackend):
             )
         return _shape_response(result, response_format=response_format)
 
-    # -- internals ----------------------------------------------------------
+    # -- internals / 内部 ----------------------------------------------------------
 
     def _transcribe_via_mlx_audio(self, audio: bytes, *, language, prompt) -> dict:
         import importlib
@@ -131,12 +141,18 @@ class MLXSTTBackend(STTBackend):
                 f"mlx_whisper.transcribe failed: {exc}",
                 code="backend_error",
             ) from exc
-        # ``mlx_whisper`` already returns the OpenAI-style dict.
+        # ``mlx_whisper`` 已返回 OpenAI 风格字典。
         return result
 
     @staticmethod
     def _audio_input(audio: bytes):
-        """Adapt raw bytes to whatever input the underlying library wants.
+        """将原始字节适配为底层库所需的任何输入类型。
+
+        ``mlx_audio`` 和 ``mlx_whisper`` 接受文件路径或类文件对象。
+        我们写入临时文件，以便两条路径都能工作，而无需自己将整个音频
+        加载到 numpy 数组中。
+
+        Adapt raw bytes to whatever input the underlying library wants.
 
         ``mlx_audio`` and ``mlx_whisper`` accept file paths or file-like
         objects.  We write to a temp file so both paths work without
@@ -154,7 +170,10 @@ class MLXSTTBackend(STTBackend):
 
 
 def _shape_response(result, *, response_format: str):
-    """Coerce the STT library's output into the OAI ``transcriptions`` shape."""
+    """将 STT 库的输出强制转换为 OAI ``transcriptions`` 形状。
+
+    Coerce the STT library's output into the OAI ``transcriptions`` shape.
+    """
     if response_format == "text":
         if isinstance(result, dict):
             return result.get("text", "")
@@ -182,7 +201,7 @@ def _shape_response(result, *, response_format: str):
         }
         return out
 
-    # Fallback: best-effort coercion.
+    # 回退：尽力强制转换。
     return {"text": str(result)}
 
 

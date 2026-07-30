@@ -1,9 +1,14 @@
 """SQLite-backed state containers for the API stubs.
+SQLite 支持的 API 存根状态容器。
 
 Every attribute below is a :class:`xijian_api.store.DictDB` instance
 mapping resource id → record, persisted to ``~/.xijian/xijian.db``.
 The API is identical to the previous in-memory dict interface, so
 existing stubs work unchanged.
+
+下面的每个属性都是一个 :class:`xijian_api.store.DictDB` 实例，
+将资源 id → 记录映射，持久化到 ``~/.xijian/xijian.db``。
+API 与之前的内存字典接口相同，因此现有存根无需修改即可工作。
 """
 
 from __future__ import annotations
@@ -14,6 +19,7 @@ from xijian_api.store import DictDB, bucket
 
 
 # Persisted key-value buckets (one SQLite table per bucket)
+# 持久化键值桶（每个桶一个 SQLite 表）
 characters: DictDB = bucket("characters")
 interactions: DictDB = bucket("interactions")
 worlds: DictDB = bucket("worlds")
@@ -65,16 +71,22 @@ models: DictDB = bucket("models")
 
 
 # In-memory special buckets (not suited for key-value SQL)
+# 内存特殊桶（不适合键值 SQL）
 safety_state: dict[str, Any] = {}
 overload: dict[str, Any] = {}
 audits: list[dict[str, Any]] = []
 
 # world_event_categories_disabled uses set values — stored via a
 # dedicated DictDB bucket with list↔set conversion.
+# world_event_categories_disabled 使用 set 值 — 通过专用 DictDB 桶
+# 存储，带 list↔set 转换。
 _world_event_categories_db: DictDB = bucket("world_event_categories_disabled")
 
 
 def _load_categories() -> dict[str, set[str]]:
+    """Load disabled world event categories from DB as sets.
+    从数据库加载禁用的世界事件分类为集合。
+    """
     d = {}
     for key in list(_world_event_categories_db.keys()):
         raw = _world_event_categories_db[key]
@@ -83,6 +95,9 @@ def _load_categories() -> dict[str, set[str]]:
 
 
 def _save_categories(d: dict[str, set[str]]) -> None:
+    """Save disabled world event categories to DB as lists.
+    将禁用的世界事件分类保存到数据库为列表。
+    """
     _world_event_categories_db.clear()
     for key, val in d.items():
         _world_event_categories_db[key] = list(val)
@@ -95,12 +110,19 @@ world_event_categories_disabled: dict[str, set[str]] = _load_categories()
 # Reset & seed — called between tests
 # ---------------------------------------------------------------------------
 
+# 重置和种子 — 在测试之间调用
+# ---------------------------------------------------------------------------
+
 
 def reset_for_testing() -> None:
     """Wipe every bucket and re-seed defaults.
 
     DictDB buckets are cleared (cache + SQLite table truncated).
     In-memory buckets are cleared directly.
+    清空每个桶并重新播种默认值。
+
+    DictDB 桶被清空（缓存 + SQLite 表截断）。
+    内存桶直接被清空。
     """
     _all_dictdb = [
         characters, interactions, worlds, memory, memory_configs,
@@ -133,6 +155,7 @@ def reset_for_testing() -> None:
 
 
 # Reload categories after seed_all in case seed_all populated them
+# 在 seed_all 之后重新加载分类，以防 seed_all 填充了它们
 world_event_categories_disabled.update(_load_categories())
 
 

@@ -1,9 +1,14 @@
-"""Tests for ``/v1/xijian/characters/*``."""
+"""Tests for ``/v1/xijian/characters/*``.
+(``/v1/xijian/characters/*`` 的测试。)
+"""
 
 from __future__ import annotations
 
 
 def test_characters_list_includes_yuki(client, auth_headers):
+    """List characters includes the pre-seeded Yuki character.
+    (列出角色包含预播种的 Yuki 角色。)
+    """
     response = client.get("/v1/xijian/characters", headers=auth_headers)
     assert response.status_code == 200
     body = response.get_json()
@@ -12,6 +17,9 @@ def test_characters_list_includes_yuki(client, auth_headers):
 
 
 def test_character_get_yuki(client, auth_headers):
+    """Get Yuki character returns its display name.
+    (获取 Yuki 角色返回其显示名称。)
+    """
     response = client.get("/v1/xijian/characters/char_yuki", headers=auth_headers)
     assert response.status_code == 200
     body = response.get_json()
@@ -19,6 +27,9 @@ def test_character_get_yuki(client, auth_headers):
 
 
 def test_character_create_get_patch_delete(client, auth_headers):
+    """Full CRUD lifecycle for a character.
+    (角色的完整 CRUD 生命周期。)
+    """
     payload = {
         "name": "测试角色",
         "display_name": "Test",
@@ -46,6 +57,9 @@ def test_character_create_get_patch_delete(client, auth_headers):
 
 
 def test_character_load_unload_toggles_loaded(client, auth_headers):
+    """Load/unload a character toggles its loaded state.
+    (加载/卸载角色切换其加载状态。)
+    """
     load = client.post("/v1/xijian/characters/char_yuki/load", headers=auth_headers)
     assert load.status_code == 200
     assert load.get_json()["loaded"] is True
@@ -55,6 +69,9 @@ def test_character_load_unload_toggles_loaded(client, auth_headers):
 
 
 def test_character_state_round_trip(client, auth_headers):
+    """Get and update character state.
+    (获取和更新角色状态。)
+    """
     state = client.get("/v1/xijian/characters/char_yuki/state", headers=auth_headers)
     assert state.status_code == 200
     assert "affection" in state.get_json()
@@ -69,6 +86,9 @@ def test_character_state_round_trip(client, auth_headers):
 
 
 def test_character_interact_known(client, auth_headers):
+    """Interacting with a known interaction_id is accepted.
+    (使用已知的 interaction_id 进行交互被接受。)
+    """
     response = client.post(
         "/v1/xijian/characters/char_yuki/interact",
         headers=auth_headers,
@@ -81,6 +101,9 @@ def test_character_interact_known(client, auth_headers):
 
 
 def test_character_interact_nsfw_blocked_by_default(client, auth_headers):
+    """NSFW interactions are blocked by default.
+    (NSFW 交互默认被阻止。)
+    """
     response = client.post(
         "/v1/xijian/characters/char_yuki/interact",
         headers=auth_headers,
@@ -93,7 +116,11 @@ def test_character_interact_nsfw_blocked_by_default(client, auth_headers):
 
 
 def test_character_state_update_blocked_when_protection_off(client, auth_headers):
+    """Character state updates are blocked when protection is disabled.
+    (保护禁用时角色状态更新被阻止。)
+    """
     # Disable protection (two-step) via the unified /safety/gate/* API.
+    # (通过统一的 /safety/gate/* API 分两步禁用保护。)
     start = client.post(
         "/v1/xijian/safety/gate/disable",
         headers=auth_headers,
@@ -115,4 +142,5 @@ def test_character_state_update_blocked_when_protection_off(client, auth_headers
     assert blocked.get_json()["error"]["type"] == "protection_error"
 
     # Restore.
+    # (恢复保护。)
     client.post("/v1/xijian/safety/gate/enable", headers=auth_headers)

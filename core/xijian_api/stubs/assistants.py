@@ -1,4 +1,4 @@
-"""Stub OAI Assistants — minimal but schema-compliant."""
+"""Stub OAI Assistants — minimal but schema-compliant. OAI Assistant 存根 — 最小但符合模式。"""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ RUN_STATUSES = {"queued", "in_progress", "completed", "failed", "cancelled", "ex
 
 
 def initial_message(thread_id: str, content: str, role: str = "user", message_id: str = "") -> dict:
+    """Create a minimal thread message dict. 创建最小的线程消息字典。"""
     return {
         "id": message_id,
         "object": "thread.message",
@@ -21,6 +22,7 @@ def initial_message(thread_id: str, content: str, role: str = "user", message_id
 
 
 def initial_run(thread_id: str, assistant_id: str, run_id: str) -> dict:
+    """Create a minimal thread run dict. 创建最小的线程运行字典。"""
     return {
         "id": run_id,
         "object": "thread.run",

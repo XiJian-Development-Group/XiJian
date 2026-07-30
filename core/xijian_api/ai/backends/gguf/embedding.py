@@ -1,4 +1,15 @@
-"""GGUF embedding backend — wraps ``llama-cpp-python`` embedding mode.
+"""GGUF 嵌入后端 —— 包装 ``llama-cpp-python`` 嵌入模式。
+
+llama-cpp 暴露两种嵌入 API：
+
+* ``Llama.embed(text)`` — 单个字符串 → 1-D 向量。
+* ``Llama.create_embedding(input=[...])`` — 批量 OAI 风格字典。
+
+我们优先使用 ``create_embedding``，因为它返回 token 用量并镜像
+OAI 信封，但对旧版本回退到逐文本 ``embed``。
+加载器必须用 ``embedding=True`` 构造；这在 :meth:`load` 中透明完成。
+
+GGUF embedding backend — wraps ``llama-cpp-python`` embedding mode.
 
 llama-cpp exposes two embedding APIs:
 
@@ -26,7 +37,10 @@ from xijian_api.ai.types import EmbeddingBackend
 
 
 def _build_llama(*, path: Path, n_ctx: int):
-    """Construct a ``Llama`` instance configured for embeddings."""
+    """构造一个为嵌入配置的 ``Llama`` 实例。
+
+    Construct a ``Llama`` instance configured for embeddings.
+    """
     try:
         from llama_cpp import Llama
     except Exception as exc:
@@ -45,6 +59,7 @@ def _build_llama(*, path: Path, n_ctx: int):
 
 @register_embedding("gguf")
 class GGUFEmbeddingBackend(EmbeddingBackend):
+    """GGUF 嵌入后端。GGUF embedding backend."""
     name = "gguf"
 
     def __init__(self) -> None:
@@ -52,7 +67,7 @@ class GGUFEmbeddingBackend(EmbeddingBackend):
         self._model_path: Path | None = None
         self._dimensions: int = 0
 
-    # -- introspection ------------------------------------------------------
+    # -- introspection / 内省 ------------------------------------------------------
 
     def is_available(self) -> bool:
         try:
@@ -68,7 +83,7 @@ class GGUFEmbeddingBackend(EmbeddingBackend):
     def dimensions(self) -> int:
         return self._dimensions
 
-    # -- lifecycle ----------------------------------------------------------
+    # -- lifecycle / 生命周期 ----------------------------------------------------------
 
     def load(self, model_path, **kwargs) -> None:
         path = Path(model_path)
@@ -84,7 +99,7 @@ class GGUFEmbeddingBackend(EmbeddingBackend):
         self._model_path = None
         self._dimensions = 0
 
-    # -- inference ----------------------------------------------------------
+    # -- inference / 推理 ----------------------------------------------------------
 
     def embed(self, texts: Sequence[str], *, model_id: str | None = None) -> list[list[float]]:
         if not self.is_loaded():
@@ -92,8 +107,8 @@ class GGUFEmbeddingBackend(EmbeddingBackend):
         if not texts:
             return []
 
-        # Try the batch OAI API first (newer llama-cpp-python); fall
-        # back to per-text ``embed`` for older releases.
+        # 先尝试批量 OAI API（较新 llama-cpp-python）；对旧版本
+        # 回退到逐文本 ``embed``。
         try:
             vectors, dim = self._embed_via_create(texts)
         except _NoBatchAPI:
@@ -103,10 +118,13 @@ class GGUFEmbeddingBackend(EmbeddingBackend):
             self._dimensions = dim
         return vectors
 
-    # -- internals ----------------------------------------------------------
+    # -- internals / 内部 ----------------------------------------------------------
 
     def _embed_via_create(self, texts: Sequence[str]):
-        """Use ``Llama.create_embedding(input=...)`` for batch embedding."""
+        """使用 ``Llama.create_embedding(input=...)`` 批量嵌入。
+
+        Use ``Llama.create_embedding(input=...)`` for batch embedding.
+        """
         if not hasattr(self._llama, "create_embedding"):
             raise _NoBatchAPI()
         try:
@@ -133,7 +151,10 @@ class GGUFEmbeddingBackend(EmbeddingBackend):
         return vectors, dim
 
     def _embed_per_text(self, texts: Sequence[str]):
-        """Per-text fallback using ``Llama.embed`` (older llama-cpp-python)."""
+        """使用 ``Llama.embed`` 逐文本回退（旧版 llama-cpp-python）。
+
+        Per-text fallback using ``Llama.embed`` (older llama-cpp-python).
+        """
         embed_fn = getattr(self._llama, "embed", None)
         if not callable(embed_fn):
             raise BackendError(
@@ -163,7 +184,10 @@ class GGUFEmbeddingBackend(EmbeddingBackend):
 
 
 class _NoBatchAPI(Exception):
-    """Internal sentinel: batch embedding API not available on this build."""
+    """内部哨兵：此构建上批量嵌入 API 不可用。
+
+    Internal sentinel: batch embedding API not available on this build.
+    """
 
 
 __all__ = ["GGUFEmbeddingBackend"]

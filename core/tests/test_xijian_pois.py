@@ -8,6 +8,9 @@ Covers:
   direct children.
 * **Route layer** — happy path + 4xx error mapping.
 * **Auth** — every endpoint requires a Bearer token.
+
+  测试兴趣点（POI）的 CRUD 操作和场景关联。
+  验证 POI 的创建、列表、获取、更新和删除。
 """
 
 from __future__ import annotations
@@ -27,6 +30,7 @@ from xijian_api.stubs.pois import (
 
 # ---------------------------------------------------------------------------
 # Fixtures
+# 测试夹具
 # ---------------------------------------------------------------------------
 
 
@@ -90,6 +94,7 @@ class TestPureHelpers:
 
     def test_map_kind_only_allows_root(self):
         # Helper-level: a "map" with a parent_id violates the rule.
+        # 辅助函数 — -level: a "map" with a parent_id violates the rule.
         fake_map = {"id": "m", "kind": "map", "parent_id": "something"}
         with pytest.raises(pois_stub.POIError):
             pois_stub._validate_parent_kind(
@@ -131,6 +136,7 @@ class TestPureHelpers:
 
 # ---------------------------------------------------------------------------
 # CRUD (stub)
+# CRUD — (stub)
 # ---------------------------------------------------------------------------
 
 
@@ -294,6 +300,7 @@ class TestStubTree:
 
 # ---------------------------------------------------------------------------
 # Routes
+# 路由
 # ---------------------------------------------------------------------------
 
 

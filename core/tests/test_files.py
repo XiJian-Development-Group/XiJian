@@ -1,9 +1,14 @@
-"""Tests for ``/v1/files`` family."""
+"""Tests for ``/v1/files`` family.
+(``/v1/files`` 系列的测试。)
+"""
 
 from __future__ import annotations
 
 
 def _upload(client, auth_headers, body, *, purpose="user_data", filename="hello.txt"):
+    """Helper to upload a file with given purpose and filename.
+    (使用给定的目的和文件名上传文件的辅助函数。)
+    """
     return client.post(
         "/v1/files",
         headers=auth_headers,
@@ -19,6 +24,9 @@ def _upload(client, auth_headers, body, *, purpose="user_data", filename="hello.
 
 
 def test_file_upload_list_get_content_delete(client, auth_headers):
+    """Full lifecycle of file upload → list → get → content → delete.
+    (文件上传 → 列表 → 获取 → 内容 → 删除的完整生命周期。)
+    """
     payload = b"hello, world\n"
 
     upload = client.post(
@@ -51,6 +59,9 @@ def test_file_upload_list_get_content_delete(client, auth_headers):
 
 
 def test_file_upload_invalid_purpose_returns_400(client, auth_headers):
+    """Upload with an invalid purpose returns 400.
+    (使用无效目的上传返回 400。)
+    """
     response = client.post(
         "/v1/files",
         headers={**auth_headers, "Content-Type": "application/octet-stream"},

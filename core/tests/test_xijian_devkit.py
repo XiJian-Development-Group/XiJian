@@ -7,6 +7,10 @@ regressions across the serialisation boundary.
 Test data creates a sample character and world in ``devkit/characters/``
 and ``devkit/worlds/`` subdirectories, matching the real DevKit's
 save format (character_editor.save_character, world_editor.save_world).
+
+  测试 ``stubs.devkit`` (A3.5 DevKit 预览/测试加载器) 及其 HTTP 路由。
+  DevKit 使前端/外部测试能够模拟 NPC 消息、生成场景图像、
+  运行事件并使 AI 对话循环。它在生产中不启用。
 """
 
 from __future__ import annotations
@@ -24,6 +28,7 @@ from xijian_api.stubs import devkit as devkit_stub
 
 # ---------------------------------------------------------------------------
 # Fixtures
+# 测试夹具
 # ---------------------------------------------------------------------------
 
 @pytest.fixture(autouse=True)
@@ -168,6 +173,7 @@ def mock_devkit_dir() -> Generator[str, None, None]:
             json.dump(world_data["config"], f, ensure_ascii=False, indent=2)
 
         # Set the env var so devkit_stub resolves to our temp dir.
+        # 设置 — the env var so devkit_stub resolves to our temp dir.
         devkit_stub._set_devkit_dir_for_test(str(dk))
         yield str(dk)
         devkit_stub._clear_env_override()
@@ -366,6 +372,7 @@ def test_unload_character(mock_devkit_dir):
     assert len(matches) == 0
 
     # Memory config should be cleaned up
+    # 记忆 — config should be cleaned up
     assert "char_test001" not in devkit_stub.state.memory_configs
 
 

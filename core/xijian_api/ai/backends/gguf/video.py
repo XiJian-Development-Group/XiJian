@@ -1,4 +1,13 @@
-"""GGUF video-generation backend.
+"""GGUF 视频生成后端。
+
+GGUF video-generation backend.
+
+GGUF 格式的视频扩散模型仍在发展中。社区扩展了带有视频生成功能的
+``stable-diffusion.cpp`` 分支是最常见的形态（``stable-diffusion.cpp-video``
+或第三方构建）。安装后，此后端将检查点交给该绑定，并通过路由层使用的
+``submit``/``poll`` 契约输出 MP4 字节。
+
+如果没有安装 GGUF 视频绑定，此后端报告自身不可用。
 
 Video diffusion models in GGUF format are still emerging.  The
 community ``stable-diffusion.cpp`` fork extended with video
@@ -26,7 +35,12 @@ from xijian_api.ai.types import VideoGenBackend
 
 
 def _probe() -> tuple[bool, str | None]:
-    """Return ``(available, class_attr)`` for the GGUF video binding.
+    """返回 GGUF 视频绑定的 ``(available, class_attr)``。
+
+    上游 ``stable_diffusion_cpp`` 包和社区分支都随时间添加了视频类。
+    我们尝试几个已知名称；哪个先成功就用哪个。
+
+    Return ``(available, class_attr)`` for the GGUF video binding.
 
     Both the upstream ``stable_diffusion_cpp`` package and the
     community fork have added video classes over time.  We try
@@ -49,6 +63,7 @@ def _probe() -> tuple[bool, str | None]:
 
 @register_video("gguf")
 class GGUFVideoBackend(VideoGenBackend):
+    """GGUF 视频生成后端。GGUF video generation backend."""
     name = "gguf"
 
     def __init__(self) -> None:
@@ -73,7 +88,7 @@ class GGUFVideoBackend(VideoGenBackend):
             raise ModelNotFound(f"model path does not exist: {path}")
         try:
             cls = getattr(__import__("stable_diffusion_cpp_video", fromlist=[self._attr])
-                          if self._attr and False else  # noqa: SIM222 - keep structure
+                          if self._attr and False else  # noqa: SIM222 - 保持结构
                           __import__("stable_diffusion_cpp", fromlist=[self._attr]),
                           self._attr)
             self._pipeline = cls(model_path=str(path))

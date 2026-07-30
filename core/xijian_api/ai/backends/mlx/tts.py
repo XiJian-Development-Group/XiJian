@@ -1,4 +1,13 @@
-"""MLX text-to-speech backend.
+"""MLX 文本转语音后端。
+
+MLX text-to-speech backend.
+
+包装可选的 ``mlx_audio`` 安装。MLX 不内置 TTS 模型；``mlx_audio``
+是事实上的社区库，在 Apple Silicon 上实现 TTS 模型
+（CosyVoice、Bark 等）。
+
+当 ``mlx_audio`` 未安装时，此后端报告自身不可用，注册表透明地
+回退到 GGUF（若 GGUF 也不存在则返回 503）。
 
 Wraps an optional ``mlx_audio`` installation.  MLX doesn't ship a TTS
 model in-tree; ``mlx_audio`` is the de-facto community library that
@@ -23,7 +32,10 @@ from xijian_api.ai.types import TTSBackend
 
 
 def _probe() -> tuple[bool, Any]:
-    """Return ``(available, generate_fn)`` for the optional ``mlx_audio`` lib."""
+    """返回可选的 ``mlx_audio`` 库的 ``(available, generate_fn)``。
+
+    Return ``(available, generate_fn)`` for the optional ``mlx_audio`` lib.
+    """
     try:
         from mlx_audio import generate as mlx_audio_generate
     except Exception:
@@ -33,6 +45,7 @@ def _probe() -> tuple[bool, Any]:
 
 @register_tts("mlx")
 class MLXTTSBackend(TTSBackend):
+    """MLX 文本转语音后端。MLX text-to-speech backend."""
     name = "mlx"
 
     def __init__(self) -> None:
@@ -58,10 +71,9 @@ class MLXTTSBackend(TTSBackend):
                 f"model path does not exist: {path}",
                 code="model_not_found",
             )
-        # ``mlx_audio`` typically lazy-loads the model inside
-        # ``generate``.  We accept the path here and let ``synth``
-        # hand it off; the contract is "after ``load()`` the backend
-        # knows which checkpoint to use".
+        # ``mlx_audio`` 通常在 ``generate`` 内部惰性加载模型。
+        # 我们在此接受路径，让 ``synth`` 传递它；契约是"在
+        # ``load()`` 之后后端知道使用哪个检查点"。
         self._model = str(path)
         self._model_path = path
 
@@ -92,9 +104,9 @@ class MLXTTSBackend(TTSBackend):
                 "mlx_audio.generate is unavailable",
                 code="backend_unavailable",
             )
-        # ``mlx_audio.generate`` accepts a directory of voice
-        # checkpoints.  When a voice_clone_ref is supplied we forward
-        # it as ``voice``; otherwise the model's default voice is used.
+        # ``mlx_audio.generate`` 接受语音检查点目录。
+        # 当提供 voice_clone_ref 时，我们将其作为 ``voice`` 转发；
+        # 否则使用模型的默认语音。
         chosen_voice = voice_clone_ref or voice
         kwargs: dict[str, Any] = {
             "text": text,
@@ -116,7 +128,14 @@ class MLXTTSBackend(TTSBackend):
 
 
 def _extract_audio_bytes(result, *, response_format: str) -> bytes:
-    """Coerce whatever ``mlx_audio.generate`` returns into raw ``bytes``.
+    """将 ``mlx_audio.generate`` 返回的任何内容强制转换为原始 ``bytes``。
+
+    ``mlx_audio`` 的不同版本返回不同的形状：
+      * 原始 ``bytes``，
+      * 带 ``"audio"``（类字节）+ ``"sampling_rate"`` 的字典，
+      * 带 ``.audio`` 属性的数据类。
+
+    Coerce whatever ``mlx_audio.generate`` returns into raw ``bytes``.
 
     Different versions of ``mlx_audio`` return different shapes:
       * raw ``bytes``,

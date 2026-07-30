@@ -1,4 +1,15 @@
-"""MLX video-generation backend.
+"""MLX 视频生成后端。
+
+MLX video-generation backend.
+
+Apple Silicon 上基于扩散的视频生成的可选支持。目前尚无单一规范库 ——
+``mlx_video`` / ``mlx-animate`` / 社区仓库填补了这一空间。
+我们探测常见名称，暴露已安装的那个，未安装时回退到
+``is_available() -> False``，以便注册表路由到其他地方。
+
+后端遵循与 GGUF 副本相同的 submit/poll 契约：``submit`` 返回后端
+任务 ID，``poll`` 返回带 ``status``、可选 ``url`` / ``bytes``
+和可选 ``error`` 块的状态字典。
 
 Optional support for diffusion-based video generation on Apple Silicon.
 There is no single canonical library yet — ``mlx_video`` /
@@ -26,9 +37,8 @@ from xijian_api.ai.registry import register_video
 from xijian_api.ai.types import VideoGenBackend
 
 
-# Candidate libraries, in preference order.  Whichever one imports
-# wins.  New entries can be added without touching the backend's
-# behaviour.
+# 候选库，按偏好顺序。先导入哪个就选哪个。
+# 可在不修改后端行为的情况下添加新条目。
 _CANDIDATES: tuple[str, ...] = (
     "mlx_video",
     "mlx_animate",
@@ -36,7 +46,10 @@ _CANDIDATES: tuple[str, ...] = (
 
 
 def _probe() -> tuple[bool, str | None]:
-    """Find the first importable MLX video library and its ``generate`` attr."""
+    """找到第一个可导入的 MLX 视频库及其 ``generate`` 属性。
+
+    Find the first importable MLX video library and its ``generate`` attr.
+    """
     for name in _CANDIDATES:
         try:
             module = __import__(name)
@@ -50,6 +63,7 @@ def _probe() -> tuple[bool, str | None]:
 
 @register_video("mlx")
 class MLXVideoBackend(VideoGenBackend):
+    """MLX 视频生成后端。MLX video generation backend."""
     name = "mlx"
 
     def __init__(self) -> None:
@@ -139,10 +153,13 @@ class MLXVideoBackend(VideoGenBackend):
             )
         return status
 
-    # -- internals ----------------------------------------------------------
+    # -- internals / 内部 ----------------------------------------------------------
 
     def _call_submit(self, *, prompt, n_seconds, width, height, fps, seed, input_reference) -> Any:
-        """Invoke the library's ``generate`` / ``submit`` function."""
+        """调用库的 ``generate`` / ``submit`` 函数。
+
+        Invoke the library's ``generate`` / ``submit`` function.
+        """
         import importlib
 
         parts = self._attr.split(".")
@@ -163,7 +180,13 @@ class MLXVideoBackend(VideoGenBackend):
         return fn(**kwargs)
 
     def _call_poll(self, task_id: str) -> dict:
-        """Poll the library for status; fall back to a synchronous wait.
+        """轮询库的进度；回退到同步等待。
+
+        大多数 MLX 视频库同步运行 —— 调用直接返回完成的视频而非任务 ID。
+        此时我们接受字典结果并将其重塑为路由层使用的
+        ``{status, url, bytes}`` 形状。
+
+        Poll the library for status; fall back to a synchronous wait.
 
         Most MLX video libraries run synchronously — the call returns
         the finished video rather than a task id.  In that case we
@@ -195,11 +218,17 @@ def _stringify(value: Any) -> str:
 
 
 class _NoPollFunction(Exception):
-    """Raised when the candidate library has no poll function."""
+    """候选库无 poll 函数时抛出。
+
+    Raised when the candidate library has no poll function.
+    """
 
 
 def _synchronous_poll(attr: str, task_id: str) -> dict:
-    """Try ``<lib>.poll(<task_id>)``; raise ``_NoPollFunction`` if absent."""
+    """尝试 ``<lib>.poll(<task_id>)``；不存在时抛出 ``_NoPollFunction``。
+
+    Try ``<lib>.poll(<task_id>)``; raise ``_NoPollFunction`` if absent.
+    """
     import importlib
 
     parts = attr.split(".")
@@ -216,7 +245,13 @@ def _synchronous_poll(attr: str, task_id: str) -> dict:
 
 
 def _synchronous_generate_result(attr: str, task_id: str) -> dict:
-    """Treat ``task_id`` as a cache key into the library's last output.
+    """将 ``task_id`` 视为库上次输出的缓存键。
+
+    对于同步完成的库（``generate`` 直接返回字节），路由层实际不会
+    用后端任务 ID 调用 ``poll`` —— 它轮询内存状态。我们提供透传，
+    返回 ``completed`` 以便轮询循环干净终止。
+
+    Treat ``task_id`` as a cache key into the library's last output.
 
     For libraries that complete synchronously (``generate`` returns the
     bytes directly), the route layer doesn't actually call ``poll``

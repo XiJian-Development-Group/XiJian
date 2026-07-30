@@ -1,4 +1,8 @@
-"""OpenAI-compatible remote TTS backend.
+"""OpenAI 兼容远程 TTS（文本转语音）后端。
+
+OpenAI-compatible remote TTS backend.
+
+调用 ``POST /audio/speech`` (OpenAI TTS API)。返回请求格式的原始音频字节。
 
 Calls ``POST /audio/speech`` (OpenAI TTS API).  Returns raw audio bytes
 in the requested format.
@@ -22,6 +26,7 @@ from xijian_api.ai.types import TTSBackend
 
 @register_tts("openai")
 class OpenAITTSBackend(TTSBackend):
+    """OpenAI 兼容 TTS 后端实现。OpenAI-compatible TTS backend implementation."""
     name = "openai"
 
     def __init__(self) -> None:
@@ -61,6 +66,9 @@ class OpenAITTSBackend(TTSBackend):
             raise ModelNotLoaded("no openai TTS model loaded")
         if abort_signal is not None:
             abort_signal.raise_if_aborted()
+        # ``voice_clone_ref`` 和 ``emotion`` 不是标准 OpenAI TTS API 的一部分；
+        # 我们优雅地忽略它们（某些兼容提供商接受它们作为额外字段，
+        # 但规范端点不支持）。
         # ``voice_clone_ref`` and ``emotion`` are not part of the
         # standard OpenAI TTS API; we ignore them gracefully (some
         # compatible providers accept them as extra fields, but the

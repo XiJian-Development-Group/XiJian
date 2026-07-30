@@ -202,6 +202,7 @@ def test_token_budget_override_triggers_trim_when_oversized():
     envelope = memory_stub.load_context("c1", budget_tokens=40)
     assert envelope["trimmed"] is True
     # Trim drops lower-importance entries; at least the top one survives.
+    # 裁剪 — drops lower-importance entries; at least the top one survives.
     assert envelope["long_term_count"] >= 1
     assert envelope["estimated_tokens"] <= envelope["budget_tokens"]
     assert "alpha" in envelope["system_message"]
@@ -298,4 +299,5 @@ def test_default_budget_derived_from_config():
     _wipe()
     envelope = memory_stub.load_context("c1")
     # Default config: max_context_tokens=8000, reserve_tokens_for_reply=2000.
+    # 默认 — config: max_context_tokens=8000, reserve_tokens_for_reply=2000.
     assert envelope["budget_tokens"] == 6000

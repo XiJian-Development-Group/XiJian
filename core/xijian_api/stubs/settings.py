@@ -1,8 +1,12 @@
 """Stub settings service — global user-tunable prefs + permissions.
+存根设置服务 — 全局用户可调偏好 + 权限。
 
 Settings container is created lazily on first read/write so the
 service ships with no pre-populated demo values.  Operators configure
 defaults through ``PATCH /v1/xijian/settings``.
+
+设置容器在首次读/写时惰性创建，因此服务在初始时没有预填充的演示值。
+运营人员通过 ``PATCH /v1/xijian/settings`` 配置默认值。
 """
 
 from __future__ import annotations
@@ -15,6 +19,8 @@ from xijian_api.utils.time import now_ts
 # are returned as the static catalogue every call.  Granted state is
 # reflected via ``granted_at`` being non-null only after the user
 # actually grants a permission through the system.
+# 权限是固定的操作系统级目录（非用户数据），因此每次调用返回静态目录。
+# 授予状态通过 ``granted_at`` 非空来反映，仅在用户实际通过系统授予权限后。
 _DEFAULT_PERMISSIONS: tuple[str, ...] = (
     "notifications",
     "microphone",
@@ -25,20 +31,30 @@ _DEFAULT_PERMISSIONS: tuple[str, ...] = (
 
 
 def seed_default() -> None:
-    """No-op — settings container is created lazily on first read/write."""
+    """No-op — settings container is created lazily on first read/write.
+    空操作 — 设置容器在首次读/写时惰性创建。
+    """
     return None
 
 
 def _settings_bucket() -> dict:
-    """Return the settings dict, creating an empty one on first use."""
+    """Return the settings dict, creating an empty one on first use.
+    返回设置字典，首次使用时创建空字典。
+    """
     return state.safety_state.setdefault("settings", {})
 
 
 def get_settings() -> dict:
+    """Return all settings.
+    返回所有设置。
+    """
     return dict(_settings_bucket())
 
 
 def patch_settings(patch: dict) -> dict:
+    """Apply a partial update to settings.
+    对设置应用部分更新。
+    """
     settings = _settings_bucket()
     for key, value in patch.items():
         settings[key] = value
@@ -47,6 +63,9 @@ def patch_settings(patch: dict) -> dict:
 
 
 def list_permissions() -> list[dict]:
+    """List all available system permissions.
+    列出所有可用的系统权限。
+    """
     items = []
     for key in _DEFAULT_PERMISSIONS:
         items.append(

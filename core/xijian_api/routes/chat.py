@@ -1,4 +1,4 @@
-"""Chat completion + abort routes."""
+"""Chat completion + abort routes. / 聊天补全 + 中止路由。"""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ bp = Blueprint("chat", __name__)
 
 @bp.post("/v1/chat/completions")
 def chat_completions():
+    """Chat completion endpoint (sync or streaming). / 聊天补全端点（同步或流式）。"""
     payload = request.get_json(silent=True) or {}
     if not payload.get("messages"):
         raise ApiError(
@@ -62,6 +63,8 @@ def chat_completions():
     signal = abort_registry.register(request_id)
 
     def _gen():
+        """Generator that yields SSE chunks and respects abort signals.
+        / 生成器，产出 SSE 数据块并尊重中止信号。"""
         try:
             for chunk in chat_stub.stream_chunks(
                 payload["messages"],
@@ -89,6 +92,7 @@ def chat_completions():
 
 @bp.post("/v1/chat/abort")
 def chat_abort():
+    """Abort a streaming request by request_id. / 通过 request_id 中止流式请求。"""
     payload = request.get_json(silent=True) or {}
     request_id = payload.get("request_id", "")
     if not request_id:
@@ -101,10 +105,12 @@ def chat_abort():
         )
     signalled = abort_registry.abort(request_id)
     # Per api.md, 204 even if no signal existed (idempotent cancel).
+    # 按 api.md，即使没有活跃的信号也返回 204（幂等取消）。
     response = jsonify({"aborted": signalled, "request_id": request_id})
     response.status_code = 204 if signalled else 200
     if not signalled:
         # Return a tiny JSON body when there's no active stream.
+        # 当没有活跃流时返回一个微小的 JSON 体。
         return jsonify({"aborted": False, "request_id": request_id}), 200
     return ("", 204)
 

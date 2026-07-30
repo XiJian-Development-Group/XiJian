@@ -1,4 +1,6 @@
-"""Stub session service — message list per session."""
+"""Stub session service — message list per session.
+存根会话服务 — 每个会话的消息列表。
+"""
 
 from __future__ import annotations
 
@@ -8,6 +10,9 @@ from xijian_api.utils.time import now_ts
 
 
 def create(payload: dict | None = None) -> dict:
+    """Create a new session record.
+    创建新的会话记录。
+    """
     session_id = gen_session_id()
     record = {
         "id": session_id,
@@ -22,10 +27,16 @@ def create(payload: dict | None = None) -> dict:
 
 
 def get(session_id: str) -> dict | None:
+    """Return a session record or ``None``.
+    返回会话记录或 ``None``。
+    """
     return state.sessions.get(session_id)
 
 
 def append_message(session_id: str, payload: dict) -> dict | None:
+    """Append a message to a session. Returns the message record.
+    将会话追加一条消息。返回消息记录。
+    """
     record = state.sessions.get(session_id)
     if record is None:
         return None
@@ -44,6 +55,9 @@ def append_message(session_id: str, payload: dict) -> dict | None:
 
 
 def list_messages(session_id: str) -> list[dict] | None:
+    """List all messages in a session.
+    列出会话中的所有消息。
+    """
     record = state.sessions.get(session_id)
     if record is None:
         return None
@@ -51,6 +65,9 @@ def list_messages(session_id: str) -> list[dict] | None:
 
 
 def delete(session_id: str) -> bool:
+    """Delete a session. Returns True if it existed.
+    删除会话。存在则返回 True。
+    """
     return state.sessions.pop(session_id, None) is not None
 
 

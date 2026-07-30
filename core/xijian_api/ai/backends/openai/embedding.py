@@ -1,4 +1,8 @@
-"""OpenAI-compatible remote embedding backend.
+"""OpenAI 兼容远程嵌入后端。
+
+OpenAI-compatible remote embedding backend.
+
+调用任意兼容 OpenAI 的端点上的 ``POST /embeddings``。
 
 Calls ``POST /embeddings`` on any OpenAI-compatible endpoint.
 """
@@ -22,6 +26,7 @@ from xijian_api.ai.types import EmbeddingBackend
 
 @register_embedding("openai")
 class OpenAIEmbeddingBackend(EmbeddingBackend):
+    """OpenAI 兼容嵌入后端实现。OpenAI-compatible embedding backend implementation."""
     name = "openai"
 
     def __init__(self) -> None:

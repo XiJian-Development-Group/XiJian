@@ -7,6 +7,8 @@ Covers:
 * **CRUD** — record / get / list / summary.
 * **Cascading** — delete_for_world / delete_for_owner.
 * **Auth** — every endpoint requires a Bearer token.
+
+  测试交易记录系统。验证交易的创建、查询和审计追踪。
 """
 
 from __future__ import annotations
@@ -30,6 +32,7 @@ from xijian_api.stubs.transactions import (
 
 # ---------------------------------------------------------------------------
 # Fixtures
+# 测试夹具
 # ---------------------------------------------------------------------------
 
 
@@ -96,6 +99,7 @@ class TestValidKinds:
 
 
 # ---------------------------------------------------------------------------
+# CRUD — stub-level
 # CRUD — stub-level
 # ---------------------------------------------------------------------------
 
@@ -345,6 +349,7 @@ class TestCascading:
     def test_delete_for_owner_sender_only(self, world):
         # n1 only as sender in one tx, n1 only as receiver in another.
         # Delete-for-npc-sender: only drops the sender-side row.
+        # 删除 — -for-npc-sender: only drops the sender-side row.
         # The other tx is unaffected (n1 is receiver, not sender).
         txn_stub.record(
             world_id=world, from_kind="npc", from_id="n1",
@@ -357,6 +362,7 @@ class TestCascading:
             amount=1, kind=KIND_PURCHASE,
         )
         # Filter by sender-side: drop tx where from_kind=npc & from_id=n1.
+        # 过滤 — by sender-side: drop tx where from_kind=npc & from_id=n1.
         # The current ``delete_for_owner`` is by-occurrence (any side).
         removed = txn_stub.delete_for_owner("npc", "n1")
         # Both tx rows reference n1 (one as sender, one as receiver) → 2.
@@ -424,6 +430,7 @@ class TestHttpList:
 
 # ---------------------------------------------------------------------------
 # Auth coverage
+# 认证 — coverage
 # ---------------------------------------------------------------------------
 
 

@@ -1,4 +1,13 @@
-"""OpenAI-compatible remote chat backend.
+"""OpenAI 兼容远程聊天后端。
+
+连接实现 OpenAI ``/chat/completions`` API 的任意端点（OpenAI 本身、
+Azure OpenAI、vLLM、Ollama、LM Studio、llama.cpp server 等）。
+同时支持流式（SSE）与非流式模式，以及多模态内容（通过 ``image_url`` 片段传图）。
+
+配置通过 :func:`resolve_config` 按调用解析 —— 后端读取 ``[[models]].extra``
+（逐模型覆盖）并与 ``[backends.openai]`` 全局段合并。
+
+OpenAI-compatible remote chat backend.
 
 Connects to any endpoint that implements the OpenAI ``/chat/completions``
 API (OpenAI itself, Azure OpenAI, vLLM, Ollama, LM Studio, llama.cpp
@@ -66,7 +75,11 @@ def _build_chunk(
 
 
 def _messages_to_oai(messages: Sequence) -> list[dict]:
-    """Convert :class:`ChatMessage` / dict sequence into OAI dicts.
+    """将 :class:`ChatMessage` / dict 序列转换为 OAI 字典。
+
+    多模态内容（``list[dict]``）原样透传；纯字符串原样转发。
+
+    Convert :class:`ChatMessage` / dict sequence into OAI dicts.
 
     Multimodal content (``list[dict]``) is passed through as-is; plain
     strings are forwarded untouched.
@@ -84,6 +97,7 @@ def _messages_to_oai(messages: Sequence) -> list[dict]:
 
 @register_chat("openai")
 class OpenAIChatBackend(ChatBackend):
+    """OpenAI 兼容聊天后端实现。OpenAI-compatible chat backend implementation."""
     name = "openai"
 
     def __init__(self) -> None:
@@ -91,19 +105,29 @@ class OpenAIChatBackend(ChatBackend):
         self._model_path: Path | None = None
         self._loaded: bool = False
 
-    # -- introspection ------------------------------------------------------
+    # -- introspection / 内省 ------------------------------------------------------
 
     def is_available(self) -> bool:
+        # 始终可用 —— httpx 是项目的硬依赖。
         # Always available — httpx is a hard dependency of the project.
         return True
 
     def is_loaded(self) -> bool:
         return self._loaded
 
-    # -- lifecycle ----------------------------------------------------------
+    # -- lifecycle / 生命周期 ----------------------------------------------------------
 
     def load(self, model_path, *, context_length: int = 0, **kwargs) -> None:
-        """Resolve the remote config from kwargs and mark as loaded.
+        """从 kwargs 解析远程配置并标记为已加载。
+
+        ``model_path`` 对远程后端未使用，但为满足 :class:`ChatBackend`
+        契约而被接受（注册表无论后端类型都会传递）。
+
+        ``kwargs`` 携带合并后的 ``[[models]].extra`` 字段及任何调用方覆盖。
+        至少 ``base_url`` 和 ``model_name`` 必须可解析（通过 kwargs、
+        ``[backends.openai]`` 段或环境变量）。
+
+        Resolve the remote config from kwargs and mark as loaded.
 
         ``model_path`` is unused for remote backends but accepted to
         satisfy the :class:`ChatBackend` contract (the registry passes
@@ -131,7 +155,7 @@ class OpenAIChatBackend(ChatBackend):
         self._model_path = None
         self._loaded = False
 
-    # -- generation ---------------------------------------------------------
+    # -- generation / 生成 ---------------------------------------------------------
 
     def chat(
         self,
@@ -173,7 +197,7 @@ class OpenAIChatBackend(ChatBackend):
             abort_signal=abort_signal,
         )
 
-    # -- internals ----------------------------------------------------------
+    # -- internals / 内部 ----------------------------------------------------------
 
     def _blocking(
         self,
@@ -222,6 +246,7 @@ class OpenAIChatBackend(ChatBackend):
     ) -> Iterator[ChatChunk]:
         if abort_signal is not None:
             abort_signal.raise_if_aborted()
+        # 首个 chunk：角色宣告。
         # First chunk: role announcement.
         yield _build_chunk(
             chunk_id=chunk_id, model=model_id, delta={"role": "assistant"},
@@ -239,6 +264,7 @@ class OpenAIChatBackend(ChatBackend):
                 choice = choices[0] if choices else {}
                 delta = choice.get("delta") or {}
                 finish_reason = choice.get("finish_reason")
+                # 部分提供商在最后一个 chunk 里带 usage。
                 # Some providers include usage in the final chunk.
                 if "usage" in piece and piece["usage"]:
                     last_usage = self._usage(piece["usage"])
@@ -268,6 +294,7 @@ class OpenAIChatBackend(ChatBackend):
         except ApiGenerationAborted:
             aborted = True
 
+        # 流式结束未收到 finish_reason chunk 时补发一个。
         # If the stream ended without a finish_reason chunk, emit one.
         yield _build_chunk(
             chunk_id=chunk_id,

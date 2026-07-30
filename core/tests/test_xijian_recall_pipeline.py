@@ -10,6 +10,9 @@ assert:
 * the citation audit verdict is consistent with the final text;
 * when recall is *not* requested the response shape is unchanged
   (regression guard for the regular chat path).
+
+  测试记忆召回管道的核心流程（A1.3）。
+  覆盖嵌入、检索、重排序和生成阶段。
 """
 
 from __future__ import annotations

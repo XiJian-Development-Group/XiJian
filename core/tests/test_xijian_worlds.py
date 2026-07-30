@@ -13,6 +13,9 @@ The A4.2 worlds surface covers:
 
 Auth: every endpoint requires a Bearer token.  Auth coverage lives
 in :class:`TestAuthCoverage` at the bottom.
+
+  测试世界的 CRUD 操作和状态管理。
+  验证世界的创建、读取、更新和删除功能。
 """
 
 from __future__ import annotations
@@ -50,6 +53,7 @@ from xijian_api.stubs.worlds import (
 
 # ---------------------------------------------------------------------------
 # Fixtures
+# 测试夹具
 # ---------------------------------------------------------------------------
 
 
@@ -86,6 +90,7 @@ class TestWhitelistedFields:
 
 
 # ---------------------------------------------------------------------------
+# CRUD
 # CRUD
 # ---------------------------------------------------------------------------
 
@@ -169,6 +174,7 @@ class TestListWorlds:
 
     def test_list_orders_active_first(self, client, auth_headers):
         # Create an inactive one and an active one.
+        # 创建 — an inactive one and an active one.
         client.post(
             "/v1/xijian/worlds",
             json={"name": "Inactive", "world_id": "world_inactive_test", "is_active": False},
@@ -251,6 +257,7 @@ class TestDeleteWorld:
 
 # ---------------------------------------------------------------------------
 # State & views
+# 状态 — & views
 # ---------------------------------------------------------------------------
 
 
@@ -356,6 +363,7 @@ class TestReset:
             headers=auth_headers,
         )
         # Patch some state to make sure reset clears it.
+        # 补丁 — some state to make sure reset clears it.
         client.patch(
             f"/v1/xijian/worlds/{world}/state",
             json={"economy": 99},
@@ -375,11 +383,13 @@ class TestReset:
         )
         assert res.status_code == 200
         # World still exists with the same id but defaults reapplied.
+        # 世界 — still exists with the same id but defaults reapplied.
         res = client.get(f"/v1/xijian/worlds/{world}/state", headers=auth_headers)
         assert res.status_code == 200
         state = res.get_json()
         assert "economy" not in state["environment"]
         # NPC was wiped.
+        # NPC — was wiped.
         assert state["npc_count"] == 0
 
     def test_confirm_without_token_returns_400(self, client, auth_headers, world):
@@ -536,6 +546,7 @@ class TestComputeView:
 class TestAuditView:
     def test_audit_lists_entries(self, client, auth_headers, world):
         # Trigger an audit-eligible action.
+        # 触发器 — an audit-eligible action.
         client.patch(
             f"/v1/xijian/worlds/{world}",
             json={"name": "Renamed"},
@@ -689,6 +700,7 @@ class TestLegacyAddEvent:
         data = res.get_json()
         assert data["event_id"] is not None or "id" in data
         # World event_instances has a fired record.
+        # 世界 — event_instances has a fired record.
         assert any(
             v.get("world_id") == world
             for v in stubs_state.world_event_instances.values()
@@ -755,6 +767,7 @@ class TestStubDirect:
 
 # ---------------------------------------------------------------------------
 # Auth coverage — every endpoint requires a Bearer
+# 认证 — coverage — every endpoint requires a Bearer
 # ---------------------------------------------------------------------------
 
 

@@ -18,6 +18,8 @@ Design
 * **Replace on reload** — when loading an item that was previously
   loaded from the devkit, the old record is replaced (not duplicated).
 * **Preview** — full devkit data is returned as-is for the UI to render.
+重新加载时替换，来源标记，内存中，预览。
+
 """
 
 from __future__ import annotations

@@ -48,6 +48,7 @@ from xijian_api.stubs.safety_rules import (
 
 # ---------------------------------------------------------------------------
 # Fixtures
+# 测试夹具
 # ---------------------------------------------------------------------------
 
 
@@ -340,6 +341,7 @@ class TestScanInputOverload:
     def test_overload_short_circuits(self, monkeypatch):
         from xijian_api.stubs import overload as ov_stub
         # Trigger overload via CPU.
+        # 触发器 — overload via CPU.
         ov_stub.simulate_overload(ov_stub.METRIC_CPU)
         try:
             result = safety_stub.scan_input(
@@ -502,6 +504,7 @@ class TestSelfCrash:
 
 # ---------------------------------------------------------------------------
 # World policy
+# 世界 — policy
 # ---------------------------------------------------------------------------
 
 
@@ -717,6 +720,7 @@ class TestHttpGate:
 
     def test_enable_is_idempotent(self, client, auth_headers):
         # Default is enabled; enabling again should stay enabled.
+        # 默认 — is enabled; enabling again should stay enabled.
         res = client.post(
             "/v1/xijian/safety/gate/enable", headers=auth_headers
         )
@@ -807,6 +811,7 @@ class TestHttpAuditExport:
 
 # ---------------------------------------------------------------------------
 # Auth coverage
+# 认证 — coverage
 # ---------------------------------------------------------------------------
 
 

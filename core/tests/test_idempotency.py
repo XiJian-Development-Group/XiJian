@@ -1,4 +1,6 @@
-"""Tests for the Idempotency-Key middleware (DESIGN §8)."""
+"""Tests for the Idempotency-Key middleware (DESIGN §8).
+(幂等性键中间件的测试 (DESIGN §8)。)
+"""
 
 from __future__ import annotations
 
@@ -8,6 +10,9 @@ ECHO_URL = "/v1/__test__/echo"
 
 
 def _post(client, auth_headers, idem_key, body):
+    """Helper to POST with idempotency key set.
+    (使用设置好的幂等性键执行 POST 的辅助函数。)
+    """
     return client.post(
         ECHO_URL,
         headers={
@@ -21,13 +26,17 @@ def _post(client, auth_headers, idem_key, body):
 
 def test_repeated_post_with_same_body_is_replayed(client, auth_headers):
     """Two POSTs with the same key and same body return the same payload,
-    with ``Idempotency-Replayed: true`` on the second response."""
+    with ``Idempotency-Replayed: true`` on the second response.
+    (相同键和相同体的两个 POST 返回相同负载，
+    第二个响应带有 ``Idempotency-Replayed: true``。)
+    """
     body = {"messages": [{"role": "user", "content": "hello"}]}
 
     r1 = _post(client, auth_headers, "key-1", body)
     assert r1.status_code == 200
     assert r1.get_json()["echo"] == body
     # The first call has no ``Idempotency-Replayed`` header.
+    # (第一次调用没有 ``Idempotency-Replayed`` 头部。)
     assert r1.headers.get("Idempotency-Replayed") is None
 
     r2 = _post(client, auth_headers, "key-1", body)
@@ -37,7 +46,9 @@ def test_repeated_post_with_same_body_is_replayed(client, auth_headers):
 
 
 def test_same_key_different_body_returns_409(client, auth_headers):
-    """Reusing a key with a different body raises 409 ``idempotency_key_conflict``."""
+    """Reusing a key with a different body raises 409 ``idempotency_key_conflict``.
+    (使用相同键但不同请求体复用导致 409 ``idempotency_key_conflict``。)
+    """
     body_a = {"messages": [{"role": "user", "content": "a"}]}
     body_b = {"messages": [{"role": "user", "content": "b"}]}
 
@@ -52,7 +63,9 @@ def test_same_key_different_body_returns_409(client, auth_headers):
 
 
 def test_different_keys_do_not_collide(client, auth_headers):
-    """Two POSTs with different keys are not treated as replays."""
+    """Two POSTs with different keys are not treated as replays.
+    (不同键的两个 POST 不会被视为重放。)
+    """
     body = {"messages": [{"role": "user", "content": "hi"}]}
 
     r1 = _post(client, auth_headers, "key-a", body)
@@ -60,12 +73,15 @@ def test_different_keys_do_not_collide(client, auth_headers):
     assert r1.status_code == 200
     assert r2.status_code == 200
     # Neither should be marked replayed.
+    # (两者都不应标记为重放。)
     assert r1.headers.get("Idempotency-Replayed") is None
     assert r2.headers.get("Idempotency-Replayed") is None
 
 
 def test_no_idempotency_key_means_no_replay(client, auth_headers):
-    """POSTs without an ``Idempotency-Key`` header are not cached."""
+    """POSTs without an ``Idempotency-Key`` header are not cached.
+    (没有 ``Idempotency-Key`` 头部的 POST 不会被缓存。)
+    """
     body = {"messages": [{"role": "user", "content": "no-cache"}]}
     headers = {**auth_headers, "Content-Type": "application/json"}
 
@@ -78,7 +94,9 @@ def test_no_idempotency_key_means_no_replay(client, auth_headers):
 
 
 def test_idempotency_only_applies_to_post(client, auth_headers):
-    """A GET with an ``Idempotency-Key`` header is not cached."""
+    """A GET with an ``Idempotency-Key`` header is not cached.
+    (带有 ``Idempotency-Key`` 头部的 GET 不会被缓存。)
+    """
     response = client.get(
         "/v1",
         headers={**auth_headers, "Idempotency-Key": "ignored-on-get"},

@@ -9,6 +9,8 @@ real OAI error envelope rather than fake-but-deterministic vectors.
 
 If a backend reports its own ``dimensions`` count, that value is
 returned by :func:`dimensions`; otherwise 0.
+确定性。
+
 """
 
 from __future__ import annotations

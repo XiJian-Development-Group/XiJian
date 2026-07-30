@@ -1,4 +1,19 @@
-"""GGUF chat backend — wraps ``llama-cpp-python`` (the canonical
+"""GGUF 聊天后端 —— 包装 ``llama-cpp-python``（``llama.cpp`` GGUF 模型的规范绑定）。
+
+契约镜像 :class:`xijian_api.ai.types.ChatBackend`：
+
+* :meth:`chat` 在流式和非流式模式下都产生 :class:`ChatChunk` 实例。
+* :class:`AbortSignal` 在 token 发射之间轮询，以便客户端中止能及时停止生成。
+
+llama-cpp-python 特有细节
+--------------------------
+
+* ``Llama.create_chat_completion(messages=..., stream=True)`` 返回
+  OAI 风格字典的生成器（``{"choices": [{"delta": {...}}]}``）。
+* 非流式返回具有相同 ``choices`` 形状的单个字典。
+* Token 计数来自 ``usage``（较新版本）或未暴露时从 tokenizer 推断。
+
+GGUF chat backend — wraps ``llama-cpp-python`` (the canonical
 binding for ``llama.cpp`` GGUF models).
 
 Contract mirrors :class:`xijian_api.ai.types.ChatBackend`:
@@ -72,7 +87,10 @@ def _build_chunk(
 
 
 def _extract_delta_content(delta) -> str:
-    """Pull the ``content`` field out of an OAI delta dict."""
+    """从 OAI delta 字典中提取 ``content`` 字段。
+
+    Pull the ``content`` field out of an OAI delta dict.
+    """
     if not isinstance(delta, dict):
         return ""
     content = delta.get("content")
@@ -92,6 +110,7 @@ def _build_gguf_kwargs(params: GenerationParams, *, max_tokens: int) -> dict:
 
 @register_chat("gguf")
 class GGUFChatBackend(ChatBackend):
+    """GGUF 聊天后端。GGUF chat backend."""
     name = "gguf"
 
     def __init__(self) -> None:
@@ -99,7 +118,7 @@ class GGUFChatBackend(ChatBackend):
         self._model_path: Path | None = None
         self._n_ctx: int = 0
 
-    # -- introspection ------------------------------------------------------
+    # -- introspection / 内省 ------------------------------------------------------
 
     def is_available(self) -> bool:
         try:
@@ -111,7 +130,7 @@ class GGUFChatBackend(ChatBackend):
     def is_loaded(self) -> bool:
         return self._llama is not None
 
-    # -- lifecycle ----------------------------------------------------------
+    # -- lifecycle / 生命周期 ----------------------------------------------------------
 
     def load(self, model_path, *, context_length: int = 0, **kwargs) -> None:
         try:
@@ -125,8 +144,8 @@ class GGUFChatBackend(ChatBackend):
         if not path.exists():
             raise ModelNotFound(f"model path does not exist: {path}")
         n_ctx = int(context_length) if context_length else 0
-        # When context_length is 0 we let llama.cpp pick its own
-        # default (4096 typically).  Callers can override via kwargs.
+        # 当 context_length 为 0 时让 llama.cpp 选择自己的默认值（通常 4096）。
+        # 调用者可以通过 kwargs 覆盖。
         try:
             self._llama = Llama(model_path=str(path), n_ctx=n_ctx or 4096, verbose=False)
         except Exception as exc:
@@ -142,7 +161,7 @@ class GGUFChatBackend(ChatBackend):
         self._model_path = None
         self._n_ctx = 0
 
-    # -- generation ---------------------------------------------------------
+    # -- generation / 生成 ---------------------------------------------------------
 
     def chat(
         self,
@@ -178,7 +197,7 @@ class GGUFChatBackend(ChatBackend):
             abort_signal=abort_signal,
         )
 
-    # -- internals ----------------------------------------------------------
+    # -- internals / 内部 ----------------------------------------------------------
 
     def _blocking(
         self,
@@ -205,7 +224,7 @@ class GGUFChatBackend(ChatBackend):
         if abort_signal is not None:
             abort_signal.raise_if_aborted()
 
-        # Result is an OAI dict: ``{"choices": [{"message": {...}, ...}]}``.
+        # 结果是 OAI 字典：``{"choices": [{"message": {...}, ...}]}``。
         try:
             choice = result["choices"][0]
         except (KeyError, IndexError, TypeError) as exc:
@@ -236,8 +255,7 @@ class GGUFChatBackend(ChatBackend):
     ) -> Iterator[ChatChunk]:
         if abort_signal is not None:
             abort_signal.raise_if_aborted()
-        # First chunk announces the role so OAI clients can start
-        # rendering immediately.
+        # 首个 chunk 宣告角色，以便 OAI 客户端能立即开始渲染。
         yield _build_chunk(
             chunk_id=chunk_id,
             model=model_id,
@@ -269,9 +287,8 @@ class GGUFChatBackend(ChatBackend):
                         delta={"content": content},
                     )
                 if finish_reason:
-                    # The final chunk carries ``finish_reason``.  Emit
-                    # it once and stop iterating.  llama-cpp-python
-                    # typically closes the iterator after this chunk.
+                    # 最终 chunk 携带 ``finish_reason``。发一次就停止迭代。
+                    # llama-cpp-python 通常会在此 chunk 后关闭迭代器。
                     usage = self._usage_to_chat(piece.get("usage"))
                     yield _build_chunk(
                         chunk_id=chunk_id,
@@ -289,8 +306,8 @@ class GGUFChatBackend(ChatBackend):
             self._map_llama_exception(exc)
             raise  # pragma: no cover
 
-        # If the stream ended without a ``finish_reason`` chunk, emit a
-        # closing one so the client always sees a terminal frame.
+        # 若流式结束未收到 ``finish_reason`` chunk，补发一个终止帧，
+        # 确保客户端始终看到终端标记。
         yield _build_chunk(
             chunk_id=chunk_id,
             model=model_id,
@@ -299,7 +316,7 @@ class GGUFChatBackend(ChatBackend):
             usage=None,
         )
 
-    # -- helpers ------------------------------------------------------------
+    # -- helpers / 辅助 ------------------------------------------------------------
 
     @staticmethod
     def _usage_to_chat(raw) -> ChatUsage | None:
@@ -318,7 +335,10 @@ class GGUFChatBackend(ChatBackend):
 
     @staticmethod
     def _map_llama_exception(exc: Exception) -> None:
-        """Translate llama.cpp errors into the AI layer's exception types."""
+        """将 llama.cpp 错误翻译为 AI 层的异常类型。
+
+        Translate llama.cpp errors into the AI layer's exception types.
+        """
         msg = str(exc).lower()
         if "context" in msg and ("exceed" in msg or "length" in msg or "full" in msg):
             raise ContextLengthExceeded(str(exc)) from exc

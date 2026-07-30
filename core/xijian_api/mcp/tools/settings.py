@@ -1,26 +1,24 @@
 """MCP tools for the global settings domain.
+MCP 全局设置域工具。
 
 Wraps the in-memory settings stub (:mod:`xijian_api.stubs.settings`) as
 MCP tools registered with :mod:`xijian_api.mcp.registry`.  The settings
 store is a lazily-created dict inside ``state.safety_state`` that holds
 operator-tunable preferences; the stub ships with no pre-populated
 defaults (operators configure them via ``settings_update``).
+将内存设置桩层封装为 MCP 工具。设置存储是 ``state.safety_state`` 中的延迟创建字典，
+保存操作者可调整的偏好；桩层未预填充默认值。
 
 These are internal domain tools (``action_kind=None``): they only touch
-in-memory state, so they skip the A5.2 gate and rely on the stub's own
-input validation.
+in-memory state, so they skip the A5.2 gate.
+内部领域工具，仅操作内存状态，绕过 A5.2 门禁。
 
-The stub exposes ``get_settings`` / ``patch_settings`` but no explicit
-reset, so ``settings_reset`` clears the lazy container in place (a full
-clear when no key is given, a single-key drop otherwise) — the stub's
-``seed_default`` is a no-op, so "defaults" is the empty state.
-
-Tools registered
+Tools registered / 已注册工具
 ----------------
 
-* ``settings_get``    — read all settings or a single key
-* ``settings_update`` — patch settings via (key, value) or a patch dict
-* ``settings_reset``  — reset settings (all or a single key)
+* ``settings_get``    — read all settings or a single key / 读取所有设置或单个键
+* ``settings_update`` — patch settings via (key, value) or a patch dict / 通过键值对或修补字典更新设置
+* ``settings_reset``  — reset settings (all or a single key) / 重置设置
 """
 
 from __future__ import annotations
@@ -33,7 +31,7 @@ from xijian_api.stubs import state
 
 
 # ---------------------------------------------------------------------------
-# Handlers
+# Handlers / 处理器
 # ---------------------------------------------------------------------------
 
 
@@ -62,11 +60,8 @@ def _settings_update(args: dict[str, Any], ctx: dict[str, Any]) -> dict:
 
 def _settings_reset(args: dict[str, Any], ctx: dict[str, Any]) -> dict:
     key = args.get("key")
-    # Settings live in the safety-state bucket (managed by the
-    # merged safety module); read straight from state for the reset.
     bucket = state.safety_state.get("settings")
     if bucket is None:
-        # Lazy container not yet created — nothing to reset.
         return {"reset": True, "key": key, "settings": {}}
     if key is not None:
         bucket.pop(key, None)
@@ -76,17 +71,17 @@ def _settings_reset(args: dict[str, Any], ctx: dict[str, Any]) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Registration
+# Registration / 注册
 # ---------------------------------------------------------------------------
 
 
 register_tool(
     name="settings_get",
-    description="Read all settings, or a single key's value when 'key' is supplied.",
+    description="Read all settings, or a single key's value when 'key' is supplied. / 读取所有设置，或提供 'key' 时读取单个键的值。",
     input_schema={
         "type": "object",
         "properties": {
-            "key": {"type": "string", "description": "Optional setting key; omit to read all settings."},
+            "key": {"type": "string", "description": "Optional setting key / 可选的设置键"},
         },
         "required": [],
     },
@@ -98,16 +93,13 @@ register_tool(
 
 register_tool(
     name="settings_update",
-    description=(
-        "Update settings. Pass 'patch' (an object) for a multi-key merge, "
-        "or 'key' + 'value' for a single-key set."
-    ),
+    description="Update settings. Pass 'patch' for a multi-key merge, or 'key' + 'value' for a single-key set. / 更新设置。传递 'patch' 进行多键合并，或 'key' + 'value' 设置单个键。",
     input_schema={
         "type": "object",
         "properties": {
-            "key": {"type": "string", "description": "Single key to set (used with 'value')."},
-            "value": {"description": "Value to set for 'key' (any JSON type)."},
-            "patch": {"type": "object", "description": "Multi-key patch object merged into settings."},
+            "key": {"type": "string", "description": "Single key to set (used with 'value'). / 要设置的单个键。"},
+            "value": {"description": "Value to set for 'key' (any JSON type). / 要为 'key' 设置的值。"},
+            "patch": {"type": "object", "description": "Multi-key patch object / 多键修补对象"},
         },
         "required": [],
     },
@@ -118,14 +110,11 @@ register_tool(
 
 register_tool(
     name="settings_reset",
-    description=(
-        "Reset settings to defaults. Omit 'key' to clear all settings; "
-        "pass 'key' to clear a single entry."
-    ),
+    description="Reset settings to defaults. Omit 'key' to clear all settings; pass 'key' to clear a single entry. / 将设置重置为默认值。省略 'key' 清除所有设置；传递 'key' 清除单个条目。",
     input_schema={
         "type": "object",
         "properties": {
-            "key": {"type": "string", "description": "Optional setting key to clear; omit to clear all."},
+            "key": {"type": "string", "description": "Optional setting key to clear / 可选的要清除的设置键"},
         },
         "required": [],
     },

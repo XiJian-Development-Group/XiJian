@@ -1,4 +1,4 @@
-"""OAI fine-tuning routes."""
+"""OAI fine-tuning routes. / OAI 微调路由。"""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ bp = Blueprint("fine_tuning", __name__)
 
 @bp.post("/v1/fine_tuning/jobs")
 def create_job():
+    """Create a fine-tuning job. / 创建微调任务。"""
     payload = request.get_json(silent=True) or {}
     if "model" not in payload:
         raise ApiError(
@@ -55,12 +56,14 @@ def create_job():
 
 @bp.get("/v1/fine_tuning/jobs")
 def list_jobs():
+    """List fine-tuning jobs. / 列出微调任务。"""
     items = [it for it in state.fine_tuning_jobs.values() if isinstance(it, dict) and it.get("object") == "fine_tuning.job"]
     return jsonify(paginate(items).to_dict())
 
 
 @bp.get("/v1/fine_tuning/jobs/<job_id>")
 def get_job(job_id: str):
+    """Retrieve a fine-tuning job. / 检索微调任务。"""
     record = state.fine_tuning_jobs.get(job_id)
     if record is None or not isinstance(record, dict) or record.get("object") != "fine_tuning.job":
         raise ApiError(404, f"job not found: {job_id}", "not_found_error", code="job_not_found")
@@ -69,6 +72,7 @@ def get_job(job_id: str):
 
 @bp.post("/v1/fine_tuning/jobs/<job_id>/cancel")
 def cancel_job(job_id: str):
+    """Cancel a fine-tuning job. / 取消微调任务。"""
     record = state.fine_tuning_jobs.get(job_id)
     if record is None or record.get("object") != "fine_tuning.job":
         raise ApiError(404, f"job not found: {job_id}", "not_found_error", code="job_not_found")
@@ -79,6 +83,7 @@ def cancel_job(job_id: str):
 
 @bp.get("/v1/fine_tuning/jobs/<job_id>/events")
 def list_events(job_id: str):
+    """List events for a fine-tuning job. / 列出微调任务的事件。"""
     if job_id not in state.fine_tuning_jobs:
         raise ApiError(404, f"job not found: {job_id}", "not_found_error", code="job_not_found")
     events = state.fine_tuning_jobs.setdefault("__events__", {}).setdefault(job_id, [])
@@ -87,6 +92,7 @@ def list_events(job_id: str):
 
 @bp.get("/v1/fine_tuning/jobs/<job_id>/checkpoints")
 def list_checkpoints(job_id: str):
+    """List checkpoints for a fine-tuning job. / 列出微调任务的检查点。"""
     if job_id not in state.fine_tuning_jobs:
         raise ApiError(404, f"job not found: {job_id}", "not_found_error", code="job_not_found")
     return jsonify({"object": "list", "data": [], "has_more": False})
@@ -94,6 +100,7 @@ def list_checkpoints(job_id: str):
 
 @bp.post("/v1/fine_tuning/jobs/<job_id>/checkpoints/permissions")
 def checkpoint_permissions(job_id: str):
+    """Check checkpoint permissions. / 检查检查点权限。"""
     if job_id not in state.fine_tuning_jobs:
         raise ApiError(404, f"job not found: {job_id}", "not_found_error", code="job_not_found")
     return jsonify({"object": "list", "data": [], "has_more": False})

@@ -1,4 +1,4 @@
-"""OAI batches routes."""
+"""OAI batches routes. / OAI 批处理路由。"""
 
 from __future__ import annotations
 
@@ -18,6 +18,7 @@ bp = Blueprint("batches", __name__)
 
 @bp.post("/v1/batches")
 def create_batch():
+    """Create a new batch job. / 创建新的批处理任务。"""
     payload = request.get_json(silent=True) or {}
     if "input_file_id" not in payload:
         raise ApiError(
@@ -46,6 +47,7 @@ def create_batch():
 
 @bp.get("/v1/batches/<batch_id>")
 def get_batch(batch_id: str):
+    """Retrieve a batch by ID. / 通过 ID 检索批处理任务。"""
     record = state.batches.get(batch_id)
     if record is None:
         raise ApiError(404, f"batch not found: {batch_id}", "not_found_error", code="batch_not_found")
@@ -54,11 +56,13 @@ def get_batch(batch_id: str):
 
 @bp.get("/v1/batches")
 def list_batches():
+    """List all batches with pagination. / 列出所有批处理任务（分页）。"""
     return jsonify(paginate(list(state.batches.values())).to_dict())
 
 
 @bp.get("/v1/batches/<batch_id>/results")
 def batch_results(batch_id: str):
+    """Get batch results as NDJSON. / 以 NDJSON 格式获取批处理结果。"""
     record = state.batches.get(batch_id)
     if record is None:
         raise ApiError(404, f"batch not found: {batch_id}", "not_found_error", code="batch_not_found")
@@ -71,6 +75,7 @@ def batch_results(batch_id: str):
 
 @bp.post("/v1/batches/<batch_id>/cancel")
 def cancel_batch(batch_id: str):
+    """Cancel a batch job. / 取消批处理任务。"""
     record = state.batches.get(batch_id)
     if record is None:
         raise ApiError(404, f"batch not found: {batch_id}", "not_found_error", code="batch_not_found")

@@ -1,4 +1,4 @@
-"""OAI Assistants / Threads / Messages / Runs routes."""
+"""OAI Assistants / Threads / Messages / Runs routes. / OAI Assistants / Threads / Messages / Runs 路由。"""
 
 from __future__ import annotations
 
@@ -25,6 +25,7 @@ bp = Blueprint("assistants", __name__)
 
 @bp.post("/v1/assistants")
 def create_assistant():
+    """Create a new assistant. / 创建新助手。"""
     payload = request.get_json(silent=True) or {}
     asst_id = gen_assistant_id()
     record = {
@@ -44,12 +45,14 @@ def create_assistant():
 
 @bp.get("/v1/assistants")
 def list_assistants():
+    """List all assistants. / 列出所有助手。"""
     items = list(state.assistants.values())
     return jsonify(paginate(items).to_dict())
 
 
 @bp.get("/v1/assistants/<assistant_id>")
 def get_assistant(assistant_id: str):
+    """Retrieve an assistant by ID. / 根据 ID 检索助手。"""
     record = state.assistants.get(assistant_id)
     if record is None:
         raise ApiError(404, "assistant not found", "not_found_error", code="assistant_not_found")
@@ -58,6 +61,7 @@ def get_assistant(assistant_id: str):
 
 @bp.post("/v1/assistants/<assistant_id>")
 def modify_assistant(assistant_id: str):
+    """Modify an existing assistant. / 修改现有助手。"""
     record = state.assistants.get(assistant_id)
     if record is None:
         raise ApiError(404, "assistant not found", "not_found_error", code="assistant_not_found")
@@ -70,6 +74,7 @@ def modify_assistant(assistant_id: str):
 
 @bp.delete("/v1/assistants/<assistant_id>")
 def delete_assistant(assistant_id: str):
+    """Delete an assistant. / 删除助手。"""
     if state.assistants.pop(assistant_id, None) is None:
         raise ApiError(404, "assistant not found", "not_found_error", code="assistant_not_found")
     return ("", 204)
@@ -80,6 +85,7 @@ def delete_assistant(assistant_id: str):
 
 @bp.post("/v1/threads")
 def create_thread():
+    """Create a new thread. / 创建新线程。"""
     payload = request.get_json(silent=True) or {}
     thread_id = gen_thread_id()
     record = {
@@ -94,6 +100,7 @@ def create_thread():
 
 @bp.get("/v1/threads/<thread_id>")
 def get_thread(thread_id: str):
+    """Retrieve a thread by ID. / 根据 ID 检索线程。"""
     record = state.threads.get(thread_id)
     if record is None:
         raise ApiError(404, "thread not found", "not_found_error", code="thread_not_found")
@@ -102,6 +109,7 @@ def get_thread(thread_id: str):
 
 @bp.post("/v1/threads/<thread_id>")
 def modify_thread(thread_id: str):
+    """Modify a thread's metadata. / 修改线程的元数据。"""
     record = state.threads.get(thread_id)
     if record is None:
         raise ApiError(404, "thread not found", "not_found_error", code="thread_not_found")
@@ -113,6 +121,7 @@ def modify_thread(thread_id: str):
 
 @bp.delete("/v1/threads/<thread_id>")
 def delete_thread(thread_id: str):
+    """Delete a thread. / 删除线程。"""
     if state.threads.pop(thread_id, None) is None:
         raise ApiError(404, "thread not found", "not_found_error", code="thread_not_found")
     return ("", 204)
@@ -123,6 +132,7 @@ def delete_thread(thread_id: str):
 
 @bp.post("/v1/threads/<thread_id>/messages")
 def create_message(thread_id: str):
+    """Create a message in a thread. / 在线程中创建消息。"""
     thread = state.threads.get(thread_id)
     if thread is None:
         raise ApiError(404, "thread not found", "not_found_error", code="thread_not_found")
@@ -137,12 +147,14 @@ def create_message(thread_id: str):
 
 @bp.get("/v1/threads/<thread_id>/messages")
 def list_messages(thread_id: str):
+    """List messages in a thread. / 列出线程中的消息。"""
     items = [m for m in state.messages.values() if m.get("thread_id") == thread_id]
     return jsonify(paginate(items).to_dict())
 
 
 @bp.get("/v1/threads/<thread_id>/messages/<message_id>")
 def get_message(thread_id: str, message_id: str):
+    """Retrieve a specific message. / 检索特定消息。"""
     record = state.messages.get(message_id)
     if record is None or record.get("thread_id") != thread_id:
         raise ApiError(404, "message not found", "not_found_error", code="message_not_found")
@@ -154,6 +166,7 @@ def get_message(thread_id: str, message_id: str):
 
 @bp.post("/v1/threads/<thread_id>/runs")
 def create_run(thread_id: str):
+    """Create a run for a thread. / 为线程创建运行。"""
     thread = state.threads.get(thread_id)
     if thread is None:
         raise ApiError(404, "thread not found", "not_found_error", code="thread_not_found")
@@ -165,19 +178,21 @@ def create_run(thread_id: str):
     record = asst_stub.initial_run(thread_id, assistant_id, run_id)
     if "instructions" in payload:
         record["instructions"] = payload["instructions"]
-    record["status"] = "completed"  # stub: complete immediately
+    record["status"] = "completed"  # stub: complete immediately / 存根：立即完成
     state.runs[run_id] = record
     return jsonify(record)
 
 
 @bp.get("/v1/threads/<thread_id>/runs")
 def list_runs(thread_id: str):
+    """List runs for a thread. / 列出线程的运行。"""
     items = [r for r in state.runs.values() if r.get("thread_id") == thread_id]
     return jsonify(paginate(items).to_dict())
 
 
 @bp.get("/v1/threads/<thread_id>/runs/<run_id>")
 def get_run(thread_id: str, run_id: str):
+    """Retrieve a specific run. / 检索特定运行。"""
     record = state.runs.get(run_id)
     if record is None or record.get("thread_id") != thread_id:
         raise ApiError(404, "run not found", "not_found_error", code="run_not_found")
@@ -186,6 +201,7 @@ def get_run(thread_id: str, run_id: str):
 
 @bp.post("/v1/threads/<thread_id>/runs/<run_id>")
 def modify_run(thread_id: str, run_id: str):
+    """Modify a run's metadata. / 修改运行的元数据。"""
     record = state.runs.get(run_id)
     if record is None or record.get("thread_id") != thread_id:
         raise ApiError(404, "run not found", "not_found_error", code="run_not_found")
@@ -197,6 +213,7 @@ def modify_run(thread_id: str, run_id: str):
 
 @bp.post("/v1/threads/<thread_id>/runs/<run_id>/cancel")
 def cancel_run(thread_id: str, run_id: str):
+    """Cancel a run. / 取消运行。"""
     record = state.runs.get(run_id)
     if record is None or record.get("thread_id") != thread_id:
         raise ApiError(404, "run not found", "not_found_error", code="run_not_found")
@@ -207,6 +224,7 @@ def cancel_run(thread_id: str, run_id: str):
 
 @bp.post("/v1/threads/<thread_id>/runs/<run_id>/steps")
 def create_run_step(thread_id: str, run_id: str):
+    """Create a run step. / 创建运行步骤。"""
     record = state.runs.get(run_id)
     if record is None or record.get("thread_id") != thread_id:
         raise ApiError(404, "run not found", "not_found_error", code="run_not_found")
@@ -227,6 +245,7 @@ def create_run_step(thread_id: str, run_id: str):
 
 @bp.get("/v1/threads/<thread_id>/runs/<run_id>/steps/<step_id>")
 def get_run_step(thread_id: str, run_id: str, step_id: str):
+    """Retrieve a specific run step. / 检索特定运行步骤。"""
     record = state.runs.get(run_id)
     if record is None or record.get("thread_id") != thread_id:
         raise ApiError(404, "run not found", "not_found_error", code="run_not_found")
@@ -245,6 +264,7 @@ def get_run_step(thread_id: str, run_id: str, step_id: str):
 
 @bp.post("/v1/threads/<thread_id>/runs/<run_id>/submit_tool_outputs")
 def submit_tool_outputs(thread_id: str, run_id: str):
+    """Submit tool outputs for a run. / 为运行提交工具输出。"""
     record = state.runs.get(run_id)
     if record is None or record.get("thread_id") != thread_id:
         raise ApiError(404, "run not found", "not_found_error", code="run_not_found")

@@ -1,8 +1,10 @@
 """MCP tools for the A5.2 MCP protection management surface.
+MCP A5.2 保护管理面工具。
 
 Wraps the rulebook stub (:mod:`xijian_api.stubs.mcp_rules`) and the
 protection orchestrator stub (:mod:`xijian_api.stubs.mcp`) as MCP tools
 registered with :mod:`xijian_api.mcp.registry`.
+将规则书桩层和保护编排器桩层封装为 MCP 工具。
 
 These are *management* tools — rule CRUD, world policy, safety-stop
 lifecycle, audit queries, and snapshot dump/sanitize/restore.  They are
@@ -11,44 +13,48 @@ which the registry runs automatically for any tool that declares an
 ``action_kind``.  Every tool here uses ``action_kind=None`` so the
 management surface stays operable even while the gate is denying
 desktop-control calls.
+这些是*管理*工具 — 规则 CRUD、世界策略、安全停止生命周期、审计查询和快照转储/清理/恢复。
+它们*不是*门禁本身：门禁是 :func:`xijian_api.stubs.mcp.check`，注册表自动为声明
+``action_kind`` 的工具运行。此处所有工具使用 ``action_kind=None``，
+使管理面在门禁拒绝桌面控制调用时仍保持可操作。
 
-Tools registered
+Tools registered / 已注册工具
 ----------------
 
-Rules:
+Rules / 规则:
 
-* ``mcp_rule_list``    — list rules (active or all)
-* ``mcp_rule_create``  — create a rule
-* ``mcp_rule_get``     — fetch a rule by id
-* ``mcp_rule_update``  — patch mutable rule fields
-* ``mcp_rule_delete``  — delete a rule
+* ``mcp_rule_list``    — list rules (active or all) / 列出规则
+* ``mcp_rule_create``  — create a rule / 创建规则
+* ``mcp_rule_get``     — fetch a rule by id / 按 ID 获取规则
+* ``mcp_rule_update``  — patch mutable rule fields / 修补可变规则字段
+* ``mcp_rule_delete``  — delete a rule / 删除规则
 
-World policy:
+World policy / 世界策略:
 
-* ``mcp_policy_get``    — read the per-world MCP policy
-* ``mcp_policy_set``    — mutate the per-world policy
-* ``mcp_policy_reset``  — drop the per-world policy entry
+* ``mcp_policy_get``    — read the per-world MCP policy / 读取世界 MCP 策略
+* ``mcp_policy_set``    — mutate the per-world policy / 修改世界策略
+* ``mcp_policy_reset``  — drop the per-world policy entry / 删除世界策略条目
 
-Audit:
+Audit / 审计:
 
-* ``mcp_audit_list``   — list audit entries (filtered)
-* ``mcp_audit_count``  — count audit entries (filtered)
+* ``mcp_audit_list``   — list audit entries (filtered) / 列出审计条目
+* ``mcp_audit_count``  — count audit entries (filtered) / 计数审计条目
 
-Safety stop:
+Safety stop / 安全停止:
 
-* ``mcp_safety_stop_initiate`` — initiate a safety stop
-* ``mcp_safety_stop_list``     — list freeze records
-* ``mcp_safety_stop_get``      — fetch a freeze by id
-* ``mcp_safety_stop_confirm``  — confirm (sanitize + restore)
-* ``mcp_safety_stop_cancel``   — cancel a pending freeze
+* ``mcp_safety_stop_initiate`` — initiate a safety stop / 发起安全停止
+* ``mcp_safety_stop_list``     — list freeze records / 列出冻结记录
+* ``mcp_safety_stop_get``      — fetch a freeze by id / 按 ID 获取冻结
+* ``mcp_safety_stop_confirm``  — confirm (sanitize + restore) / 确认（清理+恢复）
+* ``mcp_safety_stop_cancel``   — cancel a pending freeze / 取消待定冻结
 
-Snapshots:
+Snapshots / 快照:
 
-* ``mcp_snapshot_list``     — list snapshot summaries
-* ``mcp_snapshot_get``      — fetch a snapshot by id
-* ``mcp_snapshot_create``   — dump a new snapshot
-* ``mcp_snapshot_sanitize`` — sanitize a snapshot in place
-* ``mcp_snapshot_restore``  — restore live state from a snapshot
+* ``mcp_snapshot_list``     — list snapshot summaries / 列出快照摘要
+* ``mcp_snapshot_get``      — fetch a snapshot by id / 按 ID 获取快照
+* ``mcp_snapshot_create``   — dump a new snapshot / 转储新快照
+* ``mcp_snapshot_sanitize`` — sanitize a snapshot in place / 就地清理快照
+* ``mcp_snapshot_restore``  — restore live state from a snapshot / 从快照恢复活动状态
 """
 
 from __future__ import annotations
@@ -61,7 +67,7 @@ from xijian_api.stubs import mcp_rules as rules_stub
 
 
 # ---------------------------------------------------------------------------
-# Rule handlers
+# Rule handlers / 规则处理器
 # ---------------------------------------------------------------------------
 
 
@@ -135,7 +141,7 @@ def _mcp_rule_delete(args: dict[str, Any], ctx: dict[str, Any]) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# World policy handlers
+# World policy handlers / 世界策略处理器
 # ---------------------------------------------------------------------------
 
 
@@ -169,7 +175,7 @@ def _mcp_policy_reset(args: dict[str, Any], ctx: dict[str, Any]) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Audit handlers
+# Audit handlers / 审计处理器
 # ---------------------------------------------------------------------------
 
 
@@ -192,7 +198,7 @@ def _mcp_audit_count(args: dict[str, Any], ctx: dict[str, Any]) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Safety-stop handlers
+# Safety-stop handlers / 安全停止处理器
 # ---------------------------------------------------------------------------
 
 
@@ -242,7 +248,7 @@ def _mcp_safety_stop_cancel(args: dict[str, Any], ctx: dict[str, Any]) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Snapshot handlers
+# Snapshot handlers / 快照处理器
 # ---------------------------------------------------------------------------
 
 
@@ -290,19 +296,19 @@ def _mcp_snapshot_restore(args: dict[str, Any], ctx: dict[str, Any]) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Registration — rules
+# Registration — rules / 注册 — 规则
 # ---------------------------------------------------------------------------
 
 
 register_tool(
     name="mcp_rule_list",
-    description="List MCP rules. Set active_only=true to return only active rules.",
+    description="List MCP rules. Set active_only=true to return only active rules. / 列出 MCP 规则。设置 active_only=true 仅返回活跃规则。",
     input_schema={
         "type": "object",
         "properties": {
-            "active_only": {"type": "boolean", "description": "If true, return only active rules."},
-            "action_kind": {"type": "string", "description": "Filter by action kind (e.g. 'shell', 'file_delete')."},
-            "mode": {"type": "string", "description": "Filter by mode ('blacklist' or 'whitelist')."},
+            "active_only": {"type": "boolean", "description": "If true, return only active rules. / 若为 true，仅返回活跃规则。"},
+            "action_kind": {"type": "string", "description": "Filter by action kind / 按操作类型筛选"},
+            "mode": {"type": "string", "description": "Filter by mode ('blacklist' or 'whitelist') / 按模式筛选"},
         },
         "required": [],
     },
@@ -314,15 +320,15 @@ register_tool(
 
 register_tool(
     name="mcp_rule_create",
-    description="Create an MCP protection rule (blacklist/whitelist entry for the gate).",
+    description="Create an MCP protection rule (blacklist/whitelist entry for the gate). / 创建 MCP 保护规则（门禁的黑名单/白名单条目）。",
     input_schema={
         "type": "object",
         "properties": {
-            "action_kind": {"type": "string", "description": "One of the 8 A5.2 action kinds."},
-            "pattern": {"type": "string", "description": "Regex pattern the gate matches against flattened tool args."},
-            "mode": {"type": "string", "description": "'blacklist' (block on hit) or 'whitelist' (allow on hit)."},
-            "severity": {"type": "integer", "description": "1..5 (1 advisory, 5 hard block). Defaults to 3."},
-            "is_active": {"type": "boolean", "description": "Whether the rule is active. Defaults to true."},
+            "action_kind": {"type": "string", "description": "One of the 8 A5.2 action kinds. / 8 种 A5.2 操作类型之一。"},
+            "pattern": {"type": "string", "description": "Regex pattern / 正则表达式模式"},
+            "mode": {"type": "string", "description": "'blacklist' (block on hit) or 'whitelist' (allow on hit). / 黑名单或白名单。"},
+            "severity": {"type": "integer", "description": "1..5 (1 advisory, 5 hard block). Defaults to 3. / 严重级别。"},
+            "is_active": {"type": "boolean", "description": "Whether the rule is active. Defaults to true. / 规则是否活跃。"},
         },
         "required": ["action_kind", "pattern", "mode"],
     },
@@ -333,11 +339,11 @@ register_tool(
 
 register_tool(
     name="mcp_rule_get",
-    description="Fetch a single MCP rule by id.",
+    description="Fetch a single MCP rule by id. / 按 ID 获取单个 MCP 规则。",
     input_schema={
         "type": "object",
         "properties": {
-            "rule_id": {"type": "string", "description": "The rule id to fetch."},
+            "rule_id": {"type": "string", "description": "The rule id to fetch. / 要获取的规则 ID。"},
         },
         "required": ["rule_id"],
     },
@@ -349,11 +355,11 @@ register_tool(
 
 register_tool(
     name="mcp_rule_update",
-    description="Patch mutable MCP rule fields (action_kind, pattern, mode, severity, is_active).",
+    description="Patch mutable MCP rule fields (action_kind, pattern, mode, severity, is_active). / 修补可变 MCP 规则字段。",
     input_schema={
         "type": "object",
         "properties": {
-            "rule_id": {"type": "string", "description": "The rule id to update."},
+            "rule_id": {"type": "string", "description": "The rule id to update. / 要更新的规则 ID。"},
             "action_kind": {"type": "string"},
             "pattern": {"type": "string"},
             "mode": {"type": "string"},
@@ -369,11 +375,11 @@ register_tool(
 
 register_tool(
     name="mcp_rule_delete",
-    description="Delete an MCP rule by id.",
+    description="Delete an MCP rule by id. / 按 ID 删除 MCP 规则。",
     input_schema={
         "type": "object",
         "properties": {
-            "rule_id": {"type": "string", "description": "The rule id to delete."},
+            "rule_id": {"type": "string", "description": "The rule id to delete. / 要删除的规则 ID。"},
         },
         "required": ["rule_id"],
     },
@@ -384,17 +390,17 @@ register_tool(
 
 
 # ---------------------------------------------------------------------------
-# Registration — world policy
+# Registration — world policy / 注册 — 世界策略
 # ---------------------------------------------------------------------------
 
 
 register_tool(
     name="mcp_policy_get",
-    description="Read the per-world MCP policy (default verdict + lockout_until).",
+    description="Read the per-world MCP policy (default verdict + lockout_until). / 读取世界 MCP 策略（默认判决 + 锁定截止时间）。",
     input_schema={
         "type": "object",
         "properties": {
-            "world_id": {"type": "string", "description": "The world id to read policy for."},
+            "world_id": {"type": "string", "description": "The world id to read policy for. / 要读取策略的世界 ID。"},
         },
         "required": ["world_id"],
     },
@@ -406,17 +412,14 @@ register_tool(
 
 register_tool(
     name="mcp_policy_set",
-    description=(
-        "Mutate the per-world MCP policy. Pass 'default' (allow/deny), "
-        "'lockout_until' (unix ts), and/or 'clear_lockout' (true to drop lockout)."
-    ),
+    description="Mutate the per-world MCP policy. / 修改世界 MCP 策略。",
     input_schema={
         "type": "object",
         "properties": {
-            "world_id": {"type": "string", "description": "The world id to update policy for."},
-            "default": {"type": "string", "description": "Default verdict for non-matching actions: 'allow' or 'deny'."},
-            "lockout_until": {"type": "number", "description": "Unix ts until which the world is locked out."},
-            "clear_lockout": {"type": "boolean", "description": "If true, clear any active lockout (cold-restart reset)."},
+            "world_id": {"type": "string", "description": "The world id to update policy for. / 要更新策略的世界 ID。"},
+            "default": {"type": "string", "description": "Default verdict: 'allow' or 'deny'. / 默认判决。"},
+            "lockout_until": {"type": "number", "description": "Unix ts until which the world is locked out. / 世界锁定截止的 Unix 时间戳。"},
+            "clear_lockout": {"type": "boolean", "description": "If true, clear any active lockout. / 若为 true，清除任何活跃锁定。"},
         },
         "required": ["world_id"],
     },
@@ -427,11 +430,11 @@ register_tool(
 
 register_tool(
     name="mcp_policy_reset",
-    description="Drop the per-world MCP policy entry so the world starts from defaults.",
+    description="Drop the per-world MCP policy entry so the world starts from defaults. / 删除世界 MCP 策略条目，使世界从默认值开始。",
     input_schema={
         "type": "object",
         "properties": {
-            "world_id": {"type": "string", "description": "The world id to reset policy for."},
+            "world_id": {"type": "string", "description": "The world id to reset policy for. / 要重置策略的世界 ID。"},
         },
         "required": ["world_id"],
     },
@@ -442,20 +445,20 @@ register_tool(
 
 
 # ---------------------------------------------------------------------------
-# Registration — audit
+# Registration — audit / 注册 — 审计
 # ---------------------------------------------------------------------------
 
 
 register_tool(
     name="mcp_audit_list",
-    description="List MCP audit entries (per-call verdicts), newest-first, with optional filters.",
+    description="List MCP audit entries (per-call verdicts), newest-first, with optional filters. / 列出 MCP 审计条目（每次调用的判决），最新优先，带可选筛选。",
     input_schema={
         "type": "object",
         "properties": {
-            "action_kind": {"type": "string", "description": "Filter by action kind."},
-            "world_id": {"type": "string", "description": "Filter by world id."},
-            "verdict": {"type": "string", "description": "Filter by verdict (allowed/denied/denied_lockout/...)."},
-            "limit": {"type": "integer", "description": "Max entries to return (default 50)."},
+            "action_kind": {"type": "string", "description": "Filter by action kind. / 按操作类型筛选。"},
+            "world_id": {"type": "string", "description": "Filter by world id. / 按世界 ID 筛选。"},
+            "verdict": {"type": "string", "description": "Filter by verdict. / 按判决筛选。"},
+            "limit": {"type": "integer", "description": "Max entries to return (default 50). / 最大返回条目数。"},
         },
         "required": [],
     },
@@ -467,13 +470,13 @@ register_tool(
 
 register_tool(
     name="mcp_audit_count",
-    description="Count MCP audit entries matching the given filters.",
+    description="Count MCP audit entries matching the given filters. / 计数匹配给定筛选条件的 MCP 审计条目。",
     input_schema={
         "type": "object",
         "properties": {
-            "action_kind": {"type": "string", "description": "Filter by action kind."},
-            "world_id": {"type": "string", "description": "Filter by world id."},
-            "verdict": {"type": "string", "description": "Filter by verdict."},
+            "action_kind": {"type": "string", "description": "Filter by action kind. / 按操作类型筛选。"},
+            "world_id": {"type": "string", "description": "Filter by world id. / 按世界 ID 筛选。"},
+            "verdict": {"type": "string", "description": "Filter by verdict. / 按判决筛选。"},
         },
         "required": [],
     },
@@ -484,19 +487,19 @@ register_tool(
 
 
 # ---------------------------------------------------------------------------
-# Registration — safety stop
+# Registration — safety stop / 注册 — 安全停止
 # ---------------------------------------------------------------------------
 
 
 register_tool(
     name="mcp_safety_stop_initiate",
-    description="Initiate a safety stop (freeze MCP, dump snapshot, await confirm/cancel).",
+    description="Initiate a safety stop (freeze MCP, dump snapshot, await confirm/cancel). / 发起安全停止（冻结 MCP、转储快照、等待确认/取消）。",
     input_schema={
         "type": "object",
         "properties": {
-            "reason": {"type": "string", "description": "Reason for the safety stop."},
-            "world_id": {"type": "string", "description": "World id to freeze."},
-            "source": {"type": "string", "description": "Source of the trigger (e.g. 'hotkey', 'api')."},
+            "reason": {"type": "string", "description": "Reason for the safety stop. / 安全停止的原因。"},
+            "world_id": {"type": "string", "description": "World id to freeze. / 要冻结的世界 ID。"},
+            "source": {"type": "string", "description": "Source of the trigger. / 触发器来源。"},
         },
         "required": [],
     },
@@ -507,13 +510,13 @@ register_tool(
 
 register_tool(
     name="mcp_safety_stop_list",
-    description="List safety-stop freeze records, newest-first, with optional filters.",
+    description="List safety-stop freeze records, newest-first, with optional filters. / 列出安全停止冻结记录，最新优先，带可选筛选。",
     input_schema={
         "type": "object",
         "properties": {
-            "world_id": {"type": "string", "description": "Filter by world id."},
-            "status": {"type": "string", "description": "Filter by status (frozen/awaiting_confirm/restored/cancelled/lockout)."},
-            "limit": {"type": "integer", "description": "Max entries to return (default 50)."},
+            "world_id": {"type": "string", "description": "Filter by world id. / 按世界 ID 筛选。"},
+            "status": {"type": "string", "description": "Filter by status. / 按状态筛选。"},
+            "limit": {"type": "integer", "description": "Max entries to return (default 50). / 最大返回条目数。"},
         },
         "required": [],
     },
@@ -525,11 +528,11 @@ register_tool(
 
 register_tool(
     name="mcp_safety_stop_get",
-    description="Fetch a single safety-stop freeze record by id.",
+    description="Fetch a single safety-stop freeze record by id. / 按 ID 获取单个安全停止冻结记录。",
     input_schema={
         "type": "object",
         "properties": {
-            "freeze_id": {"type": "string", "description": "The freeze id to fetch."},
+            "freeze_id": {"type": "string", "description": "The freeze id to fetch. / 要获取的冻结 ID。"},
         },
         "required": ["freeze_id"],
     },
@@ -541,11 +544,11 @@ register_tool(
 
 register_tool(
     name="mcp_safety_stop_confirm",
-    description="Confirm a safety stop: sanitize the snapshot and restore live state from it.",
+    description="Confirm a safety stop: sanitize the snapshot and restore live state from it. / 确认安全停止：清理快照并从快照恢复活动状态。",
     input_schema={
         "type": "object",
         "properties": {
-            "freeze_id": {"type": "string", "description": "The freeze id to confirm."},
+            "freeze_id": {"type": "string", "description": "The freeze id to confirm. / 要确认的冻结 ID。"},
         },
         "required": ["freeze_id"],
     },
@@ -556,12 +559,12 @@ register_tool(
 
 register_tool(
     name="mcp_safety_stop_cancel",
-    description="Cancel a pending safety stop (keeps the freeze on disk for inspection).",
+    description="Cancel a pending safety stop (keeps the freeze on disk for inspection). / 取消待定安全停止（保留冻结在磁盘上供检查）。",
     input_schema={
         "type": "object",
         "properties": {
-            "freeze_id": {"type": "string", "description": "The freeze id to cancel."},
-            "reason": {"type": "string", "description": "Optional reason recorded on the freeze."},
+            "freeze_id": {"type": "string", "description": "The freeze id to cancel. / 要取消的冻结 ID。"},
+            "reason": {"type": "string", "description": "Optional reason / 可选原因"},
         },
         "required": ["freeze_id"],
     },
@@ -571,19 +574,19 @@ register_tool(
 
 
 # ---------------------------------------------------------------------------
-# Registration — snapshots
+# Registration — snapshots / 注册 — 快照
 # ---------------------------------------------------------------------------
 
 
 register_tool(
     name="mcp_snapshot_list",
-    description="List MCP snapshot summaries (without payload), newest-first, with optional filters.",
+    description="List MCP snapshot summaries (without payload), newest-first, with optional filters. / 列出 MCP 快照摘要（不含负载），最新优先，带可选筛选。",
     input_schema={
         "type": "object",
         "properties": {
-            "world_id": {"type": "string", "description": "Filter by world id."},
-            "reason": {"type": "string", "description": "Filter by reason (safety_stop/manual/pre_freeze)."},
-            "limit": {"type": "integer", "description": "Max entries to return (default 50)."},
+            "world_id": {"type": "string", "description": "Filter by world id. / 按世界 ID 筛选。"},
+            "reason": {"type": "string", "description": "Filter by reason. / 按原因筛选。"},
+            "limit": {"type": "integer", "description": "Max entries to return (default 50). / 最大返回条目数。"},
         },
         "required": [],
     },
@@ -595,11 +598,11 @@ register_tool(
 
 register_tool(
     name="mcp_snapshot_get",
-    description="Fetch a single MCP snapshot by id (includes payload).",
+    description="Fetch a single MCP snapshot by id (includes payload). / 按 ID 获取单个 MCP 快照（含负载）。",
     input_schema={
         "type": "object",
         "properties": {
-            "snapshot_id": {"type": "string", "description": "The snapshot id to fetch."},
+            "snapshot_id": {"type": "string", "description": "The snapshot id to fetch. / 要获取的快照 ID。"},
         },
         "required": ["snapshot_id"],
     },
@@ -611,12 +614,12 @@ register_tool(
 
 register_tool(
     name="mcp_snapshot_create",
-    description="Dump a new MCP snapshot of the protected state buckets (worlds/characters/memory/sessions).",
+    description="Dump a new MCP snapshot of the protected state buckets. / 转储受保护状态桶的新 MCP 快照。",
     input_schema={
         "type": "object",
         "properties": {
-            "world_id": {"type": "string", "description": "Optional world id to scope the snapshot."},
-            "reason": {"type": "string", "description": "Reason tag (safety_stop/manual/pre_freeze). Defaults to 'pre_freeze'."},
+            "world_id": {"type": "string", "description": "Optional world id to scope the snapshot. / 可选的范围限定世界 ID。"},
+            "reason": {"type": "string", "description": "Reason tag / 原因标签"},
         },
         "required": [],
     },
@@ -627,11 +630,11 @@ register_tool(
 
 register_tool(
     name="mcp_snapshot_sanitize",
-    description="Sanitize a snapshot in place (strip A5.1 forbidden-word substrings from string leaves).",
+    description="Sanitize a snapshot in place (strip A5.1 forbidden-word substrings from string leaves). / 就地清理快照（从字符串叶子节点移除 A5.1 禁用词子串）。",
     input_schema={
         "type": "object",
         "properties": {
-            "snapshot_id": {"type": "string", "description": "The snapshot id to sanitize."},
+            "snapshot_id": {"type": "string", "description": "The snapshot id to sanitize. / 要清理的快照 ID。"},
         },
         "required": ["snapshot_id"],
     },
@@ -642,11 +645,11 @@ register_tool(
 
 register_tool(
     name="mcp_snapshot_restore",
-    description="Restore live state from a snapshot (sanitizes first if not already sanitized).",
+    description="Restore live state from a snapshot (sanitizes first if not already sanitized). / 从快照恢复活动状态（若尚未清理则先清理）。",
     input_schema={
         "type": "object",
         "properties": {
-            "snapshot_id": {"type": "string", "description": "The snapshot id to restore from."},
+            "snapshot_id": {"type": "string", "description": "The snapshot id to restore from. / 要恢复的快照 ID。"},
         },
         "required": ["snapshot_id"],
     },

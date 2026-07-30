@@ -1,13 +1,19 @@
 # XiJian API server configuration.
+# XiJian API 服务配置文件。
 # Single source of truth for everything API-related: server, auth,
 # storage layout (including model checkpoints), backend selection,
 # model registry, AI runtime defaults, and feature toggles.
+# 与 API 相关的所有内容的唯一数据源：服务、认证、存储布局（包括模型检查点）、
+# 后端选择、模型注册表、AI 运行时默认设置、功能开关。
 #
 # Location is resolved by xijian_api.config: $XIJIAN_CONFIG > ./config.toml
 # > <repo>/config.toml. Copy this file to one of those paths and edit.
+# 配置文件位置由 xijian_api.config 解析：$XIJIAN_CONFIG > ./config.toml
+# > <仓库根目录>/config.toml。将本文件复制到上述路径之一后编辑。
 
 # ---------------------------------------------------------------------------
-# Server
+# Server — server options
+# 服务端选项
 # ---------------------------------------------------------------------------
 
 [server]
@@ -19,7 +25,8 @@ testing = false
 api_version = "1.0.0"
 
 # ---------------------------------------------------------------------------
-# Auth
+# Auth — authentication settings
+# 认证设置
 # ---------------------------------------------------------------------------
 
 [auth]
@@ -27,12 +34,17 @@ token_file = "/tmp/xijian-{pid}.token"
 
 # ---------------------------------------------------------------------------
 # Storage layout — single base directory, per-type subfolders.
+# 存储布局 — 单一基础目录，按类型分子目录。
 #
 # All model checkpoints + user uploads live under `base_dir`.  Model
 # files are kept under `<base_dir>/<models_subdir>/<type>/<id>/<file>`
 # (created on demand by the backend loader).  ``models_subdir`` exists
 # so operators who want to put checkpoints on a different filesystem
 # (symlink, separate volume, etc.) only edit one field.
+# 所有模型检查点和用户上传文件都位于 `base_dir` 下。模型文件存放在
+# `<base_dir>/<models_subdir>/<type>/<id>/<file>`（由后端加载器按需创建）。
+# ``models_subdir`` 的存在是为了让运维人员只需修改一个字段，
+# 即可将检查点放在不同的文件系统上（符号链接、独立卷等）。
 # ---------------------------------------------------------------------------
 
 [storage]
@@ -47,6 +59,9 @@ audit_subdir = "audit"
 # installed (e.g. mlx on Linux, llama-cpp on bare macOS), the next
 # fallback in the list is tried.  ``available`` can be set to false to
 # completely disable a backend without removing the entry.
+# 每类任务的后端偏好。当默认后端未安装时（如 Linux 上的 mlx、裸 macOS 上的
+# llama-cpp），会尝试列表中的下一个备用后端。``available`` 可设置为 false
+# 来完全禁用某后端而不删除条目。
 # ---------------------------------------------------------------------------
 
 [backends.chat]
@@ -75,59 +90,85 @@ fallbacks = ["gguf"]
 
 # ---------------------------------------------------------------------------
 # OpenAI-compatible remote backend — global defaults.
+# OpenAI 兼容远程后端 — 全局默认值。
 #
 # Any [[models]] entry with ``backend = "openai"`` inherits these.
 # Per-model ``[[models]].extra`` fields override them.  Env vars
 # (``OPENAI_API_KEY``, ``OPENAI_BASE_URL``) are the last fallback so
 # secrets don't need to live in config files.
+# 任何 ``backend = "openai"`` 的 [[models]] 条目都会继承这些设置。
+# 每个模型的 ``[[models]].extra`` 字段会覆盖它们。环境变量
+# （``OPENAI_API_KEY``、``OPENAI_BASE_URL``）是最后的备用方案，
+# 因此密钥无需保存在配置文件中。
 #
 # ``transport`` selects the HTTP client: ``httpx`` (default, always
 # available) or ``openai_sdk`` (requires the ``openai`` package).
+# ``transport`` 选择 HTTP 客户端：``httpx``（默认，始终可用）
+# 或 ``openai_sdk``（需要 ``openai`` 包）。
 #
 # ``video_endpoint`` is the path appended to ``base_url`` for video
 # generation.  Set to empty string to disable video on remote backends.
+# ``video_endpoint`` 是视频生成时追加到 ``base_url`` 的路径。
+# 设置为空字符串可禁用远程后端的视频功能。
 # ---------------------------------------------------------------------------
 
 [backends.openai]
 base_url = ""              # empty = https://api.openai.com/v1
 api_key = ""               # empty = $OPENAI_API_KEY
 default_model = ""         # e.g. "gpt-4o" — usually overridden per-model
+                          # 例如 "gpt-4o" — 通常按模型覆盖
 transport = "httpx"
 headers = {}
 video_endpoint = "/video/generations"
 
 # ---------------------------------------------------------------------------
 # AI runtime defaults — used when a request does not specify one.
+# AI 运行时默认值 — 当请求未指定时使用。
 # ---------------------------------------------------------------------------
 
 [ai]
 default_max_new_tokens = 1024
 default_context_length = 8192
 mlx_cache_dir = ""           # empty = mlx default; set "~/.cache/mlx" to pin
+                              # 空 = mlx 默认；设为 "~/.cache/mlx" 固定
 gguf_n_ctx = 4096
 gguf_n_threads = 0           # 0 = auto-detect
+                              # 0 = 自动检测
 gguf_n_gpu_layers = 0        # 0 = CPU only; >0 = offload N layers to Metal/CUDA
+                              # 0 = 仅 CPU；>0 = 将 N 层卸载到 Metal/CUDA
 
 # ---------------------------------------------------------------------------
 # Model registry.  One entry per physical checkpoint.
+# 模型注册表。每个物理检查点对应一个条目。
 #
-# Field reference:
+# Field reference / 字段说明：
 #   id              — short stable id used in API paths (``/v1/models/<id>``)
+#                     用于 API 路径的简短稳定 ID（``/v1/models/<id>``）
 #   type            — chat | embeddings | tts | stt | image | video
 #   backend         — mlx | gguf
 #   filename        — model file (or directory for mlx) name; resolved
 #                     against `<storage.base_dir>/<storage.models_subdir>/<type>/<id>/`
+#                     模型文件（或 mlx 的目录）名称；
+#                     相对于 `<storage.base_dir>/<storage.models_subdir>/<type>/<id>/` 解析
 #   family          — model family hint (qwen2.5, llama3, ...); informational
+#                     模型族提示（qwen2.5、llama3 等）；仅供参考
 #   size_b          — approximate parameter count in billions; informational
+#                     近似参数量（十亿）；仅供参考
 #   quant           — quantization tag (q4_k_m, 4bit, fp16, ...); informational
-#   context_length  — context window in tokens
+#                     量化标签（q4_k_m、4bit、fp16 等）；仅供参考
+#   context_length  — context window in tokens / 上下文窗口（以 token 计）
 #   min_ram_gb      — minimum RAM to load; informational, not enforced
+#                     加载所需的最小内存；仅供参考，不强制
 #   loaded          — initial load state.  Normally leave false; flip to
 #                     true once the checkpoint is on disk and you want
 #                     it warm at startup.
+#                     初始加载状态。通常保持 false；当检查点已下载到磁盘
+#                     且希望在启动时预热时设为 true
 #
 # No models are registered by default.  Add your own below, then either
 # restart the API or POST /v1/models/<id>/load to bring it online.
+# 默认不注册任何模型。在下方添加自己的模型，然后重启 API 或
+# 发送 POST /v1/models/<id>/load 使其上线。
 # ---------------------------------------------------------------------------
 
 # Test/dev fixtures.  These three entries back the in-tree test suite
@@ -137,6 +178,11 @@ gguf_n_gpu_layers = 0        # 0 = CPU only; >0 = offload N layers to Metal/CUDA
 # without real weights on disk — production deployments must replace
 # ``backend = "mock"`` with ``"mlx"`` or ``"gguf"`` and point
 # ``filename`` at the actual checkpoint.
+# 测试/开发夹具。这三个条目为内置测试套件（tests/test_models.py 按其 ID 引用）
+# 和本地 ``curl`` 测试加载/聊天路由提供支持。三者都使用 ``mock`` 聊天后端，
+# 因此可在任何未安装 mlx/llama_cpp 且磁盘上没有实际权重文件的主机上运行
+# — 生产部署必须将 ``backend = "mock"`` 替换为 ``"mlx"`` 或 ``"gguf"``，
+# 并将 ``filename`` 指向实际的检查点。
 
 [[models]]
 id = "qwen2.5-7b-mlx-4bit"
@@ -177,6 +223,8 @@ loaded = false
 # Example: remote OpenAI-compatible chat model.  Uncomment and fill in
 # your base_url + api_key (or set $OPENAI_API_KEY) to use a remote
 # endpoint instead of a local backend.
+# 示例：远程 OpenAI 兼容聊天模型。取消注释并填入 base_url + api_key
+# （或设置 $OPENAI_API_KEY）以使用远程端点替代本地后端。
 #
 # [[models]]
 # id = "gpt-4o-remote"
@@ -192,13 +240,15 @@ loaded = false
 # api_key = ""                              # or set $OPENAI_API_KEY
 
 # ---------------------------------------------------------------------------
-# Feature toggles
+# Feature toggles / 功能开关
 # ---------------------------------------------------------------------------
 
 [features]
 # When ``seed_default_data`` is false the in-memory stub stores start
 # empty.  Flip it on only for local demos where you want a pre-populated
 # character / world / interaction set out of the box.
+# 当 ``seed_default_data`` 为 false 时，内存中的虚拟数据存储初始为空。
+# 仅在需要开箱即用的预填充角色/世界/交互集的本地演示中开启。
 seed_default_data = false
 protection_module = true
 rate_limit = false
@@ -206,17 +256,25 @@ dev_test_emit = false
 
 # ---------------------------------------------------------------------------
 # System overload protection (A5.4)
+# 系统过载保护（A5.4）
 #
 # ``overload_monitor`` flips the background 1-Hz sampler on / off.
 # It defaults to true so production deployments run the guard; the
 # test suite and CI set ``XIJIAN_OVERLOAD_MONITOR=0`` instead of
 # editing this file.
+# ``overload_monitor`` 开启/关闭后台 1Hz 采样器。默认开启以便生产环境
+# 运行保护；测试套件和 CI 通过设置 ``XIJIAN_OVERLOAD_MONITOR=0``
+# 来关闭，而非编辑此文件。
 #
 # ``overload_tier`` is the *recommended default* at first boot.  The
 # user can change it at runtime via PATCH /v1/xijian/overload/tier.
 # Per the function list v2.1, ``medium`` is right for Mac mini /
 # Mac Studio and most MacBook Pros; ``strict`` is right for MacBook
 # Air (fan-less).
+# ``overload_tier`` 是首次启动时的*推荐默认值*。用户可以在运行时
+# 通过 PATCH /v1/xijian/overload/tier 更改。根据功能清单 v2.1，
+# ``medium`` 适用于 Mac mini / Mac Studio 和大多数 MacBook Pro；
+# ``strict`` 适用于 MacBook Air（无风扇）。
 # ---------------------------------------------------------------------------
 
 [overload]

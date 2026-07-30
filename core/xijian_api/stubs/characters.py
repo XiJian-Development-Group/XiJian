@@ -1,10 +1,16 @@
 """Stub character service — in-memory CRUD.
+角色存根服务 — 内存中的增删改查。
 
 The store starts with one demo character (``char_yuki``) so endpoints
 that exercise the canonical scenario (load/unload, state, interactions,
 …) have a known id to work with.  Operators add their own characters
 via ``POST /v1/xijian/characters``; the demo record is intentionally
 *not* removed automatically so dev workflows can rely on it.
+
+存储以一个人物 (``char_yuki``) 开始，以便执行规范场景
+(加载/卸载、状态、互动等) 的端点有已知 ID 可用。
+运营者通过 ``POST /v1/xijian/characters`` 添加自己的人物；
+演示记录有意*不*自动删除，以便开发工作流可依赖它。
 """
 
 from __future__ import annotations
@@ -15,6 +21,7 @@ from xijian_api.utils.time import now_ts
 
 
 #: Canonical demo character id used across the spec / docs / tests.
+#: 贯穿规范 / 文档 / 测试的规范演示人物 ID。
 DEFAULT_CHARACTER_ID = "char_yuki"
 
 
@@ -23,6 +30,9 @@ def seed_default() -> None:
 
     Idempotent: if a record already exists under ``char_yuki`` we leave
     it untouched.  Any user-created characters are likewise preserved.
+    填充规范演示人物 ``char_yuki``。
+    幂等：如果 ``char_yuki`` 下已存在记录，我们不触碰它。
+    任何用户创建的人物同样保留。
     """
     if DEFAULT_CHARACTER_ID in state.characters:
         return
@@ -47,6 +57,7 @@ def seed_default() -> None:
 
 
 def create(payload: dict) -> dict:
+    """Create a new character record. 创建新的人物记录。"""
     character_id = gen_character_id()
     record = {
         "id": character_id,
@@ -66,14 +77,17 @@ def create(payload: dict) -> dict:
 
 
 def list_all() -> list[dict]:
+    """List all character records. 列出所有人物记录。"""
     return list(state.characters.values())
 
 
 def get(character_id: str) -> dict | None:
+    """Get a character record by id. 通过 ID 获取人物记录。"""
     return state.characters.get(character_id)
 
 
 def update(character_id: str, patch: dict) -> dict | None:
+    """Update a character record with patch fields. 用补丁字段更新人物记录。"""
     record = state.characters.get(character_id)
     if record is None:
         return None
@@ -86,10 +100,12 @@ def update(character_id: str, patch: dict) -> dict | None:
 
 
 def delete(character_id: str) -> bool:
+    """Delete a character record by id. 通过 ID 删除人物记录。"""
     return state.characters.pop(character_id, None) is not None
 
 
 def set_loaded(character_id: str, loaded: bool) -> dict | None:
+    """Set the loaded flag on a character. 设置人物的 loaded 标志。"""
     record = state.characters.get(character_id)
     if record is None:
         return None
@@ -105,11 +121,16 @@ def get_state(character_id: str) -> dict | None:
     endpoints (``affection`` / ``mood`` / ``recent_memory_summary``).
     The A3.2 numeric fields are merged in when present so the old
     endpoint gains them for free.
+
+    返回人物状态，委托给 A3.2 状态存根。
+    为与 v1 人物状态端点向后兼容而保留。
+    A3.2 数值字段在存在时被合并，以便旧端点免费获得它们。
     """
     record = state.characters.get(character_id)
     if record is None:
         return None
     # Lazy import to avoid a circular dependency at module-load time.
+    # 惰性导入以避免模块加载时的循环依赖。
     from xijian_api.stubs import character_state as cs_stub
 
     summary = cs_stub.summary(character_id) or {}
@@ -117,6 +138,7 @@ def get_state(character_id: str) -> dict | None:
         "character_id": character_id,
         # Legacy fields — preserved verbatim so the v1 test suite
         # (``test_character_state_round_trip``) keeps passing.
+        # 旧版字段 — 原样保留，以便 v1 测试套件继续通过。
         "affection": 50,
         "mood": "neutral",
         "recent_memory_summary": f"最近的互动：与 {record.get('display_name', '?')} 的若干对话。",
@@ -124,6 +146,8 @@ def get_state(character_id: str) -> dict | None:
         # A3.2 fields — present whenever the character has a state
         # record; absent otherwise so a never-touched character
         # returns the v1 shape exactly.
+        # A3.2 字段 — 人物有状态记录时存在；否则不存在，
+        # 以便从未被触碰的人物精确返回 v1 形状。
         **(
             {
                 "values": summary.get("values"),
@@ -149,6 +173,12 @@ def update_state(character_id: str, patch: dict, *, protection_enabled: bool) ->
     fields (``hunger`` / ``thirst`` / ``health`` / ``mood_value``) are
     forwarded to the state stub which performs clamping, log writes,
     and status-machine updates.
+
+    将 ``patch`` 应用到人物状态。
+    返回 ``(state_record, error_key)``。当 ``protection_enabled``
+    为 ``False`` 时，函数以 ``error_key="protection_disabled"`` 拒绝。
+    旧版字段仍受支持以保持向后兼容；数值型 A3.2 字段
+    被转发到状态存根，由它执行钳制、日志写入和状态机更新。
     """
     record = state.characters.get(character_id)
     if record is None:
@@ -156,11 +186,14 @@ def update_state(character_id: str, patch: dict, *, protection_enabled: bool) ->
     if not protection_enabled:
         return None, "protection_disabled"
     # Lazy import — same circular-dependency concern as in get_state.
+    # 惰性导入 — 与 get_state 中相同的循环依赖问题。
     from xijian_api.stubs import character_state as cs_stub
 
     # A3.2 numeric fields.  ``mood_value`` is the v1-friendly name
     # callers can use to set the numeric mood without clashing with
     # the legacy ``mood`` text field.
+    # A3.2 数值字段。``mood_value`` 是 v1 友好的名称，
+    # 调用者可以用它设置数值情绪而不会与旧版文本 ``mood`` 字段冲突。
     numeric_patch: dict = {}
     for key in ("hunger", "thirst", "health"):
         if key in patch:
@@ -184,9 +217,10 @@ def update_state(character_id: str, patch: dict, *, protection_enabled: bool) ->
 
 
 # -------------------------------------------------------------------------
-# A3-01 Resource table CRUD helpers
+# A3-01 Resource table CRUD helpers  A3-01 资源表增删改查辅助函数
 #
 # Six resource tables store per-character asset metadata:
+# 六个资源表存储每角色资产元数据：
 #   character_models        — {character_id: {model_id, model_url, format, ...}}
 #   character_motions       — {character_id: {motion_id, animation_ref, ...}}
 #   character_voices        — {character_id: {voice_id, profile_ref, ...}}
@@ -198,13 +232,17 @@ def update_state(character_id: str, patch: dict, *, protection_enabled: bool) ->
 # are resource ids (or asset keys for the cache).  CRUD follows the same
 # pattern used by the other stubs: create via allocate-id + store, list by
 # character, get by id, update via patch, delete by id.
+# 每个桶以 character_id 为键。值是字典，其键为资源 id (或缓存的资产键)。
+# CRUD 遵循其他存根使用的相同模式：通过分配 ID + 存储创建，按角色列出，
+# 按 ID 获取，通过补丁更新，按 ID 删除。
 # -------------------------------------------------------------------------
 
 
-# ---- character_models -----------------------------------------------------
+# ---- character_models ------------------------------------------------------
 
 def create_model(character_id: str, payload: dict) -> dict:
-    mid = gen_character_id()  # reuse id generator
+    """Create a new character model record. 创建新的人物模型记录。"""
+    mid = gen_character_id()  # reuse id generator 重用 ID 生成器
     bucket = state.character_models.setdefault(character_id, {})
     record = {
         "id": mid,
@@ -222,16 +260,19 @@ def create_model(character_id: str, payload: dict) -> dict:
 
 
 def list_models(character_id: str) -> list[dict]:
+    """List all models for a character. 列出一个角色的所有模型。"""
     bucket = state.character_models.get(character_id, {})
     return list(bucket.values())
 
 
 def get_model(character_id: str, model_id: str) -> dict | None:
+    """Get a specific model record. 获取特定的模型记录。"""
     bucket = state.character_models.get(character_id, {})
     return bucket.get(model_id)
 
 
 def update_model(character_id: str, model_id: str, patch: dict) -> dict | None:
+    """Update a model record with patch fields. 用补丁字段更新模型记录。"""
     bucket = state.character_models.get(character_id, {})
     record = bucket.get(model_id)
     if record is None:
@@ -244,13 +285,15 @@ def update_model(character_id: str, model_id: str, patch: dict) -> dict | None:
 
 
 def delete_model(character_id: str, model_id: str) -> bool:
+    """Delete a model record by id. 通过 ID 删除模型记录。"""
     bucket = state.character_models.get(character_id, {})
     return bucket.pop(model_id, None) is not None
 
 
-# ---- character_motions ----------------------------------------------------
+# ---- character_motions -----------------------------------------------------
 
 def create_motion(character_id: str, payload: dict) -> dict:
+    """Create a new character motion record. 创建新的人物动作记录。"""
     mid = gen_character_id()
     bucket = state.character_motions.setdefault(character_id, {})
     record = {
@@ -268,16 +311,19 @@ def create_motion(character_id: str, payload: dict) -> dict:
 
 
 def list_motions(character_id: str) -> list[dict]:
+    """List all motions for a character. 列出一个角色的所有动作。"""
     bucket = state.character_motions.get(character_id, {})
     return list(bucket.values())
 
 
 def get_motion(character_id: str, motion_id: str) -> dict | None:
+    """Get a specific motion record. 获取特定的动作记录。"""
     bucket = state.character_motions.get(character_id, {})
     return bucket.get(motion_id)
 
 
 def update_motion(character_id: str, motion_id: str, patch: dict) -> dict | None:
+    """Update a motion record with patch fields. 用补丁字段更新动作记录。"""
     bucket = state.character_motions.get(character_id, {})
     record = bucket.get(motion_id)
     if record is None:
@@ -290,13 +336,15 @@ def update_motion(character_id: str, motion_id: str, patch: dict) -> dict | None
 
 
 def delete_motion(character_id: str, motion_id: str) -> bool:
+    """Delete a motion record by id. 通过 ID 删除动作记录。"""
     bucket = state.character_motions.get(character_id, {})
     return bucket.pop(motion_id, None) is not None
 
 
-# ---- character_voices -----------------------------------------------------
+# ---- character_voices ------------------------------------------------------
 
 def create_voice(character_id: str, payload: dict) -> dict:
+    """Create a new character voice record. 创建新的人物语音记录。"""
     vid = gen_character_id()
     bucket = state.character_voices.setdefault(character_id, {})
     record = {
@@ -314,16 +362,19 @@ def create_voice(character_id: str, payload: dict) -> dict:
 
 
 def list_voices(character_id: str) -> list[dict]:
+    """List all voices for a character. 列出一个角色的所有语音。"""
     bucket = state.character_voices.get(character_id, {})
     return list(bucket.values())
 
 
 def get_voice(character_id: str, voice_id: str) -> dict | None:
+    """Get a specific voice record. 获取特定的语音记录。"""
     bucket = state.character_voices.get(character_id, {})
     return bucket.get(voice_id)
 
 
 def update_voice(character_id: str, voice_id: str, patch: dict) -> dict | None:
+    """Update a voice record with patch fields. 用补丁字段更新语音记录。"""
     bucket = state.character_voices.get(character_id, {})
     record = bucket.get(voice_id)
     if record is None:
@@ -336,13 +387,15 @@ def update_voice(character_id: str, voice_id: str, patch: dict) -> dict | None:
 
 
 def delete_voice(character_id: str, voice_id: str) -> bool:
+    """Delete a voice record by id. 通过 ID 删除语音记录。"""
     bucket = state.character_voices.get(character_id, {})
     return bucket.pop(voice_id, None) is not None
 
 
-# ---- character_handwritings -----------------------------------------------
+# ---- character_handwritings ------------------------------------------------
 
 def create_handwriting(character_id: str, payload: dict) -> dict:
+    """Create a new character handwriting record. 创建新的人物笔迹记录。"""
     hid = gen_character_id()
     bucket = state.character_handwritings.setdefault(character_id, {})
     record = {
@@ -360,16 +413,19 @@ def create_handwriting(character_id: str, payload: dict) -> dict:
 
 
 def list_handwritings(character_id: str) -> list[dict]:
+    """List all handwritings for a character. 列出一个角色的所有笔迹。"""
     bucket = state.character_handwritings.get(character_id, {})
     return list(bucket.values())
 
 
 def get_handwriting(character_id: str, handwriting_id: str) -> dict | None:
+    """Get a specific handwriting record. 获取特定的笔迹记录。"""
     bucket = state.character_handwritings.get(character_id, {})
     return bucket.get(handwriting_id)
 
 
 def update_handwriting(character_id: str, handwriting_id: str, patch: dict) -> dict | None:
+    """Update a handwriting record with patch fields. 用补丁字段更新笔迹记录。"""
     bucket = state.character_handwritings.get(character_id, {})
     record = bucket.get(handwriting_id)
     if record is None:
@@ -382,13 +438,15 @@ def update_handwriting(character_id: str, handwriting_id: str, patch: dict) -> d
 
 
 def delete_handwriting(character_id: str, handwriting_id: str) -> bool:
+    """Delete a handwriting record by id. 通过 ID 删除笔迹记录。"""
     bucket = state.character_handwritings.get(character_id, {})
     return bucket.pop(handwriting_id, None) is not None
 
 
-# ---- character_styles -----------------------------------------------------
+# ---- character_styles ------------------------------------------------------
 
 def create_style(character_id: str, payload: dict) -> dict:
+    """Create a new character style record. 创建新的人物风格记录。"""
     sid = gen_character_id()
     bucket = state.character_styles.setdefault(character_id, {})
     record = {
@@ -406,16 +464,19 @@ def create_style(character_id: str, payload: dict) -> dict:
 
 
 def list_styles(character_id: str) -> list[dict]:
+    """List all styles for a character. 列出一个角色的所有风格。"""
     bucket = state.character_styles.get(character_id, {})
     return list(bucket.values())
 
 
 def get_style(character_id: str, style_id: str) -> dict | None:
+    """Get a specific style record. 获取特定的风格记录。"""
     bucket = state.character_styles.get(character_id, {})
     return bucket.get(style_id)
 
 
 def update_style(character_id: str, style_id: str, patch: dict) -> dict | None:
+    """Update a style record with patch fields. 用补丁字段更新风格记录。"""
     bucket = state.character_styles.get(character_id, {})
     record = bucket.get(style_id)
     if record is None:
@@ -428,13 +489,15 @@ def update_style(character_id: str, style_id: str, patch: dict) -> dict | None:
 
 
 def delete_style(character_id: str, style_id: str) -> bool:
+    """Delete a style record by id. 通过 ID 删除风格记录。"""
     bucket = state.character_styles.get(character_id, {})
     return bucket.pop(style_id, None) is not None
 
 
-# ---- character_asset_cache ------------------------------------------------
+# ---- character_asset_cache -------------------------------------------------
 
 def set_asset_cache(character_id: str, asset_key: str, payload: dict) -> dict:
+    """Set a cached asset value. 设置缓存的资产值。"""
     bucket = state.character_asset_cache.setdefault(character_id, {})
     record = {
         "character_id": character_id,
@@ -449,22 +512,27 @@ def set_asset_cache(character_id: str, asset_key: str, payload: dict) -> dict:
 
 
 def get_asset_cache(character_id: str, asset_key: str) -> dict | None:
+    """Get a cached asset by key. 通过键获取缓存的资产。"""
     bucket = state.character_asset_cache.get(character_id, {})
     return bucket.get(asset_key)
 
 
 def list_asset_cache(character_id: str) -> list[dict]:
+    """List all cached assets for a character. 列出一个角色的所有缓存资产。"""
     bucket = state.character_asset_cache.get(character_id, {})
     return list(bucket.values())
 
 
 def delete_asset_cache(character_id: str, asset_key: str) -> bool:
+    """Delete a cached asset by key. 通过键删除缓存的资产。"""
     bucket = state.character_asset_cache.get(character_id, {})
     return bucket.pop(asset_key, None) is not None
 
 
 def clear_asset_cache(character_id: str) -> int:
-    """Clear all cached assets for a character; returns count removed."""
+    """Clear all cached assets for a character; returns count removed.
+    清除角色的所有缓存资产；返回移除数量。
+    """
     bucket = state.character_asset_cache.pop(character_id, {})
     return len(bucket)
 

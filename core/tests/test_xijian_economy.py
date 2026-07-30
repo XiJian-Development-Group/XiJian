@@ -11,6 +11,11 @@ Covers two layers:
 The HTTP routes for these live under ``/v1/xijian/economy/*`` and
 ``/v1/xijian/economy/state/*`` — see the parametrized
 ``TestAuthCoverage`` block at the bottom.
+
+  测试 A4.4 经济编排器和支持存根的测试。
+  覆盖两层：``stubs.world_economy_state``（通胀/流动性边界、懒加载默认值、宏观 tick）
+  和 ``stubs.economy``（交易动词：购买/出售/奖励/转账、犯罪动词：盗窃/诈骗，带冷却和策略保护）。
+  HTTP 路由位于 ``/v1/xijian/economy/*`` 和 ``/v1/xijian/economy/state/*``。
 """
 
 from __future__ import annotations
@@ -44,6 +49,7 @@ from xijian_api.stubs.world_economy_state import (
 
 # ---------------------------------------------------------------------------
 # Fixtures
+# 测试夹具
 # ---------------------------------------------------------------------------
 
 
@@ -249,6 +255,7 @@ class TestPurchase:
         )
         assert record["kind"] == "purchase"
         # Wallets updated.
+        # 钱包 — updated.
         assert wallet_stub.get(
             wallet_stub.OWNER_USER, wallet_stub.LOCAL_USER_ID,
             funded_economy["world"], "mora",
@@ -260,6 +267,7 @@ class TestPurchase:
 
     def test_no_user_wallet(self, world_with_currency, npc):
         # User has no wallet — should refuse.
+        # 用户 — has no wallet — should refuse.
         with pytest.raises(economy_stub.EconomyError, match="user wallet"):
             economy_stub.purchase(
                 world_id=world_with_currency,
@@ -270,6 +278,7 @@ class TestPurchase:
 
     def test_no_npc_wallet(self, world_with_currency):
         # User has wallet, NPC doesn't.
+        # 用户 — has wallet, NPC doesn't.
         wallet_stub.create(
             wallet_stub.OWNER_USER, wallet_stub.LOCAL_USER_ID,
             world_with_currency, "mora", initial_balance=100,
@@ -313,6 +322,7 @@ class TestSale:
         )
         assert record["kind"] == "sale"
         # Wallets updated.
+        # 钱包 — updated.
         assert wallet_stub.get(
             wallet_stub.OWNER_USER, wallet_stub.LOCAL_USER_ID,
             funded_economy["world"], "mora",
@@ -402,6 +412,7 @@ class TestTransferUserToUser:
 class TestAttemptTheft:
     def test_blocked_when_illegal_disabled(self, funded_economy):
         # Default: allow_illegal is False.
+        # 默认 — allow_illegal is False.
         result = economy_stub.attempt_theft(
             world_id=funded_economy["world"],
             npc_id=funded_economy["npc_id"],
@@ -510,6 +521,7 @@ class TestAttemptTheft:
         assert result["success"] is True
         assert result["transaction"] is not None
         # Wallets updated.
+        # 钱包 — updated.
         assert wallet_stub.get(
             wallet_stub.OWNER_USER, wallet_stub.LOCAL_USER_ID,
             funded_economy["world"], "mora",
@@ -542,6 +554,7 @@ class TestAttemptTheft:
 
     def test_caps_at_user_balance(self, funded_economy, monkeypatch):
         # NPC tries to steal 9999, but user only has 1000 → cap to 1000.
+        # NPC — tries to steal 9999, but user only has 1000 → cap to 1000.
         eco_stub.update(funded_economy["world"], {"allow_illegal": True})
         npc = npcs_stub.get(funded_economy["npc_id"])
         npcs_stub.update(
@@ -557,6 +570,7 @@ class TestAttemptTheft:
         assert result["success"] is True
         assert result["transaction"]["amount"] == 1000.0
         # User balance now 0, NPC now 1500.
+        # 用户 — balance now 0, NPC now 1500.
         assert wallet_stub.get(
             wallet_stub.OWNER_USER, wallet_stub.LOCAL_USER_ID,
             funded_economy["world"], "mora",
@@ -644,6 +658,7 @@ class TestProbabilityHelpers:
 
 # ---------------------------------------------------------------------------
 # Convenience
+# 便捷方法
 # ---------------------------------------------------------------------------
 
 
@@ -904,6 +919,7 @@ class TestHttpEconomyState:
 
 # ---------------------------------------------------------------------------
 # Auth coverage
+# 认证 — coverage
 # ---------------------------------------------------------------------------
 
 

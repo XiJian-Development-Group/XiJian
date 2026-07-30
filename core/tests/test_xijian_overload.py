@@ -13,6 +13,9 @@ We exercise three layers:
   freezable clock so we can verify the 20 s wait deterministically.
 * **Routes** — go through the Flask test client, confirm wiring
   end-to-end (auth, error formats, status codes).
+
+  测试 A5.4 过载保护系统。
+  验证在过载事件期间和恢复窗口中的调度器行为。
 """
 
 from __future__ import annotations
@@ -290,6 +293,7 @@ class TestTier:
 
 # ---------------------------------------------------------------------------
 # Recovery handshake
+# 恢复 — handshake
 # ---------------------------------------------------------------------------
 
 
@@ -300,6 +304,7 @@ class TestRecoveryHandshake:
 
     def test_recovery_window_active_after_start(self, frozen_clock):
         # Trigger a synthetic event just to drive start_recovery.
+        # 触发器 — a synthetic event just to drive start_recovery.
         event = {
             "id": "ovl_test_start",
             "triggered_at": frozen_clock.now(),
@@ -907,6 +912,7 @@ class TestRoutesSimulate:
 
 # ---------------------------------------------------------------------------
 # Auth — overload routes must go through the same middleware as the
+# 认证 — overload routes must go through the same middleware as the
 # other xijian/* endpoints.  We test bearer enforcement here so a
 # future change that forgets the auth wrapper on a new overload route
 # trips during CI.
@@ -965,6 +971,7 @@ class TestCrossSystemTrigger:
         ov_stub.simulate_overload(METRIC_MEM)
         audit = stubs_state.safety_state.get("audit", [])
         # Overload audit entries land via _record_trigger; check we
+        # 过载 — audit entries land via _record_trigger; check we
         # at least have a recently appended record.
         kinds = [a.get("kind") for a in audit]
         # The stub does not write a fresh audit entry on every

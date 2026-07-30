@@ -20,6 +20,10 @@ The module touches three concerns:
 These tests exercise all three layers end-to-end via the Flask test
 client and direct stub calls.  The clock is monkey-patched where the
 scheduler relies on :func:`time.time` or :func:`time.gmtime`.
+
+  测试 ``stubs.events`` (A4.1) 和 HTTP 路由 ``/v1/xijian/events*``。
+  覆盖三个关注点：触发器评估（时间/间隔/概率/条件）、调度（60 秒后台 tick、冷却、优先级）、
+  跨模块链接（A5.4 过载保护）。
 """
 
 from __future__ import annotations
@@ -60,6 +64,7 @@ from xijian_api.stubs.events import (
 
 # ---------------------------------------------------------------------------
 # Fixtures
+# 测试夹具
 # ---------------------------------------------------------------------------
 
 
@@ -508,6 +513,7 @@ class TestPickFirePayload:
 
 # ---------------------------------------------------------------------------
 # CRUD — event definitions
+# CRUD — event definitions
 # ---------------------------------------------------------------------------
 
 
@@ -663,6 +669,7 @@ class TestEventCRUD:
 
 # ---------------------------------------------------------------------------
 # CRUD — fired instances
+# CRUD — fired instances
 # ---------------------------------------------------------------------------
 
 
@@ -733,6 +740,7 @@ class TestInstanceCRUD:
         # Newest first
         assert by_world[0]["fired_at"] >= by_world[-1]["fired_at"]
         # Filter by event
+        # 过滤 — by event
         only_e1 = ev_stub.list_instances(event_id=e1["id"])
         assert len(only_e1) == 2
 
@@ -793,6 +801,7 @@ class TestInstanceCRUD:
 
 # ---------------------------------------------------------------------------
 # Category toggles
+# 分类 — toggles
 # ---------------------------------------------------------------------------
 
 
@@ -837,6 +846,7 @@ class TestCategoryToggles:
 
 # ---------------------------------------------------------------------------
 # Tick — single world
+# 滴答 — single world
 # ---------------------------------------------------------------------------
 
 
@@ -896,6 +906,7 @@ class TestTickWorld:
         """A bad trigger shouldn't crash the whole tick."""
         good = self._create_event(world, name="good")
         # Patch only the good record's trigger to a corrupt dict via update.
+        # 补丁 — only the good record's trigger to a corrupt dict via update.
         # We rely on the fact that ``_evaluate_trigger`` catches exceptions.
         called = []
 
@@ -935,6 +946,7 @@ class TestTickWorld:
         # Two candidates.
         self._create_event(world, name="a")
         # Set overload to finalized-then-cleared; recovery is None now.
+        # 设置 — overload to finalized-then-cleared; recovery is None now.
         stubs_state.overload["recovery"] = {
             "status": "finalized",
             "earliest_confirm_at": 0.0,
@@ -981,6 +993,7 @@ class TestTickAll:
 
 # ---------------------------------------------------------------------------
 # Background scheduler lifecycle
+# 后台 — scheduler lifecycle
 # ---------------------------------------------------------------------------
 
 
@@ -990,6 +1003,7 @@ class TestSchedulerLifecycle:
         # Conftest sets XIJIAN_EVENT_SCHEDULER=0; opt in for this test.
         monkeypatch.setenv("XIJIAN_EVENT_SCHEDULER", "1")
         # Ensure clean.
+        # 确保 — clean.
         ev_stub.stop_scheduler()
         result = ev_stub.start_scheduler()
         assert result["started"] is True
@@ -1098,6 +1112,7 @@ class TestSummary:
 
 # ---------------------------------------------------------------------------
 # WS broadcast
+# WS 广播
 # ---------------------------------------------------------------------------
 
 
@@ -1141,6 +1156,7 @@ class TestBroadcastOnFire:
 
 # ---------------------------------------------------------------------------
 # Routes — CRUD
+# 路由 — CRUD
 # ---------------------------------------------------------------------------
 
 
@@ -1163,6 +1179,7 @@ class TestRoutesEventCRUD:
 
     def test_full_crud_roundtrip(self, client, auth_headers, world):
         # Create.
+        # 创建 — .
         create_resp = client.post(
             "/v1/xijian/events",
             json={
@@ -1184,6 +1201,7 @@ class TestRoutesEventCRUD:
         assert get_resp.get_json()["name"] == "Market Day"
 
         # List (by world).
+        # 列表 — (by world).
         list_resp = client.get(
             f"/v1/xijian/events?world_id={world}",
             headers=auth_headers,
@@ -1193,6 +1211,7 @@ class TestRoutesEventCRUD:
         assert event_id in ids
 
         # Patch.
+        # 补丁 — .
         patch_resp = client.patch(
             f"/v1/xijian/events/{event_id}",
             json={"name": "Festival Day", "priority": 99},
@@ -1202,6 +1221,7 @@ class TestRoutesEventCRUD:
         assert patch_resp.get_json()["name"] == "Festival Day"
 
         # Delete.
+        # 删除 — .
         del_resp = client.delete(
             f"/v1/xijian/events/{event_id}", headers=auth_headers
         )
@@ -1262,6 +1282,7 @@ class TestRoutesEventCRUD:
 
 # ---------------------------------------------------------------------------
 # Routes — instances
+# 路由 — instances
 # ---------------------------------------------------------------------------
 
 
@@ -1323,6 +1344,7 @@ class TestRoutesInstances:
 
 # ---------------------------------------------------------------------------
 # Routes — categories
+# 路由 — categories
 # ---------------------------------------------------------------------------
 
 
@@ -1381,6 +1403,7 @@ class TestRoutesCategoryToggles:
 
 # ---------------------------------------------------------------------------
 # Routes — scheduler control + dev tick + summary
+# 路由 — scheduler control + dev tick + summary
 # ---------------------------------------------------------------------------
 
 
@@ -1397,6 +1420,7 @@ class TestRoutesScheduler:
 
     def test_dev_tick_blocked_in_prod(self, client, auth_headers, world):
         # Default env: not dev, so the endpoint 404s.
+        # 默认 — env: not dev, so the endpoint 404s.
         rec = ev_stub.create_event(
             world_id=world,
             kind=KIND_COMMON,
@@ -1479,6 +1503,7 @@ class TestRoutesScheduler:
 
 # ---------------------------------------------------------------------------
 # Auth — every route requires Bearer
+# 认证 — every route requires Bearer
 # ---------------------------------------------------------------------------
 
 

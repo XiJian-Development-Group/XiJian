@@ -1,9 +1,7 @@
-"""MCP prompts — reusable prompt templates for common XiJian workflows.
+"""MCP prompts — 可复用的 XiJian 工作流提示词模板。
 
-Prompts are parameterised templates that the model (or the user via
-the desktop client) can render with specific arguments.  They
-encapsulate best-practice instruction patterns for common tasks like
-character creation, world building, and memory recall.
+提示词是带参数的模板，模型（或桌面客户端用户）可用特定参数渲染。
+封装了角色创建、世界构建、记忆回忆等常见任务的最佳实践指令模式。
 """
 
 from __future__ import annotations
@@ -29,7 +27,7 @@ def _register(
 
 
 def list_prompts() -> list[dict[str, Any]]:
-    """Return every registered prompt spec (without the builder)."""
+    """返回所有已注册提示词的规格 (不含构建器)。"""
     _seed_prompts()
     return [
         {k: v for k, v in p.items() if not k.startswith("_")}
@@ -38,10 +36,10 @@ def list_prompts() -> list[dict[str, Any]]:
 
 
 def get_prompt(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
-    """Render a prompt by name with the given arguments.
+    """按名称渲染提示词。
 
-    Returns ``{"messages": [{"role": ..., "content": {...}}]}``.
-    Raises ``ValueError`` if the prompt is unknown.
+    返回 ``{"messages": [{"role": ..., "content": {...}}]}``。
+    若提示词不存在，抛出 ``ValueError``。
     """
     _seed_prompts()
     record = _PROMPTS.get(name)
@@ -53,7 +51,7 @@ def get_prompt(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Prompt builders
+# Prompt builders / 提示词构建器
 # ---------------------------------------------------------------------------
 
 
@@ -144,7 +142,7 @@ def _build_npc_tick(args: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
-# Seed
+# Seed / 种子数据
 # ---------------------------------------------------------------------------
 
 

@@ -20,6 +20,8 @@ Defaults
 
 The store is keyed by ``character_id``.  Reads return a defensive copy
 so callers can't mutate the canonical record by accident.
+镜像。
+
 """
 
 from __future__ import annotations

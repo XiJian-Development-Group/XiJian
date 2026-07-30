@@ -1,4 +1,24 @@
-"""Process-wide registry of loaded model instances.
+"""进程级已加载模型实例注册表。
+
+每个 :mod:`xijian_api.ai.backends` 中的后端实例处理一个已加载的检查点；
+本注册表将 ``model_id``（在 ``config.toml`` 的 ``[[models]]`` 块中声明）
+映射到已完成 :meth:`Backend.load` 的活后端实例。
+
+本模块位于 :mod:`xijian_api.ai.registry` 之上，后者仅编目后端*类*
+（mlx / gguf / mock / ...）。加载模型遵循四步流程：
+
+1. 在 ``config.model_by_id(model_id)`` 中查找 :class:`ModelEntry`。
+2. 为 ``entry.type`` + ``entry.backend`` 选择后端类
+   （后者通常为 ``"mlx"`` 或 ``"gguf"``；测试也会注册合成的 ``"mock"`` 后端）。
+3. 实例化该类，并通过 :meth:`ModelEntry.absolute_path` 解析磁盘路径，
+   使所有模型都落在单一 ``<storage.base_dir>/<storage.models_subdir>`` 根目录下。
+4. 用路径 + kwargs（默认上下文长度、模型 ``extra`` 块、调用者提供的覆盖参数）
+   调用 :meth:`Backend.load`。
+
+注册表是进程级单例 —— 见 :func:`get_registry`。
+测试使用 :meth:`ModelRegistry.reset` 清空缓存。
+
+Process-wide registry of loaded model instances.
 
 Each backend instance in :mod:`xijian_api.ai.backends` handles one
 loaded checkpoint; this registry maps a ``model_id`` (declared in the
@@ -59,10 +79,13 @@ _TASK_GETTERS = {
 
 @dataclass
 class LoadedModel:
-    """A live, ready-to-call backend instance plus its config entry."""
+    """一个活的、可调用的后端实例及其配置条目。
+
+    A live, ready-to-call backend instance plus its config entry.
+    """
 
     entry: ModelEntry
-    instance: Any            # ChatBackend | EmbeddingBackend | ... — runtime type
+    instance: Any            # ChatBackend | EmbeddingBackend | ... — 运行时类型
     absolute_path: Path
 
     @property
@@ -75,24 +98,31 @@ class LoadedModel:
 
 
 class ModelRegistry:
-    """Process-wide pool of loaded model instances."""
+    """进程级已加载模型实例池。Process-wide pool of loaded model instances."""
 
     def __init__(self) -> None:
         self._instances: dict[str, LoadedModel] = {}
         self._locks: dict[str, threading.Lock] = {}
         self._global_lock = threading.Lock()
 
-    # -- introspection ------------------------------------------------------
+    # -- introspection / 内省 ------------------------------------------------------
 
     def list_loaded(self) -> list[str]:
-        """Return sorted ``model_id`` of every currently loaded model."""
+        """返回当前已加载的每个 ``model_id`` 的排序列表。
+
+        Return sorted ``model_id`` of every currently loaded model.
+        """
         return sorted(self._instances.keys())
 
     def is_loaded(self, model_id: str) -> bool:
         return model_id in self._instances
 
     def get(self, model_id: str) -> LoadedModel:
-        """Return the live :class:`LoadedModel` for ``model_id``.
+        """返回 ``model_id`` 对应的活 :class:`LoadedModel`。
+
+        当缓存中无实例时抛出 :class:`ModelNotLoaded`。
+
+        Return the live :class:`LoadedModel` for ``model_id``.
 
         Raises :class:`ModelNotLoaded` when no instance is cached.
         """
@@ -102,14 +132,20 @@ class ModelRegistry:
             raise ModelNotLoaded(f"model not loaded: {model_id}") from exc
 
     def entries(self) -> list[LoadedModel]:
-        """Return every loaded :class:`LoadedModel` (used by /v1/models)."""
+        """返回每个已加载的 :class:`LoadedModel`（供 /v1/models 使用）。
+
+        Return every loaded :class:`LoadedModel` (used by /v1/models).
+        """
         return list(self._instances.values())
 
-    # -- helpers ------------------------------------------------------------
+    # -- helpers / 辅助 ------------------------------------------------------------
 
     @staticmethod
     def entry_for(config: Config, model_id: str) -> ModelEntry:
-        """Look up a :class:`ModelEntry` by id; raise :class:`ModelNotFound`."""
+        """按 id 查找 :class:`ModelEntry`；未找到抛出 :class:`ModelNotFound`。
+
+        Look up a :class:`ModelEntry` by id; raise :class:`ModelNotFound`.
+        """
         entry = config.model_by_id(model_id)
         if entry is None:
             raise ModelNotFound(
@@ -120,7 +156,13 @@ class ModelRegistry:
 
     @staticmethod
     def _resolve_backend_class(task: str, backend_name: str) -> type:
-        """Find the backend class for ``task``/``backend_name``.
+        """查找 ``task``/``backend_name`` 对应的后端类。
+
+        使用公共注册表助手，它们会回退到 ``is_available()``，
+        并在请求的后端无法运行（如 Linux 上的 ``mlx``）时抛出
+        :class:`BackendUnavailable`。
+
+        Find the backend class for ``task``/``backend_name``.
 
         Uses the public registry helpers, which fall through to
         ``is_available()`` and raise :class:`BackendUnavailable` when
@@ -132,12 +174,12 @@ class ModelRegistry:
                 f"unknown task: {task}",
                 code="backend_error",
             )
-        # Empty fallbacks → must use ``backend_name`` directly; no
-        # silent substitution.  Any ``BackendUnavailable`` propagates.
+        # 空回退列表 → 必须直接使用 ``backend_name``；不做静默替换。
+        # 任何 ``BackendUnavailable`` 向上传播。
         instance = getter(name=backend_name, fallbacks=())
         return type(instance)
 
-    # -- lifecycle ----------------------------------------------------------
+    # -- lifecycle / 生命周期 ----------------------------------------------------------
 
     def load(
         self,
@@ -146,7 +188,15 @@ class ModelRegistry:
         config: Config,
         **kwargs: Any,
     ) -> LoadedModel:
-        """Load ``model_id`` into a backend instance and cache it.
+        """将 ``model_id`` 加载到后端实例并缓存。
+
+        返回生成的 :class:`LoadedModel`。幂等：当同一 ``model_id``
+        已加载时返回现有实例；kwargs 被忽略（需先 :meth:`unload` 再按新选项重载）。
+
+        ``kwargs`` 会在从 :class:`ModelEntry` 派生的默认值之后
+        转发给 :meth:`Backend.load`（调用者优先）。
+
+        Load ``model_id`` into a backend instance and cache it.
 
         Returns the resulting :class:`LoadedModel`.  Idempotent: when
         the same ``model_id`` is already loaded, the existing
@@ -175,17 +225,15 @@ class ModelRegistry:
                 ) from exc
 
             load_kwargs: dict[str, Any] = {}
-            # Extra fields from the [[models]] table land first; the
-            # caller's kwargs override them, mirroring how registries
-            # typically merge config + request.
+            # [[models]] 表的 extra 字段先进入；调用者的 kwargs 覆盖，
+            # 这模仿了注册表典型的 config + request 合并行为。
             load_kwargs.update(entry.extra)
             load_kwargs.update(kwargs)
             if entry.context_length and "context_length" not in load_kwargs:
                 load_kwargs["context_length"] = entry.context_length
 
-            # For ``backend = "openai"`` models, pass the global
-            # ``[backends.openai]`` section so :func:`resolve_config`
-            # can merge per-model overrides with global defaults.
+            # 对 ``backend = "openai"`` 的模型，传递全局 ``[backends.openai]``
+            # 以便 :func:`resolve_config` 可将逐模型覆盖与全局默认合并。
             if entry.backend == "openai":
                 oai = config.backends.openai
                 load_kwargs["_openai_section"] = {
@@ -216,7 +264,10 @@ class ModelRegistry:
             return loaded
 
     def unload(self, model_id: str) -> bool:
-        """Unload ``model_id``.  Returns ``True`` when something was removed."""
+        """卸载 ``model_id``。有移除返回 ``True``。
+
+        Unload ``model_id``.  Returns ``True`` when something was removed.
+        """
         lock = self._lock_for(model_id)
         with lock:
             loaded = self._instances.pop(model_id, None)
@@ -225,13 +276,18 @@ class ModelRegistry:
             try:
                 loaded.instance.unload()
             except Exception:
-                # Don't let backend unload glitches wedge the registry;
-                # the instance is gone from the cache either way.
+                # 别让后端卸载故障卡住注册表；
+                # 实例无论如何已从缓存移除。
                 pass
             return True
 
     def reset(self) -> None:
-        """Drop every cached instance.  Used by the test suite only.
+        """清空所有缓存实例。仅测试套件使用。
+
+        后端 ``unload()`` 尽力而为 —— 失败被吞掉，以免卡住的后端
+        阻止注册表清空。
+
+        Drop every cached instance.  Used by the test suite only.
 
         Backend ``unload()`` is best-effort — failures are swallowed so
         a stuck backend doesn't keep the registry from clearing.
@@ -245,7 +301,7 @@ class ModelRegistry:
             self._instances.clear()
             self._locks.clear()
 
-    # -- internals ----------------------------------------------------------
+    # -- internals / 内部 ----------------------------------------------------------
 
     def _lock_for(self, model_id: str) -> threading.Lock:
         with self._global_lock:
@@ -256,13 +312,16 @@ class ModelRegistry:
             return lock
 
 
-# Module-level singleton -------------------------------------------------
+# Module-level singleton / 模块级单例 -------------------------------------------------
 
 _default_registry = ModelRegistry()
 
 
 def get_registry() -> ModelRegistry:
-    """Return the process-wide :class:`ModelRegistry` singleton."""
+    """返回进程级 :class:`ModelRegistry` 单例。
+
+    Return the process-wide :class:`ModelRegistry` singleton.
+    """
     return _default_registry
 
 
@@ -271,6 +330,7 @@ __all__ = [
     "ModelRegistry",
     "get_registry",
     # Re-exports so route code only needs one import site.
+    # 重导出，路由代码只需一个导入点。
     "BackendError",
     "BackendUnavailable",
     "ModelNotFound",

@@ -15,6 +15,9 @@ Covers the NPC life-cycle:
 * **A4.1 cross-link** — affected-NPC selector picks high_active
   NPCs by default; custom selector overrides.
 * **Auth** — every endpoint requires a Bearer token.
+
+  测试 NPC（非玩家角色）的 CRUD 操作和状态管理。
+  验证 NPC 的创建、检索、更新、删除及顺序管理。
 """
 
 from __future__ import annotations
@@ -49,6 +52,7 @@ from xijian_api.stubs.npcs import (
 
 # ---------------------------------------------------------------------------
 # Fixtures
+# 测试夹具
 # ---------------------------------------------------------------------------
 
 
@@ -285,6 +289,7 @@ class TestAffectedSelector:
 
 # ---------------------------------------------------------------------------
 # CRUD — stub-level
+# CRUD — stub-level
 # ---------------------------------------------------------------------------
 
 
@@ -308,6 +313,7 @@ class TestCreateStub:
         world = worlds_stub.create(name="W")
         try:
             # Create 50 NPCs with minimal budget.
+            # 创建 — 50 NPCs with minimal budget.
             for i in range(MAX_NPCS_PER_WORLD):
                 npcs_stub.create(
                     world_id=world["id"],
@@ -544,6 +550,7 @@ class TestTickWorld:
     def test_unknown_world_returns_empty(self):
         out = npcs_stub.tick_world("world_phantom")
         # World doesn't exist — no entries, no error.
+        # 世界 — doesn't exist — no entries, no error.
         assert out["fired"] == 0
 
     def test_marks_last_think_at(self):
@@ -630,6 +637,7 @@ class TestTickAll:
 
 # ---------------------------------------------------------------------------
 # Background tick thread
+# 后台 — tick thread
 # ---------------------------------------------------------------------------
 
 
@@ -952,6 +960,7 @@ class TestHttpScheduling:
 
 # ---------------------------------------------------------------------------
 # Auth coverage
+# 认证 — coverage
 # ---------------------------------------------------------------------------
 
 

@@ -9,6 +9,9 @@ Covers:
 * **Estimate endpoint** — cost preview with and without
   ``random_roll``.
 * **Auth** — every endpoint requires a Bearer token.
+
+  测试旅行模式管理（A1.5 自动旅行模式）。
+  验证旅行状态的创建、更新和路径规划。
 """
 
 from __future__ import annotations
@@ -21,6 +24,7 @@ from xijian_api.stubs import travel_modes as tm_stub
 
 # ---------------------------------------------------------------------------
 # Fixtures
+# 测试夹具
 # ---------------------------------------------------------------------------
 
 
@@ -201,6 +205,7 @@ class TestStubCRUD:
 
 # ---------------------------------------------------------------------------
 # Routes
+# 路由
 # ---------------------------------------------------------------------------
 
 

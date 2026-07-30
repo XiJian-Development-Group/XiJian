@@ -431,6 +431,8 @@ def _is_overload_active() -> bool:
     dependency).  When A5.4 has triggered but the user has not yet
     finalized recovery, new event fires are dropped instead of being
     queued — per ``docs/notes.md`` A4.1 cross-link guidance.
+    循环依赖。
+
     """
     recovery = (state.overload or {}).get("recovery")
     if not recovery:
@@ -460,6 +462,8 @@ def _broadcast_event_fired(instance: dict) -> None:
     Best-effort: the scheduler must never crash because the WS layer
     isn't wired (early tests, headless CI, etc.).  Mirrors the
     overload module's swallow-and-log posture.
+    尽力而为，镜像。
+
     """
     try:
         from xijian_api.routes.ws_routes import publish_event
@@ -541,6 +545,8 @@ def create_event(
         event.  Optional (no cooldown by default).
     created_at:
         Override the timestamp source (testing).  Defaults to now.
+    冷却。
+
     """
     if kind not in _VALID_KINDS:
         raise EventError(
@@ -795,6 +801,8 @@ def tick_world(world_id: str, *, now: float | None = None) -> list[dict]:
 
     The "one event per cooldown" semantic matches the spec [TODO];
     priorities break ties when multiple match in the same tick.
+    冷却。
+
     """
     timestamp = _now_or(now)
     world_record = state.worlds.get(world_id)

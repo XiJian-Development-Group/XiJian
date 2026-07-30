@@ -1,4 +1,13 @@
-"""GGUF image-generation backend.
+"""GGUF 图像生成后端。
+
+GGUF image-generation backend.
+
+Stable Diffusion GGUF 模型打包为 ``.gguf`` 文件，可由 ``stable-diffusion.cpp``
+及其 Python 绑定（``stable_diffusion_cpp``）消费。安装后，此后端将
+检查点交给绑定并输出 PNG 字节。
+
+如果绑定未安装，此后端报告自身不可用；运维者仍可通过适当配置
+``[backends.image].default`` 经由远程后端生成图像。
 
 Stable Diffusion GGUF models ship as ``.gguf`` files consumable by
 ``stable-diffusion.cpp`` and its Python binding
@@ -25,7 +34,10 @@ from xijian_api.ai.types import ImageGenBackend
 
 
 def _probe() -> tuple[bool, str | None]:
-    """Return ``(available, class_attr)`` for the SD GGUF binding."""
+    """返回 SD GGUF 绑定的 ``(available, class_attr)``。
+
+    Return ``(available, class_attr)`` for the SD GGUF binding.
+    """
     try:
         import stable_diffusion_cpp  # noqa: F401
     except Exception:
@@ -38,6 +50,7 @@ def _probe() -> tuple[bool, str | None]:
 
 @register_image("gguf")
 class GGUFImageBackend(ImageGenBackend):
+    """GGUF 图像生成后端。GGUF image generation backend."""
     name = "gguf"
 
     def __init__(self) -> None:
@@ -104,13 +117,13 @@ class GGUFImageBackend(ImageGenBackend):
             ) from exc
         return _normalise(images)
 
-    def edit(self, *args, **kwargs):  # pragma: no cover - delegated to stub
+    def edit(self, *args, **kwargs):  # pragma: no cover - 委托给 stub
         raise BackendError(
             "GGUF image backend does not implement edit; fall back to generate",
             code="backend_error",
         )
 
-    def variation(self, *args, **kwargs):  # pragma: no cover - delegated to stub
+    def variation(self, *args, **kwargs):  # pragma: no cover - 委托给 stub
         raise BackendError(
             "GGUF image backend does not implement variation; fall back to generate",
             code="backend_error",
@@ -129,7 +142,10 @@ def _parse_size(size: str) -> tuple[int, int]:
 
 
 def _normalise(images) -> list[dict]:
-    """Coerce ``stable_diffusion_cpp`` outputs into the OAI shape."""
+    """将 ``stable_diffusion_cpp`` 输出强制转换为 OAI 形状。
+
+    Coerce ``stable_diffusion_cpp`` outputs into the OAI shape.
+    """
     from io import BytesIO
 
     out: list[dict] = []

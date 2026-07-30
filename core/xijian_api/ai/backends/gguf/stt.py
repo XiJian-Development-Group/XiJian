@@ -1,4 +1,9 @@
-"""GGUF speech-to-text backend.
+"""GGUF 语音转文本后端。
+
+GGUF speech-to-text backend.
+
+包装 ``pywhispercpp`` —— whisper.cpp GGUF 模型的规范绑定。
+whisper.cpp 是设备端转录的事实标准；GGUF 模型在 Hugging Face 上广泛分发。
 
 Wraps ``pywhispercpp`` — the canonical binding for whisper.cpp's
 GGUF models.  whisper.cpp is the de-facto standard for on-device
@@ -20,7 +25,10 @@ from xijian_api.ai.types import STTBackend
 
 
 def _probe() -> tuple[bool, str | None]:
-    """Return ``(available, attribute)`` for ``pywhispercpp``."""
+    """返回 ``pywhispercpp`` 的 ``(available, attribute)``。
+
+    Return ``(available, attribute)`` for ``pywhispercpp``.
+    """
     try:
         import pywhispercpp
     except Exception:
@@ -33,6 +41,7 @@ def _probe() -> tuple[bool, str | None]:
 
 @register_stt("gguf")
 class GGUFSTTBackend(STTBackend):
+    """GGUF 语音转文本后端。GGUF speech-to-text backend."""
     name = "gguf"
 
     def __init__(self) -> None:
@@ -55,10 +64,9 @@ class GGUFSTTBackend(STTBackend):
         path = Path(model_path)
         if not path.exists():
             raise ModelNotFound(f"model path does not exist: {path}")
-        # ``pywhispercpp`` accepts either a file path or a HF repo id.
-        # When ``path`` is a directory (the usual case for whisper.cpp
-        # GGUF models) we hand it directly; otherwise it's a single
-        # ``.bin``/``.gguf`` file.
+        # ``pywhispercpp`` 接受文件路径或 HF 仓库 ID。
+        # 当 ``path`` 是目录（whisper.cpp GGUF 模型的常见情况）时直接传递；
+        # 否则是单个 ``.bin``/``.gguf`` 文件。
         model_ref = str(path)
         try:
             from pywhispercpp.model import Model
@@ -104,11 +112,17 @@ class GGUFSTTBackend(STTBackend):
                 pass
         return _shape_response(segments, response_format=response_format)
 
-    # -- internals ----------------------------------------------------------
+    # -- internals / 内部 ----------------------------------------------------------
 
     @staticmethod
     def _write_temp_audio(audio: bytes) -> str:
-        """Persist ``audio`` bytes to a temp WAV file for ``pywhispercpp``.
+        """将 ``audio`` 字节持久化到临时 WAV 文件供 ``pywhispercpp`` 使用。
+
+        whisper.cpp 读取 16 kHz 16-bit 单声道 PCM；大多数客户端已发送
+        WAV blob。即使不是，我们仍写入 WAV 头 —— whisper.cpp 的加载器
+        是宽容的。
+
+        Persist ``audio`` bytes to a temp WAV file for ``pywhispercpp``.
 
         whisper.cpp reads 16-bit mono PCM at 16 kHz; most clients send
         WAV blobs already.  When they don't we still write a WAV
@@ -124,7 +138,10 @@ class GGUFSTTBackend(STTBackend):
 
 
 def _shape_response(segments, *, response_format: str):
-    """Coerce ``pywhispercpp`` segments into the OAI ``transcriptions`` shape."""
+    """将 ``pywhispercpp`` 分段强制转换为 OAI ``transcriptions`` 形状。
+
+    Coerce ``pywhispercpp`` segments into the OAI ``transcriptions`` shape.
+    """
     if response_format == "text":
         if not segments:
             return ""

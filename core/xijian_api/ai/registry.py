@@ -1,4 +1,13 @@
-"""Backend registry and selection logic.
+"""后端注册表与选择逻辑。
+
+每个后端模块（``xijian_api.ai.backends.<name>``）在导入时通过下方的
+``register_*`` 助手自行注册。选择可通过 ``Config.backends.<task>``
+按任务配置。
+
+当请求的后端未安装（如 Linux 上的 ``mlx`` 或 macOS 上的 ``llama-cpp``）时，
+加载器返回 ``None``，调用者回退到下一个配置选项。
+
+Backend registry and selection logic.
 
 Each backend module (``xijian_api.ai.backends.<name>``) registers
 itself on import via the ``register_*`` helpers below.  Selection is
@@ -28,7 +37,7 @@ from xijian_api.ai.base import BackendUnavailable
 
 
 # ---------------------------------------------------------------------------
-# Internal registries
+# Internal registries / 内部注册表
 # ---------------------------------------------------------------------------
 
 
@@ -41,6 +50,7 @@ _video_backends: dict[str, type] = {}
 
 
 def register_chat(name: str) -> Callable:
+    """注册聊天后端装饰器。Register a chat backend decorator."""
     def deco(cls: type) -> type:
         _chat_backends[name] = cls
         return cls
@@ -48,6 +58,7 @@ def register_chat(name: str) -> Callable:
 
 
 def register_embedding(name: str) -> Callable:
+    """注册嵌入后端装饰器。Register an embedding backend decorator."""
     def deco(cls: type) -> type:
         _embedding_backends[name] = cls
         return cls
@@ -55,6 +66,7 @@ def register_embedding(name: str) -> Callable:
 
 
 def register_tts(name: str) -> Callable:
+    """注册 TTS 后端装饰器。Register a TTS backend decorator."""
     def deco(cls: type) -> type:
         _tts_backends[name] = cls
         return cls
@@ -62,6 +74,7 @@ def register_tts(name: str) -> Callable:
 
 
 def register_stt(name: str) -> Callable:
+    """注册 STT 后端装饰器。Register an STT backend decorator."""
     def deco(cls: type) -> type:
         _stt_backends[name] = cls
         return cls
@@ -69,6 +82,7 @@ def register_stt(name: str) -> Callable:
 
 
 def register_image(name: str) -> Callable:
+    """注册图像后端装饰器。Register an image backend decorator."""
     def deco(cls: type) -> type:
         _image_backends[name] = cls
         return cls
@@ -76,6 +90,7 @@ def register_image(name: str) -> Callable:
 
 
 def register_video(name: str) -> Callable:
+    """注册视频后端装饰器。Register a video backend decorator."""
     def deco(cls: type) -> type:
         _video_backends[name] = cls
         return cls
@@ -83,7 +98,10 @@ def register_video(name: str) -> Callable:
 
 
 def available_backends() -> dict[str, list[str]]:
-    """Return the names of every backend that has registered and reports available."""
+    """返回每个已注册并报告可用的后端名称。
+
+    Return the names of every backend that has registered and reports available.
+    """
     out: dict[str, list[str]] = {}
     for kind, table in (
         ("chat", _chat_backends),
@@ -106,7 +124,7 @@ def available_backends() -> dict[str, list[str]]:
 
 
 # ---------------------------------------------------------------------------
-# Lazy import + fallback logic
+# Lazy import + fallback logic / 惰性导入与回退逻辑
 # ---------------------------------------------------------------------------
 
 
@@ -117,6 +135,7 @@ _BUILTIN_IMPORTS: dict[str, dict[str, str]] = {
         "openai": "xijian_api.ai.backends.openai.chat",
         # The mock backend is for tests and local development only; it
         # never loads real weights and is always ``is_available()``.
+        # mock 后端仅用于测试和本地开发；它从不加载真实权重且始终 ``is_available()``。
         "mock": "xijian_api.ai.backends.mock.chat",
     },
     "embeddings": {
@@ -148,7 +167,14 @@ _BUILTIN_IMPORTS: dict[str, dict[str, str]] = {
 
 
 def _ensure_loaded(task: str, name: str) -> None:
-    """Import the backend module on first use; no-op if already registered."""
+    """首次使用时导入后端模块；如已注册则无操作。
+
+    从 ``_BUILTIN_IMPORTS`` 查找模块名并导入。导入失败时不抛出异常，
+    而是将错误写入 stderr，让调用者能回退到下一选项。
+
+    Import the backend module on first use; no-op if already registered.
+    Falls back to stderr logging on failure so the caller can try the next option.
+    """
     table = {
         "chat": _chat_backends,
         "embeddings": _embedding_backends,
@@ -167,13 +193,21 @@ def _ensure_loaded(task: str, name: str) -> None:
     except Exception as exc:
         # Backend missing / failing to import — leave registry empty so
         # the caller can fall back to the next option.
+        # 后端缺失/导入失败 —— 让注册表保持空，调用者可回退到下一选项。
         sys.stderr.write(
             f"[xijian-api] backend {task}:{name} unavailable: {exc}\n"
         )
 
 
 def _pick(task: str, requested: str, fallbacks: tuple[str, ...]):
-    """Try each backend name in order; return the first usable instance."""
+    """按顺序尝试每个后端名称；返回第一个可用的实例。
+
+    先尝试请求的后端，再试回退列表。若全不可用则抛出
+    :class:`BackendUnavailable`。
+
+    Try each backend name in order; return the first usable instance.
+    Raises :class:`BackendUnavailable` when none is available.
+    """
     table = {
         "chat": _chat_backends,
         "embeddings": _embedding_backends,
@@ -215,36 +249,60 @@ def _pick(task: str, requested: str, fallbacks: tuple[str, ...]):
 
 
 # ---------------------------------------------------------------------------
-# Public helpers
+# Public helpers / 公共助手函数
 # ---------------------------------------------------------------------------
 
 
 def get_chat_backend(name: str | None = None, fallbacks: tuple[str, ...] = ()) -> ChatBackend:
+    """获取聊天后端实例。优先使用环境变量 ``XIJIAN_AI_BACKEND_CHAT``。
+
+    Get a chat backend instance. Prefers env var ``XIJIAN_AI_BACKEND_CHAT``.
+    """
     requested = name or os.environ.get("XIJIAN_AI_BACKEND_CHAT", "mlx")
     return _pick("chat", requested, fallbacks)
 
 
 def get_embedding_backend(name: str | None = None, fallbacks: tuple[str, ...] = ()) -> EmbeddingBackend:
+    """获取嵌入后端实例。优先使用环境变量 ``XIJIAN_AI_BACKEND_EMBED``。
+
+    Get an embedding backend instance. Prefers env var ``XIJIAN_AI_BACKEND_EMBED``.
+    """
     requested = name or os.environ.get("XIJIAN_AI_BACKEND_EMBED", "mlx")
     return _pick("embeddings", requested, fallbacks)
 
 
 def get_tts_backend(name: str | None = None, fallbacks: tuple[str, ...] = ()) -> TTSBackend:
+    """获取 TTS 后端实例。优先使用环境变量 ``XIJIAN_AI_BACKEND_TTS``。
+
+    Get a TTS backend instance. Prefers env var ``XIJIAN_AI_BACKEND_TTS``.
+    """
     requested = name or os.environ.get("XIJIAN_AI_BACKEND_TTS", "mlx")
     return _pick("tts", requested, fallbacks)
 
 
 def get_stt_backend(name: str | None = None, fallbacks: tuple[str, ...] = ()) -> STTBackend:
+    """获取 STT 后端实例。优先使用环境变量 ``XIJIAN_AI_BACKEND_STT``。
+
+    Get an STT backend instance. Prefers env var ``XIJIAN_AI_BACKEND_STT``.
+    """
     requested = name or os.environ.get("XIJIAN_AI_BACKEND_STT", "mlx")
     return _pick("stt", requested, fallbacks)
 
 
 def get_image_backend(name: str | None = None, fallbacks: tuple[str, ...] = ()) -> ImageGenBackend:
+    """获取图像生成后端实例。优先使用环境变量 ``XIJIAN_AI_BACKEND_IMAGE``。
+
+    Get an image generation backend instance. Prefers env var ``XIJIAN_AI_BACKEND_IMAGE``.
+    """
     requested = name or os.environ.get("XIJIAN_AI_BACKEND_IMAGE", "mlx")
     return _pick("image", requested, fallbacks)
 
 
 def get_video_backend(name: str | None = None, fallbacks: tuple[str, ...] = ()) -> VideoGenBackend:
+    """获取视频生成后端实例。优先使用环境变量 ``XIJIAN_AI_BACKEND_VIDEO``。
+
+    Get a video generation backend instance. Prefers env var ``XIJIAN_AI_BACKEND_VIDEO``.
+    """
     requested = name or os.environ.get("XIJIAN_AI_BACKEND_VIDEO", "mlx")
     return _pick("video", requested, fallbacks)
 

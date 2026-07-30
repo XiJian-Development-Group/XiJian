@@ -267,6 +267,8 @@ def delete(entry_id: str) -> bool:
 
     Hard ``pop`` is avoided so that A1.1 backup/restore can still
     reference soft-deleted entries during a 7-day undo window.
+    未找到。
+
     """
     record = state.memory.get(entry_id)
     if record is None:
@@ -745,6 +747,8 @@ def load_context(
         ``empty``
             ``True`` when no character_id was supplied or no entries
             matched the configured filters.
+    确定性。
+
     """
     if character_id is None:
         return {

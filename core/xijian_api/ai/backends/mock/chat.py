@@ -1,4 +1,29 @@
-"""Mock chat backend — used by the test suite and local development.
+"""模拟聊天后端 —— 测试套件和本地开发用。
+
+目标
+-----
+
+* 始终 ``is_available()``，以便 ``tests`` 和 CI 可以在没有安装
+  ``mlx``/``llama_cpp`` 且磁盘上没有真正检查点的情况下运行。
+* 在 :meth:`load` 中接受任何 ``model_path``（路径会被记录但从不打开）。
+  注册表的 ``_resolve_backend_class`` 会将相同路径传递给
+  :meth:`ModelEntry.absolute_path`，否则当目录不存在时会失败。
+* 输出确定的 token 序列，以便测试可以断言输出形状，而无需依赖权重、
+  prompt 格式或平台后端。
+* 支持最小的 ``tool_call`` 流，使 A1.2 强制召回流水线可以在没有真实
+  模型的情况下端到端运行。当 prompt 包含引用了 ``recall_memory`` 工具
+  （流水线注入的）的 system instruction 时，模拟器在第一轮发出
+  ``recall_memory`` 工具调用；在第二轮将工具结果回显为最终答案。
+
+契约镜像 :class:`xijian_api.ai.types.ChatBackend`：
+
+* :meth:`chat` 在阻塞（``stream=False``）和流式（``stream=True``）
+  模式下都返回 :class:`ChatChunk` 实例的*可迭代对象*。
+* 当提供 :class:`AbortSignal` 时，在每次发射之间轮询，以便客户端
+  ``POST .../abort`` 干净地停止模拟器。最终 chunk 的
+  ``finish_reason`` 在这种情况下为 ``"abort"``。
+
+Mock chat backend — used by the test suite and local development.
 
 Goals
 -----
@@ -50,14 +75,12 @@ from xijian_api.ai.types import (
 from xijian_api.errors import GenerationAborted as ApiGenerationAborted
 
 
-# Default token budget when the caller doesn't pass ``max_tokens``.
-# Kept small so an accidental call doesn't waste cycles, but big
-# enough to exercise streaming.
+# 当调用者未传递 ``max_tokens`` 时的默认 token 预算。
+# 保持较小以免意外调用浪费周期，但足够大以演练流式。
 _DEFAULT_MAX_TOKENS = 64
 
-# Mock token sequence.  Each entry is the *new* suffix to append, so
-# concatenating them reproduces the canonical mock text.  Tests that
-# need a known output can join this list verbatim.
+# 模拟 token 序列。每个条目是*新*的后缀用于追加，拼接起来就重现
+# 了规范的模拟文本。需要已知输出的测试可以直接按原样 join 此列表。
 _MOCK_TOKENS: tuple[str, ...] = (
     "Mock", " response", " from", " the", " mock", " chat", " backend",
     ".", " This", " backend", " is", " intended", " for", " tests", " and",
@@ -71,7 +94,10 @@ def _now_ts() -> int:
 
 
 def _resolve_max_tokens(params: GenerationParams) -> int:
-    """Resolve ``max_tokens`` honouring ``None`` / 0 as a default budget."""
+    """解析 ``max_tokens``，``None``/0 时使用默认预算。
+
+    Resolve ``max_tokens`` honouring ``None`` / 0 as a default budget.
+    """
     if params.max_tokens is None or params.max_tokens <= 0:
         return _DEFAULT_MAX_TOKENS
     return int(params.max_tokens)
@@ -85,7 +111,10 @@ def _build_chunk(
     finish_reason: str | None = None,
     usage: ChatUsage | None = None,
 ) -> ChatChunk:
-    """Assemble a :class:`ChatChunk` from its OAI-style pieces."""
+    """从 OAI 风格的组件组装一个 :class:`ChatChunk`。
+
+    Assemble a :class:`ChatChunk` from its OAI-style pieces.
+    """
     return ChatChunk(
         id=chunk_id,
         model=model,
@@ -103,7 +132,10 @@ def _build_chunk(
 
 
 def _content_text(content) -> str:
-    """Extract plain text from possibly-multimodal content (str or list)."""
+    """从可能的多模态内容（str 或 list）中提取纯文本。
+
+    Extract plain text from possibly-multimodal content (str or list).
+    """
     if isinstance(content, str):
         return content
     if isinstance(content, list):
@@ -118,7 +150,10 @@ def _content_text(content) -> str:
 
 
 def _msg_text(m) -> str:
-    """Extract text from a ChatMessage or dict, handling multimodal content."""
+    """从 ChatMessage 或 dict 中提取文本，处理多模态内容。
+
+    Extract text from a ChatMessage or dict, handling multimodal content.
+    """
     if isinstance(m, ChatMessage):
         return _content_text(m.content)
     if isinstance(m, dict):
@@ -135,7 +170,10 @@ def _msg_role(m) -> str:
 
 
 def _last_user_text(messages: Sequence) -> str:
-    """Return the most recent user message's text.  Empty string if none."""
+    """返回最近一条用户消息的文本。没有则返回空字符串。
+
+    Return the most recent user message's text.  Empty string if none.
+    """
     for m in reversed(messages):
         if _msg_role(m) == "user":
             return _msg_text(m)
@@ -143,7 +181,10 @@ def _last_user_text(messages: Sequence) -> str:
 
 
 def _system_has_recall_instruction(messages: Sequence) -> bool:
-    """True when the system message mentions the recall_memory tool."""
+    """当 system 消息提及 recall_memory 工具时返回 True。
+
+    True when the system message mentions the recall_memory tool.
+    """
     needle = "recall_memory"
     for m in messages:
         if _msg_role(m) == "system" and needle in _msg_text(m):
@@ -152,7 +193,10 @@ def _system_has_recall_instruction(messages: Sequence) -> bool:
 
 
 def _latest_tool_result(messages: Sequence) -> dict | None:
-    """Return the most recent ``role=tool`` message's parsed JSON content."""
+    """返回最近一条 ``role=tool`` 消息的解析 JSON 内容。
+
+    Return the most recent ``role=tool`` message's parsed JSON content.
+    """
     for m in reversed(messages):
         if _msg_role(m) != "tool":
             continue
@@ -164,13 +208,16 @@ def _latest_tool_result(messages: Sequence) -> dict | None:
     return None
 
 
-#: Marker injected by the MCP tools pipeline (A2) in the system prompt.
-#: Mirrors the first line of ``_TOOLS_SYSTEM_PROMPT`` in chat_stub.py.
+#: MCP 工具流水线（A2）在 system prompt 中注入的标记。
+#: 镜像 chat_stub.py 中 ``_TOOLS_SYSTEM_PROMPT`` 的第一行。
 _MCP_TOOLS_MARKER = "你可以使用以下工具来完成用户的请求"
 
 
 def _system_has_mcp_tools_instruction(messages: Sequence) -> bool:
-    """True when the system message contains the MCP tools instruction."""
+    """当 system 消息包含 MCP 工具指令时返回 True。
+
+    True when the system message contains the MCP tools instruction.
+    """
     for m in messages:
         if _msg_role(m) == "system" and _MCP_TOOLS_MARKER in _msg_text(m):
             return True
@@ -178,7 +225,10 @@ def _system_has_mcp_tools_instruction(messages: Sequence) -> bool:
 
 
 def _extract_tool_names_from_system(messages: Sequence) -> list[str]:
-    """Parse tool names from ``### name`` headers in the tools system prompt."""
+    """从工具 system prompt 中的 ``### name`` 头解析工具名称。
+
+    Parse tool names from ``### name`` headers in the tools system prompt.
+    """
     names: list[str] = []
     for m in messages:
         if _msg_role(m) != "system":
@@ -194,7 +244,12 @@ def _extract_tool_names_from_system(messages: Sequence) -> list[str]:
 
 
 def _latest_tool_text(messages: Sequence) -> str | None:
-    """Return the most recent ``role=tool`` message's raw text, or ``None``.
+    """返回最近一条 ``role=tool`` 消息的原始文本，或在没有时返回 ``None``。
+
+    与 :func:`_latest_tool_result` 不同，此函数不尝试 JSON 解析 ——
+    MCP 工具结果是纯字符串，因此这是 MCP 工具路径的正确辅助函数。
+
+    Return the most recent ``role=tool`` message's raw text, or ``None``.
 
     Unlike :func:`_latest_tool_result` this does not attempt JSON
     parsing — MCP tool results are plain strings, so this is the
@@ -207,7 +262,10 @@ def _latest_tool_text(messages: Sequence) -> str | None:
 
 
 def _build_echo_prefix(messages: Sequence) -> str:
-    """Return a short ``[echo: ...]`` prefix from the last user message."""
+    """从最后一条用户消息返回短的 ``[echo: ...]`` 前缀。
+
+    Return a short ``[echo: ...]`` prefix from the last user message.
+    """
     text = _last_user_text(messages).strip()
     if not text:
         return ""
@@ -217,7 +275,10 @@ def _build_echo_prefix(messages: Sequence) -> str:
 
 @register_chat("mock")
 class MockChatBackend(ChatBackend):
-    """Deterministic chat backend for tests + local development."""
+    """测试和本地开发用的确定性聊天后端。
+
+    Deterministic chat backend for tests + local development.
+    """
 
     name = "mock"
 
@@ -226,19 +287,26 @@ class MockChatBackend(ChatBackend):
         self._context_length: int = 0
         self._loaded: bool = False
 
-    # -- introspection ------------------------------------------------------
+    # -- introspection / 内省 ------------------------------------------------------
 
     def is_available(self) -> bool:
-        # Always available — the whole point of the mock.
+        # 始终可用 —— 这就是模拟器的全部意义。
         return True
 
     def is_loaded(self) -> bool:
         return self._loaded
 
-    # -- lifecycle ----------------------------------------------------------
+    # -- lifecycle / 生命周期 ----------------------------------------------------------
 
     def load(self, model_path, *, context_length: int = 0, **kwargs) -> None:
-        """Record the path; never touch the filesystem.
+        """记录路径；从不接触文件系统。
+
+        注册表通过 :meth:`ModelEntry.absolute_path` 解析路径并传入，
+        但测试注册的模型文件并不存在。盲目接受路径使契约保持简单：
+        模拟器不需要文件。额外的 kwargs（模型的 ``extra`` 块 + 调用者
+        覆盖）被静默忽略 —— 模拟器没有可尊重的旋钮。
+
+        Record the path; never touch the filesystem.
 
         The registry resolves a path through
         :meth:`ModelEntry.absolute_path` and passes it here, but tests
@@ -256,7 +324,7 @@ class MockChatBackend(ChatBackend):
         self._context_length = 0
         self._loaded = False
 
-    # -- generation ---------------------------------------------------------
+    # -- generation / 生成 ---------------------------------------------------------
 
     def chat(
         self,
@@ -273,16 +341,15 @@ class MockChatBackend(ChatBackend):
         chunk_id = f"chatcmpl-mock-{int(time.time() * 1000)}"
         model_id = str(self._model_path) if self._model_path else "mock"
 
-        # MCP tools path (A2): when the pipeline injects the MCP tools
-        # system instruction, the mock simulates a model that calls the
-        # first available tool on turn 1, then echoes the tool result as
-        # the final answer on turn 2.  This lets the tools pipeline be
-        # exercised end-to-end without a real model.
+        # MCP 工具路径（A2）：当流水线注入了 MCP 工具 system 指令时，
+        # 模拟器模拟一个模型，它在第一轮调用第一个可用工具，然后在
+        # 第二轮将工具结果回显为最终答案。这使工具流水线可以在没有
+        # 真实模型的情况下端到端演练。
         if _system_has_mcp_tools_instruction(messages):
             available = _extract_tool_names_from_system(messages)
             tool_text = _latest_tool_text(messages)
             if tool_text is None and available:
-                # First turn — emit a tool call for the first tool.
+                # 第一轮 —— 为第一个工具发出工具调用。
                 tool_name = available[0]
                 if stream:
                     return self._streaming_mcp_tool_call(
@@ -297,7 +364,7 @@ class MockChatBackend(ChatBackend):
                     model_id=model_id,
                     abort_signal=abort_signal,
                 )
-            # Second turn (or no tools available) — emit the final answer.
+            # 第二轮（或无可用工具）—— 发出最终答案。
             full_content = self._mcp_final_turn(tool_text, messages)
             if stream:
                 return self._streaming(
@@ -313,11 +380,10 @@ class MockChatBackend(ChatBackend):
                 abort_signal=abort_signal,
             )
 
-        # Forced-recall path (A1.2): when the pipeline injects the
-        # recall system instruction, the mock behaves like a real
-        # model that dutifully follows it — first turn emits a
-        # ``recall_memory`` tool call, second turn (with the tool
-        # result attached) emits the final answer.
+        # 强制召回路径（A1.2）：当流水线注入召回 system 指令时，
+        # 模拟器表现得像一个忠实遵循它的真实模型 —— 第一轮发出
+        # ``recall_memory`` 工具调用，第二轮（附加工具结果后）
+        # 发出最终答案。
         if _system_has_recall_instruction(messages):
             tool_result = _latest_tool_result(messages)
             if tool_result is None:
@@ -346,11 +412,10 @@ class MockChatBackend(ChatBackend):
                 chunk_id=chunk_id,
                 model_id=model_id,
                 abort_signal=abort_signal,
-            )
+                )
 
-        # Build the full content up front; slice it for streaming.
-        # The echo prefix reflects the last user message so callers
-        # can verify "the request really reached the backend".
+        # 预先构建完整内容；为流式切片。
+        # echo 前缀反映最后一条用户消息，以便调用者可验证"请求确实到达了后端"。
         tail_count = min(max_tokens, len(_MOCK_TOKENS))
         mock_tail = "".join(_MOCK_TOKENS[:tail_count])
         full_content = _build_echo_prefix(messages) + mock_tail
@@ -369,10 +434,17 @@ class MockChatBackend(ChatBackend):
             abort_signal=abort_signal,
         )
 
-    # -- recall-pipeline helpers -----------------------------------------
+    # -- recall-pipeline helpers / 召回流水线辅助 -----------------------------------------
 
     def _tool_call_turn(self, messages: Sequence, *, chunk_id: str) -> str:  # noqa: ARG002
-        """Return the assistant's first-turn reply when recall is required.
+        """在需要召回时返回助手的第一轮回复。
+
+        模拟器实际上不*生成*召回工具调用 —— 它始终以用户最后一条消息
+        作为查询调用 ``recall_memory``（镜像一个完全顺从的模型，
+        当被要求时总是召回）。流水线在 :meth:`_blocking_tool_call` 中
+        将其转换为 chunk 级 tool_call delta。
+
+        Return the assistant's first-turn reply when recall is required.
 
         The mock doesn't actually *generate* a recall tool call — it
         always invokes ``recall_memory`` with the user's last message
@@ -383,7 +455,12 @@ class MockChatBackend(ChatBackend):
         return ""
 
     def _final_turn(self, tool_result: dict, messages: Sequence) -> str:
-        """Compose the second-turn reply using the tool's recall hits.
+        """使用工具的召回命中结果组成第二轮回复。
+
+        回显召回条目，使回复文本基于真实记忆（AC-3）并避免幻觉（AC-4）。
+        片段包括每条条目的内容和 id，以便引文审计能清晰匹配验证。
+
+        Compose the second-turn reply using the tool's recall hits.
 
         Echoes the recalled entries so the response text is grounded
         in real memory (AC-3) and avoids hallucination (AC-4).  The
@@ -415,14 +492,11 @@ class MockChatBackend(ChatBackend):
         if abort_signal is not None:
             abort_signal.raise_if_aborted()
         tool_call_id = f"call_{chunk_id}"
-        # Pull the query from the latest user message so the tool
-        # arguments are non-empty and the pipeline's recall search
-        # has something to match against.
-        # We don't have access to messages here (chat() consumed
-        # them), so embed a stable default — the pipeline reads the
-        # arguments verbatim and runs recall against whatever the
-        # query is, so an empty string is safe (no hits → no
-        # citations → audit verdict = pass).
+        # 从最新的用户消息拉取查询，使工具参数非空，
+        # 流水线的召回搜索有东西可匹配。
+        # 我们在这里没有对 messages 的访问（chat() 已消费它们），
+        # 所以嵌入一个稳定的默认值 —— 流水线逐字读取参数并对任何查询
+        # 运行召回，因此空字符串是安全的（无命中 → 无引文 → 审计判定 = 通过）。
         arguments = json.dumps({"query": "memory", "top_k": 3}, ensure_ascii=False)
         usage = ChatUsage(
             prompt_tokens=0,
@@ -459,14 +533,13 @@ class MockChatBackend(ChatBackend):
             abort_signal.raise_if_aborted()
         tool_call_id = f"call_{chunk_id}"
         arguments = json.dumps({"query": "memory", "top_k": 3}, ensure_ascii=False)
-        # Role chunk.
+        # Role chunk / 角色块。
         yield _build_chunk(
             chunk_id=chunk_id,
             model=model_id,
             delta={"role": "assistant"},
         )
-        # Tool-call delta chunk (split arguments across two chunks to
-        # exercise the stream-assembler).
+        # Tool-call delta chunk / 工具调用增量块（将参数分两个 chunk 以演练流组装器）。
         yield _build_chunk(
             chunk_id=chunk_id,
             model=model_id,
@@ -493,7 +566,7 @@ class MockChatBackend(ChatBackend):
                 ]
             },
         )
-        # Final chunk.
+        # 最终 chunk。
         if abort_signal is not None:
             abort_signal.raise_if_aborted()
         yield _build_chunk(
@@ -504,10 +577,16 @@ class MockChatBackend(ChatBackend):
             usage=ChatUsage(prompt_tokens=0, completion_tokens=1, total_tokens=1),
         )
 
-    # -- mcp-tools-pipeline helpers ---------------------------------------
+    # -- mcp-tools-pipeline helpers / MCP 工具流水线辅助 ---------------------------------------
 
     def _mcp_final_turn(self, tool_text: str | None, messages: Sequence) -> str:
-        """Compose the final reply using the MCP tool's result text.
+        """使用 MCP 工具的结果文本组成最终回复。
+
+        回显工具结果的片段，以便测试可验证流水线正确传回了结果。
+        当未调用工具（``tool_text`` 为 ``None``）时，模拟器发出
+        一个简单的确认。
+
+        Compose the final reply using the MCP tool's result text.
 
         Echoes a snippet of the tool result so tests can verify the
         pipeline fed the result back correctly.  When no tool was
@@ -531,9 +610,8 @@ class MockChatBackend(ChatBackend):
         if abort_signal is not None:
             abort_signal.raise_if_aborted()
         tool_call_id = f"call_{chunk_id}"
-        # Empty arguments — the pipeline executes the tool and the
-        # registry applies per-tool defaults.  Most MCP tools accept
-        # an empty dict and return a sensible default (e.g. list_all).
+        # 空参数字典 —— 流水线执行工具，注册表应用逐工具默认值。
+        # 大多数 MCP 工具接受空字典并返回合理的默认值（例如 list_all）。
         arguments = json.dumps({}, ensure_ascii=False)
         usage = ChatUsage(
             prompt_tokens=0,
@@ -571,13 +649,13 @@ class MockChatBackend(ChatBackend):
             abort_signal.raise_if_aborted()
         tool_call_id = f"call_{chunk_id}"
         arguments = json.dumps({}, ensure_ascii=False)
-        # Role chunk.
+        # Role chunk / 角色块。
         yield _build_chunk(
             chunk_id=chunk_id,
             model=model_id,
             delta={"role": "assistant"},
         )
-        # Tool-call delta chunk.
+        # Tool-call delta chunk / 工具调用增量块。
         yield _build_chunk(
             chunk_id=chunk_id,
             model=model_id,
@@ -592,7 +670,7 @@ class MockChatBackend(ChatBackend):
                 ]
             },
         )
-        # Final chunk.
+        # 最终 chunk。
         if abort_signal is not None:
             abort_signal.raise_if_aborted()
         yield _build_chunk(
@@ -603,7 +681,7 @@ class MockChatBackend(ChatBackend):
             usage=ChatUsage(prompt_tokens=0, completion_tokens=1, total_tokens=1),
         )
 
-    # -- internals ----------------------------------------------------------
+    # -- internals / 内部 ----------------------------------------------------------
 
     def _blocking(
         self,
@@ -615,8 +693,8 @@ class MockChatBackend(ChatBackend):
     ) -> Iterator[ChatChunk]:
         if abort_signal is not None:
             abort_signal.raise_if_aborted()
-        # The mock has no tokenizer; report word count as a stand-in
-        # so callers that show a token counter get a non-zero value.
+        # 模拟器没有 tokenizer；将单词数报告为替代品，
+        # 使显示 token 计数器的调用者能获得非零值。
         words = len(full_content.split())
         usage = ChatUsage(
             prompt_tokens=0,
@@ -642,15 +720,14 @@ class MockChatBackend(ChatBackend):
         if abort_signal is not None:
             abort_signal.raise_if_aborted()
 
-        # First chunk: role-only — OAI convention.
+        # 首个 chunk：仅角色 —— OAI 惯例。
         yield _build_chunk(
             chunk_id=chunk_id,
             model=model_id,
             delta={"role": "assistant"},
         )
 
-        # Per-character emission: small enough to look like a real
-        # stream in tests, deterministic, and not worth batching.
+        # 逐字符发射：小到在测试中看起来像真实流，确定性，不值得批处理。
         aborted = False
         emitted = 0
         try:
@@ -666,7 +743,7 @@ class MockChatBackend(ChatBackend):
         except ApiGenerationAborted:
             aborted = True
 
-        # Final chunk: finish_reason + usage.
+        # 最终 chunk：finish_reason + usage。
         words = len(full_content.split()) if emitted else 0
         usage = ChatUsage(
             prompt_tokens=0,

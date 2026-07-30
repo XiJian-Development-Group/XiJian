@@ -1,4 +1,9 @@
-"""OpenAI-compatible remote image-generation backend.
+"""OpenAI 兼容远程图像生成后端。
+
+OpenAI-compatible remote image-generation backend.
+
+调用 ``POST /images/generations`` (OpenAI DALL-E API)。
+返回 OAI ``b64_json`` / ``url`` 形状的图像字节，供路由层使用。
 
 Calls ``POST /images/generations`` (OpenAI DALL-E API).  Returns image
 bytes in the OAI ``b64_json`` / ``url`` shape used by the route layer.
@@ -22,6 +27,7 @@ from xijian_api.ai.types import ImageGenBackend
 
 @register_image("openai")
 class OpenAIImageBackend(ImageGenBackend):
+    """OpenAI 兼容图像生成后端实现。OpenAI-compatible image generation backend implementation."""
     name = "openai"
 
     def __init__(self) -> None:
@@ -61,6 +67,9 @@ class OpenAIImageBackend(ImageGenBackend):
             raise ModelNotLoaded("no openai image model loaded")
         if abort_signal is not None:
             abort_signal.raise_if_aborted()
+        # ``negative_prompt`` 和 ``seed`` 不是标准 OpenAI images API 的一部分；
+        # 我们优雅地忽略它们。某些兼容提供商（如 Stable Diffusion 包装器）
+        # 接受它们，但规范端点不支持。
         # ``negative_prompt`` and ``seed`` are not part of the standard
         # OpenAI images API; we ignore them gracefully.  Some compatible
         # providers (e.g. Stable Diffusion wrappers) accept them, but
@@ -76,7 +85,10 @@ class OpenAIImageBackend(ImageGenBackend):
 
 
 def _normalise(result: dict) -> list[dict]:
-    """Convert the OAI images response into the backend ``list[dict]`` shape."""
+    """将 OAI images 响应转换为后端 ``list[dict]`` 形状。
+
+    Convert the OAI images response into the backend ``list[dict]`` shape.
+    """
     import base64
     from io import BytesIO
 
@@ -91,10 +103,11 @@ def _normalise(result: dict) -> list[dict]:
             continue
         url = entry.get("url")
         if isinstance(url, str) and url:
+            # 下载图像以便路由层获得字节（匹配 MLX/GGUF 后端契约）。
             # Download the image so the route layer gets bytes (matches
             # the MLX/GGUF backend contract).
             from xijian_api.ai.backends.openai._client import _httpx_get_bytes
-            cfg_headers = {}  # URL images are typically public
+            cfg_headers = {}  # URL 图像通常是公开的
             out.append({"bytes": _httpx_get_bytes(url, headers=cfg_headers)})
             continue
     return out

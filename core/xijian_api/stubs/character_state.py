@@ -67,6 +67,8 @@ Environment variables
 ``XIJIAN_STATE_TICK``       — set to ``0`` to disable the background
                               tick thread (CI / tests).
 ``XIJIAN_STATE_TICK_SECONDS``— override the tick interval (default 60).
+overload 模块使用的，过渡停留时间，手动恢复事件，每角色循环，应用衰减，运行时修饰因子，衰减算法，状态机，纯追加，衰减率，管理员路径，内存中。
+
 """
 
 from __future__ import annotations
@@ -148,7 +150,8 @@ DEFAULT_TRANSITION_DWELL_SECONDS: dict[str, float] = {
     "hungry_recover": 5.0 * 60.0,
     "thirsty_recover": 5.0 * 60.0,
     "recovering_recover": 10.0 * 60.0,
-    "high_mood_low_hunger": 0.0,  # edge case from spec
+    "high_mood_low_hunger": 0.0,  # edge case from spec  # 规范的边缘情况
+
 }
 
 #: Default behaviour bindings — JSON shape that the UI can read.
@@ -239,6 +242,8 @@ def decay_amount(
     Returns ``0.0`` (not a negative number) when ``dt_seconds`` is
     non-positive.  This keeps the tick loop safe against clock
     jitter — a backwards jump doesn't accidentally refill a stat.
+    不会意外回填状态值，向后跳变，时钟抖动，tick 循环。
+
     """
     if dt_seconds <= 0:
         return 0.0
@@ -415,6 +420,8 @@ def resolve_behavior_bindings(
     for the UI to consume.  The list is intentionally ordered with
     the spec's edge case first so the most expressive animation
     wins ties.
+    边缘情况。
+
     """
     bindings_cfg = config.get("behavior_bindings") or DEFAULT_BEHAVIOR_BINDINGS
     active: list[dict[str, str]] = []
@@ -529,6 +536,8 @@ def set_modifier(character_id: str, modifier: dict) -> dict:
     Unknown keys are ignored.  Values are clamped to ``(0, 8]`` so
     a bug in caller code can't accidentally make decay go backwards
     or explode.
+    未知键被忽略。
+
     """
     cfg = get_or_init_config(character_id)
     mods = cfg.setdefault("modifiers", {})
@@ -584,6 +593,8 @@ def _append_log(
     Tests that freeze the clock pass a controlled value here so log
     ordering is deterministic; production callers omit it and we
     fall back to :func:`now_ts` (wall clock).
+    确定性。
+
     """
     log_id = gen_state_log_id()
     ts = int(now) if now is not None else now_ts()
@@ -727,7 +738,8 @@ def _publish_state_change(
     try:
         from xijian_api.routes.ws_routes import publish_event
         publish_event("character.state.changed", payload)
-    except Exception:  # noqa: BLE001 — best effort, never raise
+    except Exception:  # noqa: BLE001 — best effort, never raise  # 尽力而为，绝不抛出异常
+
         pass
     # Status-specific handlers (only when the field is the status).
     if field == "status" and new_value in _STATUS_HANDLERS:
@@ -836,6 +848,8 @@ def tick_character(character_id: str, *, now: float | None = None) -> dict:
     tick loop and the routes can surface what changed.  Reads the
     record's ``last_updated`` to compute the elapsed time and uses
     the config's decay rates + modifiers.
+    衰减率，tick 循环。
+
     """
     record = get_or_init_state(character_id)
     cfg = get_or_init_config(character_id)
@@ -938,6 +952,8 @@ def _tick_loop(stop_event: threading.Event, generation: int) -> None:
     racing against the fresh instance — this is what lets a test
     suite (or a re-entrant ``seed_all``) install a new tick thread
     without leaving the old one spinning until the next interval.
+    单调计数器，可重入。
+
     """
     while not stop_event.is_set():
         with _TICK_LOCK:
@@ -1011,6 +1027,8 @@ def seed_default() -> None:
     lazily on first access (in :func:`get_or_init_state`) so we don't
     pollute the in-memory store with records for characters that
     never get queried.
+    首次访问时惰性创建，内存中。
+
     """
     if os.environ.get(_TICK_ENV_FLAG) == "0":
         return

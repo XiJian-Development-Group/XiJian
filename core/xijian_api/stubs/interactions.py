@@ -31,6 +31,8 @@ def seed_default() -> None:
     Idempotent: re-seeding is a no-op once ``int_hug`` exists.  The
     set mirrors the spec's "default library" — operators can extend
     or replace it freely without touching this function.
+    幂等，镜像，无操作。
+
     """
     if INTERACTION_HUG in state.interactions:
         return

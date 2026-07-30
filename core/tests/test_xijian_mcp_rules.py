@@ -11,6 +11,9 @@ Covers:
   broken regex is logged + skipped; unknown kind returns no
   matches.
 * **Auth** — every endpoint requires a Bearer token.
+
+  测试 MCP 规则引擎和安全策略。
+  验证工具执行权限和规则匹配逻辑。
 """
 
 from __future__ import annotations
@@ -136,6 +139,7 @@ class TestCompilePattern:
 
 
 # ---------------------------------------------------------------------------
+# CRUD
 # CRUD
 # ---------------------------------------------------------------------------
 
@@ -696,6 +700,7 @@ class TestHTTPDelete:
 
 # ---------------------------------------------------------------------------
 # Auth coverage
+# 认证 — coverage
 # ---------------------------------------------------------------------------
 
 

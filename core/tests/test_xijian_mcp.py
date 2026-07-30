@@ -35,6 +35,9 @@ Covers:
   * Restore overwrites the live state
   * Restore auto-sanitizes if the explicit step was skipped
 * **Auth** — every endpoint requires a Bearer token.
+
+  测试 MCP（模型上下文协议）端点和工具执行。
+  验证 MCP 服务器集成是否正确处理请求和响应。
 """
 
 from __future__ import annotations
@@ -89,6 +92,7 @@ from xijian_api.stubs.safety_rules import KIND_FORBIDDEN_WORD
 
 # ---------------------------------------------------------------------------
 # Fixtures
+# 测试夹具
 # ---------------------------------------------------------------------------
 
 
@@ -184,6 +188,7 @@ class TestSequence:
 
 # ---------------------------------------------------------------------------
 # World policy
+# 世界 — policy
 # ---------------------------------------------------------------------------
 
 
@@ -553,6 +558,7 @@ class TestCheckSelfCrash:
 
 # ---------------------------------------------------------------------------
 # Safety-stop — the freeze state machine
+# 安全 — -stop — the freeze state machine
 # ---------------------------------------------------------------------------
 
 
@@ -670,6 +676,7 @@ class TestGetFreeze:
 class TestConfirmSafetyStop:
     def test_confirm_runs_dump_sanitize_restore(self):
         # Set up some state that the snapshot will cover.
+        # 设置 — up some state that the snapshot will cover.
         stubs_state.worlds["world_demo"] = {"id": "world_demo", "name": "demo"}
         stubs_state.characters["char_demo"] = {"id": "char_demo", "name": "Demo"}
         # A forbidden word in the state so we can verify sanitize.
@@ -687,12 +694,14 @@ class TestConfirmSafetyStop:
         assert confirmed["restore_summary"] is not None
         assert "worlds" in confirmed["restore_summary"]["restored_buckets"]
         # Sanitize ran: the "leakme" substring is gone.
+        # 净化 — ran: the "leakme" substring is gone.
         snap = mcp_stub.get_snapshot(confirmed["snapshot_id"])
         assert snap["sanitized"] is True
         # The in-memory state was restored (overwritten back
         # to what the snapshot captured before sanitize).
         char = stubs_state.characters["char_demo"]
         # Sanitize is a defence-in-depth: the live state at
+        # 净化 — is a defence-in-depth: the live state at
         # the time of the snapshot had "leakme", and after
         # restore the live state carries the sanitized value.
         # We only check the snapshot payload here (the in-memory
@@ -986,6 +995,7 @@ class TestLifecycle:
         assert mcp_stub.list_snapshots() == []
         assert mcp_stub.list_audit() == []
         # World policy is also gone.
+        # 世界 — policy is also gone.
         assert mcp_stub.get_world_policy("world_x")["default"] == POLICY_DEFAULT_DENY
 
 
@@ -1373,6 +1383,7 @@ class TestHTTPDevCrash:
 
 # ---------------------------------------------------------------------------
 # Auth coverage
+# 认证 — coverage
 # ---------------------------------------------------------------------------
 
 

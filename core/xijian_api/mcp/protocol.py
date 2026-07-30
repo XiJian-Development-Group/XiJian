@@ -1,32 +1,43 @@
 """JSON-RPC 2.0 protocol layer + MCP 1.0 method dispatcher.
+JSON-RPC 2.0 协议层 + MCP 1.0 方法分发器。
 
 This module is the single entry point for ``POST /v1/mcp``.  It
 parses the incoming JSON-RPC 2.0 request (single or batch), routes
 the method to the appropriate handler, and returns the JSON-RPC 2.0
 response.
+本模块是 ``POST /v1/mcp`` 的单一入口。解析传入的 JSON-RPC 2.0 请求 (单个或批量)，
+将方法路由到相应处理器，返回 JSON-RPC 2.0 响应。
 
-MCP 1.0 methods implemented
-===========================
+MCP 1.0 methods implemented / 已实现的 MCP 1.0 方法
+=========================================
 
 * ``initialize``           — handshake; returns server capabilities
+  握手；返回服务端能力
 * ``ping``                 — keepalive
+  心跳保活
 * ``tools/list``           — list every registered tool
+  列出所有已注册工具
 * ``tools/call``           — execute a tool (routes through A5.2 gate)
+  执行工具 (经 A5.2 门禁路由)
 * ``resources/list``       — list read-only resources
+  列出只读资源
 * ``resources/read``       — read a resource by URI
+  按 URI 读取资源
 * ``prompts/list``         — list prompt templates
+  列出提示词模板
 * ``prompts/get``          — render a prompt by name
+  按名称渲染提示词
 
-JSON-RPC 2.0 error codes
-========================
+JSON-RPC 2.0 error codes / JSON-RPC 2.0 错误码
+==============================================
 
-Per the spec:
+Per the spec / 按规范：
 
-* ``-32700`` Parse error
-* ``-32600`` Invalid request
-* ``-32601`` Method not found
-* ``-32602`` Invalid params
-* ``-32603`` Internal error
+* ``-32700`` Parse error / 解析错误
+* ``-32600`` Invalid request / 无效请求
+* ``-32601`` Method not found / 方法未找到
+* ``-32602`` Invalid params / 无效参数
+* ``-32603`` Internal error / 内部错误
 """
 
 from __future__ import annotations
@@ -49,10 +60,10 @@ _LOGGER = logging.getLogger("xijian_api.mcp.protocol")
 
 
 # ---------------------------------------------------------------------------
-# Constants
+# Constants / 常量
 # ---------------------------------------------------------------------------
 
-PROTOCOL_VERSION = "2025-06-18"  # MCP spec version we follow
+PROTOCOL_VERSION = "2025-06-18"  # MCP spec version we follow / 遵循的 MCP 规范版本
 SERVER_NAME = "xijian-core"
 SERVER_VERSION = "1.0.0"
 
@@ -65,7 +76,7 @@ ERR_INTERNAL_ERROR = -32603
 
 
 # ---------------------------------------------------------------------------
-# Envelope helpers
+# Envelope helpers / 信封辅助函数
 # ---------------------------------------------------------------------------
 
 
@@ -86,12 +97,13 @@ def _make_error(
 
 
 # ---------------------------------------------------------------------------
-# MCP method handlers
+# MCP method handlers / MCP 方法处理器
 # ---------------------------------------------------------------------------
 
 
 def _mcp_initialize(params: dict[str, Any]) -> dict[str, Any]:
-    """Return server capabilities + protocol version."""
+    """Return server capabilities + protocol version.
+    返回服务端能力 + 协议版本。"""
     return {
         "protocolVersion": PROTOCOL_VERSION,
         "capabilities": {
@@ -136,6 +148,7 @@ def _mcp_tools_call(params: dict[str, Any]) -> dict[str, Any]:
     except ToolGateError as exc:
         # Gate denials are returned as isError results, not JSON-RPC
         # errors — the model should see the denial and adjust.
+        # 门禁拒绝作为 isError 结果返回，而非 JSON-RPC 错误 —— 模型应看到拒绝并调整。
         return {
             "content": [{"type": "text", "text": exc.message}],
             "isError": True,
@@ -181,6 +194,8 @@ def _mcp_prompts_get(params: dict[str, Any]) -> dict[str, Any]:
 #: Method dispatch table.  Each handler takes a params dict and
 #: returns the ``result`` field of the JSON-RPC response, or raises
 #: :class:`_RpcError` for protocol-level errors.
+#: 方法分发表。每个处理器接收 params 字典，返回 JSON-RPC 响应的 ``result`` 字段，
+#: 或抛出 :class:`_RpcError` 表示协议层错误。
 _METHODS: dict[str, Any] = {
     "initialize": _mcp_initialize,
     "ping": _mcp_ping,
@@ -194,12 +209,13 @@ _METHODS: dict[str, Any] = {
 
 
 # ---------------------------------------------------------------------------
-# Internal RPC error
+# Internal RPC error / 内部 RPC 错误
 # ---------------------------------------------------------------------------
 
 
 class _RpcError(Exception):
-    """Protocol-level error that maps to a JSON-RPC error response."""
+    """Protocol-level error that maps to a JSON-RPC error response.
+    映射为 JSON-RPC 错误响应的协议层错误。"""
 
     def __init__(self, code: int, message: str, data: Any = None) -> None:
         super().__init__(message)
@@ -209,7 +225,7 @@ class _RpcError(Exception):
 
 
 # ---------------------------------------------------------------------------
-# Public entry points
+# Public entry points / 公共入口
 # ---------------------------------------------------------------------------
 
 
@@ -222,6 +238,9 @@ def handle_request(
 
     Returns the response dict, or ``None`` for notifications
     (requests without an ``id`` per JSON-RPC 2.0 §4).
+    处理单个 JSON-RPC 2.0 请求字典。
+
+    返回响应字典，或 ``None`` (针对通知 — 无 ``id`` 的请求，依 JSON-RPC 2.0 §4)。
     """
     if not isinstance(payload, dict):
         return _make_error(None, ERR_INVALID_REQUEST, "request must be an object")
@@ -255,6 +274,7 @@ def handle_request(
         return _make_error(req_id, ERR_INVALID_PARAMS, "`params` must be an object")
 
     # Inject caller info for tools/call.
+    # 为 tools/call 注入调用者信息。
     if isinstance(params, dict) and caller is not None:
         params = {**params, "_caller": caller}
 
@@ -290,6 +310,11 @@ def handle_batch(
       handled independently and non-None responses are collected.
     * If the batch is empty → returns a single error response
       (per JSON-RPC 2.0 §6).
+    处理 JSON-RPC 2.0 请求 (单个或批量)。
+
+    * ``payload`` 为 dict → 单个请求 (委托给 :func:`handle_request`)。
+    * ``payload`` 为 list → 批量请求；每个元素独立处理，收集非 None 响应。
+    * 批量为空 → 返回单个错误响应 (依 JSON-RPC 2.0 §6)。
     """
     if isinstance(payload, list):
         if not payload:

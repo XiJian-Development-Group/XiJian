@@ -1,4 +1,6 @@
-"""Stub resources import — async fake zip."""
+"""Stub resources import — async fake zip.
+存根资源导入 — 异步伪 zip。
+"""
 
 from __future__ import annotations
 
@@ -12,11 +14,14 @@ from xijian_api.utils.ids import gen_file_id
 from xijian_api.utils.time import now_ts
 
 
+# 100 ms — simulated async delay
 _COMPLETE_DELAY_SECONDS = 0.1  # 100 ms
 
 
 def start_import(payload: dict, job_id: str) -> None:
-    """Schedule completion for ``job_id`` and build a placeholder zip."""
+    """Schedule completion for ``job_id`` and build a placeholder zip.
+    调度 ``job_id`` 的完成并构建占位 zip。
+    """
     file_id = gen_file_id()
     state.import_jobs[job_id] = {
         "id": job_id,
@@ -37,6 +42,7 @@ def start_import(payload: dict, job_id: str) -> None:
         record["completed_at"] = now_ts()
         # Write a tiny zip with a manifest so /v1/files/<id>/content
         # returns something meaningful.
+        # 写入一个带清单的小 zip，使 /v1/files/<id>/content 返回有意义的内容。
         buf = BytesIO()
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
             zf.writestr("manifest.json", '{"stub": true}')
@@ -53,6 +59,9 @@ def start_import(payload: dict, job_id: str) -> None:
 
 
 def get(job_id: str) -> dict | None:
+    """Return the import job record or ``None``.
+    返回导入任务记录或 ``None``。
+    """
     return state.import_jobs.get(job_id)
 
 

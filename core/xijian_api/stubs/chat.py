@@ -45,6 +45,8 @@ with the forced-recall pipeline from the A1.2 spec:
 
 The pipeline is opt-in.  Existing callers that don't pass
 ``xijian.character_id`` see no behaviour change.
+在调用之间保留，不保留状态，已注册，按需。
+
 """
 
 from __future__ import annotations
@@ -102,6 +104,8 @@ def _select_default_backend() -> ChatBackend:
     also useful for free-form model ids.  Production deploys that
     only register ``mlx`` / ``gguf`` entries simply omit mock; this
     helper just opportunistically uses it when present.
+    已注册。
+
     """
     config = _resolve_config()
     requested: str | None = None
@@ -158,6 +162,8 @@ def _resolve_backend_for(model_id: str) -> ChatBackend:
 
     AI-layer failures are translated into the API's :class:`ApiError`
     envelope with HTTP 503.
+    已注册。
+
     """
     config = _resolve_config()
     if config is not None:
@@ -312,6 +318,8 @@ def _recall_tool_spec(character_id: str | None) -> dict[str, Any]:
 
     The spec is the same shape as OpenAI's ``tools`` array entry so the
     backend can surface it to the model verbatim.
+    相同形状。
+
     """
     parameters: dict[str, Any] = {
         "type": "object",
@@ -402,6 +410,8 @@ def _build_character_context(character_id: str) -> str | None:
     prompt.
 
     Returns ``None`` if the character is not found.
+    未找到。
+
     """
     from xijian_api.stubs.characters import get as get_char
     from xijian_api.stubs.character_state import (
@@ -506,6 +516,8 @@ def _inject_memory_context(messages: list[dict], memory_block: str) -> list[dict
     is layered *before* the recall-rule system message so the model
     reads "what the character knows" first and "how to cite it" second.
     Returns a new list; the input is not mutated.
+    不修改输入，不修改。
+
     """
     if not memory_block:
         return list(messages)
@@ -525,6 +537,8 @@ def _execute_recall_call(arguments: str, *, default_character_id: str | None) ->
     backend / downstream LLM can consume it without a second mapping
     pass.  ``entry_ids`` is the flat list of returned entry ids — the
     citation audit reads from here directly.
+    镜像。
+
     """
     try:
         args = json.loads(arguments or "{}") if arguments else {}
@@ -894,6 +908,8 @@ def _build_oai_tools(
       registry).  Non-MCP tools in ``user_tools`` are passed to the
       model but can't be executed by the server — the model would
       need to handle them client-side.
+    已注册。
+
     """
     # Lazy import to avoid circular dependency at module load time.
     from xijian_api.mcp.registry import list_tool_names, list_tools
@@ -1212,6 +1228,8 @@ def _inject_tools_system(
     injection rather than backend kwargs) because the
     :class:`ChatBackend` interface is a low-level text-generation
     contract that does not accept ``tools`` / ``tool_choice``.
+    镜像。
+
     """
     parts = [_TOOLS_SYSTEM_PROMPT]
     if tool_choice in ("required", "tool"):

@@ -1,4 +1,9 @@
-"""OpenAI-compatible remote STT backend.
+"""OpenAI 兼容远程 STT（语音转文本）后端。
+
+OpenAI-compatible remote STT backend.
+
+调用 ``POST /audio/transcriptions`` (OpenAI Whisper API)。接受原始音频字节，
+返回 OAI 风格的转录字典。
 
 Calls ``POST /audio/transcriptions`` (OpenAI Whisper API).  Accepts raw
 audio bytes and returns an OAI-style transcription dict.
@@ -22,6 +27,7 @@ from xijian_api.ai.types import STTBackend
 
 @register_stt("openai")
 class OpenAISTTBackend(STTBackend):
+    """OpenAI 兼容 STT 后端实现。OpenAI-compatible STT backend implementation."""
     name = "openai"
 
     def __init__(self) -> None:

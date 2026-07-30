@@ -15,6 +15,9 @@ dependencies = [
 # GUI entry point for the Developer Kit (C5).  Heavy & platform-specific
 # (pywebview pulls in PyObjC on macOS, pythonnet on Windows, webkitgtk
 # on Linux), so it stays opt-in.
+# 开发者工具套件 (C5) 的 GUI 入口点。较重且依赖平台特性
+# （macOS 依赖 PyObjC、Windows 依赖 pythonnet、Linux 依赖 webkitgtk），
+# 因此保持可选。
 devkit = [
   "pywebview>=5.0",
   "py7zr>=0.21",
@@ -26,8 +29,11 @@ test = [
   "websocket-client>=1.7",
 ]
 # 打包为独立可执行文件的工具链（PyInstaller）。
+# Toolchain for building standalone executables (PyInstaller).
 # 使用 `pip install -e ".[build]"` 安装后，可通过
 # `./core/scripts/dev.sh --build` 或 `.\core\scripts\dev.ps1 -Build` 调用。
+# Install via `pip install -e ".[build]"`, then invoke with
+# `./core/scripts/dev.sh --build` or `.\core\scripts\dev.ps1 -Build`.
 build = [
   "pyinstaller>=6.0",
 ]
@@ -39,6 +45,8 @@ all = [
 # Launches the standalone Developer Kit window (Pywebview).  Invoked
 # from the 主程序 → 我的 → 开发者工具 → 打开独立窗口 flow documented
 # in C0 of v2.2.
+# 启动独立的开发者工具窗口（Pywebview）。从 v2.2 的 C0 中记录的
+# 主程序 → 我的 → 开发者工具 → 打开独立窗口 流程调用。
 xijian-devkit = "xijian_api.devkit.main:main"
 
 [build-system]
@@ -52,6 +60,8 @@ include = ["xijian_api*"]
 [tool.setuptools.package-data]
 # Ship the DevKit UI assets inside the wheel so the window can be
 # opened without bundling extra files alongside the wheel.
+# 将开发者工具 UI 资源打包进 wheel，这样无需在 wheel 旁额外捆绑文件
+# 即可打开窗口。
 "xijian_api.devkit.ui" = ["*.html", "*.js", "*.css"]
 
 [tool.pytest.ini_options]

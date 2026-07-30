@@ -1,23 +1,27 @@
 """MCP tools for the session domain.
+MCP 会话域工具。
 
 Wraps the in-memory session stub (:mod:`xijian_api.stubs.sessions`) as
 MCP tools registered with :mod:`xijian_api.mcp.registry`.  A "session"
 is a per-conversation message log keyed by session id.
+将内存会话桩层封装为 MCP 工具。"会话"是按会话 ID 索引的每个对话的消息日志。
 
 These are internal domain tools (``action_kind=None``): they only touch
 in-memory state, so they skip the A5.2 gate and rely on the stub's own
 input validation.  The session stub exposes no ``list_all`` helper, so
 ``session_list`` reads the ``state.sessions`` container directly.
+内部领域工具，仅操作内存状态，绕过 A5.2 门禁。会话桩层未暴露 ``list_all`` 辅助函数，
+因此 ``session_list`` 直接读取 ``state.sessions`` 容器。
 
-Tools registered
+Tools registered / 已注册工具
 ----------------
 
-* ``session_create``         — create a session
-* ``session_get``            — fetch a session by id
-* ``session_list``           — list every session
-* ``session_append_message`` — append a message to a session
-* ``session_list_messages``  — list messages in a session
-* ``session_delete``         — delete a session
+* ``session_create``         — create a session / 创建会话
+* ``session_get``            — fetch a session by id / 按 ID 获取会话
+* ``session_list``           — list every session / 列出所有会话
+* ``session_append_message`` — append a message to a session / 向会话追加消息
+* ``session_list_messages``  — list messages in a session / 列出会话中的消息
+* ``session_delete``         — delete a session / 删除会话
 """
 
 from __future__ import annotations
@@ -30,7 +34,7 @@ from xijian_api.stubs import state
 
 
 # ---------------------------------------------------------------------------
-# Handlers
+# Handlers / 处理器
 # ---------------------------------------------------------------------------
 
 
@@ -95,19 +99,19 @@ def _session_delete(args: dict[str, Any], ctx: dict[str, Any]) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Registration
+# Registration / 注册
 # ---------------------------------------------------------------------------
 
 
 register_tool(
     name="session_create",
-    description="Create a new session (per-conversation message log).",
+    description="Create a new session (per-conversation message log). / 创建新会话（每对话消息日志）。",
     input_schema={
         "type": "object",
         "properties": {
-            "title": {"type": "string", "description": "Session title (defaults to '新会话')."},
-            "character_id": {"type": "string", "description": "Optional character id to associate."},
-            "world_id": {"type": "string", "description": "Optional world id to associate."},
+            "title": {"type": "string", "description": "Session title (defaults to '新会话'). / 会话标题。"},
+            "character_id": {"type": "string", "description": "Optional character id / 可选角色 ID"},
+            "world_id": {"type": "string", "description": "Optional world id / 可选世界 ID"},
         },
         "required": [],
     },
@@ -118,11 +122,11 @@ register_tool(
 
 register_tool(
     name="session_get",
-    description="Fetch a single session by id.",
+    description="Fetch a single session by id. / 按 ID 获取单个会话。",
     input_schema={
         "type": "object",
         "properties": {
-            "session_id": {"type": "string", "description": "The session id to fetch."},
+            "session_id": {"type": "string", "description": "The session id to fetch. / 要获取的会话 ID。"},
         },
         "required": ["session_id"],
     },
@@ -134,7 +138,7 @@ register_tool(
 
 register_tool(
     name="session_list",
-    description="List every session record.",
+    description="List every session record. / 列出每个会话记录。",
     input_schema={"type": "object", "properties": {}, "required": []},
     handler=_session_list,
     action_kind=None,
@@ -144,14 +148,14 @@ register_tool(
 
 register_tool(
     name="session_append_message",
-    description="Append a message (role/content) to a session's message log.",
+    description="Append a message (role/content) to a session's message log. / 向会话的消息日志追加消息（角色/内容）。",
     input_schema={
         "type": "object",
         "properties": {
-            "session_id": {"type": "string", "description": "The session id to append to."},
-            "role": {"type": "string", "description": "Message role (e.g. 'user', 'assistant')."},
-            "content": {"type": "string", "description": "Message content text."},
-            "name": {"type": "string", "description": "Optional sender name."},
+            "session_id": {"type": "string", "description": "The session id to append to. / 要追加到的会话 ID。"},
+            "role": {"type": "string", "description": "Message role (e.g. 'user', 'assistant'). / 消息角色。"},
+            "content": {"type": "string", "description": "Message content text. / 消息内容文本。"},
+            "name": {"type": "string", "description": "Optional sender name. / 可选的发送者名称。"},
         },
         "required": ["session_id", "role", "content"],
     },
@@ -162,11 +166,11 @@ register_tool(
 
 register_tool(
     name="session_list_messages",
-    description="List every message in a session, oldest-first.",
+    description="List every message in a session, oldest-first. / 列出会话中的每条消息，最早优先。",
     input_schema={
         "type": "object",
         "properties": {
-            "session_id": {"type": "string", "description": "The session id to list messages for."},
+            "session_id": {"type": "string", "description": "The session id to list messages for. / 要列出消息的会话 ID。"},
         },
         "required": ["session_id"],
     },
@@ -178,11 +182,11 @@ register_tool(
 
 register_tool(
     name="session_delete",
-    description="Delete a session by id.",
+    description="Delete a session by id. / 按 ID 删除会话。",
     input_schema={
         "type": "object",
         "properties": {
-            "session_id": {"type": "string", "description": "The session id to delete."},
+            "session_id": {"type": "string", "description": "The session id to delete. / 要删除的会话 ID。"},
         },
         "required": ["session_id"],
     },

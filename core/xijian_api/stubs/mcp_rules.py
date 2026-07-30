@@ -61,6 +61,8 @@ Test surface
   :func:`list_all` / :func:`update` / :func:`delete`
 * :func:`match_action_rules` — hot path
 * :func:`seed_default` / :func:`reset_for_testing`
+镜像。
+
 """
 
 from __future__ import annotations
@@ -364,6 +366,8 @@ def match_action_rules(
 def seed_default() -> None:
     """Idempotent default-seed.  No rules ship by default — the
     rulebook is operator-curated.  Future rule-bundle imports
+    运营策展。
+
     have a stable entry point here."""
     return None
 

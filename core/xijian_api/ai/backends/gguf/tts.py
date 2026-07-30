@@ -1,4 +1,14 @@
-"""GGUF text-to-speech backend.
+"""GGUF 文本转语音后端。
+
+GGUF text-to-speech backend.
+
+没有单一的规范 GGUF TTS 库。我们探测一小批已知绑定并使用已安装的那个：
+
+* ``piper`` — Piper.cpp 绑定（``piper-tts`` 包）。
+* ``TTS`` — Coqui TTS（近期版本支持 GGUF 语音）。
+
+当都不存在时，此后端报告自身不可用，注册表回退（或若没有其他 TTS
+可服务则返回 503）。
 
 There is no single canonical GGUF TTS library.  We probe a small
 list of known bindings and surface whichever one is installed:
@@ -25,9 +35,9 @@ from xijian_api.ai.registry import register_tts
 from xijian_api.ai.types import TTSBackend
 
 
-# (module_name, attribute_path) pairs in preference order.  The first
-# importable one wins.  Adding a new binding here is enough to enable
-# a new backend without touching the rest of the class.
+# 按偏好顺序的 (module_name, attribute_path) 对。
+# 第一个可导入的胜出。在此添加新绑定就足以启用新后端，
+# 无需修改类的其余部分。
 _CANDIDATES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("piper", ("PiperVoice",)),
     ("piper", ("voice", "PiperVoice")),
@@ -53,6 +63,7 @@ def _probe() -> tuple[bool, tuple[str, ...] | None]:
 
 @register_tts("gguf")
 class GGUFTTSBackend(TTSBackend):
+    """GGUF 文本转语音后端。GGUF text-to-speech backend."""
     name = "gguf"
 
     def __init__(self) -> None:
@@ -73,9 +84,9 @@ class GGUFTTSBackend(TTSBackend):
                 code="backend_unavailable",
             )
         path = Path(model_path)
-        # Piper expects a ``.onnx`` (or ``.gguf``) checkpoint plus a
-        # ``.onnx.json`` config file.  We accept either — operators
-        # point at the checkpoint and we look for the sibling config.
+        # Piper 期望 ``.onnx``（或 ``.gguf``）检查点加上
+        # ``.onnx.json`` 配置文件。我们接受任一 —— 运维者指向
+        # 检查点，我们查找同级配置文件。
         if not path.exists():
             raise ModelNotFound(f"model path does not exist: {path}")
         self._model_path = path
@@ -119,10 +130,13 @@ class GGUFTTSBackend(TTSBackend):
                 code="backend_error",
             ) from exc
 
-    # -- internals ----------------------------------------------------------
+    # -- internals / 内部 ----------------------------------------------------------
 
     def _build_voice(self, path: Path, **kwargs) -> Any:
-        """Construct a voice object using the discovered binding."""
+        """使用发现的绑定构造语音对象。
+
+        Construct a voice object using the discovered binding.
+        """
         assert self._attr_path is not None
         import importlib
 
@@ -131,9 +145,8 @@ class GGUFTTSBackend(TTSBackend):
         cls = module
         for attr in attrs:
             cls = getattr(cls, attr)
-        # Piper: ``PiperVoice.load(ckpt_path, config_path=...)``.
-        # We look for the sibling ``.json`` first; fall back to
-        # letting the binding auto-discover it.
+        # Piper: ``PiperVoice.load(ckpt_path, config_path=...)``。
+        # 先查找同级 ``.json``；回退到让绑定自动发现。
         if module_name == "piper":
             config_path = path.with_suffix(".onnx.json")
             if not config_path.exists():
@@ -142,11 +155,11 @@ class GGUFTTSBackend(TTSBackend):
                 return cls.load(str(path), config_path=str(config_path) if config_path.exists() else None)
             except TypeError:
                 return cls.load(str(path))
-        # Coqui TTS: ``TTS(...).tts_to_file()`` style — we wrap the
-        # whole model instance as the "voice" for parity.
+        # Coqui TTS: ``TTS(...).tts_to_file()`` 风格 —— 为保持
+        # 一致性将整个模型实例包装为"voice"。
         if module_name == "TTS":
             return cls(model_path=str(path), progress_bar=False, gpu=False)
-        # Generic: try a positional ctor.
+        # 通用：尝试位置构造函数。
         return cls(str(path))
 
     def _synth(
@@ -181,14 +194,17 @@ class GGUFTTSBackend(TTSBackend):
         )
 
     def _synth_piper(self, *, text: str, speed: float) -> bytes:
-        """Synth via Piper, returning WAV bytes that we transcode if asked."""
+        """通过 Piper 合成，返回 WAV 字节，若请求则转码。
+
+        Synth via Piper, returning WAV bytes that we transcode if asked.
+        """
         import io
         import wave
 
         buf = io.BytesIO()
         with wave.open(buf, "wb") as wf:
-            # Piper's ``synthesize`` writes directly to a wave_write
-            # object — the easiest cross-version path.
+            # Piper 的 ``synthesize`` 直接写入 wave_write 对象 ——
+            # 这是跨版本最简单的方式。
             self._voice.synthesize(text, wf, length_scale=1.0 / max(0.1, float(speed)))
         wav_bytes = buf.getvalue()
         return _maybe_transcode(wav_bytes, response_format="wav")
@@ -230,16 +246,18 @@ def _ext_for_format(fmt: str) -> str:
 
 
 def _maybe_transcode(wav_bytes: bytes, *, response_format: str) -> bytes:
-    """Transcode WAV → ``response_format`` when the format isn't WAV."""
+    """当请求格式不是 WAV 时将 WAV 转码为 ``response_format``。
+
+    Transcode WAV → ``response_format`` when the format isn't WAV.
+    """
     fmt = (response_format or "wav").lower()
     if fmt in {"wav", "pcm"}:
         return wav_bytes
     try:
         import pydub
     except Exception:
-        # Without ``pydub`` we can't transcode — return WAV and let the
-        # caller log a warning.  mp3 playback will still work for many
-        # clients (browsers usually decode WAV natively).
+        # 没有 ``pydub`` 无法转码 —— 返回 WAV 让调用者记录警告。
+        # 对许多客户端 mp3 播放仍然有效（浏览器通常原生解码 WAV）。
         return wav_bytes
     from io import BytesIO
 

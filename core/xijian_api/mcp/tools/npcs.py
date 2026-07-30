@@ -1,4 +1,5 @@
 """MCP tools for the NPC domain.
+MCP NPC 域工具。
 
 Wraps the in-memory NPC stub (:mod:`xijian_api.stubs.npcs`) as MCP
 tools registered with :mod:`xijian_api.mcp.registry`.  An NPC is a
@@ -6,19 +7,22 @@ world-scoped "background character" with an activity tier
 (``high_active`` / ``low_active`` / ``idle``) and a per-NPC compute
 budget; the scheduler (``tick_world``) promotes and demotes NPCs based
 on budget pressure and idle time.
+将内存 NPC 桩层封装为 MCP 工具。NPC 是限定到世界的"背景角色"，带有活动层级
+和每个 NPC 的计算预算；调度器根据预算压力与空闲时间升降 NPC。
 
 These are internal domain tools (``action_kind=None``): they only touch
 in-memory state, so they skip the A5.2 gate and rely on the stub's own
 input validation.
+内部领域工具，仅操作内存状态，绕过 A5.2 门禁。
 
-Tools registered
+Tools registered / 已注册工具
 ----------------
 
-* ``npc_create``      — create an NPC in a world
-* ``npc_list``        — list NPCs for a world (filterable by tier / alive)
-* ``npc_get``         — fetch an NPC by id
-* ``npc_set_tier``    — change an NPC's activity tier (audit-logged)
-* ``npc_tick_world``  — run one scheduler pass for a world
+* ``npc_create``      — create an NPC in a world / 在世界中创建 NPC
+* ``npc_list``        — list NPCs for a world (filterable by tier / alive) / 列出世界的 NPC
+* ``npc_get``         — fetch an NPC by id / 按 ID 获取 NPC
+* ``npc_set_tier``    — change an NPC's activity tier (audit-logged) / 更改 NPC 活动层级
+* ``npc_tick_world``  — run one scheduler pass for a world / 为世界运行一次调度器
 """
 
 from __future__ import annotations
@@ -30,7 +34,7 @@ from xijian_api.stubs import npcs as npcs_stub
 
 
 # ---------------------------------------------------------------------------
-# Handlers
+# Handlers / 处理器
 # ---------------------------------------------------------------------------
 
 
@@ -100,25 +104,25 @@ def _npc_tick_world(args: dict[str, Any], ctx: dict[str, Any]) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Registration
+# Registration / 注册
 # ---------------------------------------------------------------------------
 
 
 register_tool(
     name="npc_create",
-    description="Create a new NPC in a world with persona, tier, and compute budget.",
+    description="Create a new NPC in a world with persona, tier, and compute budget. / 在世界中创建带人设、层级和计算预算的新 NPC。",
     input_schema={
         "type": "object",
         "properties": {
-            "world_id": {"type": "string", "description": "Owning world id."},
-            "name": {"type": "string", "description": "Human-readable NPC name."},
-            "persona_doc": {"type": "string", "description": "Persona / background document text."},
-            "state_json": {"type": "object", "description": "Free-form state payload (e.g. npc_kind tag)."},
-            "compute_budget": {"type": "integer", "description": "Per-NPC token/min ceiling."},
-            "activity_tier": {"type": "string", "description": "Initial tier: high_active / low_active / idle."},
-            "importance": {"type": "number", "description": "Importance weight used by the demotion order."},
-            "npc_id": {"type": "string", "description": "Optional explicit id; auto-generated when omitted."},
-            "is_alive": {"type": "boolean", "description": "Whether the NPC is alive (default true)."},
+            "world_id": {"type": "string", "description": "Owning world id. / 所属世界 ID。"},
+            "name": {"type": "string", "description": "Human-readable NPC name. / 人类可读的 NPC 名称。"},
+            "persona_doc": {"type": "string", "description": "Persona / background document text. / 人设/背景文档。"},
+            "state_json": {"type": "object", "description": "Free-form state payload. / 自由格式状态负载。"},
+            "compute_budget": {"type": "integer", "description": "Per-NPC token/min ceiling. / 每 NPC 每分钟 Token 上限。"},
+            "activity_tier": {"type": "string", "description": "Initial tier: high_active / low_active / idle. / 初始层级。"},
+            "importance": {"type": "number", "description": "Importance weight used by the demotion order. / 降序排序中使用的权重。"},
+            "npc_id": {"type": "string", "description": "Optional explicit id / 可选显式 ID"},
+            "is_alive": {"type": "boolean", "description": "Whether the NPC is alive (default true). / NPC 是否存活。"},
         },
         "required": ["world_id", "name"],
     },
@@ -129,13 +133,13 @@ register_tool(
 
 register_tool(
     name="npc_list",
-    description="List NPCs in a world, optionally filtered by tier and alive status.",
+    description="List NPCs in a world, optionally filtered by tier and alive status. / 列出世界中的 NPC，可选按层级和存活状态筛选。",
     input_schema={
         "type": "object",
         "properties": {
-            "world_id": {"type": "string", "description": "World id to list NPCs for."},
-            "tier": {"type": "string", "description": "Optional tier filter: high_active / low_active / idle."},
-            "alive_only": {"type": "boolean", "description": "If true, exclude dead NPCs."},
+            "world_id": {"type": "string", "description": "World id to list NPCs for. / 要列出 NPC 的世界 ID。"},
+            "tier": {"type": "string", "description": "Optional tier filter / 可选层级筛选"},
+            "alive_only": {"type": "boolean", "description": "If true, exclude dead NPCs. / 若为 true，排除已死亡 NPC。"},
         },
         "required": ["world_id"],
     },
@@ -147,11 +151,11 @@ register_tool(
 
 register_tool(
     name="npc_get",
-    description="Fetch a single NPC by id.",
+    description="Fetch a single NPC by id. / 按 ID 获取单个 NPC。",
     input_schema={
         "type": "object",
         "properties": {
-            "npc_id": {"type": "string", "description": "The NPC id to fetch."},
+            "npc_id": {"type": "string", "description": "The NPC id to fetch. / 要获取的 NPC ID。"},
         },
         "required": ["npc_id"],
     },
@@ -163,12 +167,12 @@ register_tool(
 
 register_tool(
     name="npc_set_tier",
-    description="Change an NPC's activity tier (writes an audit-log entry).",
+    description="Change an NPC's activity tier (writes an audit-log entry). / 更改 NPC 的活动层级（写入审计日志条目）。",
     input_schema={
         "type": "object",
         "properties": {
-            "npc_id": {"type": "string", "description": "The NPC id to update."},
-            "tier": {"type": "string", "description": "Target tier: high_active / low_active / idle."},
+            "npc_id": {"type": "string", "description": "The NPC id to update. / 要更新的 NPC ID。"},
+            "tier": {"type": "string", "description": "Target tier: high_active / low_active / idle. / 目标层级。"},
         },
         "required": ["npc_id", "tier"],
     },
@@ -179,11 +183,11 @@ register_tool(
 
 register_tool(
     name="npc_tick_world",
-    description="Run one NPC scheduler pass for a world: demote over-budget/idle NPCs and stamp last_think_at.",
+    description="Run one NPC scheduler pass for a world: demote over-budget/idle NPCs and stamp last_think_at. / 为世界运行一次 NPC 调度器：降级超预算/空闲 NPC 并更新 last_think_at。",
     input_schema={
         "type": "object",
         "properties": {
-            "world_id": {"type": "string", "description": "World id to tick."},
+            "world_id": {"type": "string", "description": "World id to tick. / 要调度的世界 ID。"},
         },
         "required": ["world_id"],
     },
