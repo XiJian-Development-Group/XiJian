@@ -321,7 +321,10 @@ def _build_app_resilient(config: Config) -> Flask:
 
 
 def _with_dev(config: Config) -> Config:
-    """Return a shallow copy of ``config`` with dev mode forced on."""
+    """Return a shallow copy of ``config`` with dev mode forced on.
+
+    返回 ``config`` 的浅拷贝，并强制开启开发模式。
+    """
     import dataclasses
 
     new_server = dataclasses.replace(config.server, dev=True)

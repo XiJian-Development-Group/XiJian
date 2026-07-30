@@ -434,6 +434,10 @@ def _parse_decorator(
     source: str,
     route_analyzer: RouteAnalyzer,
 ) -> list[dict[str, Any]]:
+    """Parse a single route decorator and extract route metadata.
+
+    解析单个路由装饰器，提取路由元数据。
+    """
     if not isinstance(dec, ast.Call):
         return []
     func_attr = dec.func
@@ -620,6 +624,10 @@ def _build_response_schema(response_fields: list[str]) -> dict[str, Any]:
 
 
 def _build_operation(route: dict[str, Any]) -> dict[str, Any]:
+    """Build an OpenAPI operation object from a route info dict.
+
+    从路由信息字典构建 OpenAPI operation 对象。
+    """
     method = route["method"].lower()
     op: dict[str, Any] = {
         "tags": [route["tag"]],

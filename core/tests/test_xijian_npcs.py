@@ -51,8 +51,7 @@ from xijian_api.stubs.npcs import (
 
 
 # ---------------------------------------------------------------------------
-# Fixtures
-# 测试夹具
+# Fixtures / 测试夹具
 # ---------------------------------------------------------------------------
 
 
@@ -75,7 +74,7 @@ def npc(client, auth_headers, world):
 
 
 # ---------------------------------------------------------------------------
-# Constants — locked by v2.1
+# Constants — locked by v2.1 / 常量 — v2.1 锁定
 # ---------------------------------------------------------------------------
 
 
@@ -105,7 +104,7 @@ class TestConstants:
 
 
 # ---------------------------------------------------------------------------
-# Pure helpers
+# Pure helpers / 纯辅助函数
 # ---------------------------------------------------------------------------
 
 
@@ -209,7 +208,7 @@ class TestPickDemoteCandidates:
 
 
 # ---------------------------------------------------------------------------
-# Affected-NPC selector — A4.1 cross-link
+# Affected-NPC selector — A4.1 cross-link / 受影响 NPC 选择器 — A4.1 交叉链接
 # ---------------------------------------------------------------------------
 
 
@@ -288,8 +287,7 @@ class TestAffectedSelector:
 
 
 # ---------------------------------------------------------------------------
-# CRUD — stub-level
-# CRUD — stub-level
+# CRUD — stub-level / CRUD — stub 层
 # ---------------------------------------------------------------------------
 
 
@@ -313,7 +311,7 @@ class TestCreateStub:
         world = worlds_stub.create(name="W")
         try:
             # Create 50 NPCs with minimal budget.
-            # 创建 — 50 NPCs with minimal budget.
+            # Create 50 NPCs with minimal budget. / 创建 50 个 NPC，使用最小预算。
             for i in range(MAX_NPCS_PER_WORLD):
                 npcs_stub.create(
                     world_id=world["id"],
@@ -407,7 +405,7 @@ class TestGetListUpdateDelete:
 
 
 # ---------------------------------------------------------------------------
-# Tier transitions
+# Tier transitions / 等级转换
 # ---------------------------------------------------------------------------
 
 
@@ -478,7 +476,7 @@ class TestSetTier:
 
 
 # ---------------------------------------------------------------------------
-# Budget + summary
+# Budget + summary / 预算 + 汇总
 # ---------------------------------------------------------------------------
 
 
@@ -533,7 +531,7 @@ class TestComputeBudget:
 
 
 # ---------------------------------------------------------------------------
-# Scheduling
+# Scheduling / 调度
 # ---------------------------------------------------------------------------
 
 
@@ -550,7 +548,7 @@ class TestTickWorld:
     def test_unknown_world_returns_empty(self):
         out = npcs_stub.tick_world("world_phantom")
         # World doesn't exist — no entries, no error.
-        # 世界 — doesn't exist — no entries, no error.
+        # World doesn't exist — no entries, no error. / 世界不存在 — 无条目，无错误。
         assert out["fired"] == 0
 
     def test_marks_last_think_at(self):
@@ -636,8 +634,7 @@ class TestTickAll:
 
 
 # ---------------------------------------------------------------------------
-# Background tick thread
-# 后台 — tick thread
+# Background tick thread / 后台 tick 线程
 # ---------------------------------------------------------------------------
 
 
@@ -671,7 +668,7 @@ class TestTickLifecycle:
 
 
 # ---------------------------------------------------------------------------
-# A5.4 overload cross-link
+# A5.4 overload cross-link / A5.4 过载交叉链接
 # ---------------------------------------------------------------------------
 
 
@@ -727,7 +724,7 @@ class TestOverloadHandler:
 
 
 # ---------------------------------------------------------------------------
-# HTTP routes
+# HTTP routes / HTTP 路由
 # ---------------------------------------------------------------------------
 
 
@@ -959,8 +956,7 @@ class TestHttpScheduling:
 
 
 # ---------------------------------------------------------------------------
-# Auth coverage
-# 认证 — coverage
+# Auth coverage / 认证覆盖
 # ---------------------------------------------------------------------------
 
 
