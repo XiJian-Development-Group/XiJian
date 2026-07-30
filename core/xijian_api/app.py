@@ -23,8 +23,11 @@ from typing import Optional
 
 from flask import Flask
 
+import atexit
+
 from xijian_api import auth
 from xijian_api.config import Config, DEFAULT_HOST, DEFAULT_PORT
+from xijian_api.discovery import write_discovery, remove_discovery
 from xijian_api.errors import register_error_handlers
 from xijian_api.handshake import register_healthz
 from xijian_api.middleware import install_middleware
@@ -472,7 +475,17 @@ def _run(args: argparse.Namespace, log_file: Optional[str]) -> int:
         return 0
 
     # ------------------------------------------------------------------
-    # 8. Serve.
+    # 8. Write discovery file so other local processes (DevKit) can
+    #    find us.
+    # ------------------------------------------------------------------
+    token = auth.get_token()
+    if token and not config.testing:
+        write_discovery(port=port, auth_token=token, pid=os.getpid())
+        atexit.register(remove_discovery)
+        _LOGGER.info("Core discovery published for port %d", port)
+
+    # ------------------------------------------------------------------
+    # 9. Serve.
     # ------------------------------------------------------------------
     try:
         _serve(app, host, port)

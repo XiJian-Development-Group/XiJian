@@ -581,6 +581,32 @@ class DevKitApi:
         """Liveness probe (``{"ok": True, "data": {"pong": true}}``)."""
         return {"pong": True, "active_developer": self._active_developer}
 
+    # --- core discovery (DevKit ↔ Core API mutual discovery) ----------
+
+    @_serialize_call
+    def core_status(self) -> dict[str, Any]:
+        """Check if the Core API is running and discoverable."""
+        from devkit.discovery import core_status
+        return core_status()
+
+    @_serialize_call
+    def push_character(self, character_id: str) -> dict[str, Any]:
+        """Push a DevKit character to the Core API for preview testing."""
+        from devkit.discovery import push_character_for_preview
+        return push_character_for_preview(character_id)
+
+    @_serialize_call
+    def push_world(self, world_id: str) -> dict[str, Any]:
+        """Push a DevKit world to the Core API for preview testing."""
+        from devkit.discovery import push_world_for_preview
+        return push_world_for_preview(world_id)
+
+    @_serialize_call
+    def push_reload(self) -> dict[str, Any]:
+        """Tell the Core API to rescan and reload all DevKit items."""
+        from devkit.discovery import reload_all
+        return reload_all()
+
     # --- session -------------------------------------------------------
 
     @_serialize_call
