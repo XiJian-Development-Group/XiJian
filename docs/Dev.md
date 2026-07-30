@@ -661,7 +661,76 @@ test(world): 覆盖经济系统边界值
 
 ---
 
-## 15. 附录：常见问题（FAQ）
+## 11. DevKit 预览/测试环境（C0 循环）
+
+### 11.1 架构
+
+DevKit 是独立 Pywebview 进程，Core API 是 Flask 服务器。预览/测试通过**共享文件系统**桥接：
+
+```
+┌─────────────────────┐      ┌─────────────────────────────┐
+│  DevKit (Pywebview)  │      │  Core API (Flask)           │
+│                     │      │                             │
+│  保存数据到工作目录    │      │  GET /v1/xijian/devkit/*   │
+│  ↓                   │      │  ↑                         │
+│  ~/Library/.../DevKit│◄─────│  扫描 & 加载到 runtime     │
+│  ├── characters/     │      │                             │
+│  ├── worlds/         │      │  用户通过主程序对话测试      │
+│  ├── memories/       │      │                             │
+│  └── plots/          │      │                             │
+└─────────────────────┘      └─────────────────────────────┘
+```
+
+**零侵入**——Core 直接读取 DevKit 的保存目录，无需修改 DevKit 代码。
+
+### 11.2 端点清单
+
+所有端点位于 `/v1/xijian/devkit/`：
+
+| Method | Path | 用途 |
+|--------|------|------|
+| `GET` | `/status` | DevKit 目录可用性 + 统计 |
+| `GET` | `/characters` | 列出 DevKit 中保存的角色 |
+| `GET` | `/characters/<id>` | 角色详细预览 |
+| `POST` | `/characters/<id>/load` | 载入 core runtime |
+| `DELETE` 或 `POST /unload` | `/characters/<id>` | 从 runtime 卸载 |
+| `GET` | `/worlds` | 列出 DevKit 中保存的世界 |
+| `GET` | `/worlds/<id>` | 世界详细预览 |
+| `POST` | `/worlds/<id>/load` | 载入 core runtime |
+| `DELETE` 或 `POST /unload` | `/worlds/<id>` | 从 runtime 卸载 |
+| `GET` | `/loaded` | 当前已加载的 devkit 条目 |
+| `POST` | `/reload?kind=character|world` | 重新扫描并刷新 runtime |
+
+### 11.3 预览/测试流程（C0 循环）
+
+```
+DevKit 编辑 → 保存
+    ↓
+切到主程序 → 开发者工具 → 预览
+    ↓
+看到角色/世界列表
+    ↓
+点击「加载」→ 出现在对话列表
+    ↓
+聊天测试 → 满意？
+    ├── 是 → DevKit 点「提交」
+    └── 否 → DevKit 修改 → 保存 → 主程序「重新加载」→ 再测
+```
+
+### 11.4 实现模块
+
+- `core/xijian_api/stubs/devkit.py` — 目录扫描、数据解析、runtime 加载/卸载
+- `core/xijian_api/routes/xijian_devkit.py` — HTTP 端点
+
+### 11.5 DevKit 路径
+
+默认路径：`~/Library/Application Support/XiJian/DevKit/`
+
+可通过环境变量 `XIJIAN_DEVKIT_DIR` 覆盖。
+
+---
+
+## 12. 附录：常见问题（FAQ）
 
 **Q：业务逻辑写一次还是两次？**
 A：业务逻辑（角色、互动、世界、记忆、保护）一律写在 `core/`，跨平台共享。AI 推理由 backend 适配。
