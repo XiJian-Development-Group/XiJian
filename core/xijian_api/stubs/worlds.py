@@ -236,8 +236,11 @@ def create(
     # have something to read.
     from xijian_api.stubs import world_environment as env_stub
     from xijian_api.stubs import world_compute_config as wcc_stub
+    from xijian_api.stubs import events as events_stub
     env_stub.ensure_environment(new_id)
     wcc_stub.get(new_id)  # lazy default
+    # A4-02: Seed default events for the new world.
+    events_stub.seed_default_events(new_id)
     _audit(new_id, "create", payload={"name": name})
     return record
 

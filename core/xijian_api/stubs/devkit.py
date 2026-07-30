@@ -347,6 +347,13 @@ def _load_world_impl(devkit_id: str) -> dict | None:
         "updated_at": now,
     }
 
+    # A4-05: Auto-generate basic NPCs for the world.
+    try:
+        from xijian_api.stubs import npcs as npcs_stub
+        npcs_stub.auto_generate_npcs(wid, count=5)
+    except Exception as exc:  # noqa: BLE001
+        _LOGGER.warning("auto_generate_npcs failed for world %s: %s", wid, exc)
+
     _LOGGER.info("Loaded DevKit world %s (%s) into runtime", devkit_id, record["name"])
     return record
 

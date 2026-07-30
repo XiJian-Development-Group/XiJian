@@ -1100,6 +1100,17 @@ def _run_tools_pipeline(
             except json.JSONDecodeError:
                 args = {}
 
+            # A5-05: Audit the tool call regardless of execution path.
+            try:
+                safety_stub.audit_tool_call(
+                    tool_name=name,
+                    arguments=args_str,
+                    character_id=(xijian or {}).get("character_id"),
+                    world_id=world_id,
+                )
+            except Exception:
+                pass  # audit must never crash the pipeline
+
             if name in mcp_names:
                 exec_result = _execute_mcp_tool_call(
                     name, args, world_id=world_id,

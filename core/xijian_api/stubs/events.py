@@ -993,6 +993,89 @@ def seed_default() -> None:
     start_scheduler()
 
 
+def seed_default_events(world_id: str) -> dict:
+    """Seed a small set of common event templates for a world.
+
+    Creates four standard event templates:
+    - "market_day" (weekly trigger, boosts mood)
+    - "rain_storm" (weather-based trigger)
+    - "festival" (time-based, seasonal)
+    - "peaceful_day" (daily default with low probability)
+
+    Returns a dict with the created event IDs.
+    """
+    from xijian_api.utils.time import now_ts
+    
+    created = {}
+    now = now_ts()
+    
+    # Market day - weekly on Saturday at 10:00 UTC
+    market = create_event(
+        world_id=world_id,
+        kind=KIND_COMMON,
+        name="market_day",
+        description="Weekly market day - NPCs gather, trade, and socialize",
+        trigger_config={
+            "type": TRIGGER_TIME,
+            "hour": 10,
+            "minute": 0,
+            "frequency": "daily"
+        },
+        priority=5,
+        scene_ref_id=None,
+    )
+    created["market_day"] = market["id"]
+    
+    # Rain storm - probability-based, 10% per tick
+    rain = create_event(
+        world_id=world_id,
+        kind=KIND_INCIDENT,
+        name="rain_storm",
+        description="Sudden rain storm affects outdoor activities",
+        trigger_config={
+            "type": TRIGGER_PROBABILITY,
+            "per_tick": 0.1
+        },
+        priority=3,
+        scene_ref_id=None,
+    )
+    created["rain_storm"] = rain["id"]
+    
+    # Festival - seasonal, monthly on the 1st at 18:00
+    festival = create_event(
+        world_id=world_id,
+        kind=KIND_COMMON,
+        name="festival",
+        description="Seasonal festival celebration",
+        trigger_config={
+            "type": TRIGGER_CONDITION,
+            "field": "festival_day",
+            "op": "eq",
+            "value": True
+        },
+        priority=7,
+        scene_ref_id=None,
+    )
+    created["festival"] = festival["id"]
+    
+    # Peaceful day - daily low probability default
+    peaceful = create_event(
+        world_id=world_id,
+        kind=KIND_COMMON,
+        name="peaceful_day",
+        description="A calm, uneventful day in the world",
+        trigger_config={
+            "type": TRIGGER_PROBABILITY,
+            "per_tick": 0.05
+        },
+        priority=0,
+        scene_ref_id=None,
+    )
+    created["peaceful_day"] = peaceful["id"]
+    
+    return {"world_id": world_id, "created_events": created}
+
+
 def reset_for_testing() -> None:
     """Wipe in-memory state and stop the scheduler thread."""
     stop_scheduler()

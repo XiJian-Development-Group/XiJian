@@ -91,6 +91,8 @@ Test surface
 
 from __future__ import annotations
 
+from collections.abc import MutableMapping as _MutableMapping
+
 import copy
 import logging
 import re
@@ -970,7 +972,7 @@ def dump_snapshot(
     }
     for bucket_name in buckets_to_dump:
         bucket = getattr(state, bucket_name, None)
-        if not isinstance(bucket, dict):
+        if not isinstance(bucket, (dict, _MutableMapping)):
             # Skip non-dict buckets silently (e.g. ``audits``
             # is a list).  Operators asking for a list bucket
             # can extend the snapshot via ``extra_buckets`` and
@@ -1134,7 +1136,7 @@ def restore_snapshot(
             skipped.append(bucket_name)
             continue
         bucket = getattr(state, bucket_name, None)
-        if not isinstance(bucket, dict):
+        if not isinstance(bucket, (dict, _MutableMapping)):
             skipped.append(bucket_name)
             continue
         bucket.clear()

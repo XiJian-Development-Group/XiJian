@@ -303,6 +303,75 @@ def is_world_dangerous(world_id: str | None) -> bool:
     return _is_world_dangerous(world_id)
 
 
+def is_dangerous_context(world_id: str | None) -> bool:
+    """Return True if the world is currently in a dangerous context.
+
+    Checks two sources:
+    1. The per-world ``is_dangerous`` flag set via :func:`set_world_dangerous`.
+    2. ``state.world_event_instances`` for any recently fired instances whose
+       payload or event tags contain dangerous keywords.
+
+    This is a broader check than ``is_world_dangerous`` — it incorporates
+    the live event log so caller code doesn't need a separate lookup.
+    """
+    if not world_id:
+        return False
+    # Check the explicit per-world dangerous flag.
+    if _is_world_dangerous(world_id):
+        return True
+    # Check world_event_instances for dangerous events.
+    for inst in state.world_event_instances.values():
+        if inst.get("world_id") != world_id:
+            continue
+        event_tags = inst.get("payload", {}).get("tags", [])
+        if isinstance(event_tags, list) and _event_is_dangerous(event_tags):
+            return True
+        # Also check the event_id — look up the event definition for tags.
+        event_id = inst.get("event_id")
+        if event_id:
+            evt = state.world_events.get(event_id)
+            if evt:
+                evt_name = evt.get("name", "").lower()
+                if any(marker in evt_name for marker in ("dangerous", "danger", "extreme", "fatal")):
+                    return True
+    return False
+
+
+def is_overload() -> bool:
+    """Return True if A5.4 overload is in a recovery window.
+
+    Used by callers (events scheduler, NPC tick, chat) to short-circuit
+    when the system is in overload recovery.  Mirrors the internal
+    ``_is_overload_active`` helper."""
+    return _is_overload_active()
+
+
+# ---------------------------------------------------------------------------
+# Tool call audit (A5-05)
+# ---------------------------------------------------------------------------
+
+
+def audit_tool_call(
+    tool_name: str,
+    arguments: str,
+    character_id: str | None = None,
+    world_id: str | None = None,
+) -> dict:
+    """Log a tool call to the safety audit log (A5-05).
+
+    Called by the chat tools pipeline after each tool execution to
+    record which tool was invoked, with what arguments, and in which
+    context (character / world).  Returns the audit entry.
+    """
+    return record_audit(
+        character_id=character_id,
+        world_id=world_id,
+        stage=STAGE_PRE_INPUT,
+        verdict=VERDICT_PASS,
+        reason="tool_call",
+        snippet="%s(%s)" % (tool_name, _truncate(str(arguments), 120)),
+    )
+
 def get_safety_threshold(world_id: str | None = None) -> int:
     """Return the effective threshold for ``world_id`` (falling
     back to the global default)."""
@@ -622,8 +691,13 @@ def scan_output(
         # OOC: branching per spec flowchart.
         if ooc_hits:
             match = _worst_match(ooc_hits)
-            if _is_world_dangerous(world_id) and _event_is_dangerous(event_tags):
-                # US-A5.1-02 exception path.  AC-2 "显式记录原因".
+            # A5-02: Check dangerous context via is_dangerous_context which
+            # checks the world.is_dangerous flag, world_event_instances for
+            # dangerous-event tags, AND the explicit event_tags parameter.
+            # Both the dangerous context AND explicit event tags are required
+            # (AND logic) so that a dangerous world alone doesn't bypass OOC.
+            if is_dangerous_context(world_id) and _event_is_dangerous(event_tags):
+                # US-A5.1-02 / A5-02 exception path.  AC-2 "显式记录原因".
                 entry = record_audit(
                     character_id=character_id, world_id=world_id,
                     stage=STAGE_POST_OUTPUT,
