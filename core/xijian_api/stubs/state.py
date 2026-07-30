@@ -124,6 +124,22 @@ world_compute_config: dict = {}
 world_environment: dict = {}
 world_audit_log: dict = {}
 
+# A3-01 resource table buckets for character assets.
+# These store per-character resource metadata (the actual file data
+# is stored separately, e.g. via the files bucket or external storage).
+#   character_models        — {character_id: {model_id, model_url, format, ...}}
+#   character_motions       — {character_id: {motion_id, animation_ref, ...}}
+#   character_voices        — {character_id: {voice_id, profile_ref, ...}}
+#   character_handwritings  — {character_id: {handwriting_id, style_ref, ...}}
+#   character_styles        — {character_id: {style_id, art_style_ref, ...}}
+#   character_asset_cache   — {character_id: {asset_key, cached_data, ...}}
+character_models: dict = {}
+character_motions: dict = {}
+character_voices: dict = {}
+character_handwritings: dict = {}
+character_styles: dict = {}
+character_asset_cache: dict = {}
+
 # A4.3 scene / interaction system.  Three buckets mirror the SQL schema
 # in the function list v2:
 #   pois                 — {poi_id: {world_id, parent_id, name, kind,
@@ -350,6 +366,13 @@ def reset_for_testing() -> None:
     character_states.clear()
     character_state_configs.clear()
     character_state_log.clear()
+    # A3-01 resource table buckets.
+    character_models.clear()
+    character_motions.clear()
+    character_voices.clear()
+    character_handwritings.clear()
+    character_styles.clear()
+    character_asset_cache.clear()
     overload.clear()
     world_events.clear()
     world_event_instances.clear()
@@ -409,6 +432,12 @@ __all__ = [
     "character_states",
     "character_state_configs",
     "character_state_log",
+    "character_models",
+    "character_motions",
+    "character_voices",
+    "character_handwritings",
+    "character_styles",
+    "character_asset_cache",
     "overload",
     "world_events",
     "world_event_instances",

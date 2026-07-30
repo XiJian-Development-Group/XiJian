@@ -71,6 +71,7 @@ from xijian_api.config import Config
 from xijian_api.errors import BackendError as ApiBackendError
 from xijian_api.stubs import citations as citations_stub
 from xijian_api.stubs import memory as memory_stub
+from xijian_api.stubs import safety as safety_stub
 from xijian_api.utils.ids import gen_chat_id
 
 
@@ -350,12 +351,138 @@ def _recall_tool_spec(character_id: str | None) -> dict[str, Any]:
 def _should_enable_recall(xijian: dict | None) -> bool:
     if not isinstance(xijian, dict):
         return False
-    if not xijian.get("character_id"):
+    character_id = xijian.get("character_id")
+    if not character_id:
         return False
     recall = xijian.get("recall")
     if isinstance(recall, dict):
-        return bool(recall.get("enabled", False))
-    return False
+        if not bool(recall.get("enabled", False)):
+            return False
+    else:
+        return False
+    # Per-character memory_config.force_recall_on_history (A1.2).
+    # When set to 0 (False) on the character config, recall is
+    # skipped even if the global/request-level flag says enabled.
+    from xijian_api.stubs import state
+    mem_cfg = state.memory_configs.get(character_id, {})
+    if mem_cfg.get("force_recall_on_history", 1) == 0:
+        return False
+    return True
+
+
+# ---------------------------------------------------------------------------
+# Character context injection (A2-01 / A3.2 / A4)
+# ---------------------------------------------------------------------------
+
+_CHARACTER_CONTEXT_TEMPLATE = """## 当前角色设定
+
+### 角色基本信息
+- 名称: {display_name}
+- 描述: {description}
+- 语言风格: {language_style}
+
+### 角色人设
+{persona_doc}
+
+### 当前状态
+{state_summary}
+
+### 当前世界上下文
+{world_context}
+
+
+请严格遵循以上角色设定进行回复。"""
+
+
+def _build_character_context(character_id: str) -> str | None:
+    """Build a character context block from persona, state, and world.
+
+    Reads from the core stubs (characters, character_state, worlds)
+    and returns a Markdown-formatted string to inject into the system
+    prompt.
+
+    Returns ``None`` if the character is not found.
+    """
+    from xijian_api.stubs.characters import get as get_char
+    from xijian_api.stubs.character_state import (
+        get_or_init_state,
+        get_active_behavior,
+    )
+
+    char = get_char(character_id)
+    if char is None:
+        return None
+
+    display_name = char.get("display_name", char.get("name", "未知角色"))
+    description = char.get("description", "")
+    language_style = char.get("language_style", "")
+    persona_doc = char.get("persona_doc", "")
+
+    # Build state summary (A3.2)
+    state_rec = get_or_init_state(character_id)
+    if state_rec:
+        state_summary = (
+            f"心情: {state_rec.get('mood', 70):.0f}/100 | "
+            f"饱食: {state_rec.get('hunger', 80):.0f}/100 | "
+            f"饮水: {state_rec.get('thirst', 80):.0f}/100 | "
+            f"健康: {state_rec.get('health', 100):.0f}/100 | "
+            f"状态: {state_rec.get('status', 'Healthy')}"
+        )
+        behavior = get_active_behavior(character_id)
+        if behavior:
+            state_summary += f"\n当前行为倾向: {behavior}"
+    else:
+        state_summary = "（无状态数据）"
+
+    # Build world context (A4)
+    assigned_world = char.get("assigned_world", "")
+    if assigned_world:
+        from xijian_api.stubs.worlds import get as get_world
+        from xijian_api.stubs.world_environment import get_env
+        world = get_world(assigned_world)
+        if world:
+            env = get_env(assigned_world)
+            world_context = f"世界: {world.get('name', assigned_world)}"
+            if env:
+                world_context += (
+                    f"\n天气: {env.get('weather', '未知')} | "
+                    f"时间: {env.get('time_of_day', 0)}分"
+                )
+        else:
+            world_context = f"世界ID: {assigned_world}（未加载）"
+    else:
+        world_context = "（未绑定世界）"
+
+    return _CHARACTER_CONTEXT_TEMPLATE.format(
+        display_name=display_name,
+        description=description,
+        language_style=language_style or "默认",
+        persona_doc=persona_doc or "（无人设文档）",
+        state_summary=state_summary,
+        world_context=world_context,
+    )
+
+
+def _inject_character_context(
+    messages: list[dict],
+    character_id: str,
+) -> list[dict]:
+    """Inject the character context block into the system prompt.
+
+    Merges with any existing system message content rather than
+    replacing it.
+    """
+    context_block = _build_character_context(character_id)
+    if context_block is None:
+        return messages
+
+    out = list(messages)
+    if not out or out[0].get("role") != "system":
+        return [{"role": "system", "content": context_block}, *out]
+    first = dict(out[0])
+    first["content"] = (first.get("content") or "") + "\n\n" + context_block
+    out[0] = first
+    return out
 
 
 def _inject_recall_system(messages: list[dict]) -> list[dict]:
@@ -1169,6 +1296,10 @@ def complete(
         )
 
     if _should_enable_recall(xijian):
+        # Inject character context (A2-01) before the recall pipeline.
+        character_id = (xijian or {}).get("character_id")
+        if character_id:
+            messages = _inject_character_context(messages, character_id)
         # The pipeline walks n-times for parity but most callers pass n=1.
         # Multi-n is rare in chat — we still loop, picking the first
         # completion's audit verdict for the response.
@@ -1182,7 +1313,35 @@ def complete(
                 params=params,
                 audit_response=bool((xijian or {}).get("recall", {}).get("audit", True)),
             )
-        return last_response or {"id": gen_chat_id(), "object": "chat.completion", "choices": []}
+        response = last_response or {"id": gen_chat_id(), "object": "chat.completion", "choices": []}
+        # A5-03 safety guard: scan output on the response.
+        last_user_msg = next(
+            (m.get("content", "") for m in reversed(messages) if m.get("role") == "user"),
+            "",
+        )
+        if last_user_msg:
+            safety_stub.scan_input(
+                text=last_user_msg,
+                character_id=character_id,
+            )
+        response_text = ""
+        for choice in (response.get("choices") or []):
+            msg = choice.get("message") or {}
+            response_text = (msg.get("content") or "")
+        if response_text:
+            scan_result = safety_stub.scan_output(
+                text=response_text,
+                character_id=character_id,
+            )
+            if scan_result.get("verdict") in ("block", "hard_block"):
+                blocked = {
+                    "role": "assistant",
+                    "content": "I'm sorry, but my response has been blocked by the safety system.",
+                }
+                choices = response.get("choices", [])
+                for choice in choices:
+                    choice["message"] = blocked
+        return response
 
     try:
         result = backend.chat(
@@ -1197,7 +1356,37 @@ def complete(
             type_="backend_unavailable",
             code=getattr(exc, "code", "backend_error"),
         ) from exc
-    return _to_oai_response(result, model=model)
+
+    response = _to_oai_response(result, model=model)
+    # A5-03 safety guard on the fallback path.
+    char_id = (xijian or {}).get("character_id")
+    last_user_msg = next(
+        (m.get("content", "") for m in reversed(messages) if m.get("role") == "user"),
+        "",
+    )
+    if last_user_msg:
+        safety_stub.scan_input(
+            text=last_user_msg,
+            character_id=char_id,
+        )
+    response_text = ""
+    for choice in (response.get("choices") or []):
+        msg = choice.get("message") or {}
+        response_text = (msg.get("content") or "")
+    if response_text:
+        scan_result = safety_stub.scan_output(
+            text=response_text,
+            character_id=char_id,
+        )
+        if scan_result.get("verdict") in ("block", "hard_block"):
+            blocked = {
+                "role": "assistant",
+                "content": "I'm sorry, but my response has been blocked by the safety system.",
+            }
+            choices = response.get("choices", [])
+            for choice in choices:
+                choice["message"] = blocked
+    return response
 
 
 def _response_to_stream(

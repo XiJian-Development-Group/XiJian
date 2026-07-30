@@ -122,6 +122,7 @@ def audit(
     response_text: str,
     candidate_entry_ids: Iterable[str] | None = None,
     response_id: str | None = None,
+    escalate_uncited: bool = True,
 ) -> dict:
     """Audit an assistant response for citation faithfulness.
 
@@ -186,12 +187,20 @@ def audit(
     if not warnings:
         verdict = VERDICT_PASS
     elif missing:
-        # Missing citations are an explicit AC-3 violation — that's a
-        # strong "warn" but not a hard block (the model may simply
-        # have referenced stale ids after consolidation).
-        verdict = VERDICT_WARN
+        # Missing citations are an explicit AC-3 violation — if all
+        # cited entries are missing or the response fabricates history
+        # without citations, escalate to BLOCK.
+        if len(missing) >= 2 and len(real) == 0:
+            # Two or more citations point to non-existent entries AND
+            # zero real entries were cited — model is making things up.
+            verdict = VERDICT_BLOCK
+        else:
+            verdict = VERDICT_WARN
     elif uncited:
-        verdict = VERDICT_WARN
+        # Response references past events but cited nothing.  For a
+        # first offence this is a warn; a caller can escalate to block
+        # by passing ``escalate_uncited=True``.
+        verdict = VERDICT_BLOCK if escalate_uncited else VERDICT_WARN
     else:
         verdict = VERDICT_PASS
 

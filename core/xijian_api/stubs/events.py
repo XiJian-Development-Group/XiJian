@@ -120,8 +120,9 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+from xijian_api.stubs import memory as memory_stub
 from xijian_api.stubs import state
-from xijian_api.utils.ids import gen_event_id, gen_event_instance_id
+from xijian_api.utils.ids import gen_event_id, gen_event_instance_id, gen_memory_id
 from xijian_api.utils.time import now_ts
 
 
@@ -666,6 +667,33 @@ def fire_event(
     state.world_event_instances[instance_id] = instance
     _trim_instances()
     _broadcast_event_fired(instance)
+
+    # A4-04: Write memory entries for affected NPCs/users.
+    event_name = record.get("name", event_id)
+    event_kind = record.get("kind", "common")
+    for npc_id in (affected_npcs or []):
+        memory_stub.create({
+            "character_id": npc_id,
+            "type": "short",
+            "content": f"[事件通知] 事件 '{event_name}' ({event_kind}) 于 {timestamp} 触发。",
+            "importance": 0.5,
+            "decay_score": 0.8,
+            "source": "world_event",
+            "source_ref_id": event_id,
+            "tags": ["world_event", event_kind, event_id],
+        })
+    if affects_user:
+        memory_stub.create({
+            "character_id": None,
+            "type": "short",
+            "content": f"[事件通知] 世界事件 '{event_name}' ({event_kind}) 于 {timestamp} 触发，影响到您。",
+            "importance": 0.6,
+            "decay_score": 0.8,
+            "source": "world_event",
+            "source_ref_id": event_id,
+            "tags": ["world_event", event_kind, event_id, "user_affected"],
+        })
+
     return instance
 
 

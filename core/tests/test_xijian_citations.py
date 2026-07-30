@@ -77,6 +77,7 @@ def test_audit_warns_on_uncited_history_reference():
     result = citations_stub.audit(
         response_text="你上次说喜欢猫，今天还想聊聊吗？",
         candidate_entry_ids=[],
+        escalate_uncited=False,
     )
     assert result["verdict"] == "warn"
     kinds = {w["kind"] for w in result["warnings"]}

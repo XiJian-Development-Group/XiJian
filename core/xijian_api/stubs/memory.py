@@ -257,7 +257,23 @@ def update(entry_id: str, patch: dict) -> dict | None:
 
 
 def delete(entry_id: str) -> bool:
-    return state.memory.pop(entry_id, None) is not None
+    """Soft-delete a memory entry by setting ``deleted_at``.
+
+    Returns ``True`` if the entry existed and was marked as deleted,
+    ``False`` if it was not found.  Soft-deleted entries are retained
+    in the store for 7 days (configurable via
+    :data:`SOFT_DELETE_RETENTION_SECONDS`) before the cleanup job
+    removes them permanently.
+
+    Hard ``pop`` is avoided so that A1.1 backup/restore can still
+    reference soft-deleted entries during a 7-day undo window.
+    """
+    record = state.memory.get(entry_id)
+    if record is None:
+        return False
+    record["deleted_at"] = now_ts()
+    record["updated_at"] = now_ts()
+    return True
 
 
 def search(
@@ -390,6 +406,41 @@ def _recency_bonus(entry: dict, *, now: int | None = None) -> float:
     return 0.1 * (1.0 - age_days / 30.0)
 
 
+def apply_decay_and_promote(
+    *,
+    character_id: str | None = None,
+    rate: float = DEFAULT_SHORT_TERM_DECAY_RATE,
+    now: int | None = None,
+) -> dict:
+    """Apply live decay scores to all short-term entries and promote eligible ones.
+
+    This function should be called periodically (e.g. after recall_search or
+    via a heartbeat) to keep decay scores current and automatically promote
+    high-importance short-term entries to long-term storage.
+
+    Returns a dict with ``promoted`` (list of entry ids that were promoted)
+    and ``updated`` (total number of short-term entries whose score was
+    recomputed).
+    """
+    if now is None:
+        now = now_ts()
+    promoted: list[str] = []
+    updated: int = 0
+    for entry in state.memory.values():
+        if character_id and entry.get("character_id") != character_id:
+            continue
+        if (entry.get("type") or "short") != "short":
+            continue
+        live_decay = compute_decay_score(entry, now=now, rate=rate)
+        entry["decay_score"] = live_decay
+        entry["updated_at"] = now
+        updated += 1
+        if should_promote_to_long(entry):
+            promote_to_long(entry["id"])
+            promoted.append(entry["id"])
+    return {"promoted": promoted, "updated": updated}
+
+
 def recall_search(
     *,
     character_id: str | None,
@@ -440,6 +491,12 @@ def recall_search(
             entry = h["entry"]
             entry["access_count"] = int(entry.get("access_count", 0) or 0) + 1
             entry["last_access_at"] = now
+            # Check promotion after each access — frequently-accessed
+            # short entries that decay below threshold are candidates.
+            live_decay = compute_decay_score(entry, now=now, rate=decay_rate)
+            entry["decay_score"] = live_decay
+            if should_promote_to_long(entry):
+                promote_to_long(entry["id"])
 
     return sliced
 
@@ -838,6 +895,7 @@ __all__ = [
     "compute_decay_score",
     "should_promote_to_long",
     "promote_to_long",
+    "apply_decay_and_promote",
     "recall_search",
     "load_context",
     "seed_default",

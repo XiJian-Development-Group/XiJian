@@ -183,8 +183,301 @@ def update_state(character_id: str, patch: dict, *, protection_enabled: bool) ->
     return state_record, None
 
 
+# -------------------------------------------------------------------------
+# A3-01 Resource table CRUD helpers
+#
+# Six resource tables store per-character asset metadata:
+#   character_models        — {character_id: {model_id, model_url, format, ...}}
+#   character_motions       — {character_id: {motion_id, animation_ref, ...}}
+#   character_voices        — {character_id: {voice_id, profile_ref, ...}}
+#   character_handwritings  — {character_id: {handwriting_id, style_ref, ...}}
+#   character_styles        — {character_id: {style_id, art_style_ref, ...}}
+#   character_asset_cache   — {character_id: {asset_key, cached_data, ...}}
+#
+# Each bucket is keyed by character_id.  The value is a dict whose keys
+# are resource ids (or asset keys for the cache).  CRUD follows the same
+# pattern used by the other stubs: create via allocate-id + store, list by
+# character, get by id, update via patch, delete by id.
+# -------------------------------------------------------------------------
+
+
+# ---- character_models -----------------------------------------------------
+
+def create_model(character_id: str, payload: dict) -> dict:
+    mid = gen_character_id()  # reuse id generator
+    bucket = state.character_models.setdefault(character_id, {})
+    record = {
+        "id": mid,
+        "character_id": character_id,
+        "object": "character.model",
+        "name": payload.get("name", "Unnamed Model"),
+        "model_url": payload.get("model_url", ""),
+        "format": payload.get("format", "glb"),
+        "tags": list(payload.get("tags", [])),
+        "created_at": now_ts(),
+        "updated_at": now_ts(),
+    }
+    bucket[mid] = record
+    return record
+
+
+def list_models(character_id: str) -> list[dict]:
+    bucket = state.character_models.get(character_id, {})
+    return list(bucket.values())
+
+
+def get_model(character_id: str, model_id: str) -> dict | None:
+    bucket = state.character_models.get(character_id, {})
+    return bucket.get(model_id)
+
+
+def update_model(character_id: str, model_id: str, patch: dict) -> dict | None:
+    bucket = state.character_models.get(character_id, {})
+    record = bucket.get(model_id)
+    if record is None:
+        return None
+    for key in ("name", "model_url", "format", "tags"):
+        if key in patch:
+            record[key] = patch[key]
+    record["updated_at"] = now_ts()
+    return record
+
+
+def delete_model(character_id: str, model_id: str) -> bool:
+    bucket = state.character_models.get(character_id, {})
+    return bucket.pop(model_id, None) is not None
+
+
+# ---- character_motions ----------------------------------------------------
+
+def create_motion(character_id: str, payload: dict) -> dict:
+    mid = gen_character_id()
+    bucket = state.character_motions.setdefault(character_id, {})
+    record = {
+        "id": mid,
+        "character_id": character_id,
+        "object": "character.motion",
+        "name": payload.get("name", "Unnamed Motion"),
+        "animation_ref": payload.get("animation_ref", ""),
+        "tags": list(payload.get("tags", [])),
+        "created_at": now_ts(),
+        "updated_at": now_ts(),
+    }
+    bucket[mid] = record
+    return record
+
+
+def list_motions(character_id: str) -> list[dict]:
+    bucket = state.character_motions.get(character_id, {})
+    return list(bucket.values())
+
+
+def get_motion(character_id: str, motion_id: str) -> dict | None:
+    bucket = state.character_motions.get(character_id, {})
+    return bucket.get(motion_id)
+
+
+def update_motion(character_id: str, motion_id: str, patch: dict) -> dict | None:
+    bucket = state.character_motions.get(character_id, {})
+    record = bucket.get(motion_id)
+    if record is None:
+        return None
+    for key in ("name", "animation_ref", "tags"):
+        if key in patch:
+            record[key] = patch[key]
+    record["updated_at"] = now_ts()
+    return record
+
+
+def delete_motion(character_id: str, motion_id: str) -> bool:
+    bucket = state.character_motions.get(character_id, {})
+    return bucket.pop(motion_id, None) is not None
+
+
+# ---- character_voices -----------------------------------------------------
+
+def create_voice(character_id: str, payload: dict) -> dict:
+    vid = gen_character_id()
+    bucket = state.character_voices.setdefault(character_id, {})
+    record = {
+        "id": vid,
+        "character_id": character_id,
+        "object": "character.voice",
+        "name": payload.get("name", "Unnamed Voice"),
+        "profile_ref": payload.get("profile_ref", ""),
+        "tags": list(payload.get("tags", [])),
+        "created_at": now_ts(),
+        "updated_at": now_ts(),
+    }
+    bucket[vid] = record
+    return record
+
+
+def list_voices(character_id: str) -> list[dict]:
+    bucket = state.character_voices.get(character_id, {})
+    return list(bucket.values())
+
+
+def get_voice(character_id: str, voice_id: str) -> dict | None:
+    bucket = state.character_voices.get(character_id, {})
+    return bucket.get(voice_id)
+
+
+def update_voice(character_id: str, voice_id: str, patch: dict) -> dict | None:
+    bucket = state.character_voices.get(character_id, {})
+    record = bucket.get(voice_id)
+    if record is None:
+        return None
+    for key in ("name", "profile_ref", "tags"):
+        if key in patch:
+            record[key] = patch[key]
+    record["updated_at"] = now_ts()
+    return record
+
+
+def delete_voice(character_id: str, voice_id: str) -> bool:
+    bucket = state.character_voices.get(character_id, {})
+    return bucket.pop(voice_id, None) is not None
+
+
+# ---- character_handwritings -----------------------------------------------
+
+def create_handwriting(character_id: str, payload: dict) -> dict:
+    hid = gen_character_id()
+    bucket = state.character_handwritings.setdefault(character_id, {})
+    record = {
+        "id": hid,
+        "character_id": character_id,
+        "object": "character.handwriting",
+        "name": payload.get("name", "Unnamed Handwriting"),
+        "style_ref": payload.get("style_ref", ""),
+        "tags": list(payload.get("tags", [])),
+        "created_at": now_ts(),
+        "updated_at": now_ts(),
+    }
+    bucket[hid] = record
+    return record
+
+
+def list_handwritings(character_id: str) -> list[dict]:
+    bucket = state.character_handwritings.get(character_id, {})
+    return list(bucket.values())
+
+
+def get_handwriting(character_id: str, handwriting_id: str) -> dict | None:
+    bucket = state.character_handwritings.get(character_id, {})
+    return bucket.get(handwriting_id)
+
+
+def update_handwriting(character_id: str, handwriting_id: str, patch: dict) -> dict | None:
+    bucket = state.character_handwritings.get(character_id, {})
+    record = bucket.get(handwriting_id)
+    if record is None:
+        return None
+    for key in ("name", "style_ref", "tags"):
+        if key in patch:
+            record[key] = patch[key]
+    record["updated_at"] = now_ts()
+    return record
+
+
+def delete_handwriting(character_id: str, handwriting_id: str) -> bool:
+    bucket = state.character_handwritings.get(character_id, {})
+    return bucket.pop(handwriting_id, None) is not None
+
+
+# ---- character_styles -----------------------------------------------------
+
+def create_style(character_id: str, payload: dict) -> dict:
+    sid = gen_character_id()
+    bucket = state.character_styles.setdefault(character_id, {})
+    record = {
+        "id": sid,
+        "character_id": character_id,
+        "object": "character.style",
+        "name": payload.get("name", "Unnamed Style"),
+        "art_style_ref": payload.get("art_style_ref", ""),
+        "tags": list(payload.get("tags", [])),
+        "created_at": now_ts(),
+        "updated_at": now_ts(),
+    }
+    bucket[sid] = record
+    return record
+
+
+def list_styles(character_id: str) -> list[dict]:
+    bucket = state.character_styles.get(character_id, {})
+    return list(bucket.values())
+
+
+def get_style(character_id: str, style_id: str) -> dict | None:
+    bucket = state.character_styles.get(character_id, {})
+    return bucket.get(style_id)
+
+
+def update_style(character_id: str, style_id: str, patch: dict) -> dict | None:
+    bucket = state.character_styles.get(character_id, {})
+    record = bucket.get(style_id)
+    if record is None:
+        return None
+    for key in ("name", "art_style_ref", "tags"):
+        if key in patch:
+            record[key] = patch[key]
+    record["updated_at"] = now_ts()
+    return record
+
+
+def delete_style(character_id: str, style_id: str) -> bool:
+    bucket = state.character_styles.get(character_id, {})
+    return bucket.pop(style_id, None) is not None
+
+
+# ---- character_asset_cache ------------------------------------------------
+
+def set_asset_cache(character_id: str, asset_key: str, payload: dict) -> dict:
+    bucket = state.character_asset_cache.setdefault(character_id, {})
+    record = {
+        "character_id": character_id,
+        "asset_key": asset_key,
+        "object": "character.asset_cache",
+        "data": payload.get("data"),
+        "mime_type": payload.get("mime_type", ""),
+        "cached_at": now_ts(),
+    }
+    bucket[asset_key] = record
+    return record
+
+
+def get_asset_cache(character_id: str, asset_key: str) -> dict | None:
+    bucket = state.character_asset_cache.get(character_id, {})
+    return bucket.get(asset_key)
+
+
+def list_asset_cache(character_id: str) -> list[dict]:
+    bucket = state.character_asset_cache.get(character_id, {})
+    return list(bucket.values())
+
+
+def delete_asset_cache(character_id: str, asset_key: str) -> bool:
+    bucket = state.character_asset_cache.get(character_id, {})
+    return bucket.pop(asset_key, None) is not None
+
+
+def clear_asset_cache(character_id: str) -> int:
+    """Clear all cached assets for a character; returns count removed."""
+    bucket = state.character_asset_cache.pop(character_id, {})
+    return len(bucket)
+
+
 __all__ = [
     "DEFAULT_CHARACTER_ID",
     "seed_default", "create", "list_all", "get",
     "update", "delete", "set_loaded", "get_state", "update_state",
+    # A3-01 resource table CRUD
+    "create_model", "list_models", "get_model", "update_model", "delete_model",
+    "create_motion", "list_motions", "get_motion", "update_motion", "delete_motion",
+    "create_voice", "list_voices", "get_voice", "update_voice", "delete_voice",
+    "create_handwriting", "list_handwritings", "get_handwriting", "update_handwriting", "delete_handwriting",
+    "create_style", "list_styles", "get_style", "update_style", "delete_style",
+    "set_asset_cache", "get_asset_cache", "list_asset_cache", "delete_asset_cache", "clear_asset_cache",
 ]
