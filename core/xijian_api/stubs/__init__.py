@@ -39,6 +39,7 @@ from xijian_api.stubs import (
     transactions,
     travel_modes,
     video,
+    multimodal,
     wallets,
     world_audit,
     world_compute_config,

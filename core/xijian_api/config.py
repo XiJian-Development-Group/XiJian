@@ -50,7 +50,16 @@ RATE_LIMIT_REMAINING_REQUESTS = 99999
 IDEMPOTENCY_TTL_SECONDS = 24 * 60 * 60
 DEFAULT_STREAM_FORMAT = "sse"
 
-_MODEL_TYPES = ("chat", "embeddings", "tts", "stt", "image", "video")
+_MODEL_TYPES = (
+    "chat",
+    "embeddings",
+    "tts",
+    "stt",
+    "image",
+    "video",
+    "multimodal",
+    "video_understanding",
+)
 
 
 def _config_search_paths() -> list[Path]:
@@ -230,6 +239,8 @@ class BackendsConfig:
     stt: BackendConfig = field(default_factory=lambda: BackendConfig(default="mlx"))
     image: BackendConfig = field(default_factory=lambda: BackendConfig(default="mlx"))
     video: BackendConfig = field(default_factory=lambda: BackendConfig(default="mlx"))
+    multimodal: BackendConfig = field(default_factory=lambda: BackendConfig(default="mlx"))
+    video_understanding: BackendConfig = field(default_factory=lambda: BackendConfig(default="mlx"))
     openai: OpenAIBackendConfig = field(default_factory=OpenAIBackendConfig)
 
 
@@ -240,8 +251,8 @@ class ModelEntry:
     单个已注册模型及其元数据。
     """
     id: str
-    type: str             # chat | embeddings | tts | stt | image | video
-    backend: str          # mlx | gguf
+    type: str             # chat | embeddings | tts | stt | image | video | multimodal | video_understanding
+    backend: str          # mlx | gguf | openai | mock
     filename: str         # file or directory name under model_dir(type, id)
     family: str = ""
     size_b: float = 0.0

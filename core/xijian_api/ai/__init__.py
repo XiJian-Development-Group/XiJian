@@ -38,12 +38,16 @@ from xijian_api.ai.registry import (
     get_stt_backend,
     get_image_backend,
     get_video_backend,
+    get_video_understanding_backend,
+    get_multimodal_backend,
     register_chat,
     register_embedding,
     register_tts,
     register_stt,
     register_image,
     register_video,
+    register_video_understanding,
+    register_multimodal,
 )
 
 __all__ = [
@@ -51,6 +55,8 @@ __all__ = [
     "LoadedModel", "ModelRegistry", "get_registry",
     "get_chat_backend", "get_embedding_backend", "get_tts_backend",
     "get_stt_backend", "get_image_backend", "get_video_backend",
+    "get_video_understanding_backend", "get_multimodal_backend",
     "register_chat", "register_embedding", "register_tts",
     "register_stt", "register_image", "register_video",
+    "register_video_understanding", "register_multimodal",
 ]

@@ -54,9 +54,22 @@ def _backend_error(exc: AIBackendError) -> ApiBackendError:
     )
 
 
-def synth(text: str, *, voice: str = "default", response_format: str = "mp3") -> bytes:
+def synth(
+    text: str,
+    *,
+    voice: str = "default",
+    response_format: str = "mp3",
+    emotion: str | None = None,
+) -> bytes:
     """Synthesise ``text`` to audio bytes via the TTS backend.
     通过 TTS 后端将 ``text`` 合成为音频字节。
+
+    ``emotion`` allows specifying an emotion/tone for the speech
+    (e.g. "happy", "sad", "angry", "cheerful", "calm").  Not all
+    backends support this; unsupported backends will ignore it.
+    ``emotion`` 允许指定语音的情感/语调
+    (如 "happy", "sad", "angry", "cheerful", "calm")。
+    并非所有后端都支持此参数，不支持的后端会忽略它。
     """
     config = _resolve_config()
     requested: str | None = None
@@ -73,6 +86,7 @@ def synth(text: str, *, voice: str = "default", response_format: str = "mp3") ->
             text,
             voice=voice,
             response_format=response_format,
+            emotion=emotion,
         )
     except AIBackendError as exc:
         raise _backend_error(exc) from exc

@@ -43,6 +43,49 @@ def _probe() -> tuple[bool, Any]:
     return True, mlx_audio_generate
 
 
+_SINGING_CAPABLE_MODELS: set[str] = {
+    # CosyVoice 支持歌唱（通过 cosyvoice-300m-sft 或类似检查点）
+    # CosyVoice supports singing via cosyvoice-300m-sft or similar checkpoints
+    "cosyvoice",
+    # Bark 也有 generate_singing 机制 / Bark has a generate_singing mechanism
+    "bark",
+    # XTTS-v2 支持歌唱风格 / XTTS-v2 supports singing style
+    "xtts",
+}
+
+
+def _detect_singing_support(model_path: str | None = None) -> bool:
+    """检测当前环境是否支持歌唱生成。
+
+    检查两个条件：
+    1. ``mlx_audio`` 中是否导入了 ``generate_singing`` 函数
+    2. 如果提供了 model_path，检查其是否位于歌唱能力列表中
+
+    Detect whether singing generation is supported in the current environment.
+
+    Checks two conditions:
+    1. Whether ``generate_singing`` is importable from ``mlx_audio``
+    2. If model_path is provided, whether its model type supports singing
+    """
+    # 方法 1：检查 mlx_audio 是否有 generate_singing 函数
+    # Method 1: check if mlx_audio has generate_singing function
+    try:
+        from mlx_audio import generate_singing
+        return True
+    except (ImportError, AttributeError):
+        pass
+
+    # 方法 2：检查 model_path 是否暗示支持歌唱
+    # Method 2: check if model_path hints at singing support
+    if model_path:
+        mp = model_path.lower()
+        for hint in _SINGING_CAPABLE_MODELS:
+            if hint in mp:
+                return True
+
+    return False
+
+
 @register_tts("mlx")
 class MLXTTSBackend(TTSBackend):
     """MLX 文本转语音后端。MLX text-to-speech backend."""

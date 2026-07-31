@@ -60,9 +60,11 @@ from xijian_api.ai.registry import (
     get_chat_backend,
     get_embedding_backend,
     get_image_backend,
+    get_multimodal_backend,
     get_stt_backend,
     get_tts_backend,
     get_video_backend,
+    get_video_understanding_backend,
 )
 from xijian_api.config import Config, ModelEntry
 
@@ -74,6 +76,8 @@ _TASK_GETTERS = {
     "stt": get_stt_backend,
     "image": get_image_backend,
     "video": get_video_backend,
+    "video_understanding": get_video_understanding_backend,
+    "multimodal": get_multimodal_backend,
 }
 
 

@@ -88,6 +88,14 @@ fallbacks = ["gguf"]
 default = "mlx"
 fallbacks = ["gguf"]
 
+[backends.multimodal]
+default = "mlx"
+fallbacks = ["gguf"]
+
+[backends.video_understanding]
+default = "mlx"
+fallbacks = ["gguf"]
+
 # ---------------------------------------------------------------------------
 # OpenAI-compatible remote backend — global defaults.
 # OpenAI 兼容远程后端 — 全局默认值。
@@ -144,8 +152,8 @@ gguf_n_gpu_layers = 0        # 0 = CPU only; >0 = offload N layers to Metal/CUDA
 # Field reference / 字段说明：
 #   id              — short stable id used in API paths (``/v1/models/<id>``)
 #                     用于 API 路径的简短稳定 ID（``/v1/models/<id>``）
-#   type            — chat | embeddings | tts | stt | image | video
-#   backend         — mlx | gguf
+#   type            — chat | embeddings | tts | stt | image | video | multimodal | video_understanding
+#   backend         — mlx | gguf | openai | mock
 #   filename        — model file (or directory for mlx) name; resolved
 #                     against `<storage.base_dir>/<storage.models_subdir>/<type>/<id>/`
 #                     模型文件（或 mlx 的目录）名称；
@@ -220,6 +228,24 @@ context_length = 8192
 min_ram_gb = 8
 loaded = false
 
+[[models]]
+id = "stub-multimodal"
+type = "multimodal"
+backend = "mock"
+filename = "mock-multimodal"
+family = "mock"
+context_length = 8192
+loaded = false
+
+[[models]]
+id = "stub-video-understanding"
+type = "video_understanding"
+backend = "mock"
+filename = "mock-video-understanding"
+family = "mock"
+context_length = 8192
+loaded = false
+
 # Example: remote OpenAI-compatible chat model.  Uncomment and fill in
 # your base_url + api_key (or set $OPENAI_API_KEY) to use a remote
 # endpoint instead of a local backend.
@@ -229,6 +255,76 @@ loaded = false
 # [[models]]
 # id = "gpt-4o-remote"
 # type = "chat"
+# backend = "openai"
+# filename = ""               # unused for remote; keep empty
+# family = "gpt-4o"
+# context_length = 128000
+# loaded = false
+# [models.extra]
+# model_name = "gpt-4o"
+# base_url = "https://api.openai.com/v1"   # or your compatible endpoint
+# api_key = ""                              # or set $OPENAI_API_KEY
+
+# ---------------------------------------------------------------------------
+# Real multimodal examples (commented out).  ``stub-multimodal`` above is
+# the test fixture; production deployments replace it with one of these.
+# 真实全模态示例（已注释）。上面的 ``stub-multimodal`` 是测试夹具；
+# 生产部署将其替换为以下之一。
+# ---------------------------------------------------------------------------
+
+# Example: local MLX VLM (e.g. Qwen2.5-VL) for multimodal understanding.
+# 示例：本地 MLX VLM（如 Qwen2.5-VL）用于全模态理解。
+#
+# [[models]]
+# id = "qwen2.5-vl-7b-mlx"
+# type = "multimodal"
+# backend = "mlx"
+# filename = "Qwen2.5-VL-7B-Instruct-4bit"
+# family = "qwen2.5-vl"
+# size_b = 7.0
+# quant = "4bit"
+# context_length = 32768
+# min_ram_gb = 8
+# loaded = false
+
+# Example: local GGUF VLM (e.g. llama.cpp vision model) for multimodal
+# understanding.
+# 示例：本地 GGUF VLM（如 llama.cpp 视觉模型）用于全模态理解。
+#
+# [[models]]
+# id = "qwen2.5-vl-7b-gguf-q4km"
+# type = "multimodal"
+# backend = "gguf"
+# filename = "qwen2.5-vl-7b-instruct-q4_k_m.gguf"
+# family = "qwen2.5-vl"
+# size_b = 7.0
+# quant = "q4_k_m"
+# context_length = 8192
+# min_ram_gb = 8
+# loaded = false
+
+# Example: remote OpenAI-compatible multimodal model (GPT-4o and friends).
+# 示例：远程 OpenAI 兼容全模态模型（GPT-4o 及其同类）。
+#
+# [[models]]
+# id = "gpt-4o-multimodal"
+# type = "multimodal"
+# backend = "openai"
+# filename = ""               # unused for remote; keep empty
+# family = "gpt-4o"
+# context_length = 128000
+# loaded = false
+# [models.extra]
+# model_name = "gpt-4o"
+# base_url = "https://api.openai.com/v1"   # or your compatible endpoint
+# api_key = ""                              # or set $OPENAI_API_KEY
+
+# Example: remote OpenAI-compatible video understanding model.
+# 示例：远程 OpenAI 兼容视频理解模型。
+#
+# [[models]]
+# id = "gpt-4o-video-understanding"
+# type = "video_understanding"
 # backend = "openai"
 # filename = ""               # unused for remote; keep empty
 # family = "gpt-4o"

@@ -32,6 +32,8 @@ from xijian_api.ai.types import (
     STTBackend,
     ImageGenBackend,
     VideoGenBackend,
+    VideoUnderstandingBackend,
+    MultimodalBackend,
 )
 from xijian_api.ai.base import BackendUnavailable
 
@@ -47,6 +49,8 @@ _tts_backends: dict[str, type] = {}
 _stt_backends: dict[str, type] = {}
 _image_backends: dict[str, type] = {}
 _video_backends: dict[str, type] = {}
+_video_understanding_backends: dict[str, type] = {}
+_multimodal_backends: dict[str, type] = {}
 
 
 def register_chat(name: str) -> Callable:
@@ -97,6 +101,22 @@ def register_video(name: str) -> Callable:
     return deco
 
 
+def register_video_understanding(name: str) -> Callable:
+    """注册视频理解后端装饰器。Register a video understanding backend decorator."""
+    def deco(cls: type) -> type:
+        _video_understanding_backends[name] = cls
+        return cls
+    return deco
+
+
+def register_multimodal(name: str) -> Callable:
+    """注册全模态后端装饰器。Register a multimodal backend decorator."""
+    def deco(cls: type) -> type:
+        _multimodal_backends[name] = cls
+        return cls
+    return deco
+
+
 def available_backends() -> dict[str, list[str]]:
     """返回每个已注册并报告可用的后端名称。
 
@@ -110,6 +130,8 @@ def available_backends() -> dict[str, list[str]]:
         ("stt", _stt_backends),
         ("image", _image_backends),
         ("video", _video_backends),
+        ("video_understanding", _video_understanding_backends),
+        ("multimodal", _multimodal_backends),
     ):
         names = []
         for name, cls in table.items():
@@ -163,6 +185,22 @@ _BUILTIN_IMPORTS: dict[str, dict[str, str]] = {
         "gguf": "xijian_api.ai.backends.gguf.video",
         "openai": "xijian_api.ai.backends.openai.video",
     },
+    "video_understanding": {
+        "openai": "xijian_api.ai.backends.openai.video_understanding",
+        # The mock backend is for tests and local development only; it
+        # never loads real weights and is always ``is_available()``.
+        # mock 后端仅用于测试和本地开发；它从不加载真实权重且始终 ``is_available()``。
+        "mock": "xijian_api.ai.backends.mock.multimodal",
+    },
+    "multimodal": {
+        "openai": "xijian_api.ai.backends.openai.multimodal",
+        "mlx": "xijian_api.ai.backends.mlx.multimodal",
+        "gguf": "xijian_api.ai.backends.gguf.multimodal",
+        # The mock backend is for tests and local development only; it
+        # never loads real weights and is always ``is_available()``.
+        # mock 后端仅用于测试和本地开发；它从不加载真实权重且始终 ``is_available()``。
+        "mock": "xijian_api.ai.backends.mock.multimodal",
+    },
 }
 
 
@@ -182,6 +220,8 @@ def _ensure_loaded(task: str, name: str) -> None:
         "stt": _stt_backends,
         "image": _image_backends,
         "video": _video_backends,
+        "video_understanding": _video_understanding_backends,
+        "multimodal": _multimodal_backends,
     }[task]
     if name in table:
         return
@@ -215,6 +255,8 @@ def _pick(task: str, requested: str, fallbacks: tuple[str, ...]):
         "stt": _stt_backends,
         "image": _image_backends,
         "video": _video_backends,
+        "video_understanding": _video_understanding_backends,
+        "multimodal": _multimodal_backends,
     }[task]
     cls_type = {
         "chat": ChatBackend,
@@ -223,6 +265,8 @@ def _pick(task: str, requested: str, fallbacks: tuple[str, ...]):
         "stt": STTBackend,
         "image": ImageGenBackend,
         "video": VideoGenBackend,
+        "video_understanding": VideoUnderstandingBackend,
+        "multimodal": MultimodalBackend,
     }[task]
 
     tried: list[str] = []
@@ -307,10 +351,37 @@ def get_video_backend(name: str | None = None, fallbacks: tuple[str, ...] = ()) 
     return _pick("video", requested, fallbacks)
 
 
+def get_video_understanding_backend(name: str | None = None, fallbacks: tuple[str, ...] = ()) -> VideoUnderstandingBackend:
+    """获取视频理解后端实例。优先使用环境变量 ``XIJIAN_AI_BACKEND_VIDEO_UNDERSTAND``。
+
+    Get a video understanding backend instance. Prefers env var ``XIJIAN_AI_BACKEND_VIDEO_UNDERSTAND``.
+    """
+    requested = name or os.environ.get("XIJIAN_AI_BACKEND_VIDEO_UNDERSTAND", "openai")
+    return _pick("video_understanding", requested, fallbacks)
+
+
+def get_multimodal_backend(name: str | None = None, fallbacks: tuple[str, ...] = ()) -> MultimodalBackend:
+    """获取全模态理解后端实例。优先使用环境变量 ``XIJIAN_AI_BACKEND_MULTIMODAL``。
+
+    Get a multimodal understanding backend instance. Prefers env var ``XIJIAN_AI_BACKEND_MULTIMODAL``.
+
+    全模态后端是新一代的统一理解接口。对于支持多模态的模型（如 GPT-4o、Gemini 2.5），
+    它提供原生的多模态输入输出。对于本地模型，它可能通过组合 VLM + STT 等方式实现。
+
+    The multimodal backend is the next-generation unified understanding interface. For
+    multimodal models (GPT-4o, Gemini 2.5), it provides native multimodal I/O. For local
+    models, it may composite VLM + STT etc.
+    """
+    requested = name or os.environ.get("XIJIAN_AI_BACKEND_MULTIMODAL", "openai")
+    return _pick("multimodal", requested, fallbacks)
+
+
 __all__ = [
     "register_chat", "register_embedding", "register_tts",
     "register_stt", "register_image", "register_video",
+    "register_video_understanding", "register_multimodal",
     "available_backends",
     "get_chat_backend", "get_embedding_backend", "get_tts_backend",
     "get_stt_backend", "get_image_backend", "get_video_backend",
+    "get_video_understanding_backend", "get_multimodal_backend",
 ]

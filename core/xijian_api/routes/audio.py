@@ -25,7 +25,14 @@ def speech():
         )
     voice = payload.get("voice", "default")
     response_format = payload.get("response_format", "mp3")
-    data = audio_stub.synth(payload["input"], voice=voice, response_format=response_format)
+    emotion = payload.get("emotion")  # optional emotion param (e.g. "happy", "sad", "calm")
+    # 可选情感参数（如 "happy", "sad", "calm"）
+    data = audio_stub.synth(
+        payload["input"],
+        voice=voice,
+        response_format=response_format,
+        emotion=emotion,
+    )
     mime = {
         "mp3": "audio/mpeg",
         "wav": "audio/wav",

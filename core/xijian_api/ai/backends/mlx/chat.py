@@ -569,6 +569,232 @@ def _extract_images(messages: Sequence) -> list[str]:
     return images
 
 
+def _extract_video_frames(messages: Sequence, max_frames: int = 5) -> list[str]:
+    """从多模态消息内容中提取视频帧路径。
+
+    遍历每条消息；对每个 ``video_url`` 部分下载/解析视频文件，
+    使用 ffmpeg 提取关键帧，返回帧图像路径列表。
+    需要 ffmpeg 可用。
+
+    Extract video frame paths from multimodal message content.
+
+    Walks every message; for each ``video_url`` part downloads/resolves
+    the video file, extracts key frames via ffmpeg, returns frame image paths.
+    Requires ffmpeg to be available.
+    """
+    frames: list[str] = []
+    for m in messages:
+        content = _msg_content(m)
+        if not isinstance(content, list):
+            continue
+        for p in content:
+            if not isinstance(p, dict):
+                continue
+            if p.get("type") != "video_url":
+                continue
+            spec = p.get("video_url")
+            if isinstance(spec, dict):
+                url = spec.get("url", "")
+            else:
+                url = spec if isinstance(spec, str) else ""
+            if not url:
+                continue
+            # 解析视频 URL 到本地路径
+            video_path = _resolve_video_to_path(url)
+            if not video_path:
+                continue
+            # 提取帧
+            extracted = _extract_frames_from_video(video_path, max_frames)
+            frames.extend(extracted)
+    return frames
+
+
+def _resolve_video_to_path(url: str) -> str | None:
+    """将 ``video_url`` 值解析为本地文件系统路径。
+
+    支持：
+    * ``file:///abs/path.mp4`` → ``/abs/path.mp4``
+    * ``/abs/path.mp4`` → 原样返回
+    * ``http(s)://...`` → 下载到临时文件
+    * ``data:video/...;base64,...`` → 解码到临时文件
+
+    Resolve a ``video_url`` value to a local filesystem path.
+    """
+    if not isinstance(url, str) or not url:
+        return None
+    if url.startswith("file://"):
+        path = url[len("file://"):]
+        return path if Path(path).exists() else None
+    if url.startswith("data:"):
+        try:
+            header, b64 = url.split(",", 1)
+            mime = header.split(":")[1].split(";")[0] if ":" in header else "video/mp4"
+            ext = mime.split("/")[-1].split("-")[-1] or "mp4"
+            raw = base64.b64decode(b64)
+            fd, tmp = tempfile.mkstemp(suffix=f".{ext}")
+            with os.fdopen(fd, "wb") as fp:
+                fp.write(raw)
+            return tmp
+        except Exception:
+            return None
+    if url.startswith("http://") or url.startswith("https://"):
+        try:
+            import httpx
+            ext = url.rsplit(".", 1)[-1].split("?")[0][:8].lower()
+            if ext not in ("mp4", "mov", "avi", "mkv", "webm", "flv", "m4v"):
+                ext = "mp4"
+            resp = httpx.get(url, timeout=60.0, follow_redirects=True)
+            if resp.status_code >= 400:
+                return None
+            fd, tmp = tempfile.mkstemp(suffix=f".{ext}")
+            with os.fdopen(fd, "wb") as fp:
+                fp.write(resp.content)
+            return tmp
+        except Exception:
+            return None
+    # 裸文件系统路径。
+    return url if Path(url).exists() else None
+
+
+def _extract_frames_from_video(video_path: str, max_frames: int = 5) -> list[str]:
+    """从视频文件中提取关键帧。
+
+    使用 ffmpeg 均匀提取最多 max_frames 帧，返回帧图像路径列表。
+    临时文件由调用者负责清理。
+
+    Extract key frames from a video file.
+
+    Uses ffmpeg to uniformly extract up to max_frames frames.
+    Returns list of frame image paths. Temp files managed by caller.
+    """
+    frames: list[str] = []
+    tmp_dir = tempfile.mkdtemp(prefix="mlx_vlm_video_frames_")
+
+    try:
+        # 获取视频时长
+        result = subprocess.run(
+            ["ffprobe", "-v", "error",
+             "-show_entries", "format=duration",
+             "-of", "default=noprint_wrappers=1:nokey=1",
+             video_path],
+            capture_output=True, text=True, timeout=15,
+        )
+        duration = float(result.stdout.strip() or 0)
+    except Exception:
+        duration = 0
+
+    try:
+        if duration > 0:
+            interval = max(1.0, duration / max_frames)
+            for i in range(max_frames):
+                ts = i * interval
+                out_path = os.path.join(tmp_dir, f"frame_{i:04d}.jpg")
+                try:
+                    subprocess.run(
+                        ["ffmpeg", "-y", "-ss", str(ts), "-i", video_path,
+                         "-vframes", "1", "-q:v", "2", out_path],
+                        capture_output=True, timeout=30, check=True,
+                    )
+                    if os.path.exists(out_path) and os.path.getsize(out_path) > 0:
+                        frames.append(out_path)
+                except Exception:
+                    continue
+        else:
+            # 无法获取时长，提取第一帧
+            out_path = os.path.join(tmp_dir, "frame_0001.jpg")
+            subprocess.run(
+                ["ffmpeg", "-y", "-i", video_path,
+                 "-vframes", "1", "-q:v", "2", out_path],
+                capture_output=True, timeout=30, check=True,
+            )
+            if os.path.exists(out_path):
+                frames.append(out_path)
+    except Exception:
+        pass
+
+    return frames[:max_frames]
+
+
+def _extract_audio_paths(messages: Sequence) -> list[str]:
+    """从多模态消息内容中提取音频文件路径。
+
+    遍历每条消息；对每个 ``audio_url`` 部分将 URL 解析为本地路径。
+    返回音频文件路径列表，供后续 STT 处理。
+
+    Extract audio file paths from multimodal message content.
+
+    Walks every message; for each ``audio_url`` part resolves the URL
+    to a local path. Returns list of audio file paths for STT processing.
+    """
+    audio_paths: list[str] = []
+    for m in messages:
+        content = _msg_content(m)
+        if not isinstance(content, list):
+            continue
+        for p in content:
+            if not isinstance(p, dict):
+                continue
+            if p.get("type") != "audio_url":
+                continue
+            spec = p.get("audio_url")
+            if isinstance(spec, dict):
+                url = spec.get("url", "")
+            else:
+                url = spec if isinstance(spec, str) else ""
+            if not url:
+                continue
+            resolved = _resolve_audio_to_path(url)
+            if resolved:
+                audio_paths.append(resolved)
+    return audio_paths
+
+
+def _resolve_audio_to_path(url: str) -> str | None:
+    """将 ``audio_url`` 值解析为本地文件系统路径。
+
+    支持：
+    * ``file:///abs/path.wav`` → ``/abs/path.wav``
+    * ``/abs/path.wav`` → 原样返回
+    * ``http(s)://...`` → 下载到临时文件
+    * ``data:audio/...;base64,...`` → 解码到临时文件
+
+    Resolve an ``audio_url`` value to a local filesystem path.
+    """
+    if not isinstance(url, str) or not url:
+        return None
+    if url.startswith("file://"):
+        path = url[len("file://"):]
+        return path if Path(path).exists() else None
+    if url.startswith("data:"):
+        try:
+            header, b64 = url.split(",", 1)
+            mime = header.split(":")[1].split(";")[0] if ":" in header else "audio/wav"
+            ext = mime.split("/")[-1].split("-")[-1] or "wav"
+            raw = base64.b64decode(b64)
+            fd, tmp = tempfile.mkstemp(suffix=f".{ext}")
+            with os.fdopen(fd, "wb") as fp:
+                fp.write(raw)
+            return tmp
+        except Exception:
+            return None
+    if url.startswith("http://") or url.startswith("https://"):
+        try:
+            import httpx
+            ext = url.rsplit(".", 1)[-1].split("?")[0][:8].lower()
+            if ext not in ("wav", "mp3", "flac", "ogg", "m4a", "aac", "opus", "webm"):
+                ext = "wav"
+            resp = httpx.get(url, timeout=60.0, follow_redirects=True)
+            if resp.status_code >= 400:
+                return None
+            fd, tmp = tempfile.mkstemp(suffix=f".{ext}")
+            with os.fdopen(fd, "wb") as fp:
+                fp.write(resp.content)
+            return tmp
+        except Exception:
+            return None
+    return url if Path(url).exists() else None
+
+
 def _messages_to_oai(messages: Sequence) -> list[dict]:
     """将 :class:`ChatMessage` / dict 序列转换为 OAI 字典。
 
@@ -779,9 +1005,17 @@ class MLXChatBackend(ChatBackend):
         stream: bool,
         abort_signal,
     ) -> Iterator[ChatChunk]:
-        """通过 ``mlx_vlm`` 使用图像输入生成。
+        """通过 ``mlx_vlm`` 使用多模态输入（图像 + 视频 + 音频）生成。
 
-        Generate via ``mlx_vlm`` with image inputs.
+        Generate via ``mlx_vlm`` with multimodal inputs (images + video + audio).
+
+        - 图像（image_url）直接以文件路径传入 ``mlx_vlm``
+        - 视频（video_url）通过 ffmpeg 提取帧，以图像序列形式传入
+        - 音频（audio_url）通过 STT 转录为文本，注入 prompt（如果可用）
+
+        - Images (image_url) passed directly as file paths to ``mlx_vlm``
+        - Videos (video_url) frames extracted via ffmpeg, passed as image sequence
+        - Audio (audio_url) transcribed via STT (if available) and injected as text
         """
         try:
             from mlx_vlm import (
@@ -796,11 +1030,53 @@ class MLXChatBackend(ChatBackend):
             ) from exc
 
         oai_messages = _messages_to_oai(messages)
+
+        # 1) 提取静态图像 / Extract static images
         images = _extract_images(oai_messages)
+
+        # 2) 提取视频帧（如果 ffmpeg 可用） / Extract video frames (if ffmpeg available)
+        video_frames = _extract_video_frames(oai_messages, max_frames=5)
+
+        # 3) 尝试 STT 转录音频并注入为文本
+        #    Try STT-transcribe audio and inject as text
+        audio_paths = _extract_audio_paths(oai_messages)
+        stt_texts: list[str] = []
+        if audio_paths:
+            # 惰性导入，避免文件级依赖
+            # Lazy import to avoid file-level dependency
+            try:
+                from xijian_api.ai.registry import get_stt_backend
+                stt = get_stt_backend("mlx", ("gguf",))
+                if stt and stt.is_loaded():
+                    for ap in audio_paths:
+                        try:
+                            with open(ap, "rb") as f:
+                                audio_bytes = f.read()
+                            result = stt.transcribe(audio_bytes, response_format="text")
+                            text = result.get("text", "") if isinstance(result, dict) else str(result)
+                            if text:
+                                stt_texts.append(text)
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+
         # 跟踪临时文件以便在 unload 时清理。
-        for img in images:
-            if img not in self._temp_image_paths and img.startswith(tempfile.gettempdir()):
-                self._temp_image_paths.append(img)
+        all_media = images + video_frames + audio_paths
+        for path in all_media:
+            if path not in self._temp_image_paths and self._is_temp_path(path):
+                self._temp_image_paths.append(path)
+
+        # 注入转录文本到消息（作为额外的用户文本）
+        # Inject transcribed text into messages (as additional user text)
+        if stt_texts:
+            transcript_combined = "\n\n[Audio transcription: " + " | ".join(
+                t.strip() for t in stt_texts if t.strip()
+            ) + "]"
+            oai_messages.append({"role": "user", "content": transcript_combined})
+
+        # 组合所有图像（静态图 + 视频帧）/ Combine all images (static + video frames)
+        all_images = images + video_frames
 
         # 构建格式化的 prompt。``mlx_vlm.apply_chat_template``
         # 接受字符串或消息列表。
@@ -810,7 +1086,7 @@ class MLXChatBackend(ChatBackend):
                 self._config,
                 oai_messages,
                 add_generation_prompt=True,
-                num_images=len(images),
+                num_images=len(all_images),
             )
         except Exception as exc:
             raise BackendError(
@@ -819,7 +1095,7 @@ class MLXChatBackend(ChatBackend):
             ) from exc
 
         # ``mlx_vlm`` 期望 ``image`` 为列表（或 None）。
-        image_arg = images if images else None
+        image_arg = all_images if all_images else None
 
         if stream:
             return self._streaming_vlm(
@@ -842,6 +1118,14 @@ class MLXChatBackend(ChatBackend):
             vlm_generate=vlm_generate,
             abort_signal=abort_signal,
         )
+
+    @staticmethod
+    def _is_temp_path(path: str) -> bool:
+        """检查路径是否在系统临时目录中。"""
+        try:
+            return path.startswith(tempfile.gettempdir())
+        except Exception:
+            return False
 
     def _blocking_vlm(
         self,

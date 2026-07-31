@@ -198,16 +198,30 @@ def _resolve_backend_for(model_id: str) -> ChatBackend:
 
 
 def _normalise_messages(messages: list[Any]) -> list[ChatMessage]:
-    """Coerce raw dicts into :class:`ChatMessage` instances."""
+    """Coerce raw dicts into :class:`ChatMessage` instances.
+
+    Preserves multimodal content: when the original ``content`` is a list
+    of content parts (OAI multimodal format), it is kept as-is rather than
+    being forced to a string.
+    保留多模态内容：当原始 ``content`` 是内容片段列表（OAI 多模态格式）时，
+    将其原样保留，而不是强制转换为字符串。
+    """
     out: list[ChatMessage] = []
     for m in messages:
         if isinstance(m, ChatMessage):
             out.append(m)
         else:
+            raw_content = m.get("content", "")
+            # Preserve list-type content (multimodal parts) as-is.
+            # 保留列表类型的内容（多模态片段）不变。
+            if isinstance(raw_content, list):
+                content = raw_content
+            else:
+                content = str(raw_content) if raw_content is not None else ""
             out.append(
                 ChatMessage(
                     role=str(m.get("role", "user")),
-                    content=str(m.get("content", "")),
+                    content=content,
                     name=m.get("name"),
                     tool_call_id=m.get("tool_call_id"),
                     tool_calls=m.get("tool_calls"),
@@ -641,10 +655,17 @@ def _chat_messages_for_backend(messages: list[Any]) -> list[ChatMessage]:
                 )
             )
             continue
+        raw_content = m.get("content", "")
+        # Preserve list-type content (multimodal parts) as-is.
+        # 保留列表类型的内容（多模态片段）不变。
+        if isinstance(raw_content, list):
+            content = raw_content
+        else:
+            content = str(raw_content) if raw_content is not None else ""
         out.append(
             ChatMessage(
                 role=role,
-                content=str(m.get("content", "")),
+                content=content,
                 name=m.get("name"),
                 tool_call_id=m.get("tool_call_id"),
                 tool_calls=m.get("tool_calls"),

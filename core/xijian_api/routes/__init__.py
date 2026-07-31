@@ -74,6 +74,7 @@ _OPTIONAL_ROUTE_MODULES: tuple[str, ...] = (
     "xijian_api.routes.xijian_scenes",
     "xijian_api.routes.ws_routes",
     "xijian_api.routes.xijian_devkit",
+    "xijian_api.routes.multimodal",
 )
 
 
