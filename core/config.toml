@@ -93,8 +93,11 @@ default = "mlx"
 fallbacks = ["gguf"]
 
 [backends.video_understanding]
-default = "mlx"
-fallbacks = ["gguf"]
+# 目前视频理解后端仅 openai/mock 实现（GGUF/MLX 尚无对应后端）。
+# Currently only openai/mock implement video understanding
+# (GGUF/MLX have no such backend yet).
+default = "openai"
+fallbacks = []
 
 # ---------------------------------------------------------------------------
 # OpenAI-compatible remote backend — global defaults.

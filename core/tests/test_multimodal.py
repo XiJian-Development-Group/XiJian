@@ -745,3 +745,211 @@ def test_mock_video_understanding_backend_not_loaded():
     backend = MockVideoUnderstandingBackend()
     with pytest.raises(ModelNotLoaded):
         backend.understand({"url": "file:///tmp/clip.mp4"})
+
+
+# ---------------------------------------------------------------------------
+# Regression tests — QA findings (S1/M2/M6 + content-part helpers)
+# (回归测试 — QA 发现的问题（S1/M2/M6 + 内容片段辅助函数）)
+# ---------------------------------------------------------------------------
+
+
+def test_multimodal_stream_unknown_model_returns_503(client, auth_headers):
+    """Streaming with an unknown model must return 503, not 500.
+
+    (流式请求使用未知模型必须返回 503 而不是 500。)
+    """
+    response = client.post(
+        "/v1/multimodal/completions",
+        headers=auth_headers,
+        json={
+            "model": "no-such-model",
+            "stream": True,
+            "messages": [{"role": "user", "content": "hi"}],
+        },
+    )
+    assert response.status_code == 503
+    body = response.get_json()
+    assert body["error"]["code"] == "backend_unavailable"
+
+
+def test_multimodal_sync_unknown_model_returns_503(client, auth_headers):
+    """Non-streaming with an unknown model also returns 503.
+
+    (非流式请求使用未知模型同样返回 503。)
+    """
+    response = client.post(
+        "/v1/multimodal/completions",
+        headers=auth_headers,
+        json={
+            "model": "no-such-model",
+            "messages": [{"role": "user", "content": "hi"}],
+        },
+    )
+    assert response.status_code == 503
+    assert response.get_json()["error"]["code"] == "backend_unavailable"
+
+
+def test_multimodal_max_tokens_string_coerced(client, auth_headers):
+    """A string ``max_tokens`` must be coerced instead of 500ing.
+
+    (字符串形式的 ``max_tokens`` 应被转换而不是返回 500。)
+    """
+    response = client.post(
+        "/v1/multimodal/completions",
+        headers=auth_headers,
+        json={
+            "model": "stub-multimodal",
+            "max_tokens": "50",
+            "messages": [{"role": "user", "content": "hi"}],
+        },
+    )
+    assert response.status_code == 200
+    assert response.get_json()["choices"][0]["finish_reason"] == "stop"
+
+
+def test_video_understanding_endpoint_default_model(client, auth_headers):
+    """POST /v1/videos/understanding with a JSON video URL works.
+
+    (POST /v1/videos/understanding 使用 JSON video URL 正常工作。)
+    """
+    response = client.post(
+        "/v1/videos/understanding",
+        headers=auth_headers,
+        json={"video": "file:///tmp/clip.mp4", "prompt": "Who is in the video?"},
+    )
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["object"] == "video.understanding"
+    assert "Who is in the video?" in body["text"]
+
+
+def test_video_understanding_endpoint_explicit_model(client, auth_headers):
+    """The explicit stub-video-understanding model is honoured.
+
+    (显式指定 stub-video-understanding 模型生效。)
+    """
+    response = client.post(
+        "/v1/videos/understanding",
+        headers=auth_headers,
+        json={
+            "video": "file:///tmp/clip.mp4",
+            "model": "stub-video-understanding",
+            "fps": 2,
+            "max_frames": 6,
+        },
+    )
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["model"] == "stub-video-understanding"
+    assert "fps=2" in body["text"]
+    assert "max_frames=6" in body["text"]
+
+
+def test_video_understanding_endpoint_missing_video_400(client, auth_headers):
+    """Missing video input returns 400.
+
+    (缺少视频输入返回 400。)
+    """
+    response = client.post(
+        "/v1/videos/understanding",
+        headers=auth_headers,
+        json={"prompt": "hi"},
+    )
+    assert response.status_code == 400
+    assert response.get_json()["error"]["code"] == "missing_video"
+
+
+def test_video_understanding_endpoint_unknown_model_503(client, auth_headers):
+    """Unknown model on the video understanding endpoint returns 503.
+
+    (视频理解端点使用未知模型返回 503。)
+    """
+    response = client.post(
+        "/v1/videos/understanding",
+        headers=auth_headers,
+        json={"video": "file:///tmp/clip.mp4", "model": "no-such-model"},
+    )
+    assert response.status_code == 503
+
+
+def test_content_part_helpers_roundtrip():
+    """resolve_part_to_path / resolve_part_content handle data URIs.
+
+    (resolve_part_to_path / resolve_part_content 处理 data URI。)
+    """
+    from xijian_api.ai.types import (
+        detect_part_mime,
+        make_image_part,
+        resolve_part_content,
+    )
+
+    part = make_image_part("data:image/png;base64,aGVsbG8=")
+    assert part["type"] == "image_url"
+    assert detect_part_mime(part) == "image/png"
+    content = resolve_part_content(part)
+    assert content == b"hello"
+
+
+def test_content_part_make_audio_video_file_parts():
+    """make_audio_part / make_video_part / make_file_part shapes.
+
+    (make_audio_part / make_video_part / make_file_part 的形状。)
+    """
+    from xijian_api.ai.types import (
+        make_audio_part,
+        make_file_part,
+        make_text_part,
+        make_video_part,
+    )
+
+    assert make_text_part("hi") == {"type": "text", "text": "hi"}
+    audio = make_audio_part("file:///tmp/a.wav", format="wav")
+    assert audio["audio_url"]["format"] == "wav"
+    video = make_video_part("file:///tmp/v.mp4")
+    assert video["video_url"]["url"] == "file:///tmp/v.mp4"
+    file_part = make_file_part("file:///tmp/f.pdf", mime_type="application/pdf")
+    assert file_part["file_url"]["mime_type"] == "application/pdf"
+
+
+def test_gguf_multimodal_accepts_file_url_type():
+    """GGUF multimodal preprocessing must accept ``file_url`` parts.
+
+    (GGUF 全模态预处理必须接受 ``file_url`` 片段。)
+    """
+    from xijian_api.ai.backends.gguf.multimodal import _preprocess_multimodal_messages
+
+    processed = _preprocess_multimodal_messages([
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "read this"},
+                {"type": "file_url", "file_url": {"url": "/nonexistent/x.txt"}},
+            ],
+        }
+    ])
+    content = processed[0].content
+    # The file cannot be read (no such path), so a readable fallback text
+    # is produced instead of a bare ``[file_url]`` placeholder.
+    # (文件不存在，因此生成可读的回退文本而不是裸 ``[file_url]`` 占位符。)
+    assert any(isinstance(p, dict) and p.get("type") == "text" for p in content)
+    assert not any(isinstance(p, dict) and p.get("type") == "file_url" for p in content)
+
+
+def test_stub_resolve_backend_eager_raises_503(monkeypatch):
+    """resolve_backend() translates BackendUnavailable into ApiBackendError 503.
+
+    (resolve_backend() 将 BackendUnavailable 转换为 ApiBackendError 503。)
+    """
+    from xijian_api.ai.base import BackendUnavailable as AIBackendUnavailable
+    from xijian_api.errors import BackendError as ApiBackendError
+    from xijian_api.stubs import multimodal as mm
+
+    def _boom(name=None, fallbacks=()):
+        raise AIBackendUnavailable("no usable backend", code="backend_unavailable")
+
+    monkeypatch.setattr(mm, "_resolve_config", lambda: None)
+    monkeypatch.setattr(mm, "get_multimodal_backend", _boom)
+    with pytest.raises(ApiBackendError) as exc_info:
+        mm.resolve_backend("no-such-model")
+    assert exc_info.value.status == 503
+    assert exc_info.value.code == "backend_unavailable"

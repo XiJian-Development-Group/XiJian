@@ -19,6 +19,7 @@ frame sequences through the ``/chat/completions`` API.
 
 from __future__ import annotations
 
+import base64
 import json
 import os
 import tempfile
@@ -214,10 +215,16 @@ class OpenAIVideoUnderstandingBackend(VideoUnderstandingBackend):
             {"type": "text", "text": prompt or "Describe what is happening in this video."}
         ]
         for frame_path in frames:
-            content_parts.append({
-                "type": "image_url",
-                "image_url": {"url": f"file://{frame_path}"},
-            })
+            try:
+                with open(frame_path, "rb") as fp:
+                    raw = fp.read()
+                b64 = base64.b64encode(raw).decode("ascii")
+                content_parts.append({
+                    "type": "image_url",
+                    "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
+                })
+            except Exception:
+                continue
 
         messages = [
             {"role": "system", "content": system_prompt},

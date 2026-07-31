@@ -71,7 +71,6 @@ def _resolve_backend_for(model_id: str) -> MultimodalBackend:
                 ) from exc
 
     # Fallback: use default multimodal backend
-    config = _resolve_config()
     requested: str | None = None
     fallbacks: tuple[str, ...] = ()
     if config is not None:
@@ -111,6 +110,9 @@ def _to_oai_chunk(chunk) -> dict[str, Any]:
             "completion_tokens": chunk.usage.completion_tokens,
             "total_tokens": chunk.usage.total_tokens,
         }
+    backend_name = getattr(chunk, "backend", "")
+    if backend_name:
+        payload["xijian"] = {"backend": backend_name}
     return payload
 
 
@@ -163,6 +165,21 @@ def _to_oai_response(backend_result, *, model: str) -> dict[str, Any]:
     }
 
 
+def _coerce_max_tokens(value) -> int | None:
+    """Coerce ``max_tokens`` to int, tolerating numeric strings.
+
+    将 ``max_tokens`` 转换为 int，容忍数字字符串。
+    """
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return int(value)
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def understand(
     messages: list[dict],
     *,
@@ -185,7 +202,7 @@ def understand(
     params = GenerationParams(
         temperature=temperature,
         top_p=top_p,
-        max_tokens=max_tokens,
+        max_tokens=_coerce_max_tokens(max_tokens),
         stop=stop,
     )
 
@@ -216,38 +233,64 @@ def understand_stream(
     """Stream multimodal understanding results from the backend.
 
     Yields OAI streaming chunk dicts.
+
+    The backend is resolved *eagerly* (before returning the generator)
+    so that an unknown/unavailable model fails with a proper 503 error
+    instead of exploding mid-stream with a 500.
+    后端在返回生成器前被*急切*解析，这样未知/不可用的模型会以
+    正确的 503 错误失败，而不是在流式过程中爆出 500。
     """
     backend = _resolve_backend_for(model)
     params = GenerationParams(
         temperature=temperature,
         top_p=top_p,
-        max_tokens=max_tokens,
+        max_tokens=_coerce_max_tokens(max_tokens),
         stop=stop,
     )
 
-    try:
-        for chunk in backend.understand(messages, params, stream=True, abort_signal=signal):
-            yield _to_oai_chunk(chunk)
-        if include_usage:
-            yield {
-                "id": gen_chat_id(),
-                "object": "multimodal.completion.chunk",
-                "created": 0,
-                "model": model,
-                "choices": [],
-                "usage": {
-                    "prompt_tokens": 0,
-                    "completion_tokens": 0,
-                    "total_tokens": 0,
-                },
-            }
-    except AIBackendError as exc:
-        raise ApiBackendError(
-            status=503,
-            message=str(exc) or "backend error",
-            type_="backend_unavailable",
-            code=getattr(exc, "code", "backend_error"),
-        ) from exc
+    def _gen() -> Iterator[dict[str, Any]]:
+        try:
+            for chunk in backend.understand(messages, params, stream=True, abort_signal=signal):
+                yield _to_oai_chunk(chunk)
+            if include_usage:
+                yield {
+                    "id": gen_chat_id(),
+                    "object": "multimodal.completion.chunk",
+                    "created": 0,
+                    "model": model,
+                    "choices": [],
+                    "usage": {
+                        "prompt_tokens": 0,
+                        "completion_tokens": 0,
+                        "total_tokens": 0,
+                    },
+                }
+        except AIBackendError as exc:
+            raise ApiBackendError(
+                status=503,
+                message=str(exc) or "backend error",
+                type_="backend_unavailable",
+                code=getattr(exc, "code", "backend_error"),
+            ) from exc
+
+    return _gen()
+
+
+def resolve_backend(model: str) -> None:
+    """Eagerly resolve (and load) the multimodal backend for ``model``.
+
+    Raises :class:`xijian_api.errors.BackendError` (503) when the model
+    or backend chain is unavailable.  Callers use this *before* starting
+    a streaming response so unknown models fail with 503 instead of
+    exploding mid-stream with a 500.
+
+    急切解析（并加载）``model`` 对应的全模态后端。
+
+    当模型或后端链不可用时抛出 :class:`xijian_api.errors.BackendError`
+    （503）。调用方在开始流式响应*之前*调用它，这样未知模型会以 503
+    失败，而不是在流式过程中爆出 500。
+    """
+    _resolve_backend_for(model)
 
 
 __all__ = ["understand", "understand_stream"]

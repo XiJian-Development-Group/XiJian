@@ -221,17 +221,34 @@ def _convert_video_for_gpt4o(part: dict) -> list[dict]:
 
     frames = _extract_frames_ffmpeg(video_path, max_frames=5)
     if frames:
-        return [
-            {"type": "image_url", "image_url": {"url": f"file://{f}"}}
-            for f in frames
-        ]
+        return [_frame_to_data_uri(f) for f in frames]
 
     # Fallback: try first frame only
     first_frame = _extract_frames_ffmpeg(video_path, max_frames=1)
     if first_frame:
-        return [{"type": "image_url", "image_url": {"url": f"file://{first_frame[0]}"}}]
+        return [_frame_to_data_uri(first_frame[0])]
 
     return [{"type": "text", "text": "[video: unable to extract frames]"}]
+
+
+def _frame_to_data_uri(frame_path: str) -> dict:
+    """将本地帧文件转为 base64 data URI 内容片段。
+
+    Remote endpoints (OpenAI-compatible) cannot access local ``file://``
+    paths, so extracted frames must be embedded as base64 data URIs.
+    远程端点（OpenAI 兼容）无法访问本地 ``file://`` 路径，
+    因此提取的帧必须以 base64 data URI 形式嵌入。
+    """
+    try:
+        with open(frame_path, "rb") as fp:
+            raw = fp.read()
+        b64 = base64.b64encode(raw).decode("ascii")
+        return {
+            "type": "image_url",
+            "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
+        }
+    except Exception:
+        return {"type": "text", "text": "[video: frame read failed]"}
 
 
 def _download_to_temp(url: str) -> str | None:

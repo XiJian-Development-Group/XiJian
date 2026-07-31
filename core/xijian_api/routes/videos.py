@@ -14,6 +14,83 @@ from xijian_api.utils.time import now_ts
 bp = Blueprint("videos", __name__)
 
 
+@bp.post("/v1/videos/understanding")
+def video_understanding():
+    """Video understanding endpoint.
+
+    Accepts a video via JSON body (``video`` field: URL / data URI /
+    file path) or multipart upload (``video`` file + optional ``prompt``
+    form field).  Returns a text description of the video content.
+
+    视频理解端点。
+
+    通过 JSON 请求体（``video`` 字段：URL / data URI / 文件路径）
+    或 multipart 上传（``video`` 文件 + 可选 ``prompt`` 表单字段）
+    接受视频。返回视频内容的文本描述。
+    """
+    files = request.files
+    payload = request.get_json(silent=True) or {}
+
+    if files:
+        uploaded = files.get("video")
+        if uploaded is None:
+            raise ApiError(
+                400,
+                "multipart `video` is required",
+                "invalid_request_error",
+                code="missing_video",
+            )
+        video_bytes = uploaded.read()
+        prompt = request.form.get("prompt", "Describe what is happening in this video.")
+        model = request.form.get("model", "stub-video-understanding")
+        fps = int(request.form.get("fps", 1) or 1)
+        max_frames = int(request.form.get("max_frames", 10) or 10)
+    elif payload:
+        video = payload.get("video") or payload.get("url", "")
+        if not video:
+            raise ApiError(
+                400,
+                "`video` (URL, data URI or file path) is required in JSON body",
+                "invalid_request_error",
+                code="missing_video",
+                param="video",
+            )
+        video_bytes = None
+        prompt = payload.get("prompt", "Describe what is happening in this video.")
+        model = payload.get("model", "stub-video-understanding")
+        fps = int(payload.get("fps", 1) or 1)
+        max_frames = int(payload.get("max_frames", 10) or 10)
+    else:
+        raise ApiError(
+            400,
+            "video is required (multipart `video` or JSON `video` field)",
+            "invalid_request_error",
+            code="missing_video",
+        )
+
+    if files:
+        result = video_stub.understand_video(
+            video_bytes,
+            model=model,
+            prompt=prompt,
+            fps=fps,
+            max_frames=max_frames,
+        )
+    else:
+        result = video_stub.understand_video(
+            video,
+            model=model,
+            prompt=prompt,
+            fps=fps,
+            max_frames=max_frames,
+        )
+    return jsonify({
+        "object": "video.understanding",
+        "model": model,
+        "text": result,
+    })
+
+
 @bp.post("/v1/videos/generations")
 def submit_generation():
     payload = request.get_json(silent=True) or {}

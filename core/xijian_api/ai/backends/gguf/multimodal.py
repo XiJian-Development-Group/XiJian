@@ -261,8 +261,8 @@ def _extract_files_from_messages(messages: Sequence) -> list[tuple[str, bytes]]:
             for part in content:
                 if not isinstance(part, dict):
                     continue
-                if part.get("type") == "file":
-                    spec = part.get("file")
+                if part.get("type") == "file_url":
+                    spec = part.get("file_url")
                     if isinstance(spec, dict):
                         url = spec.get("url", "")
                         name = spec.get("name", "file")
@@ -394,9 +394,9 @@ def _preprocess_multimodal_messages(messages: Sequence) -> Sequence:
                         new_content_parts.append({"type": "text", "text": "[Video: unable to download]"})
                 else:
                     new_content_parts.append({"type": "text", "text": "[Video: ffmpeg not available]"})
-            elif ptype == "file":
+            elif ptype == "file_url":
                 # 文件提取文本
-                spec = part.get("file")
+                spec = part.get("file_url")
                 if isinstance(spec, dict):
                     url = spec.get("url", "")
                     name = spec.get("name", "file")

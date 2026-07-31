@@ -344,7 +344,7 @@ Chat 路由使用 `flask.stream_with_context()` 包装流式生成器，确保�
 
 4. **本地歌唱 TTS 不可用**：当前 mlx-audio 支持列表不含专门的歌唱模型（CosyVoice/Bark/XTTS 为旧版 mlx-audio 思路，已不在现行支持列表）。情感/语气可通过 Qwen3-TTS CustomVoice 的 `instruct` 参数近似实现。
 
-5. **`video_understanding` 后端覆盖**：目前仅 OpenAI 远程 + mock 实现。配置默认 mlx/gguf 在未注册模型时会返回 503（`backend_unavailable`）。
+5. **`video_understanding` 后端覆盖**：目前仅 OpenAI 远程 + mock 实现；GGUF/MLX 尚无对应后端，因此配置默认指向 `openai`（不再指向不存在的 mlx/gguf）。未注册远程端点时会返回 503（`backend_unavailable`）。
 
 6. **全模态可用性依赖模型与依赖**：MLX 组合式后端需要 `mlx_vlm`（图像/视频）与 `mlx_whisper`/`mlx_audio`（音频）；GGUF 需要 `llama_cpp`（VLM + mmproj）与 `pywhispercpp`（音频）。任一缺失时对应模态自动降级，`modalities()` 会如实报告。
 

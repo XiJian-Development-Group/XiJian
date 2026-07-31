@@ -23,6 +23,7 @@ from flask import current_app
 from xijian_api.ai.base import BackendError as AIBackendError
 from xijian_api.ai.base import BackendUnavailable as AIBackendUnavailable
 from xijian_api.ai.registry import get_video_backend
+from xijian_api.ai.registry import get_video_understanding_backend
 from xijian_api.config import Config
 from xijian_api.errors import BackendError as ApiBackendError
 from xijian_api.stubs import state
@@ -177,4 +178,74 @@ def submit(
     _complete_record(video_id, backend_task_id=backend_task_id)
 
 
-__all__ = ["submit", "_complete_record"]
+def understand_video(
+    video: Any,
+    *,
+    model: str = "stub-video-understanding",
+    prompt: str = "",
+    fps: int = 1,
+    max_frames: int = 10,
+    abort_signal=None,
+) -> str:
+    """Run video understanding through the configured backend.
+
+    Accepts the same input shapes as the backend: ``str`` (URL / path /
+    data URI), ``bytes``, or a ``dict`` with a ``url`` / ``video_url``
+    / ``file_url`` key.  Returns the text description of the video.
+
+    通过配置的后端执行视频理解。
+
+    接受与后端相同的输入形式：``str``（URL / 路径 / data URI）、
+    ``bytes`` 或带 ``url`` / ``video_url`` / ``file_url`` 键的
+    ``dict``。返回视频的文本描述。
+    """
+    config = _resolve_config()
+    requested: str | None = None
+    fallbacks: tuple[str, ...] = ()
+    if config is not None:
+        requested = config.backends.video_understanding.default or None
+        fallbacks = config.backends.video_understanding.fallbacks or ()
+
+    backend = None
+    # 显式指定的模型：优先通过注册表加载对应条目（如 stub-video-understanding → mock）。
+    # Explicitly requested model: prefer loading the matching registry
+    # entry (e.g. stub-video-understanding → mock) over the default chain.
+    if model:
+        try:
+            from xijian_api.ai.model_registry import get_registry
+            entry = config.model_by_id(model) if config is not None else None
+            if entry is not None and entry.type == "video_understanding":
+                loaded = get_registry().load(model, config=config)
+                backend = loaded.instance
+        except Exception:
+            backend = None
+
+    if backend is None:
+        try:
+            backend = get_video_understanding_backend(requested, fallbacks)
+        except AIBackendUnavailable as exc:
+            raise ApiBackendError(
+                status=503,
+                message=str(exc) or "no video understanding backend available",
+                type_="backend_unavailable",
+                code="backend_unavailable",
+            ) from exc
+
+    try:
+        return backend.understand(
+            video,
+            prompt=prompt,
+            fps=int(fps),
+            max_frames=int(max_frames),
+            abort_signal=abort_signal,
+        )
+    except AIBackendError as exc:
+        raise ApiBackendError(
+            status=503,
+            message=str(exc) or "video understanding backend error",
+            type_="backend_unavailable",
+            code=getattr(exc, "code", "backend_error"),
+        ) from exc
+
+
+__all__ = ["submit", "_complete_record", "understand_video"]

@@ -187,6 +187,3 @@ def understanding():
 
 
 __all__ = ["bp"]
-# Tiny reference to base64 keeps the import path meaningful for future
-# edits that want to decode uploaded content.
-_ = base64.b64encode

@@ -94,9 +94,19 @@ def _resolve_max_tokens(params: GenerationParams) -> int:
 
     Resolve ``max_tokens`` honouring ``None`` / 0 as a default budget.
     """
-    if params.max_tokens is None or params.max_tokens <= 0:
+    mt = params.max_tokens
+    # 防御：容忍数字字符串（如 "50"），非法值回退默认预算。
+    # Defensive: tolerate numeric strings (e.g. "50"); fall back on bad values.
+    if isinstance(mt, bool):
+        mt = int(mt)
+    elif mt is not None:
+        try:
+            mt = int(mt)
+        except (TypeError, ValueError):
+            mt = None
+    if mt is None or mt <= 0:
         return _DEFAULT_MAX_TOKENS
-    return int(params.max_tokens)
+    return mt
 
 
 def _build_chunk(

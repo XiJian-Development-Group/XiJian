@@ -463,6 +463,26 @@ multipart/form-data：`image`（必填）、`n` / `size` / `response_format` / `
 
 删除任务与对应文件。
 
+#### `POST /v1/videos/understanding`
+
+视频理解端点 —— 通过配置的视频理解后端（默认 ``video_understanding`` 任务类型，
+目前为 OpenAI 远程 + mock 实现）理解视频内容并返回文本描述。
+
+- **JSON**：`video`（URL / data URI / 本地路径）+ 可选 `prompt`（默认
+  "Describe what is happening in this video."）+ 可选 `model` + 可选 `fps`（默认 1）
+  + 可选 `max_frames`（默认 10）
+- **multipart/form-data**：`video`（必填文件）+ 可选 `prompt` / `model` / `fps` / `max_frames`
+
+缺视频时返回 400（`missing_video`）；模型不可用时返回 503。成功返回：
+
+```json
+{
+  "object": "video.understanding",
+  "model": "stub-video-understanding",
+  "text": "视频内容的文本描述"
+}
+```
+
 ### 2.7 Multimodal（全模态理解）
 
 统一的全模态理解入口，接受文本、图像、音频、视频、文件任意组合的输入。

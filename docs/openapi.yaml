@@ -126,6 +126,30 @@ paths:
                     type: array
                 additionalProperties: true
   /assistants:
+    get:
+      tags:
+      - assistants
+      operationId: list_assistants
+      summary: List all assistants. / 列出所有助手。
+      responses:
+        '200':
+          description: Success / 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  object:
+                    type: string
+                  data:
+                    type: array
+                  has_more:
+                    type: boolean
+                  first_id:
+                    type: string
+                  last_id:
+                    type: string
+                additionalProperties: true
     post:
       tags:
       - assistants
@@ -169,31 +193,28 @@ paths:
               schema: *id001
         '400':
           $ref: '#/components/responses/BadRequest'
+  /assistants/{assistant_id}:
     get:
       tags:
       - assistants
-      operationId: list_assistants
-      summary: List all assistants. / 列出所有助手。
+      operationId: get_assistant
+      summary: Get assistant
+      parameters:
+      - name: assistant_id
+        in: path
+        required: true
+        schema:
+          type: string
       responses:
         '200':
-          description: Success / 成功
+          description: 成功
           content:
             application/json:
               schema:
                 type: object
-                properties:
-                  object:
-                    type: string
-                  data:
-                    type: array
-                  has_more:
-                    type: boolean
-                  first_id:
-                    type: string
-                  last_id:
-                    type: string
                 additionalProperties: true
-  /assistants/{assistant_id}:
+        '404':
+          $ref: '#/components/responses/NotFound'
     post:
       tags:
       - assistants
@@ -212,27 +233,6 @@ paths:
             schema:
               type: object
               additionalProperties: true
-      responses:
-        '200':
-          description: 成功
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
-        '404':
-          $ref: '#/components/responses/NotFound'
-    get:
-      tags:
-      - assistants
-      operationId: get_assistant
-      summary: Get assistant
-      parameters:
-      - name: assistant_id
-        in: path
-        required: true
-        schema:
-          type: string
       responses:
         '200':
           description: 成功
@@ -364,6 +364,30 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
   /batches:
+    get:
+      tags:
+      - batches
+      operationId: list_batches
+      summary: List all batches with pagination. / 列出所有批处理任务（分页）。
+      responses:
+        '200':
+          description: Success / 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  object:
+                    type: string
+                  data:
+                    type: array
+                  has_more:
+                    type: boolean
+                  first_id:
+                    type: string
+                  last_id:
+                    type: string
+                additionalProperties: true
     post:
       tags:
       - batches
@@ -405,30 +429,6 @@ paths:
               schema: *id005
         '400':
           $ref: '#/components/responses/BadRequest'
-    get:
-      tags:
-      - batches
-      operationId: list_batches
-      summary: List all batches with pagination. / 列出所有批处理任务（分页）。
-      responses:
-        '200':
-          description: Success / 成功
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  object:
-                    type: string
-                  data:
-                    type: array
-                  has_more:
-                    type: boolean
-                  first_id:
-                    type: string
-                  last_id:
-                    type: string
-                additionalProperties: true
   /batches/{batch_id}:
     get:
       tags:
@@ -720,6 +720,30 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
   /files:
+    get:
+      tags:
+      - files
+      operationId: list_files
+      summary: List uploaded files. / 列出已上传的文件。
+      responses:
+        '200':
+          description: Success / 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  object:
+                    type: string
+                  data:
+                    type: array
+                  has_more:
+                    type: boolean
+                  first_id:
+                    type: string
+                  last_id:
+                    type: string
+                additionalProperties: true
     post:
       tags:
       - files
@@ -780,30 +804,6 @@ paths:
                 additionalProperties: true
         '404':
           $ref: '#/components/responses/NotFound'
-    get:
-      tags:
-      - files
-      operationId: list_files
-      summary: List uploaded files. / 列出已上传的文件。
-      responses:
-        '200':
-          description: Success / 成功
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  object:
-                    type: string
-                  data:
-                    type: array
-                  has_more:
-                    type: boolean
-                  first_id:
-                    type: string
-                  last_id:
-                    type: string
-                additionalProperties: true
   /files/{file_id}:
     get:
       tags:
@@ -868,6 +868,30 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
   /fine_tuning/jobs:
+    get:
+      tags:
+      - fine-tuning
+      operationId: list_jobs
+      summary: List fine-tuning jobs. / 列出微调任务。
+      responses:
+        '200':
+          description: Success / 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  object:
+                    type: string
+                  data:
+                    type: array
+                  has_more:
+                    type: boolean
+                  first_id:
+                    type: string
+                  last_id:
+                    type: string
+                additionalProperties: true
     post:
       tags:
       - fine-tuning
@@ -898,30 +922,6 @@ paths:
               schema: *id010
         '400':
           $ref: '#/components/responses/BadRequest'
-    get:
-      tags:
-      - fine-tuning
-      operationId: list_jobs
-      summary: List fine-tuning jobs. / 列出微调任务。
-      responses:
-        '200':
-          description: Success / 成功
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  object:
-                    type: string
-                  data:
-                    type: array
-                  has_more:
-                    type: boolean
-                  first_id:
-                    type: string
-                  last_id:
-                    type: string
-                additionalProperties: true
   /fine_tuning/jobs/{job_id}:
     get:
       tags:
@@ -1565,6 +1565,22 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
   /threads/{thread_id}:
+    get:
+      tags:
+      - assistants
+      operationId: getThread
+      summary: 获取 Thread
+      parameters:
+      - $ref: '#/components/parameters/ThreadId'
+      responses:
+        '200':
+          description: 详情
+          content:
+            application/json:
+              schema:
+                type: object
+        '404':
+          $ref: '#/components/responses/NotFound'
     post:
       tags:
       - assistants
@@ -1585,22 +1601,6 @@ paths:
             application/json:
               schema:
                 type: object
-    get:
-      tags:
-      - assistants
-      operationId: getThread
-      summary: 获取 Thread
-      parameters:
-      - $ref: '#/components/parameters/ThreadId'
-      responses:
-        '200':
-          description: 详情
-          content:
-            application/json:
-              schema:
-                type: object
-        '404':
-          $ref: '#/components/responses/NotFound'
     delete:
       tags:
       - assistants
@@ -1612,6 +1612,38 @@ paths:
         '204':
           $ref: '#/components/responses/NoContent'
   /threads/{thread_id}/messages:
+    get:
+      tags:
+      - assistants
+      operationId: list_messages
+      summary: List messages in a thread. / 列出线程中的消息。
+      parameters:
+      - name: thread_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Success / 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  object:
+                    type: string
+                  data:
+                    type: array
+                  has_more:
+                    type: boolean
+                  first_id:
+                    type: string
+                  last_id:
+                    type: string
+                additionalProperties: true
+        '404':
+          $ref: '#/components/responses/NotFound'
     post:
       tags:
       - assistants
@@ -1645,38 +1677,6 @@ paths:
           $ref: '#/components/responses/NotFound'
         '400':
           $ref: '#/components/responses/BadRequest'
-    get:
-      tags:
-      - assistants
-      operationId: list_messages
-      summary: List messages in a thread. / 列出线程中的消息。
-      parameters:
-      - name: thread_id
-        in: path
-        required: true
-        schema:
-          type: string
-      responses:
-        '200':
-          description: Success / 成功
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  object:
-                    type: string
-                  data:
-                    type: array
-                  has_more:
-                    type: boolean
-                  first_id:
-                    type: string
-                  last_id:
-                    type: string
-                additionalProperties: true
-        '404':
-          $ref: '#/components/responses/NotFound'
   /threads/{thread_id}/messages/{message_id}:
     get:
       tags:
@@ -1705,6 +1705,38 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
   /threads/{thread_id}/runs:
+    get:
+      tags:
+      - assistants
+      operationId: list_runs
+      summary: List runs for a thread. / 列出线程的运行。
+      parameters:
+      - name: thread_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Success / 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  object:
+                    type: string
+                  data:
+                    type: array
+                  has_more:
+                    type: boolean
+                  first_id:
+                    type: string
+                  last_id:
+                    type: string
+                additionalProperties: true
+        '404':
+          $ref: '#/components/responses/NotFound'
     post:
       tags:
       - assistants
@@ -1738,39 +1770,22 @@ paths:
           $ref: '#/components/responses/NotFound'
         '400':
           $ref: '#/components/responses/BadRequest'
+  /threads/{thread_id}/runs/{run_id}:
     get:
       tags:
       - assistants
-      operationId: list_runs
-      summary: List runs for a thread. / 列出线程的运行。
+      operationId: getRun
+      summary: 获取 Run
       parameters:
-      - name: thread_id
-        in: path
-        required: true
-        schema:
-          type: string
+      - $ref: '#/components/parameters/ThreadId'
+      - $ref: '#/components/parameters/RunId'
       responses:
         '200':
-          description: Success / 成功
+          description: 详情
           content:
             application/json:
               schema:
                 type: object
-                properties:
-                  object:
-                    type: string
-                  data:
-                    type: array
-                  has_more:
-                    type: boolean
-                  first_id:
-                    type: string
-                  last_id:
-                    type: string
-                additionalProperties: true
-        '404':
-          $ref: '#/components/responses/NotFound'
-  /threads/{thread_id}/runs/{run_id}:
     post:
       tags:
       - assistants
@@ -1792,21 +1807,6 @@ paths:
             application/json:
               schema:
                 type: object
-    get:
-      tags:
-      - assistants
-      operationId: getRun
-      summary: 获取 Run
-      parameters:
-      - $ref: '#/components/parameters/ThreadId'
-      - $ref: '#/components/parameters/RunId'
-      responses:
-        '200':
-          description: 详情
-          content:
-            application/json:
-              schema:
-                type: object
   /threads/{thread_id}/runs/{run_id}/cancel:
     post:
       tags:
@@ -1824,6 +1824,21 @@ paths:
               schema:
                 type: object
   /threads/{thread_id}/runs/{run_id}/steps:
+    get:
+      tags:
+      - assistants
+      operationId: listRunSteps
+      summary: 列出 Run Step
+      parameters:
+      - $ref: '#/components/parameters/ThreadId'
+      - $ref: '#/components/parameters/RunId'
+      responses:
+        '200':
+          description: 列表
+          content:
+            application/json:
+              schema:
+                type: object
     post:
       tags:
       - assistants
@@ -1862,21 +1877,6 @@ paths:
           $ref: '#/components/responses/NotFound'
         '400':
           $ref: '#/components/responses/BadRequest'
-    get:
-      tags:
-      - assistants
-      operationId: listRunSteps
-      summary: 列出 Run Step
-      parameters:
-      - $ref: '#/components/parameters/ThreadId'
-      - $ref: '#/components/parameters/RunId'
-      responses:
-        '200':
-          description: 列表
-          content:
-            application/json:
-              schema:
-                type: object
   /threads/{thread_id}/runs/{run_id}/steps/{step_id}:
     get:
       tags:
@@ -2010,6 +2010,68 @@ paths:
               schema: *id019
         '400':
           $ref: '#/components/responses/BadRequest'
+  /videos/understanding:
+    post:
+      tags:
+      - video
+      operationId: video_understanding
+      summary: Video understanding endpoint.
+      description: |-
+        Video understanding endpoint.
+
+        Accepts a video via JSON body (``video`` field: URL / data URI /
+        file path) or multipart upload (``video`` file + optional ``prompt``
+        form field).  Returns a text description of the video content.
+
+        视频理解端点。
+
+        通过 JSON 请求体（``video`` 字段：URL / data URI / 文件路径）
+        或 multipart 上传（``video`` 文件 + 可选 ``prompt`` 表单字段）
+        接受视频。返回视频内容的文本描述。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                prompt:
+                  type: string
+                model:
+                  type: string
+                video:
+                  type: string
+                url:
+                  type: string
+                fps:
+                  type: integer
+                max_frames:
+                  type: integer
+              additionalProperties: true
+              required:
+              - video
+      responses:
+        '200':
+          description: Success / 成功
+          content:
+            application/json:
+              schema: &id020
+                type: object
+                properties:
+                  object:
+                    type: string
+                  model:
+                    type: string
+                  text:
+                    type: string
+                additionalProperties: true
+        '201':
+          description: Created / 创建成功
+          content:
+            application/json:
+              schema: *id020
+        '400':
+          $ref: '#/components/responses/BadRequest'
   /videos/{video_id}:
     get:
       tags:
@@ -2106,7 +2168,7 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id020
+              schema: &id021
                 type: object
                 properties:
                   published:
@@ -2118,7 +2180,7 @@ paths:
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id020
+              schema: *id021
         '403':
           description: Requires XIJIAN_DEV=1 / 需要 XIJIAN_DEV=1 环境变量
           content:
@@ -2151,14 +2213,14 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id021
+              schema: &id022
                 type: object
                 additionalProperties: true
         '201':
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id021
+              schema: *id022
         '403':
           description: Requires XIJIAN_DEV=1 / 需要 XIJIAN_DEV=1 环境变量
           content:
@@ -2214,17 +2276,43 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id022
+              schema: &id023
                 type: object
                 additionalProperties: true
         '201':
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id022
+              schema: *id023
         '400':
           $ref: '#/components/responses/BadRequest'
   /xijian/backups/policy:
+    get:
+      tags:
+      - xijian.backup
+      operationId: get_policy
+      summary: Get policy
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+    delete:
+      tags:
+      - xijian.backup
+      operationId: reset_policy
+      summary: Reset policy
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
     put:
       tags:
       - xijian.backup
@@ -2261,32 +2349,6 @@ paths:
                 additionalProperties: true
         '400':
           $ref: '#/components/responses/BadRequest'
-    get:
-      tags:
-      - xijian.backup
-      operationId: get_policy
-      summary: Get policy
-      responses:
-        '200':
-          description: 成功
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
-    delete:
-      tags:
-      - xijian.backup
-      operationId: reset_policy
-      summary: Reset policy
-      responses:
-        '200':
-          description: 成功
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
   /xijian/backups/prune:
     post:
       tags:
@@ -2308,7 +2370,7 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id023
+              schema: &id024
                 type: object
                 properties:
                   dry_run:
@@ -2322,10 +2384,26 @@ paths:
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id023
+              schema: *id024
         '400':
           $ref: '#/components/responses/BadRequest'
   /xijian/backups/snapshots:
+    get:
+      tags:
+      - xijian.backup
+      operationId: list_snapshots
+      summary: List snapshots
+      responses:
+        '200':
+          description: Success / 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  snapshots:
+                    type: array
+                additionalProperties: true
     post:
       tags:
       - xijian.backup
@@ -2363,32 +2441,16 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id024
+              schema: &id025
                 type: object
                 additionalProperties: true
         '201':
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id024
+              schema: *id025
         '400':
           $ref: '#/components/responses/BadRequest'
-    get:
-      tags:
-      - xijian.backup
-      operationId: list_snapshots
-      summary: List snapshots
-      responses:
-        '200':
-          description: Success / 成功
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  snapshots:
-                    type: array
-                additionalProperties: true
   /xijian/backups/snapshots/{snapshot_id}:
     get:
       tags:
@@ -2467,24 +2529,6 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
   /xijian/characters:
-    post:
-      tags:
-      - xijian.character
-      operationId: createCharacter
-      summary: 创建角色（管理员/创作者）
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CharacterCreate'
-      responses:
-        '201':
-          description: 已创建
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Character'
     get:
       tags:
       - xijian.character
@@ -2509,6 +2553,24 @@ paths:
                   last_id:
                     type: string
                 additionalProperties: true
+    post:
+      tags:
+      - xijian.character
+      operationId: createCharacter
+      summary: 创建角色（管理员/创作者）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CharacterCreate'
+      responses:
+        '201':
+          description: 已创建
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Character'
   /xijian/characters/{character_id}:
     get:
       tags:
@@ -2612,6 +2674,20 @@ paths:
               schema:
                 type: object
   /xijian/characters/{character_id}/state:
+    get:
+      tags:
+      - xijian.character
+      operationId: getCharacterState
+      summary: 获取角色当前状态（好感度、心情、最近记忆摘要等）
+      parameters:
+      - $ref: '#/components/parameters/CharacterId'
+      responses:
+        '200':
+          description: 状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterState'
     post:
       tags:
       - xijian.character
@@ -2628,20 +2704,6 @@ paths:
       responses:
         '200':
           description: 已更新
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CharacterState'
-    get:
-      tags:
-      - xijian.character
-      operationId: getCharacterState
-      summary: 获取角色当前状态（好感度、心情、最近记忆摘要等）
-      parameters:
-      - $ref: '#/components/parameters/CharacterId'
-      responses:
-        '200':
-          description: 状态
           content:
             application/json:
               schema:
@@ -2752,35 +2814,6 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
   /xijian/characters/{character_id}/state/modifier:
-    delete:
-      tags:
-      - xijian.character
-      operationId: delete_character_state_modifier
-      summary: Delete character state modifier
-      parameters:
-      - name: character_id
-        in: path
-        required: true
-        schema:
-          type: string
-      - name: keys
-        in: query
-        required: false
-        schema:
-          type: string
-      responses:
-        '200':
-          description: Success / 成功
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  modifiers:
-                    type: string
-                additionalProperties: true
-        '404':
-          $ref: '#/components/responses/NotFound'
     put:
       tags:
       - xijian.character
@@ -2799,6 +2832,35 @@ paths:
             schema:
               type: object
               additionalProperties: true
+      responses:
+        '200':
+          description: Success / 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  modifiers:
+                    type: string
+                additionalProperties: true
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags:
+      - xijian.character
+      operationId: delete_character_state_modifier
+      summary: Delete character state modifier
+      parameters:
+      - name: character_id
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: keys
+        in: query
+        required: false
+        schema:
+          type: string
       responses:
         '200':
           description: Success / 成功
@@ -2959,49 +3021,6 @@ paths:
               schema:
                 type: object
   /xijian/currencies:
-    post:
-      tags:
-      - xijian.economy
-      operationId: create_currency
-      summary: Create currency
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                world_id:
-                  type: string
-                code:
-                  type: string
-                name:
-                  type: string
-                symbol:
-                  type: string
-                decimals:
-                  type: string
-              additionalProperties: true
-              required:
-              - world_id
-              - code
-              - name
-              - symbol
-      responses:
-        '200':
-          description: Success / 成功
-          content:
-            application/json:
-              schema: &id025
-                type: object
-                additionalProperties: true
-        '201':
-          description: Created / 创建成功
-          content:
-            application/json:
-              schema: *id025
-        '400':
-          $ref: '#/components/responses/BadRequest'
     get:
       tags:
       - xijian.economy
@@ -3038,6 +3057,49 @@ paths:
                 additionalProperties: true
         '404':
           $ref: '#/components/responses/NotFound'
+    post:
+      tags:
+      - xijian.economy
+      operationId: create_currency
+      summary: Create currency
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                world_id:
+                  type: string
+                code:
+                  type: string
+                name:
+                  type: string
+                symbol:
+                  type: string
+                decimals:
+                  type: string
+              additionalProperties: true
+              required:
+              - world_id
+              - code
+              - name
+              - symbol
+      responses:
+        '200':
+          description: Success / 成功
+          content:
+            application/json:
+              schema: &id026
+                type: object
+                additionalProperties: true
+        '201':
+          description: Created / 创建成功
+          content:
+            application/json:
+              schema: *id026
+        '400':
+          $ref: '#/components/responses/BadRequest'
   /xijian/currencies/{world_id}/{code}:
     get:
       tags:
@@ -3719,7 +3781,7 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id026
+              schema: &id027
                 type: object
                 properties:
                   success:
@@ -3735,7 +3797,7 @@ paths:
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id026
+              schema: *id027
         '400':
           $ref: '#/components/responses/BadRequest'
   /xijian/economy/crime/theft:
@@ -3773,7 +3835,7 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id027
+              schema: &id028
                 type: object
                 properties:
                   success:
@@ -3789,7 +3851,7 @@ paths:
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id027
+              schema: *id028
         '400':
           $ref: '#/components/responses/BadRequest'
   /xijian/economy/purchase:
@@ -3827,14 +3889,14 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id028
+              schema: &id029
                 type: object
                 additionalProperties: true
         '201':
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id028
+              schema: *id029
         '400':
           $ref: '#/components/responses/BadRequest'
   /xijian/economy/reward:
@@ -3875,14 +3937,14 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id029
+              schema: &id030
                 type: object
                 additionalProperties: true
         '201':
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id029
+              schema: *id030
         '400':
           $ref: '#/components/responses/BadRequest'
   /xijian/economy/sale:
@@ -3920,14 +3982,14 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id030
+              schema: &id031
                 type: object
                 additionalProperties: true
         '201':
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id030
+              schema: *id031
         '400':
           $ref: '#/components/responses/BadRequest'
   /xijian/economy/state/{world_id}:
@@ -4169,17 +4231,41 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id031
+              schema: &id032
                 type: object
                 additionalProperties: true
         '201':
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id031
+              schema: *id032
         '400':
           $ref: '#/components/responses/BadRequest'
   /xijian/events:
+    get:
+      tags:
+      - xijian.event
+      operationId: list_events
+      summary: List events
+      responses:
+        '200':
+          description: Success / 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  object:
+                    type: string
+                  data:
+                    type: array
+                  has_more:
+                    type: boolean
+                  first_id:
+                    type: string
+                  last_id:
+                    type: string
+                additionalProperties: true
     post:
       tags:
       - xijian.event
@@ -4197,7 +4283,7 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id032
+              schema: &id033
                 type: object
                 properties:
                   id:
@@ -4227,31 +4313,7 @@ paths:
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id032
-    get:
-      tags:
-      - xijian.event
-      operationId: list_events
-      summary: List events
-      responses:
-        '200':
-          description: Success / 成功
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  object:
-                    type: string
-                  data:
-                    type: array
-                  has_more:
-                    type: boolean
-                  first_id:
-                    type: string
-                  last_id:
-                    type: string
-                additionalProperties: true
+              schema: *id033
   /xijian/events/instances:
     get:
       tags:
@@ -4363,7 +4425,7 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id033
+              schema: &id034
                 type: object
                 properties:
                   started:
@@ -4377,7 +4439,7 @@ paths:
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id033
+              schema: *id034
   /xijian/events/scheduler/stop:
     post:
       tags:
@@ -4396,7 +4458,7 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id034
+              schema: &id035
                 type: object
                 properties:
                   stopped:
@@ -4408,7 +4470,7 @@ paths:
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id034
+              schema: *id035
   /xijian/events/scheduler/tick:
     post:
       tags:
@@ -4438,7 +4500,7 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id035
+              schema: &id036
                 type: object
                 properties:
                   fired_by_world:
@@ -4456,7 +4518,7 @@ paths:
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id035
+              schema: *id036
         '403':
           description: Requires XIJIAN_DEV=1 / 需要 XIJIAN_DEV=1 环境变量
           content:
@@ -4560,7 +4622,7 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id036
+              schema: &id037
                 type: object
                 properties:
                   aborted:
@@ -4574,7 +4636,7 @@ paths:
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id036
+              schema: *id037
         '400':
           $ref: '#/components/responses/BadRequest'
   /xijian/interactions:
@@ -4739,7 +4801,7 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id037
+              schema: &id038
                 type: object
                 properties:
                   verdict:
@@ -4757,7 +4819,7 @@ paths:
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id037
+              schema: *id038
         '400':
           $ref: '#/components/responses/BadRequest'
   /xijian/mcp/dev/crash:
@@ -4778,7 +4840,7 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id038
+              schema: &id039
                 type: object
                 properties:
                   verdict:
@@ -4796,7 +4858,7 @@ paths:
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id038
+              schema: *id039
         '403':
           description: Requires XIJIAN_DEV=1 / 需要 XIJIAN_DEV=1 环境变量
           content:
@@ -4805,53 +4867,6 @@ paths:
                 $ref: '#/components/schemas/OAIError'
       x-dev-only: true
   /xijian/mcp/policy/{world_id}:
-    put:
-      tags:
-      - xijian.mcp
-      operationId: set_policy
-      summary: Set policy
-      parameters:
-      - name: world_id
-        in: path
-        required: true
-        schema:
-          type: string
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                default:
-                  type: string
-                lockout_until:
-                  type: string
-                clear_lockout:
-                  type: boolean
-              additionalProperties: true
-              required:
-              - default
-              - lockout_until
-      responses:
-        '200':
-          description: Success / 成功
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  world_id:
-                    type: string
-                  default:
-                    type: string
-                  lockout_until:
-                    type: string
-                additionalProperties: true
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '400':
-          $ref: '#/components/responses/BadRequest'
     get:
       tags:
       - xijian.mcp
@@ -4908,12 +4923,17 @@ paths:
                 additionalProperties: true
         '404':
           $ref: '#/components/responses/NotFound'
-  /xijian/mcp/rules:
-    post:
+    put:
       tags:
       - xijian.mcp
-      operationId: create_rule
-      summary: Create rule
+      operationId: set_policy
+      summary: Set policy
+      parameters:
+      - name: world_id
+        in: path
+        required: true
+        schema:
+          type: string
       requestBody:
         required: true
         content:
@@ -4921,35 +4941,36 @@ paths:
             schema:
               type: object
               properties:
-                action_kind:
+                default:
                   type: string
-                pattern:
+                lockout_until:
                   type: string
-                mode:
-                  type: string
-                severity:
-                  type: string
-                is_active:
+                clear_lockout:
                   type: boolean
               additionalProperties: true
               required:
-              - action_kind
-              - mode
+              - default
+              - lockout_until
       responses:
         '200':
           description: Success / 成功
           content:
             application/json:
-              schema: &id039
+              schema:
                 type: object
+                properties:
+                  world_id:
+                    type: string
+                  default:
+                    type: string
+                  lockout_until:
+                    type: string
                 additionalProperties: true
-        '201':
-          description: Created / 创建成功
-          content:
-            application/json:
-              schema: *id039
+        '404':
+          $ref: '#/components/responses/NotFound'
         '400':
           $ref: '#/components/responses/BadRequest'
+  /xijian/mcp/rules:
     get:
       tags:
       - xijian.mcp
@@ -4984,6 +5005,47 @@ paths:
                 additionalProperties: true
         '404':
           $ref: '#/components/responses/NotFound'
+    post:
+      tags:
+      - xijian.mcp
+      operationId: create_rule
+      summary: Create rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                action_kind:
+                  type: string
+                pattern:
+                  type: string
+                mode:
+                  type: string
+                severity:
+                  type: string
+                is_active:
+                  type: boolean
+              additionalProperties: true
+              required:
+              - action_kind
+              - mode
+      responses:
+        '200':
+          description: Success / 成功
+          content:
+            application/json:
+              schema: &id040
+                type: object
+                additionalProperties: true
+        '201':
+          description: Created / 创建成功
+          content:
+            application/json:
+              schema: *id040
+        '400':
+          $ref: '#/components/responses/BadRequest'
   /xijian/mcp/rules/{rule_id}:
     get:
       tags:
@@ -5061,6 +5123,22 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
   /xijian/mcp/safety_stop:
+    get:
+      tags:
+      - xijian.mcp
+      operationId: list_safety_stop
+      summary: List safety stop
+      responses:
+        '200':
+          description: Success / 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  freezes:
+                    type: string
+                additionalProperties: true
     post:
       tags:
       - xijian.mcp
@@ -5089,7 +5167,7 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id040
+              schema: &id041
                 type: object
                 properties:
                   id:
@@ -5125,25 +5203,9 @@ paths:
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id040
+              schema: *id041
         '400':
           $ref: '#/components/responses/BadRequest'
-    get:
-      tags:
-      - xijian.mcp
-      operationId: list_safety_stop
-      summary: List safety stop
-      responses:
-        '200':
-          description: Success / 成功
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  freezes:
-                    type: string
-                additionalProperties: true
   /xijian/mcp/safety_stop/{freeze_id}:
     get:
       tags:
@@ -5232,6 +5294,22 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
   /xijian/mcp/snapshots:
+    get:
+      tags:
+      - xijian.mcp
+      operationId: list_snapshots
+      summary: List snapshots
+      responses:
+        '200':
+          description: Success / 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  snapshots:
+                    type: array
+                additionalProperties: true
     post:
       tags:
       - xijian.mcp
@@ -5256,7 +5334,7 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id041
+              schema: &id042
                 type: object
                 properties:
                   id:
@@ -5288,25 +5366,9 @@ paths:
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id041
+              schema: *id042
         '400':
           $ref: '#/components/responses/BadRequest'
-    get:
-      tags:
-      - xijian.mcp
-      operationId: list_snapshots
-      summary: List snapshots
-      responses:
-        '200':
-          description: Success / 成功
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  snapshots:
-                    type: array
-                additionalProperties: true
   /xijian/mcp/snapshots/{snapshot_id}:
     get:
       tags:
@@ -5397,34 +5459,6 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
   /xijian/memory/config/{character_id}:
-    put:
-      tags:
-      - xijian.memory
-      operationId: upsert_config
-      summary: Upsert config
-      parameters:
-      - name: character_id
-        in: path
-        required: true
-        schema:
-          type: string
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: true
-      responses:
-        '200':
-          description: 成功
-          content:
-            application/json:
-              schema:
-                type: object
-                additionalProperties: true
-        '404':
-          $ref: '#/components/responses/NotFound'
     get:
       tags:
       - xijian.memory
@@ -5481,6 +5515,34 @@ paths:
                 additionalProperties: true
         '404':
           $ref: '#/components/responses/NotFound'
+    put:
+      tags:
+      - xijian.memory
+      operationId: upsert_config
+      summary: Upsert config
+      parameters:
+      - name: character_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '404':
+          $ref: '#/components/responses/NotFound'
   /xijian/memory/consolidate:
     post:
       tags:
@@ -5504,7 +5566,7 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id042
+              schema: &id043
                 type: object
                 properties:
                   job_id:
@@ -5520,10 +5582,47 @@ paths:
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id042
+              schema: *id043
         '400':
           $ref: '#/components/responses/BadRequest'
   /xijian/memory/entries:
+    get:
+      tags:
+      - xijian.memory
+      operationId: list_entries
+      summary: List entries
+      parameters:
+      - name: character_id
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: importance
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Success / 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  object:
+                    type: string
+                  data:
+                    type: array
+                  has_more:
+                    type: boolean
+                  first_id:
+                    type: string
+                  last_id:
+                    type: string
+                additionalProperties: true
+        '404':
+          $ref: '#/components/responses/NotFound'
     post:
       tags:
       - xijian.memory
@@ -5541,7 +5640,7 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id043
+              schema: &id044
                 type: object
                 properties:
                   id:
@@ -5585,44 +5684,7 @@ paths:
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id043
-    get:
-      tags:
-      - xijian.memory
-      operationId: list_entries
-      summary: List entries
-      parameters:
-      - name: character_id
-        in: query
-        required: false
-        schema:
-          type: string
-      - name: importance
-        in: query
-        required: false
-        schema:
-          type: string
-      responses:
-        '200':
-          description: Success / 成功
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  object:
-                    type: string
-                  data:
-                    type: array
-                  has_more:
-                    type: boolean
-                  first_id:
-                    type: string
-                  last_id:
-                    type: string
-                additionalProperties: true
-        '404':
-          $ref: '#/components/responses/NotFound'
+              schema: *id044
   /xijian/memory/entries/{entry_id}:
     get:
       tags:
@@ -5707,7 +5769,7 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id044
+              schema: &id045
                 type: object
                 properties:
                   forgotten:
@@ -5721,7 +5783,7 @@ paths:
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id044
+              schema: *id045
         '400':
           $ref: '#/components/responses/BadRequest'
   /xijian/memory/search:
@@ -5751,7 +5813,7 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id045
+              schema: &id046
                 type: object
                 properties:
                   object:
@@ -5773,84 +5835,10 @@ paths:
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id045
-        '400':
-          $ref: '#/components/responses/BadRequest'
-  /xijian/npcs:
-    post:
-      tags:
-      - xijian.npc
-      operationId: create_npc
-      summary: Create npc
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                world_id:
-                  type: string
-                name:
-                  type: string
-                persona_doc:
-                  type: string
-                compute_budget:
-                  type: string
-                activity_tier:
-                  type: string
-                importance:
-                  type: number
-                npc_id:
-                  type: string
-                state_json:
-                  type: string
-                is_alive:
-                  type: boolean
-              additionalProperties: true
-              required:
-              - world_id
-              - name
-              - npc_id
-              - state_json
-      responses:
-        '200':
-          description: Success / 成功
-          content:
-            application/json:
-              schema: &id046
-                type: object
-                properties:
-                  id:
-                    type: string
-                  world_id:
-                    type: string
-                  name:
-                    type: string
-                  persona_doc:
-                    type: string
-                  state_json:
-                    type: string
-                  compute_budget:
-                    type: string
-                  is_alive:
-                    type: string
-                  activity_tier:
-                    type: string
-                  importance:
-                    type: string
-                  last_think_at:
-                    type: string
-                  created_at:
-                    type: integer
-                additionalProperties: true
-        '201':
-          description: Created / 创建成功
-          content:
-            application/json:
               schema: *id046
         '400':
           $ref: '#/components/responses/BadRequest'
+  /xijian/npcs:
     get:
       tags:
       - xijian.npc
@@ -5897,6 +5885,80 @@ paths:
                 additionalProperties: true
         '404':
           $ref: '#/components/responses/NotFound'
+    post:
+      tags:
+      - xijian.npc
+      operationId: create_npc
+      summary: Create npc
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                world_id:
+                  type: string
+                name:
+                  type: string
+                persona_doc:
+                  type: string
+                compute_budget:
+                  type: string
+                activity_tier:
+                  type: string
+                importance:
+                  type: number
+                npc_id:
+                  type: string
+                state_json:
+                  type: string
+                is_alive:
+                  type: boolean
+              additionalProperties: true
+              required:
+              - world_id
+              - name
+              - npc_id
+              - state_json
+      responses:
+        '200':
+          description: Success / 成功
+          content:
+            application/json:
+              schema: &id047
+                type: object
+                properties:
+                  id:
+                    type: string
+                  world_id:
+                    type: string
+                  name:
+                    type: string
+                  persona_doc:
+                    type: string
+                  state_json:
+                    type: string
+                  compute_budget:
+                    type: string
+                  is_alive:
+                    type: string
+                  activity_tier:
+                    type: string
+                  importance:
+                    type: string
+                  last_think_at:
+                    type: string
+                  created_at:
+                    type: integer
+                additionalProperties: true
+        '201':
+          description: Created / 创建成功
+          content:
+            application/json:
+              schema: *id047
+        '400':
+          $ref: '#/components/responses/BadRequest'
   /xijian/npcs/affected/preview:
     post:
       tags:
@@ -5928,7 +5990,7 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id047
+              schema: &id048
                 type: object
                 properties:
                   world_id:
@@ -5940,7 +6002,7 @@ paths:
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id047
+              schema: *id048
         '400':
           $ref: '#/components/responses/BadRequest'
   /xijian/npcs/scheduling/log:
@@ -5996,7 +6058,7 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id048
+              schema: &id049
                 type: object
                 properties:
                   resumed:
@@ -6006,7 +6068,7 @@ paths:
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id048
+              schema: *id049
   /xijian/npcs/scheduling/status:
     get:
       tags:
@@ -6073,7 +6135,7 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id049
+              schema: &id050
                 type: object
                 properties:
                   world_id:
@@ -6093,7 +6155,7 @@ paths:
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id049
+              schema: *id050
         '403':
           description: Requires XIJIAN_DEV=1 / 需要 XIJIAN_DEV=1 环境变量
           content:
@@ -6121,7 +6183,7 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id050
+              schema: &id051
                 type: object
                 properties:
                   suspended:
@@ -6133,7 +6195,7 @@ paths:
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id050
+              schema: *id051
         '403':
           description: Requires XIJIAN_DEV=1 / 需要 XIJIAN_DEV=1 环境变量
           content:
@@ -6405,14 +6467,14 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id051
+              schema: &id052
                 type: object
                 additionalProperties: true
         '201':
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id051
+              schema: *id052
         '400':
           $ref: '#/components/responses/BadRequest'
   /xijian/overload/recovery/finalize:
@@ -6551,7 +6613,7 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id052
+              schema: &id053
                 type: object
                 properties:
                   job_id:
@@ -6575,7 +6637,7 @@ paths:
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id052
+              schema: *id053
   /xijian/resources/imports/{job_id}:
     get:
       tags:
@@ -6653,7 +6715,7 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id053
+              schema: &id054
                 type: object
                 properties:
                   file_id:
@@ -6665,7 +6727,7 @@ paths:
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id053
+              schema: *id054
   /xijian/safety/dev/crash:
     post:
       tags:
@@ -6684,7 +6746,7 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id054
+              schema: &id055
                 type: object
                 properties:
                   input:
@@ -6704,7 +6766,7 @@ paths:
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id054
+              schema: *id055
         '403':
           description: Requires XIJIAN_DEV=1 / 需要 XIJIAN_DEV=1 环境变量
           content:
@@ -6738,7 +6800,7 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id055
+              schema: &id056
                 type: object
                 properties:
                   challenge_id:
@@ -6758,7 +6820,7 @@ paths:
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id055
+              schema: *id056
   /xijian/safety/gate/enable:
     post:
       tags:
@@ -6777,7 +6839,7 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id056
+              schema: &id057
                 type: object
                 properties:
                   enabled:
@@ -6793,7 +6855,7 @@ paths:
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id056
+              schema: *id057
   /xijian/safety/gate/status:
     get:
       tags:
@@ -6818,41 +6880,6 @@ paths:
                     type: string
                 additionalProperties: true
   /xijian/safety/policy/{world_id}:
-    put:
-      tags:
-      - xijian.safety
-      operationId: set_policy
-      summary: Set policy
-      parameters:
-      - name: world_id
-        in: path
-        required: true
-        schema:
-          type: string
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              additionalProperties: true
-      responses:
-        '200':
-          description: Success / 成功
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  world_id:
-                    type: string
-                  is_dangerous:
-                    type: string
-                  threshold:
-                    type: string
-                additionalProperties: true
-        '404':
-          $ref: '#/components/responses/NotFound'
     get:
       tags:
       - xijian.safety
@@ -6909,45 +6936,42 @@ paths:
                 additionalProperties: true
         '404':
           $ref: '#/components/responses/NotFound'
-  /xijian/safety/rules:
-    post:
+    put:
       tags:
       - xijian.safety
-      operationId: create_rule
-      summary: Create rule
-      requestBody:
+      operationId: set_policy
+      summary: Set policy
+      parameters:
+      - name: world_id
+        in: path
         required: true
+        schema:
+          type: string
+      requestBody:
+        required: false
         content:
           application/json:
             schema:
               type: object
-              properties:
-                rule_kind:
-                  type: string
-                pattern:
-                  type: string
-                severity:
-                  type: string
-                is_active:
-                  type: boolean
               additionalProperties: true
-              required:
-              - rule_kind
       responses:
         '200':
           description: Success / 成功
           content:
             application/json:
-              schema: &id057
+              schema:
                 type: object
+                properties:
+                  world_id:
+                    type: string
+                  is_dangerous:
+                    type: string
+                  threshold:
+                    type: string
                 additionalProperties: true
-        '201':
-          description: Created / 创建成功
-          content:
-            application/json:
-              schema: *id057
-        '400':
-          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /xijian/safety/rules:
     get:
       tags:
       - xijian.safety
@@ -6987,6 +7011,44 @@ paths:
                 additionalProperties: true
         '404':
           $ref: '#/components/responses/NotFound'
+    post:
+      tags:
+      - xijian.safety
+      operationId: create_rule
+      summary: Create rule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                rule_kind:
+                  type: string
+                pattern:
+                  type: string
+                severity:
+                  type: string
+                is_active:
+                  type: boolean
+              additionalProperties: true
+              required:
+              - rule_kind
+      responses:
+        '200':
+          description: Success / 成功
+          content:
+            application/json:
+              schema: &id058
+                type: object
+                additionalProperties: true
+        '201':
+          description: Created / 创建成功
+          content:
+            application/json:
+              schema: *id058
+        '400':
+          $ref: '#/components/responses/BadRequest'
   /xijian/safety/rules/{rule_id}:
     get:
       tags:
@@ -7094,7 +7156,7 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id058
+              schema: &id059
                 type: object
                 properties:
                   verdict:
@@ -7110,7 +7172,7 @@ paths:
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id058
+              schema: *id059
         '400':
           $ref: '#/components/responses/BadRequest'
   /xijian/safety/scan/output:
@@ -7144,7 +7206,7 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id059
+              schema: &id060
                 type: object
                 properties:
                   verdict:
@@ -7160,10 +7222,47 @@ paths:
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id059
+              schema: *id060
         '400':
           $ref: '#/components/responses/BadRequest'
   /xijian/scenes/interactions:
+    get:
+      tags:
+      - xijian.scene
+      operationId: list_scene_interactions
+      summary: List scene interactions
+      parameters:
+      - name: world_id
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: poi_id
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Success / 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  object:
+                    type: string
+                  data:
+                    type: array
+                  has_more:
+                    type: boolean
+                  first_id:
+                    type: string
+                  last_id:
+                    type: string
+                additionalProperties: true
+        '404':
+          $ref: '#/components/responses/NotFound'
     post:
       tags:
       - xijian.scene
@@ -7207,53 +7306,16 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id060
+              schema: &id061
                 type: object
                 additionalProperties: true
         '201':
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id060
+              schema: *id061
         '400':
           $ref: '#/components/responses/BadRequest'
-    get:
-      tags:
-      - xijian.scene
-      operationId: list_scene_interactions
-      summary: List scene interactions
-      parameters:
-      - name: world_id
-        in: query
-        required: false
-        schema:
-          type: string
-      - name: poi_id
-        in: query
-        required: false
-        schema:
-          type: string
-      responses:
-        '200':
-          description: Success / 成功
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  object:
-                    type: string
-                  data:
-                    type: array
-                  has_more:
-                    type: boolean
-                  first_id:
-                    type: string
-                  last_id:
-                    type: string
-                additionalProperties: true
-        '404':
-          $ref: '#/components/responses/NotFound'
   /xijian/scenes/interactions/{interaction_id}:
     get:
       tags:
@@ -7368,6 +7430,38 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
   /xijian/scenes/pois:
+    get:
+      tags:
+      - xijian.scene
+      operationId: list_pois
+      summary: List pois
+      parameters:
+      - name: world_id
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Success / 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  object:
+                    type: string
+                  data:
+                    type: array
+                  has_more:
+                    type: boolean
+                  first_id:
+                    type: string
+                  last_id:
+                    type: string
+                additionalProperties: true
+        '404':
+          $ref: '#/components/responses/NotFound'
     post:
       tags:
       - xijian.scene
@@ -7407,7 +7501,7 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id061
+              schema: &id062
                 type: object
                 properties:
                   id:
@@ -7431,41 +7525,9 @@ paths:
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id061
+              schema: *id062
         '400':
           $ref: '#/components/responses/BadRequest'
-    get:
-      tags:
-      - xijian.scene
-      operationId: list_pois
-      summary: List pois
-      parameters:
-      - name: world_id
-        in: query
-        required: false
-        schema:
-          type: string
-      responses:
-        '200':
-          description: Success / 成功
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  object:
-                    type: string
-                  data:
-                    type: array
-                  has_more:
-                    type: boolean
-                  first_id:
-                    type: string
-                  last_id:
-                    type: string
-                additionalProperties: true
-        '404':
-          $ref: '#/components/responses/NotFound'
   /xijian/scenes/pois/tree:
     get:
       tags:
@@ -7662,6 +7724,38 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
   /xijian/scenes/travel-modes:
+    get:
+      tags:
+      - xijian.scene
+      operationId: list_travel_modes
+      summary: List travel modes
+      parameters:
+      - name: world_id
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Success / 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  object:
+                    type: string
+                  data:
+                    type: array
+                  has_more:
+                    type: boolean
+                  first_id:
+                    type: string
+                  last_id:
+                    type: string
+                additionalProperties: true
+        '404':
+          $ref: '#/components/responses/NotFound'
     post:
       tags:
       - xijian.scene
@@ -7696,48 +7790,16 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id062
+              schema: &id063
                 type: object
                 additionalProperties: true
         '201':
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id062
+              schema: *id063
         '400':
           $ref: '#/components/responses/BadRequest'
-    get:
-      tags:
-      - xijian.scene
-      operationId: list_travel_modes
-      summary: List travel modes
-      parameters:
-      - name: world_id
-        in: query
-        required: false
-        schema:
-          type: string
-      responses:
-        '200':
-          description: Success / 成功
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  object:
-                    type: string
-                  data:
-                    type: array
-                  has_more:
-                    type: boolean
-                  first_id:
-                    type: string
-                  last_id:
-                    type: string
-                additionalProperties: true
-        '404':
-          $ref: '#/components/responses/NotFound'
   /xijian/scenes/travel-modes/{mode_id}:
     get:
       tags:
@@ -7873,7 +7935,7 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id063
+              schema: &id064
                 type: object
                 properties:
                   id:
@@ -7893,7 +7955,7 @@ paths:
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id063
+              schema: *id064
   /xijian/sessions/{session_id}:
     delete:
       tags:
@@ -7906,6 +7968,38 @@ paths:
         '204':
           $ref: '#/components/responses/NoContent'
   /xijian/sessions/{session_id}/messages:
+    get:
+      tags:
+      - xijian.session
+      operationId: list_messages
+      summary: List messages
+      parameters:
+      - name: session_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Success / 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  object:
+                    type: string
+                  data:
+                    type: array
+                  has_more:
+                    type: boolean
+                  first_id:
+                    type: string
+                  last_id:
+                    type: string
+                additionalProperties: true
+        '404':
+          $ref: '#/components/responses/NotFound'
     post:
       tags:
       - xijian.session
@@ -7944,38 +8038,6 @@ paths:
                     type: array
                   created_at:
                     type: integer
-                additionalProperties: true
-        '404':
-          $ref: '#/components/responses/NotFound'
-    get:
-      tags:
-      - xijian.session
-      operationId: list_messages
-      summary: List messages
-      parameters:
-      - name: session_id
-        in: path
-        required: true
-        schema:
-          type: string
-      responses:
-        '200':
-          description: Success / 成功
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  object:
-                    type: string
-                  data:
-                    type: array
-                  has_more:
-                    type: boolean
-                  first_id:
-                    type: string
-                  last_id:
-                    type: string
                 additionalProperties: true
         '404':
           $ref: '#/components/responses/NotFound'
@@ -8126,14 +8188,14 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id064
+              schema: &id065
                 type: object
                 additionalProperties: true
         '201':
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id064
+              schema: *id065
         '400':
           $ref: '#/components/responses/BadRequest'
   /xijian/wallets/{owner_kind}/{owner_id}:
@@ -8363,6 +8425,30 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
   /xijian/worlds:
+    get:
+      tags:
+      - xijian.world
+      operationId: list_worlds
+      summary: List worlds
+      responses:
+        '200':
+          description: Success / 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  object:
+                    type: string
+                  data:
+                    type: array
+                  has_more:
+                    type: boolean
+                  first_id:
+                    type: string
+                  last_id:
+                    type: string
+                additionalProperties: true
     post:
       tags:
       - xijian.world
@@ -8396,7 +8482,7 @@ paths:
           description: Success / 成功
           content:
             application/json:
-              schema: &id065
+              schema: &id066
                 type: object
                 properties:
                   name:
@@ -8420,33 +8506,9 @@ paths:
           description: Created / 创建成功
           content:
             application/json:
-              schema: *id065
+              schema: *id066
         '400':
           $ref: '#/components/responses/BadRequest'
-    get:
-      tags:
-      - xijian.world
-      operationId: list_worlds
-      summary: List worlds
-      responses:
-        '200':
-          description: Success / 成功
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  object:
-                    type: string
-                  data:
-                    type: array
-                  has_more:
-                    type: boolean
-                  first_id:
-                    type: string
-                  last_id:
-                    type: string
-                additionalProperties: true
   /xijian/worlds/summary:
     get:
       tags:

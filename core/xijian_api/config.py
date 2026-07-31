@@ -240,7 +240,12 @@ class BackendsConfig:
     image: BackendConfig = field(default_factory=lambda: BackendConfig(default="mlx"))
     video: BackendConfig = field(default_factory=lambda: BackendConfig(default="mlx"))
     multimodal: BackendConfig = field(default_factory=lambda: BackendConfig(default="mlx"))
-    video_understanding: BackendConfig = field(default_factory=lambda: BackendConfig(default="mlx"))
+    # 注意：视频理解后端目前仅 openai/mock 实现（GGUF/MLX 尚无对应后端），
+    # 默认指向 openai，避免解析到不存在的后端。
+    # NB: video understanding is only implemented for openai/mock so far
+    # (GGUF/MLX have no such backend); default to openai to avoid
+    # resolving to a non-existent backend.
+    video_understanding: BackendConfig = field(default_factory=lambda: BackendConfig(default="openai"))
     openai: OpenAIBackendConfig = field(default_factory=OpenAIBackendConfig)
 
 

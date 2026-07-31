@@ -76,6 +76,16 @@ def multimodal_completions():
     request_id = getattr(g, "request_id", None) or "req_unknown"
     signal = abort_registry.register(request_id)
 
+    # Eagerly resolve the backend *before* the streaming response starts,
+    # so unknown/unavailable models return 503 instead of 500 mid-stream.
+    # 在流式响应开始*之前*急切解析后端，
+    # 这样未知/不可用的模型返回 503 而不是流式中途 500。
+    try:
+        multimodal_stub.resolve_backend(model)
+    except Exception:
+        abort_registry.cleanup(request_id)
+        raise
+
     def _gen():
         """Generator that yields SSE chunks and respects abort signals.
         生成器，产出 SSE 数据块并尊重中止信号。"""
@@ -145,8 +155,6 @@ def multimodal_abort():
             param="request_id",
         )
     signalled = abort_registry.abort(request_id)
-    response = jsonify({"aborted": signalled, "request_id": request_id})
-    response.status_code = 204 if signalled else 200
     if not signalled:
         return jsonify({"aborted": False, "request_id": request_id}), 200
     return ("", 204)
