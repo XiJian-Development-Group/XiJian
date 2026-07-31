@@ -355,14 +355,16 @@ TTS，OAI 兼容。
   "voice": "yuki-female-jp",
   "response_format": "mp3",
   "speed": 1.0,
+  "emotion": "happy",
   "xijian": {
-    "voice_clone_ref": "voice_ref_abc",
-    "emotion": "happy"
+    "voice_clone_ref": "voice_ref_abc"
   }
 }
 ```
 
 返回二进制音频流（`Content-Type: audio/mpeg` 等）。
+
+可选字段 `emotion`（如 `"happy"` / `"sad"` / `"calm"`）透传给 TTS 后端控制语气；不支持的后端会忽略它。
 
 #### `POST /v1/audio/transcriptions`
 
@@ -400,6 +402,15 @@ multipart/form-data：`image`（必填）、`mask`（可选）、`prompt`（必�
 #### `POST /v1/images/variations`
 
 multipart/form-data：`image`（必填）、`n` / `size` / `response_format` / `model`。
+
+#### `POST /v1/images/understanding`
+
+图像理解（视觉）端点。两种入参：
+
+- **multipart/form-data**：`image`（必填文件）+ 可选 `prompt`（默认 "Describe this image in detail."）+ 可选 `model`
+- **JSON**：`image` 或 `url`（base64 data URI 或远程 URL）+ 可选 `prompt` + 可选 `model` + 可选 `temperature` / `max_tokens`
+
+缺图时返回 400（`missing_image`）。返回 OAI 风格 completion 对象（`choices[0].message.content` 为理解文本）。
 
 ### 2.6 Video
 
@@ -452,7 +463,74 @@ multipart/form-data：`image`（必填）、`n` / `size` / `response_format` / `
 
 删除任务与对应文件。
 
-### 2.7 Files
+### 2.7 Multimodal（全模态理解）
+
+统一的全模态理解入口，接受文本、图像、音频、视频、文件任意组合的输入。
+
+#### `POST /v1/multimodal/completions`
+
+请求格式与 `/v1/chat/completions` 相同，但 `content` 字段可以是任意 OAI 内容片段列表：
+
+```json
+{
+  "model": "stub-multimodal",
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {"type": "text", "text": "这张图里有什么？"},
+        {"type": "image_url", "image_url": {"url": "data:image/png;base64,..."}},
+        {"type": "audio_url", "audio_url": {"url": "data:audio/wav;base64,..."}},
+        {"type": "video_url", "video_url": {"url": "file:///tmp/clip.mp4"}}
+      ]
+    }
+  ],
+  "stream": false
+}
+```
+
+支持的内容片段类型：`text` / `image_url` / `audio_url` / `video_url` / `file_url`（URL 支持 `data:` base64、`http(s)://`、`file://` 与裸路径）。
+
+响应为 OAI 风格 completion 对象：
+
+```json
+{
+  "id": "chatcmpl_xxx",
+  "object": "multimodal.completion",
+  "created": 1718000000,
+  "model": "stub-multimodal",
+  "choices": [
+    {
+      "index": 0,
+      "message": {"role": "assistant", "content": "理解结果文本"},
+      "finish_reason": "stop",
+      "logprobs": null
+    }
+  ],
+  "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+  "xijian": {"backend": "mock"}
+}
+```
+
+`stream=true` 时返回 SSE 流，chunk 的 `object` 为 `multimodal.completion.chunk`；支持 `stream_options.include_usage` 与中止（见下）。
+
+#### `GET /v1/multimodal/models`
+
+列出配置中 `type = "multimodal"` 的模型：
+
+```json
+{"object": "list", "data": [{"id": "stub-multimodal", "type": "multimodal", ...}]}
+```
+
+#### `POST /v1/multimodal/abort`
+
+```json
+{"request_id": "req_xxx"}
+```
+
+已注册的 `request_id` 返回 204；未知返回 200 `{"aborted": false}`；缺 `request_id` 返回 400。
+
+### 2.8 Files
 
 #### `POST /v1/files`
 

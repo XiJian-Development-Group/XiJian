@@ -40,7 +40,15 @@
 | TTS | `TTSBackend` | `/v1/audio/speech` |
 | STT | `STTBackend` | `/v1/audio/transcriptions` |
 | Image | `ImageGenBackend` | `/v1/images/generations` |
+| Image Understanding | `MultimodalBackend` | `/v1/images/understanding` |
 | Video | `VideoGenBackend` | `/v1/video/generations` |
+| Video Understanding | `VideoUnderstandingBackend` | `/v1/multimodal/completions` |
+| Multimodal (理解) | `MultimodalBackend` | `/v1/multimodal/completions` |
+
+全模态理解（Multimodal）是新一代接口：单个后端接受文本、图像、音频、视频、文件任意组合的输入并返回理解结果。实现方式分两类：
+
+- **原生多模态**：OpenAI 兼容远程后端（GPT-4o 等）单模型理解所有模态
+- **组合式多模态**：MLX / GGUF 本地后端通过编排单模态模型协同工作（图像→VLM、音频→STT、视频→ffmpeg 抽帧→VLM、文件→文本提取）
 
 ---
 
@@ -63,6 +71,8 @@
 ### 2.3 TTS — `backends/mlx/tts.py`
 
 - 基于 `mlx_audio`，支持语音合成
+- 支持 `emotion` 情感参数（`synth(..., emotion="happy")`），透传给底层 `mlx_audio.generate`
+- 内置歌唱能力检测：`_detect_singing_support()` 检查 `mlx_audio.generate_singing` 是否存在，或模型路径是否暗示歌唱支持（CosyVoice / Bark / XTTS 关键词）
 
 ### 2.4 STT — `backends/mlx/stt.py`
 
@@ -78,6 +88,17 @@
 ### 2.6 Video — `backends/mlx/video.py`
 
 - 基于模型生成视频帧序列
+
+### 2.7 Multimodal Understanding — `backends/mlx/multimodal.py`
+
+组合式全模态理解后端（`MLXMultimodalBackend`，`register_multimodal("mlx")`）：
+
+- 复用 `MLXChatBackend` 的加载与 VLM 检测逻辑
+- 音频片段 → MLX STT 转录为文本后注入
+- 视频片段 → ffmpeg 抽帧（`_extract_frames_from_video`，默认最多 5 帧）→ 图像片段
+- 文件片段 → 文本/二进制提取
+- 图像 + 文本 → 原样交给 VLM
+- `modalities()` 报告各模态可用性（text/image/audio/video/file）
 
 ### 已安装的 MLX 扩展包
 
@@ -100,6 +121,8 @@
 - 基于 `llama-cpp-python`，包装 `Llama.create_chat_completion`
 - 支持 streaming（SSE）和 blocking 模式
 - 多模态内容以 OAI dict 透传给 `llama_cpp`（取决于绑定是否支持）
+- **VLM 检测**：`_detect_vlm(path)` 检查目录中是否存在 `.mmproj` 文件（llama.cpp VLM 加载的明确标志），或检查 `config.json` 的 `architectures` 字段是否包含已知 VLM 架构名称（`vl` / `vision` / `llava` / `qwen2vl` / `paligemma` / `idefics` / `pixtral` / `internvl` 等）
+- VLM 模式下，消息中的 `image_url` 内容片段会被解析为本地路径（`file://` / `http(s)://` / `data:` URI）并传递给 `create_chat_completion()`
 
 ### 3.2 Embedding — `backends/gguf/embedding.py`
 
@@ -115,13 +138,24 @@
 
 ### 3.5 Image — `backends/gguf/image.py`
 
-- 基于 `stable_diffusion_cpp`（**未安装** — PyPI 上无可用分发）
+- 基于 `stable_diffusion_cpp`（**未安装**）
 - `is_available()` 返回 `False`
 - 使用 MLX image 后端或 OpenAI 远程后端替代
+- 注：`stable-diffusion-cpp-python`（0.4.7+）已在 PyPI 分发（对应 stable-diffusion.cpp，支持 SD/SDXL/Flux/Qwen-Image/Wan 等 GGUF），安装后即可启用
 
 ### 3.6 Video — `backends/gguf/video.py`
 
 - 占位实现
+
+### 3.7 Multimodal Understanding — `backends/gguf/multimodal.py`
+
+组合式全模态理解后端（`GGUFMultimodalBackend`，`register_multimodal("gguf")`）：
+
+- 图像理解 → llama.cpp VLM（通过 GGUF chat backend，依赖 mmproj）
+- 音频理解 → GGUF STT backend（pywhispercpp）转录为文本
+- 视频理解 → ffmpeg 帧提取 → VLM
+- 文件理解 → 文本/二进制提取
+- 文本理解 → GGUF chat backend
 
 ---
 
@@ -189,10 +223,26 @@ api_key = ""                    # 空则使用 $OPENAI_API_KEY
 | `_client.py` | 共享 HTTP 客户端、`RemoteConfig`、`resolve_config`、高层 API |
 | `chat.py` | `OpenAIChatBackend` — 流式 SSE + 阻塞 + 多模态透传 |
 | `embedding.py` | `OpenAIEmbeddingBackend` |
-| `tts.py` | `OpenAITTSBackend` |
+| `tts.py` | `OpenAITTSBackend` — 支持 `emotion`（非标准字段，透传/忽略） |
 | `stt.py` | `OpenAISTTBackend` |
 | `image.py` | `OpenAIImageBackend` — b64_json/url 归一化 |
 | `video.py` | `OpenAIVideoBackend` — submit/poll 模式 |
+| `multimodal.py` | `OpenAIMultimodalBackend` — 原生全模态理解（GPT-4o 等） |
+| `video_understanding.py` | `OpenAIVideoUnderstandingBackend` — ffmpeg 抽帧 + 多图理解 |
+
+### 4.5 全模态理解（Multimodal）
+
+`OpenAIMultimodalBackend`（`register_multimodal("openai")`）利用 GPT-4o / GPT-4o-audio-preview 等模型的原生全模态能力：
+
+- 文本、图像、音频、视频帧输入通过 OpenAI `/chat/completions` API 发送
+- 音频 → `input_audio` 原生格式（base64 + format）
+- 视频 → ffmpeg 抽帧 → 多 `image_url`（OpenAI 无原生视频输入）
+- 支持模态清单统计（`_inventory_modalities`）与流式/阻塞两种模式
+
+`OpenAIVideoUnderstandingBackend`（`register_video_understanding("openai")`）：
+
+- ffmpeg 抽帧（默认最多 10 帧，1 fps）→ 帧图像 → 远程 VLM 理解
+- 支持视频 URL（http/file/base64）解析与时间线问答
 
 ---
 
@@ -226,8 +276,32 @@ ChatMessage(role="user", content=[
 | OpenAI 远程 | 原样透传（远程 API 负责处理） |
 | MLX VLM | 解析 `image_url`，下载/解码为本地文件，传给 `mlx_vlm` |
 | MLX 纯文本 | 降级为 `[image]` / `[audio]` / `[video]` 占位符 |
-| GGUF | OAI dict 透传给 `llama_cpp` |
+| GGUF | OAI dict 透传给 `llama_cpp`（VLM 模式解析 image_url 为本地路径） |
 | Mock | 通过 `text_content` 提取纯文本处理 |
+
+### 5.4 全模态内容片段辅助函数（`ai/types.py`）
+
+```python
+make_text_part(text)              # → {"type": "text", "text": ...}
+make_image_part(url)              # → {"type": "image_url", ...}
+make_audio_part(url, format=...)  # → {"type": "audio_url", ...}
+make_video_part(url, format=...)  # → {"type": "video_url", ...}
+make_file_part(url, mime_type=...)  # → {"type": "file_url", ...}
+resolve_part_to_path(part)        # data:/http/file/裸路径 → 本地文件路径
+resolve_part_content(part)        # → bytes（媒体）或 str（文本）
+detect_part_mime(part)            # 推断 MIME 类型
+```
+
+`resolve_part_to_path` 支持 `data:` base64、`http(s)://` 下载、`file://` 与裸路径四种输入。
+
+### 5.5 `/v1/multimodal/completions` 端点
+
+统一全模态理解入口（`routes/multimodal.py`，`stubs/multimodal.py` 调度）：
+
+- `POST /v1/multimodal/completions` — 同步或流式（`stream=true`）理解，消息格式与 `/v1/chat/completions` 相同，但 `content` 可含 `audio_url` / `video_url` / `file_url` 等任意 OAI 内容片段
+- `GET /v1/multimodal/models` — 列出配置中 `type = "multimodal"` 的模型
+- `POST /v1/multimodal/abort` — 通过 `request_id` 中止流式请求
+- `POST /v1/images/understanding` — 图像理解专用端点（multipart `image` 或 JSON `image`/`url` + 可选 `prompt`）
 
 ---
 
@@ -262,11 +336,17 @@ Chat 路由使用 `flask.stream_with_context()` 包装流式生成器，确保�
 
 ## 7. 已知限制
 
-1. **`stable-diffusion-cpp` 未安装**：PyPI 上无可用分发（需要 C++ 构建工具链）。GGUF image 后端不可用，请使用 MLX image（diffusers 回退）或 OpenAI 远程后端。
+1. **`stable-diffusion-cpp` 未安装**：GGUF image 后端当前不可用（依赖 C++ 构建；`stable-diffusion-cpp-python` 已在 PyPI 提供分发，可 `pip install` 启用）。请使用 MLX image（diffusers 回退）或 OpenAI 远程后端。
 
 2. **MLX image 生成依赖 `diffusers` + `torch`**：`mlx_stable_diffusion` 不在 PyPI 上。当前使用 `diffusers` + `torch`（MPS 后端）作为回退，首次加载较慢。
 
 3. **桌面控制工具为转发骨架**：桌面级操作（启动应用、控制浏览器、模拟键鼠）需要客户端实现拉取/回写端点。
+
+4. **本地歌唱 TTS 不可用**：当前 mlx-audio 支持列表不含专门的歌唱模型（CosyVoice/Bark/XTTS 为旧版 mlx-audio 思路，已不在现行支持列表）。情感/语气可通过 Qwen3-TTS CustomVoice 的 `instruct` 参数近似实现。
+
+5. **`video_understanding` 后端覆盖**：目前仅 OpenAI 远程 + mock 实现。配置默认 mlx/gguf 在未注册模型时会返回 503（`backend_unavailable`）。
+
+6. **全模态可用性依赖模型与依赖**：MLX 组合式后端需要 `mlx_vlm`（图像/视频）与 `mlx_whisper`/`mlx_audio`（音频）；GGUF 需要 `llama_cpp`（VLM + mmproj）与 `pywhispercpp`（音频）。任一缺失时对应模态自动降级，`modalities()` 会如实报告。
 
 ---
 
@@ -277,3 +357,4 @@ Chat 路由使用 `flask.stream_with_context()` 包装流式生成器，确保�
 - `tests/test_chat_stream_sse.py` — SSE 流式 chat 集成测试
 - `tests/test_chat_sync.py` — 阻塞 chat 集成测试
 - `tests/test_models.py` — 模型注册/加载/卸载测试
+- `tests/test_multimodal.py` — 全模态测试（25 项：`/v1/multimodal/completions` 同步/流式/中止、`/v1/multimodal/models`、`/v1/images/understanding`、`/v1/audio/speech` emotion 透传、stub 调度、mock 后端契约）

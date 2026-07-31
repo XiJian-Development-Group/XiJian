@@ -81,6 +81,7 @@ MODULE_TAG: dict[str, str] = {
     "xijian_scenes": "xijian.scene",
     "xijian_mcp": "xijian.mcp",
     "xijian_generation": "xijian.generation",
+    "multimodal": "multimodal",
     "mcp_server": "mcp",
     "ws_routes": "websocket",
 }
