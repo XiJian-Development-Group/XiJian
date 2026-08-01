@@ -22,15 +22,10 @@ from devkit.persona_parser import extract_persona_features, get_persona_template
 _CHARACTERS_SUBDIR = "characters"
 
 # Built-in character config schema definition (C2.3).
+# Memory-related knobs live in ``memory_config`` (single source of truth,
+# consumed by core via ``state.memory_configs``); this schema only holds
+# non-memory character tuning fields.
 CHARACTER_CONFIG_SCHEMA: dict[str, dict[str, Any]] = {
-    "max_long_term": {"type": "integer", "min": 1, "max": 1000, "default": 200, "label": "长期记忆上限"},
-    "long_term_importance_min": {"type": "number", "min": 0.0, "max": 1.0, "default": 0.6, "label": "长期记忆重要性阈值", "step": 0.05},
-    "max_short_term": {"type": "integer", "min": 0, "max": 500, "default": 50, "label": "短期记忆上限"},
-    "short_term_decay_rate": {"type": "number", "min": 0.0, "max": 1.0, "default": 0.05, "label": "短期记忆衰减率", "step": 0.01},
-    "short_term_importance_min": {"type": "number", "min": 0.0, "max": 1.0, "default": 0.3, "label": "短期记忆重要性阈值", "step": 0.05},
-    "max_context_tokens": {"type": "integer", "min": 100, "max": 32000, "default": 8000, "label": "上下文 Token 上限"},
-    "reserve_tokens_for_reply": {"type": "integer", "min": 0, "max": 16000, "default": 2000, "label": "回复保留 Token"},
-    "force_recall_on_history": {"type": "boolean", "default": True, "label": "强制召回历史"},
     "speaking_speed": {"type": "number", "min": 0.5, "max": 2.0, "default": 1.0, "label": "语速倍率", "step": 0.1},
     "emotion_stability": {"type": "number", "min": 0.0, "max": 1.0, "default": 0.6, "label": "情绪稳定性", "step": 0.05},
 }

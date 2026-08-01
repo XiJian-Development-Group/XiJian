@@ -531,14 +531,6 @@ const callApi = async (method, ...args) => {
     const cfg = char?.character_config || {};
     $("#char-cfg-speaking-speed").value = cfg.speaking_speed ?? 1.0;
     $("#char-cfg-emotion-stability").value = cfg.emotion_stability ?? 0.6;
-    $("#char-cfg-max-long-term").value = cfg.max_long_term ?? 200;
-    $("#char-cfg-long-term-importance-min").value = cfg.long_term_importance_min ?? 0.6;
-    $("#char-cfg-max-short-term").value = cfg.max_short_term ?? 50;
-    $("#char-cfg-short-term-decay-rate").value = cfg.short_term_decay_rate ?? 0.05;
-    $("#char-cfg-short-term-importance-min").value = cfg.short_term_importance_min ?? 0.3;
-    $("#char-cfg-max-context-tokens").value = cfg.max_context_tokens ?? 8000;
-    $("#char-cfg-reserve-tokens-for-reply").value = cfg.reserve_tokens_for_reply ?? 2000;
-    $("#char-cfg-force-recall-on-history").value = cfg.force_recall_on_history ? "true" : "false";
 
     $("#char-editor-hint").textContent = char
       ? `编辑：${char.display_name || char.name}`
@@ -570,14 +562,6 @@ const callApi = async (method, ...args) => {
     // Reset new character config fields
     $("#char-cfg-speaking-speed").value = 1.0;
     $("#char-cfg-emotion-stability").value = 0.6;
-    $("#char-cfg-max-long-term").value = 200;
-    $("#char-cfg-long-term-importance-min").value = 0.6;
-    $("#char-cfg-max-short-term").value = 50;
-    $("#char-cfg-short-term-decay-rate").value = 0.05;
-    $("#char-cfg-short-term-importance-min").value = 0.3;
-    $("#char-cfg-max-context-tokens").value = 8000;
-    $("#char-cfg-reserve-tokens-for-reply").value = 2000;
-    $("#char-cfg-force-recall-on-history").value = "true";
     $("#char-editor-hint").textContent = "";
     refreshCharButtons();
   };
@@ -615,14 +599,6 @@ const callApi = async (method, ...args) => {
       character_config: {
         speaking_speed: parseFloat($("#char-cfg-speaking-speed").value) || 1.0,
         emotion_stability: parseFloat($("#char-cfg-emotion-stability").value) || 0.6,
-        max_long_term: parseInt($("#char-cfg-max-long-term").value) || 200,
-        long_term_importance_min: parseFloat($("#char-cfg-long-term-importance-min").value) || 0.6,
-        max_short_term: parseInt($("#char-cfg-max-short-term").value) || 50,
-        short_term_decay_rate: parseFloat($("#char-cfg-short-term-decay-rate").value) || 0.05,
-        short_term_importance_min: parseFloat($("#char-cfg-short-term-importance-min").value) || 0.3,
-        max_context_tokens: parseInt($("#char-cfg-max-context-tokens").value) || 8000,
-        reserve_tokens_for_reply: parseInt($("#char-cfg-reserve-tokens-for-reply").value) || 2000,
-        force_recall_on_history: $("#char-cfg-force-recall-on-history").value === "true",
       },
     };
     if (!data.name) { toast("请填写角色名称", "err"); return; }
