@@ -70,6 +70,7 @@ from xijian_api.ai.types import (
     GenerationParams,
 )
 from xijian_api.config import Config
+from xijian_api.errors import ApiError
 from xijian_api.errors import BackendError as ApiBackendError
 from xijian_api.stubs import citations as citations_stub
 from xijian_api.stubs import memory as memory_stub
@@ -674,6 +675,13 @@ def _chat_messages_for_backend(messages: list[Any]) -> list[ChatMessage]:
     return out
 
 
+#: Max regeneration attempts after an AC-4 ``block`` verdict.
+#: The spec caps regeneration at 2 (1 original + up to 2 retries).
+#: AC-4 拦截后的最大重生成次数。规范将重生成上限设为 2
+#: (1 次原始生成 + 至多 2 次重试)。
+_MAX_REGENERATE_ATTEMPTS = 2
+
+
 def _run_recall_pipeline(
     backend: ChatBackend,
     messages: list[Any],
@@ -698,6 +706,15 @@ def _run_recall_pipeline(
     5. Run the citation audit if any entries were cited or the final
        text references past events.
 
+    **AC-4 regeneration (spec §强制调用规则)**: when the citation
+    audit returns ``block`` (the model fabricated history without a
+    matching memory entry), the pipeline regenerates up to
+    :data:`_MAX_REGENERATE_ATTEMPTS` more times.  Each retry injects
+    an explicit system note telling the model to only cite real
+    ``recall_memory`` results.  The final response's
+    ``xijian.recall.regenerations`` field reports how many retries
+    actually ran.
+
     Returns the OAI envelope plus ``xijian.recall`` / ``xijian.context``
     / ``xijian.audit`` blocks.  ``xijian.context`` is the load_context
     envelope (counts, ids, tokens, trimmed flag) so callers / tests can
@@ -713,8 +730,95 @@ def _run_recall_pipeline(
     if character_id is not None:
         context_envelope = memory_stub.load_context(character_id)
 
-    prepared_messages = _inject_memory_context(messages, context_envelope["system_message"])
-    prepared_messages = _inject_recall_system(prepared_messages)
+    base_prepared = _inject_memory_context(
+        messages, context_envelope["system_message"]
+    )
+    base_prepared = _inject_recall_system(base_prepared)
+
+    context_block = {
+        "long_term_count": context_envelope["long_term_count"],
+        "short_term_count": context_envelope["short_term_count"],
+        "long_term_ids": list(context_envelope["long_term_ids"]),
+        "short_term_ids": list(context_envelope["short_term_ids"]),
+        "estimated_tokens": context_envelope["estimated_tokens"],
+        "budget_tokens": context_envelope["budget_tokens"],
+        "trimmed": context_envelope["trimmed"],
+    }
+
+    regenerations = 0
+    last_response: dict[str, Any] | None = None
+    last_audit: dict | None = None
+
+    for attempt in range(_MAX_REGENERATE_ATTEMPTS + 1):
+        prepared_messages = list(base_prepared)
+        if attempt > 0:
+            # AC-4 regeneration hint — appended to the first system
+            # message so the model understands why it's being asked
+            # to answer again.
+            # AC-4 重生成提示 — 追加到第一条 system 消息，
+            # 让模型明白为何被要求重新回答。
+            hint = (
+                "\n\n[系统重试] 你上一次的回复因引用审查被拦截："
+                "你提到了历史信息，但没有引用任何 `recall_memory` 返回的 "
+                "`entry_id`（或引用了不存在的条目）。请重新生成回复："
+                "涉及过往信息时必须先调用 `recall_memory` 工具，并且只引用 "
+                "工具实际返回的 `entry_id`。"
+            )
+            if not prepared_messages or prepared_messages[0].get("role") != "system":
+                prepared_messages = [{"role": "system", "content": hint}, *prepared_messages]
+            else:
+                first = dict(prepared_messages[0])
+                first["content"] = (first.get("content") or "") + hint
+                prepared_messages[0] = first
+
+        response, audit_result = _run_recall_attempt(
+            backend,
+            prepared_messages,
+            model=model,
+            character_id=character_id,
+            params=params,
+            audit_response=audit_response,
+            context_block=context_block,
+        )
+        last_response = response
+        last_audit = audit_result
+
+        if audit_result is None or audit_result.get("verdict") != citations_stub.VERDICT_BLOCK:
+            break
+        if attempt < _MAX_REGENERATE_ATTEMPTS:
+            regenerations += 1
+
+    if last_response is None:
+        # Defensive — an empty response should never happen, but keep
+        # the envelope shape stable for callers.
+        last_response = {
+            "id": gen_chat_id(),
+            "object": "chat.completion",
+            "choices": [],
+            "xijian": {},
+        }
+    last_response.setdefault("xijian", {})
+    last_response["xijian"]["recall"]["regenerations"] = regenerations
+    if last_audit is not None:
+        last_response["xijian"]["audit"] = last_audit
+    return last_response
+
+
+def _run_recall_attempt(
+    backend: ChatBackend,
+    prepared_messages: list[Any],
+    *,
+    model: str,
+    character_id: str | None,
+    params: GenerationParams,
+    audit_response: bool,
+    context_block: dict[str, Any],
+) -> tuple[dict[str, Any], dict | None]:
+    """Run one recall-pipeline pass and return ``(response, audit)``.
+
+    Extracted from :func:`_run_recall_pipeline` so the AC-4
+    regeneration loop can re-invoke it with a fresh hint.
+    """
     tools = [_recall_tool_spec(character_id)]
 
     try:
@@ -748,16 +852,6 @@ def _run_recall_pipeline(
             if text:
                 final_text_parts.append(text)
 
-    context_block = {
-        "long_term_count": context_envelope["long_term_count"],
-        "short_term_count": context_envelope["short_term_count"],
-        "long_term_ids": list(context_envelope["long_term_ids"]),
-        "short_term_ids": list(context_envelope["short_term_ids"]),
-        "estimated_tokens": context_envelope["estimated_tokens"],
-        "budget_tokens": context_envelope["budget_tokens"],
-        "trimmed": context_envelope["trimmed"],
-    }
-
     if not tool_calls:
         # No recall invoked — emit the first response verbatim, but
         # still run the citation audit when the response text itself
@@ -778,7 +872,7 @@ def _run_recall_pipeline(
         }
         response["xijian"]["context"] = context_block
         response["xijian"]["audit"] = audit_result
-        return response
+        return response, audit_result
 
     # Execute the recall calls and feed results back as tool messages.
     tool_messages: list[dict[str, Any]] = []
@@ -864,7 +958,7 @@ def _run_recall_pipeline(
     }
     response["xijian"]["context"] = context_block
     response["xijian"]["audit"] = audit_result
-    return response
+    return response, audit_result
 
 
 # ---------------------------------------------------------------------------
@@ -1291,6 +1385,89 @@ def _inject_tools_system(
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Character dialogue guard (A3.2) + dialogue memory write-back (A1.2)
+# ---------------------------------------------------------------------------
+
+#: Error code used when a character's state forbids dialogue.
+#: 角色状态禁止对话时使用的错误码。
+ERR_CHARACTER_CANNOT_DIALOGUE = "character_cannot_dialogue"
+
+
+def _guard_character_dialogue(xijian: dict | None) -> None:
+    """Block chat when the character's state forbids dialogue.
+
+    A3.2 boundary case: 健康 ≤ 0 → 角色不可对话.  The state stub's
+    :func:`can_dialogue` returns ``False`` only for the Critical
+    status; the chat pipeline never checked it before, so a dying
+    character could keep chatting.  This guard raises a 400 so the
+    caller gets a clear error instead.
+    """
+    if not isinstance(xijian, dict):
+        return
+    character_id = xijian.get("character_id")
+    if not character_id:
+        return
+    from xijian_api.stubs import character_state as cs_stub
+    if not cs_stub.can_dialogue(character_id):
+        raise ApiError(
+            400,
+            f"角色 {character_id} 当前状态不允许对话（健康值 ≤ 0 / Critical）",
+            "invalid_request_error",
+            code=ERR_CHARACTER_CANNOT_DIALOGUE,
+            param="character_id",
+        )
+
+
+#: Public alias — used by the chat route so streaming requests get the
+#: guard eagerly (before the stream response is constructed).
+#: 公共别名 — 聊天路由使用，使流式请求在构造流响应之前即获得门控。
+guard_character_dialogue = _guard_character_dialogue
+
+
+def _record_dialogue_memory(
+    xijian: dict | None,
+    messages: list[dict],
+    response: dict[str, Any],
+) -> None:
+    """Write a short-term dialogue memory entry after a conversation.
+
+    A1.2 §关键流程 final steps:
+
+    * S->>M: 写入新产生的短期记忆 (type=short, source=dialogue)
+    * M->>M: 更新 access_count / last_access_at / decay_score
+
+    Best-effort: never raises, so a memory-write failure can't break
+    the chat response.
+    """
+    if not isinstance(xijian, dict):
+        return
+    character_id = xijian.get("character_id")
+    if not character_id:
+        return
+    last_user_msg = next(
+        (m.get("content", "") for m in reversed(messages) if m.get("role") == "user"),
+        "",
+    )
+    response_text = ""
+    for choice in (response.get("choices") or []):
+        msg = choice.get("message") or {}
+        response_text = (msg.get("content") or "")
+    if not response_text:
+        return
+    try:
+        cited = list((response.get("xijian") or {}).get("recall", {}).get("citations") or [])
+        memory_stub.record_dialogue(
+            character_id,
+            _content_to_text(last_user_msg),
+            response_text,
+        )
+        if cited:
+            memory_stub.bump_access(cited)
+    except Exception:  # noqa: BLE001 — best effort, never raise
+        pass
+
+
 def complete(
     messages: list[dict],
     *,
@@ -1318,8 +1495,13 @@ def complete(
     instead: it injects the MCP tool descriptions, lets the model
     decide which tools to call, executes them through the A5.2 gate,
     and feeds the results back for a final answer.
+
+    A3.2 guard: when ``xijian.character_id`` is set and the character's
+    state forbids dialogue (health ≤ 0 / Critical), a 400 is raised
+    before any backend call.
     """
     _ = user  # accepted for OAI parity; backends consume the rest
+    _guard_character_dialogue(xijian)
     n = max(1, int(n or 1))
     backend = _resolve_backend_for(model)
     params = GenerationParams(
@@ -1335,7 +1517,7 @@ def complete(
     # includes memory_recall as one of the MCP tools, so it
     # subsumes the recall pipeline when both are requested.
     if _should_enable_tools(xijian, tools):
-        return _run_tools_pipeline(
+        response = _run_tools_pipeline(
             backend,
             messages,
             model=model,
@@ -1344,6 +1526,8 @@ def complete(
             tool_choice=tool_choice,
             params=params,
         )
+        _record_dialogue_memory(xijian, messages, response)
+        return response
 
     if _should_enable_recall(xijian):
         # Inject character context (A2-01) before the recall pipeline.
@@ -1391,6 +1575,7 @@ def complete(
                 choices = response.get("choices", [])
                 for choice in choices:
                     choice["message"] = blocked
+        _record_dialogue_memory(xijian, messages, response)
         return response
 
     try:
@@ -1436,6 +1621,7 @@ def complete(
             choices = response.get("choices", [])
             for choice in choices:
                 choice["message"] = blocked
+    _record_dialogue_memory(xijian, messages, response)
     return response
 
 
@@ -1530,7 +1716,11 @@ def stream_chunks(
     then the final response is re-emitted as streaming chunks.
     When ``xijian.tools.enabled`` is true or the OAI ``tools`` field
     is provided, the MCP tools pipeline (A2) runs first instead.
+
+    A3.2 guard: like :func:`complete`, a character whose state forbids
+    dialogue raises a 400 before any streaming starts.
     """
+    _guard_character_dialogue(xijian)
     # A1.2 recall / A2 tools pipelines — multiple round-trips, so
     # run non-streaming via complete() and re-emit as chunks.
     if _should_enable_tools(xijian, tools) or _should_enable_recall(xijian):

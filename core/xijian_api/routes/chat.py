@@ -40,6 +40,15 @@ def chat_completions():
     stream_options = payload.get("stream_options") or {}
     include_usage = bool(stream_options.get("include_usage", False))
 
+    # A3.2 guard — raise eagerly (before the stream response is
+    # constructed) so a Critical character gets a clean 400 for both
+    # sync and streaming requests.  ``complete()`` repeats the guard
+    # internally for direct stub callers.
+    # A3.2 门控 — 在构造流式响应之前立即抛出，使 Critical 角色在
+    # 同步和流式请求下都得到干净的 400。``complete()`` 内部会为
+    # 直接调用存根的调用者重复执行该门控。
+    chat_stub.guard_character_dialogue(xijian_ext)
+
     if not stream:
         response = chat_stub.complete(
             payload["messages"],

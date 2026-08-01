@@ -30,6 +30,7 @@ def generations():
         size=payload.get("size", "1024x1024"),
         response_format=payload.get("response_format", "b64_json"),
         model=payload.get("model", "stub-image"),
+        character_id=(payload.get("xijian") or {}).get("character_id"),
     )
     return jsonify(response)
 

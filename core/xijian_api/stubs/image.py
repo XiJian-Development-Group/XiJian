@@ -84,6 +84,38 @@ def _ensure_b64(item: dict) -> dict:
     return item
 
 
+def _inject_character_references(
+    prompt: str,
+    character_id: str | None,
+) -> tuple[str, dict]:
+    """A3.1 跨模态一致性: attach character reference resources.
+
+    When ``character_id`` is provided and the character has pose-image
+    / texture references, the prompt is augmented with a reference
+    note and the resolved references are returned for the response
+    envelope.  This is the “注入到生成请求上下文” seam the spec calls
+    for — backends that support reference images can read
+    ``xijian.character_references``; the prompt note keeps the
+    reference visible even for backends that only take text.
+    """
+    if not character_id:
+        return prompt, {}
+    from xijian_api.stubs.characters import get_generation_references
+
+    refs = get_generation_references(character_id)
+    present = {k: v for k, v in refs.items() if v}
+    if not present:
+        return prompt, {}
+    parts = [prompt]
+    if present.get("pose_image"):
+        parts.append(f"[角色参考图: {present['pose_image']}]")
+    if present.get("texture"):
+        parts.append(f"[角色贴图: {present['texture']}]")
+    if present.get("motion_clip"):
+        parts.append(f"[角色动作参考: {present['motion_clip']}]")
+    return "\n".join(parts), present
+
+
 def generate(
     prompt: str,
     *,
@@ -93,10 +125,15 @@ def generate(
     model: str = "stub-image",
     negative_prompt: str | None = None,
     seed: int | None = None,
+    character_id: str | None = None,
 ) -> dict:
     """Return an OAI-style images.generations response body via the backend.
     通过后端返回 OAI 风格的 images.generations 响应体。
+
+    ``character_id`` (A3.1) injects the character's pose-image / texture
+    references into the generation request context.
     """
+    prompt, refs = _inject_character_references(prompt, character_id)
     backend = _select_backend()
     try:
         results = backend.generate(
@@ -115,7 +152,10 @@ def generate(
             code=getattr(exc, "code", "backend_error"),
         ) from exc
     items = [_ensure_b64(r) for r in results]
-    return _envelope(items, prompt=prompt, model=model, size=size)
+    envelope = _envelope(items, prompt=prompt, model=model, size=size)
+    if refs:
+        envelope.setdefault("xijian", {})["character_references"] = refs
+    return envelope
 
 
 def edit(

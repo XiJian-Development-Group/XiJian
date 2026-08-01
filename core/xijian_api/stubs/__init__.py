@@ -27,6 +27,7 @@ from xijian_api.stubs import (
     memory,
     snapshots,
     memory_config,
+    manual_backups,
     npcs,
     overload,
     pois,
@@ -66,6 +67,12 @@ def seed_all() -> None:
     端点有数据可返回。
     """
     characters.seed_default()
+    # A3.1 startup scan — mark loaded every character with an
+    # ``is_active=1`` model so they're available without a manual
+    # load (spec §加载策略: 启动时仅加载 is_active=1 的模型).
+    # A3.1 启动扫描 — 将有 ``is_active=1`` 模型的角色标记为已加载，
+    # 无需手动加载即可使用 (规范 §加载策略：启动时仅加载 is_active=1 的模型)。
+    characters.auto_load_active_models()
     interactions.seed_default()
     # Worlds are seeded *first* so the related per-world buckets
     # (environment, compute_config) can materialise their lazy
@@ -79,6 +86,11 @@ def seed_all() -> None:
     # ``npcs.seed_default`` 注册 A5.4 过载处理器并启动后台 tick 线程
     # (如果环境允许)。它 *不* 播种任何默认 NPC —— 由运营创建。
     npcs.seed_default()
+    # A1.1 manual backup — seeds the protected-module registry and
+    # starts the daily scheduler (env-gated like the other schedulers).
+    # A1.1 手动备份 — 播种受保护模块注册表并启动每日调度器
+    # (与其他调度器一样受环境变量门控)。
+    manual_backups.seed_default()
     memory.seed_default()
     memory_config.seed_default()  # type: ignore[attr-defined]
     # The merged safety module seeds both the A5.1 rulebook and
@@ -181,6 +193,7 @@ __all__ = [
     "mcp_rules",
     "memory",
     "memory_config",
+    "manual_backups",
     "npcs",
     "overload",
     "pois",

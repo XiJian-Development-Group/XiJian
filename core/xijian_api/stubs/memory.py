@@ -209,7 +209,23 @@ def _new_entry(payload: dict) -> dict:
 def create(payload: dict) -> dict:
     record = _new_entry(payload)
     state.memory[record["id"]] = record
+    _notify_modified(record.get("character_id"))
     return record
+
+
+def _notify_modified(character_id: str | None) -> None:
+    """A1.1 auto-backup hook: count memory mutations per character.
+
+    Crossing the 50-edit threshold triggers an automatic backup
+    (spec §自动备份策略).  Lazy import keeps the module graph acyclic.
+    """
+    if not character_id:
+        return
+    try:
+        from xijian_api.stubs import manual_backups as mb_stub
+        mb_stub.notify_memory_modified(character_id)
+    except Exception:  # noqa: BLE001 — backup trigger must never break CRUD
+        pass
 
 
 def list_all(
@@ -257,6 +273,7 @@ def update(entry_id: str, patch: dict) -> dict | None:
     if "type" in patch and patch["type"] in {"long", "short"}:
         record["type"] = patch["type"]
     record["updated_at"] = now_ts()
+    _notify_modified(record.get("character_id"))
     return record
 
 
@@ -279,6 +296,7 @@ def delete(entry_id: str) -> bool:
         return False
     record["deleted_at"] = now_ts()
     record["updated_at"] = now_ts()
+    _notify_modified(record.get("character_id"))
     return True
 
 
@@ -529,6 +547,61 @@ def schedule_consolidate(job_id: str, character_id: str | None = None) -> None:
 
 def consolidate_status(job_id: str) -> dict | None:
     return _consolidate_jobs.get(job_id)
+
+
+def bump_access(entry_ids: list[str], *, now: int | None = None) -> dict:
+    """Increment ``access_count`` / refresh ``last_access_at`` for entries.
+
+    Called after a dialogue so the entries that actually participated in
+    the conversation are seen as "accessed" (A1.2 §关键流程: 更新
+    access_count / last_access_at / decay_score).  Missing ids are
+    silently skipped.
+    """
+    ts = now if now is not None else now_ts()
+    bumped = 0
+    for entry_id in entry_ids or []:
+        record = state.memory.get(entry_id)
+        if record is None:
+            continue
+        record["access_count"] = int(record.get("access_count", 0) or 0) + 1
+        record["last_access_at"] = ts
+        bumped += 1
+    return {"bumped": bumped}
+
+
+def record_dialogue(
+    character_id: str,
+    user_text: str,
+    assistant_text: str,
+    *,
+    source_ref_id: str | None = None,
+    importance: float = 0.5,
+    tags: list[str] | None = None,
+) -> dict:
+    """Write a short-term dialogue memory entry after a conversation.
+
+    A1.2 §关键流程 final step: "写入新产生的短期记忆 (type=short,
+    source=dialogue)".  The content stores a compact exchange summary
+    so the character can recall *what was talked about* later.
+
+    Returns the created entry.
+    """
+    user_snip = (user_text or "").strip()[:200]
+    assistant_snip = (assistant_text or "").strip()[:200]
+    content = f"[对话] 用户: {user_snip or '（空）'} | 助手: {assistant_snip or '（空）'}"
+    entry = create(
+        {
+            "character_id": character_id,
+            "type": "short",
+            "content": content,
+            "importance": importance,
+            "decay_score": 1.0,
+            "source": "dialogue",
+            "source_ref_id": source_ref_id,
+            "tags": list(tags or ["dialogue"]),
+        }
+    )
+    return entry
 
 
 def forget(*, entry_ids: list[str] | None = None, decay: str | None = None) -> dict:
@@ -1012,6 +1085,8 @@ __all__ = [
     "search",
     "schedule_consolidate",
     "consolidate_status",
+    "bump_access",
+    "record_dialogue",
     "forget",
     # A5.4 cross-link
     "COMPRESS_DECAY_THRESHOLD",

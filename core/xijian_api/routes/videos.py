@@ -127,6 +127,7 @@ def submit_generation():
         size=record["size"],
         fps=record["fps"],
         video_id=video_id,
+        character_id=(payload.get("xijian") or {}).get("character_id"),
     )
     response = jsonify(record)
     response.status_code = 202

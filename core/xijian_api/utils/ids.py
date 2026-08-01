@@ -487,6 +487,23 @@ def gen_backup_policy_id() -> str:
     return gen_id("bkpol_", _SHORT_HEX_LEN)
 
 
+def gen_manual_backup_id() -> str:
+    """Return an A1.1 manual-backup id (``bak_<12 hex>``).
+    返回 A1.1 手动备份 ID (``bak_<12 hex>``)。
+
+    A1.1 manual backup: every user/system triggered backup of a
+    character's protected modules lands one of these.  Independent
+    of A5.3's ``sas_`` snapshots — A1.1 keeps per-character versioned
+    backups (``{character_id}_{ISO8601}_v{n}.bak``) with a retention
+    policy, while A5.3 stores whole-world safety snapshots.
+    A1.1 手动备份：角色的受保护模块的每次用户/系统触发的备份
+    都会产生一条记录。与 A5.3 的 ``sas_`` 快照相互独立 —
+    A1.1 保留按角色版本的备份（``{character_id}_{ISO8601}_v{n}.bak``）
+    并带有保留策略，而 A5.3 存储整个世界的安全快照。
+    """
+    return gen_id("bak_", _SHORT_HEX_LEN)
+
+
 def gen_submission_id() -> str:
     """Return a Developer-Kit submission id (``sub_<12 hex>``).
     返回开发者套件提交 ID (``sub_<12 hex>``)。

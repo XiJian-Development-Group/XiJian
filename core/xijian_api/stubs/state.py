@@ -59,6 +59,12 @@ mcp_freezes: DictDB = bucket("mcp_freezes")
 mcp_snapshots: DictDB = bucket("mcp_snapshots")
 safety_snapshots: DictDB = bucket("safety_snapshots")
 backup_policies: DictDB = bucket("backup_policies")
+# A1.1 manual backup system — protected-module registry, per-character
+# module associations and the manual backup records.
+# A1.1 手动备份系统 — 受保护模块注册表、每角色模块关联和手动备份记录。
+protected_modules: DictDB = bucket("protected_modules")
+character_protected_module: DictDB = bucket("character_protected_module")
+manual_backups: DictDB = bucket("manual_backups")
 files: DictDB = bucket("files")
 batches: DictDB = bucket("batches")
 fine_tuning_jobs: DictDB = bucket("fine_tuning_jobs")
@@ -156,6 +162,7 @@ def reset_for_testing() -> None:
         safety_audit_log, safety_rules,
         mcp_rules, mcp_audit, mcp_freezes, mcp_snapshots,
         safety_snapshots, backup_policies,
+        protected_modules, character_protected_module, manual_backups,
         files, batches, fine_tuning_jobs,
         assistants, threads, runs, messages, videos, models,
         # A6 / A7 / A8 buckets (added 2026-08-01).

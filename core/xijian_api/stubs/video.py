@@ -143,6 +143,7 @@ def submit(
     fps: int = 24,
     seed: int | None = None,
     video_id: str,
+    character_id: str | None = None,
 ) -> None:
     """Submit a video generation request to the backend.
 
@@ -153,7 +154,17 @@ def submit(
 
     路由层先将排队记录插入 ``state.videos``；此函数将任务交给后端，
     并安排轮询线程在任务完成时翻转状态。
+
+    ``character_id`` (A3.1 跨模态一致性): when provided and no
+    explicit ``input_reference`` was given, the character's motion
+    clip reference is used as the generation's input reference so
+    the output video stays consistent with the character's motion
+    library.
     """
+    if not input_reference and character_id:
+        from xijian_api.stubs.characters import get_generation_references
+        refs = get_generation_references(character_id)
+        input_reference = refs.get("motion_clip") or input_reference
     backend = _select_backend()
     try:
         backend_task_id = backend.submit(

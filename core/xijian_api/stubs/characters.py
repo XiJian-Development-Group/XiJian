@@ -109,8 +109,19 @@ def set_loaded(character_id: str, loaded: bool) -> dict | None:
     record = state.characters.get(character_id)
     if record is None:
         return None
+    was_loaded = bool(record.get("loaded"))
     record["loaded"] = loaded
     record["updated_at"] = now_ts()
+    # A1.1 auto-backup trigger: the first load of a character
+    # initiates an automatic backup (spec §自动备份策略: 角色首次加载).
+    # A1.1 自动备份触发器：角色首次加载时自动备份
+    # (规范 §自动备份策略：角色首次加载)。
+    if loaded and not was_loaded:
+        try:
+            from xijian_api.stubs import manual_backups as mb_stub
+            mb_stub.notify_first_load(character_id)
+        except Exception:  # noqa: BLE001 — trigger must never break load
+            pass
     return record
 
 
@@ -240,23 +251,155 @@ def update_state(character_id: str, patch: dict, *, protection_enabled: bool) ->
 
 # ---- character_models ------------------------------------------------------
 
+#: Valid model kinds per A3.1 §数据模型.
+#: A3.1 §数据模型 规定的有效模型类型。
+VALID_MODEL_KINDS: frozenset[str] = frozenset({"vrm", "fbx", "glb", "sprite"})
+
+
 def create_model(character_id: str, payload: dict) -> dict:
-    """Create a new character model record. 创建新的人物模型记录。"""
+    """Create a new character model record. 创建新的人物模型记录。
+
+    Accepts both the legacy fields (``model_url`` / ``format``) and the
+    A3.1 spec fields (``kind`` / ``file_path`` / ``texture_paths`` /
+    ``rig_meta`` / ``version`` / ``is_active``).  ``kind`` is validated
+    against :data:`VALID_MODEL_KINDS`; ``is_active`` defaults to 0 and
+    setting a model active clears the others.
+    """
     mid = gen_character_id()  # reuse id generator 重用 ID 生成器
     bucket = state.character_models.setdefault(character_id, {})
+    kind = payload.get("kind", payload.get("format", "glb"))
+    if kind not in VALID_MODEL_KINDS:
+        raise ValueError(
+            "kind must be one of %s, got %r" % (sorted(VALID_MODEL_KINDS), kind)
+        )
+    is_active = bool(payload.get("is_active", False))
+    if is_active:
+        _clear_active_models(character_id)
     record = {
         "id": mid,
         "character_id": character_id,
         "object": "character.model",
         "name": payload.get("name", "Unnamed Model"),
         "model_url": payload.get("model_url", ""),
-        "format": payload.get("format", "glb"),
+        "format": kind,
+        "kind": kind,
+        "file_path": payload.get("file_path", payload.get("model_url", "")),
+        "texture_paths": list(payload.get("texture_paths", [])),
+        "rig_meta": payload.get("rig_meta"),
+        "version": int(payload.get("version", 1) or 1),
+        "is_active": 1 if is_active else 0,
         "tags": list(payload.get("tags", [])),
         "created_at": now_ts(),
         "updated_at": now_ts(),
     }
     bucket[mid] = record
     return record
+
+
+def _clear_active_models(character_id: str) -> None:
+    """Set ``is_active=0`` on every model of the character."""
+    for record in (state.character_models.get(character_id, {}) or {}).values():
+        record["is_active"] = 0
+
+
+def set_active_model(character_id: str, model_id: str) -> dict | None:
+    """Mark one model as active, clearing the others (US-A3.1-01)."""
+    bucket = state.character_models.get(character_id, {})
+    record = bucket.get(model_id)
+    if record is None:
+        return None
+    _clear_active_models(character_id)
+    record["is_active"] = 1
+    record["updated_at"] = now_ts()
+    return record
+
+
+def get_active_model(character_id: str) -> dict | None:
+    """Return the character's active model, or ``None``."""
+    for record in (state.character_models.get(character_id, {}) or {}).values():
+        if record.get("is_active"):
+            return dict(record)
+    return None
+
+
+def auto_load_active_models() -> dict:
+    """A3.1 startup scan: mark loaded every character that has an
+    ``is_active=1`` model.
+
+    Per the spec's 加载策略 (“启动时：仅加载 is_active=1 的模型 + 默认
+    声音 + 默认风格”), the core startup path calls this after seeding so
+    characters with an active model are immediately available without
+    a manual ``POST .../load``.  Returns a summary of characters whose
+    ``loaded`` flag flipped to ``True``.
+    """
+    loaded: list[str] = []
+    for character_id in list(state.characters.keys()):
+        if get_active_model(character_id) is None:
+            continue
+        record = state.characters.get(character_id)
+        if record is not None and not record.get("loaded"):
+            record["loaded"] = True
+            record["updated_at"] = now_ts()
+            loaded.append(character_id)
+    return {"loaded": loaded, "count": len(loaded)}
+
+
+def get_generation_references(character_id: str) -> dict:
+    """A3.1 跨模态一致性: collect pose / motion / voice references.
+
+    Returns a dict with the reference resources the image / video
+    generation backends should inject to keep cross-modal consistency:
+
+    * ``pose_image`` — the character's cached ``pose_image`` asset
+      (``character_asset_cache`` with ``asset_kind='pose_image'``),
+      falling back to the active model's first texture.
+    * ``motion_clip`` — the first motion in the character's motion
+      library (used as the video-generation reference clip).
+    * ``voice_ref`` — the default voice sample path.
+    * ``texture`` — the active model's first texture path.
+
+    All values are ``None`` when the character has no such asset, so
+    callers can treat the dict as “inject what's present”.
+    """
+    pose_image = None
+    texture = None
+    cache = state.character_asset_cache.get(character_id, {}) or {}
+    for asset in cache.values():
+        kind = asset.get("asset_kind") or asset.get("kind")
+        if kind == "pose_image" and pose_image is None:
+            pose_image = asset.get("data") or asset.get("asset_ref")
+        if kind == "texture" and texture is None:
+            texture = asset.get("data") or asset.get("asset_ref")
+
+    active_model = get_active_model(character_id)
+    if pose_image is None and active_model:
+        textures = active_model.get("texture_paths") or []
+        if textures:
+            pose_image = textures[0]
+    if texture is None and active_model:
+        textures = active_model.get("texture_paths") or []
+        if textures:
+            texture = textures[0]
+
+    motions = list((state.character_motions.get(character_id, {}) or {}).values())
+    motion_clip = None
+    if motions:
+        first = motions[0]
+        motion_clip = first.get("file_path") or first.get("animation_ref")
+
+    voice_ref = None
+    voices = list((state.character_voices.get(character_id, {}) or {}).values())
+    for voice in voices:
+        if voice.get("is_default") or voice_ref is None:
+            voice_ref = voice.get("voice_ref_path") or voice.get("profile_ref")
+
+    return {
+        "character_id": character_id,
+        "pose_image": pose_image,
+        "motion_clip": motion_clip,
+        "voice_ref": voice_ref,
+        "texture": texture,
+    }
 
 
 def list_models(character_id: str) -> list[dict]:
@@ -277,9 +420,21 @@ def update_model(character_id: str, model_id: str, patch: dict) -> dict | None:
     record = bucket.get(model_id)
     if record is None:
         return None
-    for key in ("name", "model_url", "format", "tags"):
+    for key in ("name", "model_url", "format", "tags", "kind", "file_path",
+                "texture_paths", "rig_meta", "version"):
         if key in patch:
             record[key] = patch[key]
+    if "kind" in patch and patch["kind"] not in VALID_MODEL_KINDS:
+        raise ValueError(
+            "kind must be one of %s, got %r" % (sorted(VALID_MODEL_KINDS), patch["kind"])
+        )
+    if "is_active" in patch:
+        if patch["is_active"]:
+            _clear_active_models(character_id)
+            record["is_active"] = 1
+        else:
+            record["is_active"] = 0
+    record["format"] = record.get("kind", record.get("format"))
     record["updated_at"] = now_ts()
     return record
 
@@ -344,15 +499,29 @@ def delete_motion(character_id: str, motion_id: str) -> bool:
 # ---- character_voices ------------------------------------------------------
 
 def create_voice(character_id: str, payload: dict) -> dict:
-    """Create a new character voice record. 创建新的人物语音记录。"""
+    """Create a new character voice record. 创建新的人物语音记录。
+
+    Accepts both the legacy ``profile_ref`` field and the A3.1 spec
+    fields (``engine`` / ``voice_ref_path`` / ``params_json`` /
+    ``is_default``).  Setting ``is_default`` clears the other voices'
+    default flag.
+    """
     vid = gen_character_id()
     bucket = state.character_voices.setdefault(character_id, {})
+    is_default = bool(payload.get("is_default", False))
+    if is_default:
+        for other in (bucket.values() if bucket else []):
+            other["is_default"] = 0
     record = {
         "id": vid,
         "character_id": character_id,
         "object": "character.voice",
         "name": payload.get("name", "Unnamed Voice"),
-        "profile_ref": payload.get("profile_ref", ""),
+        "profile_ref": payload.get("profile_ref", payload.get("voice_ref_path", "")),
+        "voice_ref_path": payload.get("voice_ref_path", payload.get("profile_ref", "")),
+        "engine": payload.get("engine", "tts_engine_v1"),
+        "params_json": payload.get("params_json"),
+        "is_default": 1 if is_default else 0,
         "tags": list(payload.get("tags", [])),
         "created_at": now_ts(),
         "updated_at": now_ts(),
@@ -543,6 +712,9 @@ __all__ = [
     "update", "delete", "set_loaded", "get_state", "update_state",
     # A3-01 resource table CRUD
     "create_model", "list_models", "get_model", "update_model", "delete_model",
+    "set_active_model", "get_active_model", "auto_load_active_models",
+    "get_generation_references",
+    "VALID_MODEL_KINDS",
     "create_motion", "list_motions", "get_motion", "update_motion", "delete_motion",
     "create_voice", "list_voices", "get_voice", "update_voice", "delete_voice",
     "create_handwriting", "list_handwritings", "get_handwriting", "update_handwriting", "delete_handwriting",

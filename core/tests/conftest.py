@@ -134,6 +134,13 @@ def _reset_state(app):
         ov_stub.reset_for_testing()
         from xijian_api.stubs import character_state as cs_stub
         cs_stub.reset_for_testing()
+        # Re-install the A3.2 default status handlers (Critical
+        # subscriber) after the reset cleared the registry.
+        # (在重置清空注册表后重新安装 A3.2 默认状态处理器 (Critical 订阅者)。)
+        # Guarded: the A3 chapter lands this helper in parallel; until
+        # it exists the reset must not fail the whole suite.
+        if hasattr(cs_stub, "install_default_status_handlers"):
+            cs_stub.install_default_status_handlers()
         from xijian_api.stubs import events as events_stub
         events_stub.reset_for_testing()
         from xijian_api.stubs import npcs as npcs_stub
@@ -215,6 +222,13 @@ def _reset_state(app):
         # 和策略记录，以便下一个测试从规范默认值 (5 GiB 上限等) 开始。)
         from xijian_api.stubs import snapshots as snap_stub
         snap_stub.reset_for_testing()
+        # A1.1 manual backups — wipes the protected-module registry,
+        # per-character associations and backup records; stops the
+        # daily scheduler.
+        # (A1.1 手动备份 — 清除受保护模块注册表、每角色关联和备份记录；
+        # 停止每日调度器。)
+        from xijian_api.stubs import manual_backups as mb_stub
+        mb_stub.reset_for_testing()
         # A6 / A7 / A8 (added 2026-08-01).  The A6 hooks (reply /
         # sing engines) and the A7 tick thread are module-level
         # state that survives ``state.reset_for_testing``.
