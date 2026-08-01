@@ -978,7 +978,7 @@ const callApi = async (method, ...args) => {
         };
       case "composite":
         const rules = [];
-        $("#trigger-composite-rules .composite-rule").forEach((el) => {
+        $$("#trigger-composite-rules .composite-rule").forEach((el) => {
           const subKind = el.querySelector(".composite-sub-kind").value;
           const subTrigger = {};
           switch (subKind) {
@@ -1157,7 +1157,7 @@ const callApi = async (method, ...args) => {
 
   const buildEffectsFromUI = () => {
     const effects = {};
-    $("#effects-list .effect-row").forEach((row) => {
+    $$("#effects-list .effect-row").forEach((row) => {
       const targetKind = row.querySelector(".effect-target-kind").value;
       const targetId = row.querySelector(".effect-target-id").value.trim();
       const field = row.querySelector(".effect-field").value.trim();
