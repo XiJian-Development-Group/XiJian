@@ -736,18 +736,6 @@ const callApi = async (method, ...args) => {
     $("#char-persona-template-picker").style.display = "none";
   };
 
-  const onCharConfigAutofill = async () => {
-    const persona = $("#char-persona").value.trim();
-    if (!persona) { toast("请先填写人设文档", "err"); return; }
-    const resp = await callApi("auto_suggest", "角色配置：\n" + persona.slice(0, 500));
-    if (!resp.ok) { toast("自动填写失败", "err"); return; }
-    const suggestion = resp.data?.suggestion || "";
-    const existing = $("#char-config-json").value.trim();
-    const comment = "// AI 建议（请复核后使用）：\n";
-    $("#char-config-json").value = existing ? existing + "\n\n" + comment + suggestion : comment + suggestion;
-    toast("已添加 AI 建议（标记为 source='ai_suggested'）", "ok");
-  };
-
   // ---- save/load the character config JSON ----
 
   // --------------------------------------------------------------
@@ -2663,7 +2651,6 @@ const callApi = async (method, ...args) => {
     on("#char-persona-template-btn", "click", onCharPersonaTemplate);
     on("#char-persona-template-apply-btn", "click", onCharPersonaTemplateApply);
     on("#char-persona-template-cancel-btn", "click", onCharPersonaTemplateCancel);
-    on("#char-config-autofill-btn", "click", onCharConfigAutofill);
     on("#char-list", "click", (e) => {
       const li = e.target.closest(".item-list__item");
       if (li && li.dataset.id) onCharSelect(li.dataset.id);
