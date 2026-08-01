@@ -1178,3 +1178,56 @@ class TestEndToEnd:
             "/v1/xijian/characters/char_yuki/state", headers=auth_headers
         )
         assert response.get_json()["can_dialogue"] is False
+
+
+# ---------------------------------------------------------------------------
+# Extra value fields (stamina) — A4.3 travel / interaction deductions
+# ---------------------------------------------------------------------------
+
+
+class TestExtraValueFields:
+    """``apply_extra_field_change`` — the A4.3 stamina-deduction path
+    (AC-3 真实扣减) that lives outside the four-field decay machine."""
+
+    def test_extra_field_defaults_on_new_record(self):
+        record = cs_stub.get_or_init_state("c1")
+        assert record["stamina"] == 100.0
+        assert record["max_stamina"] == 100.0
+
+    def test_apply_extra_field_change_clamps_and_logs(self):
+        record = cs_stub.apply_extra_field_change(
+            "c1", "stamina", 85.0, reason="travel", ref_id="tmode_1",
+        )
+        assert record["stamina"] == 85.0
+        # Clamp below zero.
+        cs_stub.apply_extra_field_change("c1", "stamina", -50.0, reason="travel")
+        assert cs_stub.get_state("c1")["stamina"] == 0.0
+        # Clamp above max.
+        cs_stub.apply_extra_field_change("c1", "stamina", 500.0, reason="travel")
+        assert cs_stub.get_state("c1")["stamina"] == 100.0
+        # Log written with the reason.
+        reasons = [e["reason"] for e in cs_stub.list_log("c1")]
+        assert "travel" in reasons
+
+    def test_unknown_extra_field_rejected(self):
+        with pytest.raises(ValueError, match="unknown extra value field"):
+            cs_stub.apply_extra_field_change("c1", "mana", 5.0)
+
+    def test_canonical_field_routed_to_apply_field_change(self):
+        record = cs_stub.apply_extra_field_change(
+            "c1", "health", 50.0, reason="travel",
+        )
+        assert record["health"] == 50.0
+
+    def test_summary_includes_extra_fields(self):
+        cs_stub.apply_extra_field_change("c1", "stamina", 77.0)
+        s = cs_stub.summary("c1")
+        assert s["values"]["stamina"] == 77.0
+        assert s["max"]["stamina"] == 100.0
+
+    def test_extra_fields_excluded_from_decay(self, frozen_clock):
+        # A decay tick must not lower stamina (no decay rate for it).
+        cs_stub.apply_extra_field_change("c1", "stamina", 90.0, now=frozen_clock.now())
+        frozen_clock.advance(3600.0)
+        cs_stub.tick_character("c1", now=frozen_clock.now())
+        assert cs_stub.get_state("c1")["stamina"] == 90.0

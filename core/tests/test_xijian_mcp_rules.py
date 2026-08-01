@@ -721,3 +721,47 @@ class TestAuthCoverage:
             "%s %s should require auth, got %d"
             % (method, path, res.status_code)
         )
+
+
+# ---------------------------------------------------------------------------
+# A5.2 — SQL 落库决策 (mcp_action_blacklist → store_mcp_rules)
+# ---------------------------------------------------------------------------
+
+
+class TestPersistence:
+    """The rulebook is a DictDB bucket — write-through persisted to
+    SQLite (``store_mcp_rules``), so blacklist rules survive a cache
+    reload / process restart within the same DB file."""
+
+    def test_persistence_info_documents_table(self):
+        info = rules_stub.persistence_info()
+        assert info["table"] == "store_mcp_rules"
+        assert info["engine"] == "sqlite-write-through-DictDB"
+        assert info["spec_table"] == "mcp_action_blacklist"
+        assert info["db_path"].endswith(".db")
+
+    def test_rule_survives_cache_reload(self):
+        rule = rules_stub.create(
+            action_kind=KIND_FILE_DELETE,
+            pattern=r"^/etc/",
+            mode=MODE_BLACKLIST,
+            severity=5,
+        )
+        # Drop the in-memory cache; the next read must come back from
+        # the SQLite table (the store layer's write-through guarantee).
+        rules_stub.state.mcp_rules._invalidate_cache()
+        reloaded = rules_stub.get(rule["id"])
+        assert reloaded is not None
+        assert reloaded["pattern"] == r"^/etc/"
+        assert reloaded["mode"] == MODE_BLACKLIST
+
+    def test_blacklist_rule_blocks_after_reload(self):
+        rule = rules_stub.create(
+            action_kind=KIND_FILE_DELETE,
+            pattern=r"^/etc/",
+            mode=MODE_BLACKLIST,
+            severity=5,
+        )
+        rules_stub.state.mcp_rules._invalidate_cache()
+        hits = rules_stub.match_action_rules(KIND_FILE_DELETE, "/etc/passwd")
+        assert any(h["id"] == rule["id"] for h in hits)

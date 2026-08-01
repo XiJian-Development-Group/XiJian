@@ -35,13 +35,30 @@ Trigger sources
 Compression
 ===========
 
-The spec calls for zstd (AC-3: 平均压缩比 ≥ 0.4).  The stub
-uses Python's stdlib ``zlib`` to simulate the
-"compressed-size" output — the same algorithm-level
-guarantees (zlib is the algorithm under zstd's hood) but
-without the optional binary dep.  The interface is
-``compress_snapshot(snap_id)``; the real backend swap to
-zstd is a one-line change in :func:`_compress_bytes`.
+The spec calls for zstd (AC-3: 平均压缩比 ≥ 0.4).  The stub uses
+``zstandard`` (real zstd) when the package is present — the test /
+CI environment ships it — and falls back to stdlib ``zlib`` with a
+warning otherwise.  The interface is ``compress_snapshot(snap_id)``
+and the compression algorithm is pluggable in :func:`_zstd_compress`.
+
+Scheduled backups (AC-1)
+=========================
+
+``backup_interval_seconds`` (default 3600 = 每小时 1 次) drives a
+background scheduler thread (same pattern as A3.2 / A4.1 / A5.4):
+every interval the thread runs :func:`run_scheduled_backup`, which
+snapshots the live state (reason=``scheduled``) and prunes expired
+entries.  Env overrides: ``XIJIAN_BACKUP_SCHEDULER=0`` disables the
+thread; ``XIJIAN_BACKUP_INTERVAL_SECONDS`` overrides the interval.
+
+A5.4 cross-link (emergency_dump)
+=================================
+
+The A5.4 overload protection fires an ``emergency_dump`` action when
+SoC temperature trips.  :func:`install_overload_handler` registers a
+handler that writes a force-persisted archive snapshot (reason=
+``overload``) so the trigger point is never lost to a capacity
+prompt.
 
 Capacity / 提示 flow
 ====================
@@ -80,8 +97,10 @@ from __future__ import annotations
 
 import copy
 import logging
+import os
 import pickle
 import threading
+import time
 import zlib
 from typing import Any
 
@@ -92,8 +111,31 @@ from xijian_api.utils.ids import (
 )
 from xijian_api.utils.time import now_ts
 
+# zstd is the spec-mandated compressor (AC-3: 压缩比 ≥ 0.4).  The
+# ``zstandard`` package is a pure-C optional dependency; when it is
+# missing we fall back to stdlib ``zlib`` with a loud warning (the
+# fallback still satisfies the ratio but not the algorithm — install
+# ``zstandard`` in the deployment environment).  The test / CI
+# environment (anaconda python) ships ``zstandard``, so the real zstd
+# path is what the test suite exercises.
+try:
+    import zstandard
+    _ZSTD_AVAILABLE = True
+except ImportError:  # pragma: no cover — depends on the runtime env
+    zstandard = None
+    _ZSTD_AVAILABLE = False
+
 
 _LOGGER = logging.getLogger("xijian_api.snapshots")
+
+#: Env flags for the A5.3 scheduled-backup thread (same pattern as
+#: A3.2 / A4.1 / A5.4).  ``0`` disables the thread (CI / tests); the
+#: interval env override is honoured on top of the policy field.
+_BACKUP_ENV_FLAG = "XIJIAN_BACKUP_SCHEDULER"
+_BACKUP_INTERVAL_ENV_FLAG = "XIJIAN_BACKUP_INTERVAL_SECONDS"
+
+#: Hard floor for the scheduler interval (mirrors A3.2's policy).
+_BACKUP_INTERVAL_FLOOR_SECONDS = 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -165,6 +207,19 @@ MAX_SINGLE_SNAPSHOT_BYTES = 500 * 1024 * 1024
 #: pytest is single-threaded, but the production thread
 #: (A5.3 tick) could race a route call.
 _LOCK = threading.RLock()
+
+#: Background scheduler lifecycle — mirrors the A3.2 / A4.1 / A5.4
+#: thread pattern (generation counter so a stale loop exits after
+#: ``reset_for_testing``).
+_BACKUP_LOCK = threading.Lock()
+_BACKUP_STOP = threading.Event()
+_BACKUP_THREAD: threading.Thread | None = None
+_BACKUP_GENERATION: int = 0
+
+#: Whether the A5.4 ``emergency_dump`` overload handler is installed
+#: (guards against duplicate registration across repeated seed_all
+#: calls).
+_OVERLOAD_HANDLER_INSTALLED: bool = False
 
 #: Monotonic insert-sequence counter.  Same trick as
 #: :mod:`safety` + :mod:`mcp` — the audit log and the
@@ -240,29 +295,42 @@ def _seq_next() -> int:
     return _SEQ
 
 
+def _zstd_compress(data: bytes) -> bytes:
+    """Compress ``data`` with zstd when available, else zlib (fallback)."""
+    if _ZSTD_AVAILABLE:
+        return zstandard.ZstdCompressor(level=6).compress(data)
+    _LOGGER.warning(
+        "zstandard not installed — falling back to zlib.  "
+        "Spec AC-3 requires zstd; install `zstandard` in the runtime env."
+    )
+    return zlib.compress(data, level=6)
+
+
 def _estimate_payload_bytes(payload: Any) -> int:
     """Return the on-disk byte size of ``payload``.  We
-    use :func:`pickle.dumps` + :func:`zlib.compress` to
-    match what :func:`_compress_bytes` will produce; the
-    caller uses this to decide whether the post-compression
-    size fits the per-snapshot cap."""
+    use :func:`pickle.dumps` + the configured compressor
+    (zstd, zlib fallback) to match what :func:`_compress_bytes`
+    will produce; the caller uses this to decide whether the
+    post-compression size fits the per-snapshot cap."""
     raw = pickle.dumps(payload, protocol=pickle.HIGHEST_PROTOCOL)
-    compressed = zlib.compress(raw, level=6)
+    compressed = _zstd_compress(raw)
     return len(compressed)
 
 
 def _compress_bytes(payload: Any) -> tuple[bytes, int, int]:
-    """Compress ``payload`` with zlib (zstd stub).  Returns
+    """Compress ``payload`` with zstd (spec AC-3).  Returns
     ``(compressed_bytes, original_size, compressed_size)``.
 
-    The real backend swap to zstd is a one-line change
-    here; the interface is identical (``bytes`` out,
-    sizes in).  AC-3 (压缩比 ≥ 0.4) is satisfied as long
-    as ``compressed_size ≤ 0.4 * original_size`` which
-    zlib on JSON-shaped payloads reaches comfortably.
+    AC-3 (平均压缩比 ≥ 0.4) is satisfied as long as
+    ``compressed_size ≤ 0.4 * original_size`` — zstd on
+    pickle-serialised JSON-shaped payloads reaches this
+    comfortably.  When ``zstandard`` is missing from the
+    runtime env, :func:`_zstd_compress` falls back to zlib
+    with a warning (the ratio still holds; the algorithm
+    does not — deploy with zstandard installed).
     """
     raw = pickle.dumps(payload, protocol=pickle.HIGHEST_PROTOCOL)
-    compressed = zlib.compress(raw, level=6)
+    compressed = _zstd_compress(raw)
     return compressed, len(raw), len(compressed)
 
 
@@ -779,21 +847,243 @@ def _drop_oldest_until_fits(
 
 
 # ---------------------------------------------------------------------------
+# A5.4 cross-link — emergency_dump action handler
+# ---------------------------------------------------------------------------
+
+
+def _emergency_dump_handler(event: dict) -> None:
+    """A5.4 ``emergency_dump`` action consumer: write an emergency
+    archive snapshot for the overload event.
+
+    ``force=True`` so a capacity prompt can never swallow an
+    emergency dump — an overload trigger point is exactly the moment
+    you do *not* want to lose the archive.  Best-effort: handler
+    errors are caught by the overload registry and logged there.
+    """
+    try:
+        create_snapshot(
+            scope=SCOPE_MIXED,
+            target_id=str(event.get("id") or "emergency"),
+            payload={
+                "event_id": event.get("id"),
+                "tier": event.get("tier"),
+                "triggered_metrics": event.get("triggered_metrics"),
+                "action": event.get("action"),
+            },
+            reason=REASON_OVERLOAD,
+            ref_id=event.get("id"),
+            force=True,
+        )
+    except Exception as exc:  # noqa: BLE001 — registry logs handler errors
+        _LOGGER.warning("emergency_dump handler failed: %s", exc)
+
+
+def install_overload_handler() -> dict:
+    """Register the A5.4 ``emergency_dump`` action handler.
+
+    Safe to call repeatedly (guarded) — the overload registry is
+    cleared by ``overload.reset_for_testing`` between tests, so the
+    conftest re-installs this after each reset, mirroring the npcs
+    cross-link pattern.
+    """
+    global _OVERLOAD_HANDLER_INSTALLED
+    if _OVERLOAD_HANDLER_INSTALLED:
+        return {"action": "emergency_dump", "installed": True, "already": True}
+    from xijian_api.stubs.overload import (
+        ACTION_EMERGENCY_DUMP,
+        register_action_handler,
+    )
+    register_action_handler(ACTION_EMERGENCY_DUMP, _emergency_dump_handler)
+    _OVERLOAD_HANDLER_INSTALLED = True
+    return {"action": ACTION_EMERGENCY_DUMP, "installed": True}
+
+
+# ---------------------------------------------------------------------------
+# Scheduled backups (A5.3 AC-1 — 每小时定时自动备份)
+# ---------------------------------------------------------------------------
+
+
+def _current_interval() -> float:
+    """Return the configured backup interval.
+
+    Priority: ``XIJIAN_BACKUP_INTERVAL_SECONDS`` env override →
+    policy ``backup_interval_seconds`` → default 3600 s.  Hard floor
+    of 1 s (fast loop is the test path).
+    """
+    raw = os.environ.get(_BACKUP_INTERVAL_ENV_FLAG)
+    if raw:
+        try:
+            value = float(raw)
+        except ValueError:
+            value = DEFAULT_BACKUP_INTERVAL_SECONDS
+    else:
+        policy = get_policy()
+        value = float(
+            policy.get("backup_interval_seconds", DEFAULT_BACKUP_INTERVAL_SECONDS)
+        )
+    if value < _BACKUP_INTERVAL_FLOOR_SECONDS:
+        value = _BACKUP_INTERVAL_FLOOR_SECONDS
+    return value
+
+
+def _scheduled_payload() -> dict:
+    """Compose the payload for a scheduled backup — a deep-ish snapshot
+    of the live state the archive should survive a restart with.
+
+    We deliberately snapshot the *world / event / npc / character*
+    buckets (the A4 sim-world state) plus the archive's own counters;
+    memory entries are excluded to keep the payload bounded (the
+    memory bucket has its own A1.2 persistence story).
+    """
+    def _dump(bucket: Any) -> dict:
+        return copy.deepcopy(dict(bucket.items()))
+
+    return {
+        "captured_at": float(now_ts()),
+        "worlds": _dump(state.worlds),
+        "npcs": _dump(state.npcs),
+        "world_events": _dump(state.world_events),
+        "world_event_instances": _dump(state.world_event_instances),
+        "character_states": _dump(state.character_states),
+    }
+
+
+def run_scheduled_backup(*, now: float | None = None) -> dict:
+    """Run one scheduled-backup pass (A5.3 AC-1).
+
+    Creates a ``reason=scheduled`` snapshot of the live state and
+    prunes expired entries.  Returns a small result dict; on a
+    capacity-prompt outcome it returns the prompt so callers / logs
+    can surface the "空间不足" notice instead of failing silently.
+    Never raises.
+    """
+    moment = _now_or(now)
+    try:
+        record = create_snapshot(
+            scope=SCOPE_MIXED,
+            target_id="auto",
+            payload=_scheduled_payload(),
+            reason=REASON_SCHEDULED,
+            ref_id="scheduled",
+            now=moment,
+        )
+        pruned = prune_expired(now=moment)
+        return {
+            "created": True,
+            "snapshot_id": record["id"],
+            "size_bytes": int(record.get("size_bytes", 0)),
+            "pruned": pruned,
+            "reason": REASON_SCHEDULED,
+        }
+    except CapacityExceededError as exc:
+        _LOGGER.warning(
+            "scheduled backup hit the capacity ceiling; prompt recorded "
+            "for the operator (US-A5.3-02)"
+        )
+        return {
+            "created": False,
+            "error": "capacity_exceeded",
+            "prompt": exc.prompt,
+        }
+    except Exception as exc:  # noqa: BLE001 — a failed pass must not kill the thread
+        _LOGGER.warning("scheduled backup failed: %s", exc)
+        return {"created": False, "error": "backup_failed", "detail": str(exc)}
+
+
+def _backup_loop(stop_event: threading.Event, generation: int) -> None:
+    """Main scheduler loop.  Mirrors the A3.2 tick-loop pattern."""
+    while not stop_event.is_set():
+        with _BACKUP_LOCK:
+            if _BACKUP_GENERATION != generation:
+                return
+        try:
+            run_scheduled_backup()
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.warning("backup scheduler tick failed: %s", exc)
+        if stop_event.wait(_current_interval()):
+            break
+
+
+def start_scheduler() -> dict:
+    """Start the background scheduled-backup thread (idempotent)."""
+    global _BACKUP_THREAD, _BACKUP_GENERATION
+    with _BACKUP_LOCK:
+        if _BACKUP_THREAD is not None and _BACKUP_THREAD.is_alive():
+            return {"started": False, "reason": "already_running"}
+        if os.environ.get(_BACKUP_ENV_FLAG) == "0":
+            return {"started": False, "reason": "disabled_by_env"}
+        _BACKUP_STOP.clear()
+        _BACKUP_GENERATION += 1
+        generation = _BACKUP_GENERATION
+        thread = threading.Thread(
+            target=_backup_loop,
+            args=(_BACKUP_STOP, generation),
+            name="xijian-backup-scheduler",
+            daemon=True,
+        )
+        _BACKUP_THREAD = thread
+        thread.start()
+    return {"started": True, "interval_s": _current_interval()}
+
+
+def stop_scheduler() -> dict:
+    """Stop the background scheduled-backup thread.  No-op if not running."""
+    global _BACKUP_THREAD
+    with _BACKUP_LOCK:
+        thread = _BACKUP_THREAD
+        if thread is None or not thread.is_alive():
+            return {"stopped": False, "reason": "not_running"}
+        _BACKUP_STOP.set()
+    thread.join(timeout=_current_interval() * 3)
+    with _BACKUP_LOCK:
+        _BACKUP_THREAD = None
+    return {"stopped": True}
+
+
+def scheduler_status() -> dict:
+    """Return a debug-friendly snapshot of the backup scheduler."""
+    with _BACKUP_LOCK:
+        running = _BACKUP_THREAD is not None and _BACKUP_THREAD.is_alive()
+    policy = get_policy()
+    return {
+        "running": running,
+        "interval_s": _current_interval(),
+        "policy_interval_s": float(
+            policy.get("backup_interval_seconds", DEFAULT_BACKUP_INTERVAL_SECONDS)
+        ),
+        "enabled_by_env": os.environ.get(_BACKUP_ENV_FLAG) != "0",
+        "zstd_available": _ZSTD_AVAILABLE,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Lifecycle
 # ---------------------------------------------------------------------------
 
 
 def seed_default() -> None:
     """Idempotent default-seed.  Seeds the policy record
-    if missing.  No snapshots ship by default — operators
-    trigger the first dump via the route or a key event."""
+    if missing, registers the A5.4 ``emergency_dump`` handler,
+    and starts the scheduled-backup thread if the env allows it.
+    No snapshots ship by default — the scheduler / key events
+    trigger the first dump."""
     _ensure_default_policy()
+    install_overload_handler()
+    if os.environ.get(_BACKUP_ENV_FLAG) == "0":
+        return
+    start_scheduler()
 
 
 def reset_for_testing() -> None:
     """Wipe every snapshot + the policy record (the next
-    :func:`get_policy` call re-seeds the default)."""
-    global _SEQ
+    :func:`get_policy` call re-seeds the default) and stop the
+    scheduled-backup thread."""
+    global _SEQ, _OVERLOAD_HANDLER_INSTALLED
+    stop_scheduler()
+    with _BACKUP_LOCK:
+        global _BACKUP_GENERATION
+        _BACKUP_GENERATION += 1
+    _OVERLOAD_HANDLER_INSTALLED = False
     with _LOCK:
         _SEQ = 0
         state.safety_snapshots.clear()
@@ -814,7 +1104,8 @@ __all__ = [
     # Errors
     "SnapshotError", "CapacityExceededError",
     # Pure helpers
-    "_estimate_payload_bytes", "_compress_bytes",
+    "_estimate_payload_bytes", "_compress_bytes", "_zstd_compress",
+    "_ZSTD_AVAILABLE",
     # Policy
     "get_policy", "set_policy", "reset_policy",
     # Core
@@ -823,6 +1114,11 @@ __all__ = [
     # Capacity / compress / prune
     "get_total_bytes", "compress_snapshot", "prune_expired",
     "enforce_capacity", "resolve_capacity",
+    # A5.4 cross-link
+    "install_overload_handler", "_emergency_dump_handler",
+    # Scheduled backups (A5.3 AC-1)
+    "run_scheduled_backup", "_scheduled_payload",
+    "start_scheduler", "stop_scheduler", "scheduler_status",
     # Lifecycle
     "seed_default", "reset_for_testing",
 ]

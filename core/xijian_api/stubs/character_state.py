@@ -121,6 +121,22 @@ DEFAULT_MAX_THIRST = 100.0
 DEFAULT_MAX_HEALTH = 100.0
 DEFAULT_MAX_MOOD = 100.0
 
+#: Default stamina value / cap.  Stamina is an *extra* value field —
+#: it lives on the state record and is clamped + logged like the four
+#: canonical fields, but it is **not** part of the decay/state-machine
+#: pipeline (no decay rate, no status transition).  It exists so the
+#: A4.3 travel / scene-interaction systems can deduct real stamina
+#: (AC-3 "交通方式的体力消耗必须真实扣减") without polluting the
+#: canonical four-field state machine.
+DEFAULT_STAMINA = 100.0
+DEFAULT_MAX_STAMINA = 100.0
+
+#: Extra value fields — tracked + logged + clamped like VALUE_FIELDS
+#: but excluded from decay and from the status machine.  Unknown extra
+#: fields are rejected by :func:`apply_extra_field_change` (no silent
+#: schema creep).
+EXTRA_VALUE_FIELDS: tuple[str, ...] = ("stamina",)
+
 #: Default per-hour decay rates — locked by v2 of the function list.
 DEFAULT_DECAY_RATES: dict[str, float] = {
     "hunger": 2.0,
@@ -193,6 +209,11 @@ MAX_FIELDS: dict[str, str] = {
     "mood": "max_mood",
 }
 
+#: max-field name for each extra field (mirrors MAX_FIELDS).
+EXTRA_MAX_FIELDS: dict[str, str] = {
+    "stamina": "max_stamina",
+}
+
 
 # ---------------------------------------------------------------------------
 # Module-level state — monitor lifecycle
@@ -208,6 +229,67 @@ _TICK_STOP = threading.Event()
 #: Generation counter so the test suite can detect that the running
 #: tick thread belongs to the previous reset.
 _TICK_GENERATION: int = 0
+
+
+# ---------------------------------------------------------------------------
+# Default status handlers — the Critical subscriber
+# ---------------------------------------------------------------------------
+
+
+def _critical_memory_handler(payload: dict) -> None:
+    """Default Critical subscriber: write a memory entry + world-event notice.
+
+    Fires whenever a character enters the Critical status (health ≤ 0).
+    The handler records the transition as a short-term memory entry
+    (``source=world_event``) so the character's own memory carries the
+    state change, and best-effort forwards the event to the events stub
+    (fire-and-forget; failures are swallowed so the status machine is
+    never held hostage by a side effect).
+    """
+    character_id = payload.get("character_id")
+    if not character_id:
+        return
+    try:
+        from xijian_api.stubs import memory as memory_stub
+        reason = payload.get("reason") or "tick"
+        memory_stub.create(
+            {
+                "character_id": character_id,
+                "type": "short",
+                "content": (
+                    f"[状态告警] 角色进入 Critical 状态（健康值 ≤ 0），"
+                    f"原因: {reason}，已停止对话。"
+                ),
+                "importance": 0.9,
+                "decay_score": 1.0,
+                "source": "world_event",
+                "tags": ["state", "critical"],
+            }
+        )
+    except Exception as exc:  # noqa: BLE001 — best effort, never raise
+        _LOGGER.warning("critical memory handler failed: %s", exc)
+
+
+def install_default_status_handlers() -> dict:
+    """Register the default per-status subscribers (idempotent).
+
+    Currently wires the Critical → memory-entry handler so the
+    ``register_status_handler`` mechanism has a real consumer (the
+    audit flagged the registry as having zero subscribers).  Called
+    from :func:`seed_default` at start-up and re-installed by
+    :func:`reset_for_testing` so tests see the same wiring as prod.
+    """
+    handlers = _STATUS_HANDLERS.get(STATUS_CRITICAL, [])
+    if _critical_memory_handler not in handlers:
+        register_status_handler(STATUS_CRITICAL, _critical_memory_handler)
+    return {"status": STATUS_CRITICAL, "handlers": len(_STATUS_HANDLERS.get(STATUS_CRITICAL, []))}
+
+
+def _install_default_status_handlers_locked() -> None:
+    """Idempotent install used inside locked sections (seed / reset)."""
+    handlers = _STATUS_HANDLERS.setdefault(STATUS_CRITICAL, [])
+    if _critical_memory_handler not in handlers:
+        handlers.append(_critical_memory_handler)
 
 
 # ---------------------------------------------------------------------------
@@ -466,10 +548,12 @@ def _default_state_record(character_id: str, *, now: float | None = None) -> dic
         "thirst": DEFAULT_THIRST,
         "health": DEFAULT_HEALTH,
         "mood": DEFAULT_MOOD,
+        "stamina": DEFAULT_STAMINA,
         "max_hunger": DEFAULT_MAX_HUNGER,
         "max_thirst": DEFAULT_MAX_THIRST,
         "max_health": DEFAULT_MAX_HEALTH,
         "max_mood": DEFAULT_MAX_MOOD,
+        "max_stamina": DEFAULT_MAX_STAMINA,
         "status": STATUS_HEALTHY,
         "status_changed_at": moment,
         "last_updated": moment,
@@ -808,6 +892,44 @@ def apply_field_change(
     return dict(record)
 
 
+def apply_extra_field_change(
+    character_id: str,
+    field: str,
+    value: float,
+    *,
+    reason: str = "manual",
+    ref_id: str | None = None,
+    now: float | None = None,
+) -> dict:
+    """Apply ``value`` to an extra value field (e.g. ``stamina``).
+
+    Extra fields share the clamp / log / broadcast pipeline with the
+    canonical fields but are excluded from decay and the status
+    machine — see :data:`EXTRA_VALUE_FIELDS`.  Raises ``ValueError``
+    for unknown fields.  Canonical fields are routed to
+    :func:`apply_field_change` so callers can treat this as a
+    uniform "apply a value to any trackable field" entry point.
+    """
+    if field in VALUE_FIELDS:
+        return apply_field_change(
+            character_id, field, value, reason=reason, ref_id=ref_id, now=now
+        )
+    if field not in EXTRA_VALUE_FIELDS:
+        raise ValueError(f"unknown extra value field: {field!r}")
+    record = get_or_init_state(character_id)
+    moment = float(now) if now is not None else float(time.time())
+    old_value = float(record.get(field, 0.0))
+    max_field = EXTRA_MAX_FIELDS[field]
+    max_value = float(record.get(max_field, 100.0))
+    new_value = clamp(float(value), max_value)
+    if old_value != new_value:
+        record[field] = new_value
+        record["last_updated"] = moment
+        _append_log(character_id, field, old_value, new_value, reason, ref_id, now=moment)
+        _publish_state_change(character_id, field, old_value, new_value, reason, ref_id)
+    return dict(record)
+
+
 def apply_patch(
     character_id: str, patch: dict, *, reason: str = "manual", ref_id: str | None = None
 ) -> dict:
@@ -1029,7 +1151,11 @@ def seed_default() -> None:
     never get queried.
     首次访问时惰性创建，内存中。
 
+    Also installs the default status handlers (Critical → memory
+    subscriber) so the handler registry has a real consumer in prod.
+
     """
+    _install_default_status_handlers_locked()
     if os.environ.get(_TICK_ENV_FLAG) == "0":
         return
     start_tick()
@@ -1047,6 +1173,12 @@ def reset_for_testing() -> None:
     with _STATUS_HANDLER_LOCK:
         for handlers in _STATUS_HANDLERS.values():
             handlers.clear()
+    # Re-install the default subscribers so tests see the same
+    # Critical-handler wiring as production (the audit flagged the
+    # registry as having zero consumers).
+    # 重新安装默认订阅者，使测试看到与生产相同的 Critical 处理器接线
+    # (审计指出注册表没有消费者)。
+    _install_default_status_handlers_locked()
 
 
 # ---------------------------------------------------------------------------
@@ -1065,20 +1197,26 @@ def summary(character_id: str) -> dict | None:
     if record is None:
         return None
     cfg = get_config(character_id) or _default_config(character_id)
+    values: dict = {
+        "hunger": float(record.get("hunger", 0.0)),
+        "thirst": float(record.get("thirst", 0.0)),
+        "health": float(record.get("health", 0.0)),
+        "mood": float(record.get("mood", 0.0)),
+    }
+    maxes: dict = {
+        "hunger": float(record.get("max_hunger", DEFAULT_MAX_HUNGER)),
+        "thirst": float(record.get("max_thirst", DEFAULT_MAX_THIRST)),
+        "health": float(record.get("max_health", DEFAULT_MAX_HEALTH)),
+        "mood": float(record.get("max_mood", DEFAULT_MAX_MOOD)),
+    }
+    for field in EXTRA_VALUE_FIELDS:
+        max_field = EXTRA_MAX_FIELDS[field]
+        values[field] = float(record.get(field, 0.0))
+        maxes[field] = float(record.get(max_field, DEFAULT_MAX_STAMINA))
     return {
         "character_id": character_id,
-        "values": {
-            "hunger": float(record.get("hunger", 0.0)),
-            "thirst": float(record.get("thirst", 0.0)),
-            "health": float(record.get("health", 0.0)),
-            "mood": float(record.get("mood", 0.0)),
-        },
-        "max": {
-            "hunger": float(record.get("max_hunger", DEFAULT_MAX_HUNGER)),
-            "thirst": float(record.get("max_thirst", DEFAULT_MAX_THIRST)),
-            "health": float(record.get("max_health", DEFAULT_MAX_HEALTH)),
-            "mood": float(record.get("max_mood", DEFAULT_MAX_MOOD)),
-        },
+        "values": values,
+        "max": maxes,
         "status": record.get("status", STATUS_HEALTHY),
         "status_changed_at": record.get("status_changed_at"),
         "last_updated": record.get("last_updated"),
@@ -1094,6 +1232,8 @@ __all__ = [
     "STATUS_SICK", "STATUS_RECOVERING", "STATUS_CRITICAL",
     "ALL_STATUSES",
     "VALUE_FIELDS", "MAX_FIELDS",
+    "EXTRA_VALUE_FIELDS", "EXTRA_MAX_FIELDS",
+    "DEFAULT_STAMINA", "DEFAULT_MAX_STAMINA",
     "DEFAULT_TICK_INTERVAL_SECONDS", "LOG_MAX_ENTRIES",
     # pure helpers
     "clamp", "decay_amount", "compute_target_status",
@@ -1104,7 +1244,7 @@ __all__ = [
     "set_modifier", "clear_modifier",
     "list_log",
     # mutations
-    "apply_field_change", "apply_patch",
+    "apply_field_change", "apply_extra_field_change", "apply_patch",
     "tick_character", "tick_all",
     "can_dialogue", "force_recover", "enter_recovering",
     "get_active_behavior",
@@ -1114,6 +1254,7 @@ __all__ = [
     "seed_default", "reset_for_testing",
     # handler registry
     "register_status_handler", "unregister_status_handler",
+    "install_default_status_handlers",
     # summary
     "summary",
 ]

@@ -304,3 +304,103 @@ class TestRoutes:
             headers=auth_headers,
         )
         assert res.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# A4.3 AC-3 — execute_trip (real stamina deduction)
+# ---------------------------------------------------------------------------
+
+
+class TestExecuteTrip:
+    """``execute_trip`` actually mutates the character's stamina and
+    writes an audit row — unlike the pure ``estimate_trip`` preview."""
+
+    def test_execute_deducts_stamina(self, world, walk_mode):
+        from xijian_api.stubs import character_state as cs_stub
+        out = tm_stub.execute_trip(
+            walk_mode["id"], character_id="char_a",
+        )
+        assert out["stamina_cost"] == walk_mode["stamina_cost"]
+        assert out["stamina_remaining"] == 100.0 - walk_mode["stamina_cost"]
+        record = cs_stub.get_state("char_a")
+        assert record["stamina"] == out["stamina_remaining"]
+        # Reason recorded in the state log.
+        reasons = [e["reason"] for e in cs_stub.list_log("char_a")]
+        assert "travel" in reasons
+
+    def test_execute_never_goes_below_zero(self, world, walk_mode):
+        from xijian_api.stubs import character_state as cs_stub
+        cs_stub.apply_extra_field_change("char_a", "stamina", 5.0)
+        out = tm_stub.execute_trip(
+            walk_mode["id"], character_id="char_a",
+        )
+        assert out["stamina_remaining"] == 0.0
+
+    def test_execute_writes_audit_row(self, world, walk_mode):
+        from xijian_api.stubs import state as stubs_state
+        tm_stub.execute_trip(walk_mode["id"], character_id="char_a")
+        rows = [r for r in stubs_state.world_audit_log.values()
+                if r.get("action") == "travel.execute"]
+        assert len(rows) == 1
+        assert rows[0]["payload"]["mode_id"] == walk_mode["id"]
+
+    def test_execute_event_chance_fires_event(self, world):
+        from xijian_api.stubs import events as ev_stub
+        mode = tm_stub.create(
+            world_id=world, name="risky", speed_factor=1.0,
+            stamina_cost=1.0, event_chance=1.0,
+        )
+        ev = ev_stub.create_event(
+            world_id=world, kind=ev_stub.KIND_COMMON, name="road_event",
+            trigger_config={"type": "interval", "seconds": 60},
+        )
+        out = tm_stub.execute_trip(
+            mode["id"], character_id="char_a",
+            random_roll=0.0, fire_event_id=ev["id"],
+        )
+        assert out["event_triggered"] is True
+        instances = ev_stub.list_instances(event_id=ev["id"])
+        assert len(instances) == 1
+
+    def test_execute_requires_character_id(self, world, walk_mode):
+        # ``character_id`` is a required keyword argument.
+        with pytest.raises(TypeError):
+            tm_stub.execute_trip(walk_mode["id"])
+        # And a None character id is rejected with a clear error.
+        with pytest.raises(tm_stub.TravelModeError, match="character_id"):
+            tm_stub.execute_trip(walk_mode["id"], character_id=None)
+
+    def test_execute_unknown_mode_raises(self):
+        with pytest.raises(tm_stub.TravelModeError):
+            tm_stub.execute_trip("tmode_nope", character_id="char_a")
+
+
+class TestExecuteTripRoute:
+    """POST /v1/xijian/scenes/travel-modes/<id>/execute."""
+
+    def test_execute_endpoint_deducts_stamina(self, client, auth_headers, world, walk_mode):
+        res = client.post(
+            f"/v1/xijian/scenes/travel-modes/{walk_mode['id']}/execute",
+            headers=auth_headers,
+            json={"character_id": "char_a"},
+        )
+        assert res.status_code == 200
+        body = res.get_json()
+        assert body["stamina_cost"] == walk_mode["stamina_cost"]
+        assert body["stamina_remaining"] == 100.0 - walk_mode["stamina_cost"]
+
+    def test_execute_endpoint_missing_character_400(self, client, auth_headers, walk_mode):
+        res = client.post(
+            f"/v1/xijian/scenes/travel-modes/{walk_mode['id']}/execute",
+            headers=auth_headers,
+            json={},
+        )
+        assert res.status_code == 400
+
+    def test_execute_endpoint_404(self, client, auth_headers):
+        res = client.post(
+            "/v1/xijian/scenes/travel-modes/tmode_nope/execute",
+            headers=auth_headers,
+            json={"character_id": "char_a"},
+        )
+        assert res.status_code == 404

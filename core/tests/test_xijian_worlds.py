@@ -803,3 +803,58 @@ class TestAuthCoverage:
         assert res.status_code in (401, 403), (
             f"{method} {path} should require auth, got {res.status_code}"
         )
+
+
+# ---------------------------------------------------------------------------
+# A4.2 AC-1 — 3 并发世界上限 (MAX_WORLDS)
+# ---------------------------------------------------------------------------
+
+
+class TestMaxWorlds:
+    """Single instance supports at least 3 concurrent worlds (fixed);
+    the 4th active world is rejected."""
+
+    def test_constant_is_three(self):
+        from xijian_api.stubs.worlds import MAX_WORLDS
+        assert MAX_WORLDS == 3
+
+    def test_capacity_reports_limits(self):
+        cap = worlds_stub.worlds_capacity()
+        assert cap["max_worlds"] == 3
+        assert cap["active_worlds"] >= 1  # seeded demo world
+        assert cap["slots_left"] == 3 - cap["active_worlds"]
+
+    def test_fourth_active_world_rejected(self):
+        # Seeded demo world + 2 more = 3 active; the 4th must fail.
+        worlds_stub.create(name="W2")
+        worlds_stub.create(name="W3")
+        with pytest.raises(WorldError, match="active world limit"):
+            worlds_stub.create(name="W4")
+
+    def test_inactive_creation_does_not_consume_slot(self):
+        worlds_stub.create(name="W2")
+        worlds_stub.create(name="W3")
+        # Inactive worlds are allowed past the active limit.
+        rec = worlds_stub.create(name="W4", is_active=False)
+        assert rec["is_active"] is False
+
+    def test_deactivating_frees_a_slot(self):
+        w2 = worlds_stub.create(name="W2")
+        w3 = worlds_stub.create(name="W3")
+        with pytest.raises(WorldError, match="active world limit"):
+            worlds_stub.create(name="W4")
+        # Deactivate one → creation succeeds again.
+        worlds_stub.update(w3["id"], {"is_active": False})
+        rec = worlds_stub.create(name="W4")
+        assert rec["is_active"] is True
+
+    def test_summary_exposes_max_worlds(self):
+        summary = worlds_stub.summary()
+        assert summary["max_worlds"] == 3
+
+    def test_route_rejects_fourth_world(self, client, auth_headers):
+        client.post("/v1/xijian/worlds", json={"name": "W2"}, headers=auth_headers)
+        client.post("/v1/xijian/worlds", json={"name": "W3"}, headers=auth_headers)
+        res = client.post("/v1/xijian/worlds", json={"name": "W4"}, headers=auth_headers)
+        assert res.status_code == 400
+        assert res.get_json()["error"]["code"] == "world_error"

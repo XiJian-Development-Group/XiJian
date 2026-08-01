@@ -610,3 +610,104 @@ class TestRoutes:
             headers=auth_headers,
         )
         assert res.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# A4.3 effects actually applied (AC-2 / AC-3)
+# ---------------------------------------------------------------------------
+
+
+class TestEffectsApplied:
+    """The trigger() path must *apply* effects — the old behaviour only
+    returned them.  These tests pin the state mutations."""
+
+    def test_stamina_delta_applied_to_character(self, world, poi):
+        from xijian_api.stubs import character_state as cs_stub
+        si = si_stub.create(
+            world_id=world, poi_id=poi["id"], target_type="object",
+            target_id="chest", action="open",
+            effects={"stamina_delta": -2},
+            cooldown_sec=0,
+        )
+        out = si_stub.trigger(si["id"], character_id="char_a")
+        assert out["accepted"] is True
+        assert out["effects_applied"] == ["stamina_delta"]
+        record = cs_stub.get_state("char_a")
+        assert record["stamina"] == 98.0
+
+    def test_health_and_mood_deltas_applied(self, world, poi):
+        from xijian_api.stubs import character_state as cs_stub
+        cs_stub.apply_field_change("char_a", "health", 100.0)
+        si = si_stub.create(
+            world_id=world, poi_id=poi["id"], target_type="object",
+            target_id="trap", action="spring",
+            effects={"health_delta": -20, "mood_delta": -10},
+            cooldown_sec=0,
+        )
+        out = si_stub.trigger(si["id"], character_id="char_a")
+        assert out["accepted"] is True
+        record = cs_stub.get_state("char_a")
+        assert record["health"] == 80.0
+        assert record["mood"] == 60.0  # 70 default − 10
+
+    def test_npc_mood_delta_applied_to_npc_target(self, world, poi):
+        from xijian_api.stubs import npcs as npcs_stub
+        npc = npcs_stub.create(
+            world_id=world, name="N", state_json={"mood": 40},
+        )
+        si = si_stub.create(
+            world_id=world, poi_id=poi["id"], target_type="npc",
+            target_id=npc["id"], action="praise",
+            effects={"npc_mood_delta": 15},
+            cooldown_sec=0,
+        )
+        out = si_stub.trigger(si["id"], character_id="char_a")
+        assert out["accepted"] is True
+        assert "npc_mood_delta" in out["effects_applied"]
+        assert npcs_stub.get(npc["id"])["state_json"]["mood"] == 55.0
+
+    def test_world_state_effect_patches_environment(self, world, poi):
+        from xijian_api.stubs import world_environment as env_stub
+        si = si_stub.create(
+            world_id=world, poi_id=poi["id"], target_type="mechanism",
+            target_id="weather_control", action="flip",
+            effects={"world_state": {"weather": "storm"}},
+            cooldown_sec=0,
+        )
+        out = si_stub.trigger(si["id"], character_id="char_a")
+        assert out["accepted"] is True
+        assert env_stub.get(world)["weather"] == "storm"
+
+    def test_effect_without_character_is_logged_not_applied(self, world, poi, caplog):
+        si = si_stub.create(
+            world_id=world, poi_id=poi["id"], target_type="object",
+            target_id="chest", action="open",
+            effects={"stamina_delta": -2},
+            cooldown_sec=0,
+        )
+        # No character_id → stamina cannot be deducted; trigger still accepts.
+        out = si_stub.trigger(si["id"])
+        assert out["accepted"] is True
+        assert "stamina_delta" not in out["effects_applied"]
+
+    def test_npc_delta_without_npc_target_is_skipped(self, world, poi, caplog):
+        si = si_stub.create(
+            world_id=world, poi_id=poi["id"], target_type="object",
+            target_id="chest", action="open",
+            effects={"npc_mood_delta": 5},
+            cooldown_sec=0,
+        )
+        out = si_stub.trigger(si["id"], character_id="char_a")
+        assert out["accepted"] is True
+        assert "npc_mood_delta" not in out["effects_applied"]
+
+    def test_unsupported_effect_ignored(self, world, poi, caplog):
+        si = si_stub.create(
+            world_id=world, poi_id=poi["id"], target_type="object",
+            target_id="chest", action="open",
+            effects={"loot": ["gold_coin"]},
+            cooldown_sec=0,
+        )
+        out = si_stub.trigger(si["id"], character_id="char_a")
+        assert out["accepted"] is True
+        assert out["effects_applied"] == []

@@ -1522,3 +1522,234 @@ class TestRoutesAuth:
     def test_no_auth_blocked(self, client, method, path):
         resp = getattr(client, method)(path)
         assert resp.status_code in (401, 403)
+
+
+# ---------------------------------------------------------------------------
+# A4.1 scene generation (AC-1/AC-2) + event effects
+# ---------------------------------------------------------------------------
+
+
+class TestSceneGeneration:
+    """A4.1 US-A4.1-03 / AC-1 / AC-2 — events that need a scene get one,
+    and a failing / missing backend degrades to a placeholder."""
+
+    def test_fire_attaches_placeholder_scene_when_backend_disabled(self, world):
+        # conftest sets XIJIAN_SCENE_GENERATION=0 → placeholder path.
+        rec = ev_stub.create_event(
+            world_id=world, kind=KIND_COMMON, name="festival",
+            trigger_config={"type": "interval", "seconds": 60},
+            scene_ref_id="scene_festival",
+        )
+        inst = ev_stub.fire_event(rec["id"])
+        scene = inst["scene"]
+        assert scene["status"] == "placeholder"
+        assert scene["ref_id"] == "scene_festival"
+        assert "占位" in scene["description"]
+        assert scene["image_url"].startswith("placeholder://")
+
+    def test_fire_without_scene_ref_has_no_scene(self, world):
+        rec = ev_stub.create_event(
+            world_id=world, kind=KIND_COMMON, name="x",
+            trigger_config={"type": "interval", "seconds": 60},
+        )
+        inst = ev_stub.fire_event(rec["id"])
+        assert inst["needs_scene"] is False
+        assert "scene" not in inst
+
+    def test_placeholder_never_breaks_firing(self, world, monkeypatch):
+        # Even if the placeholder builder itself blows up, the fire
+        # must still succeed (AC-2: 不中断).
+        rec = ev_stub.create_event(
+            world_id=world, kind=KIND_COMMON, name="x",
+            trigger_config={"type": "interval", "seconds": 60},
+            scene_ref_id="scene_x",
+        )
+        monkeypatch.setattr(ev_stub, "_placeholder_scene", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
+        inst = ev_stub.fire_event(rec["id"])
+        assert inst is not None
+        assert inst["scene"]["status"] == "placeholder"
+
+    def test_core_generation_probe_failure_degrades_to_placeholder(self, world, monkeypatch):
+        rec = ev_stub.create_event(
+            world_id=world, kind=KIND_COMMON, name="x",
+            trigger_config={"type": "interval", "seconds": 60},
+            scene_ref_id="scene_x",
+        )
+        # Simulate a backend that exists but raises — must degrade.
+        class _BoomBackend:
+            name = "boom"
+            def generate(self, *a, **k):
+                raise RuntimeError("backend blew up")
+        monkeypatch.setenv("XIJIAN_SCENE_GENERATION", "1")
+        monkeypatch.setattr(
+            ev_stub, "_try_core_scene_generation",
+            lambda *a, **k: None,
+        )
+        inst = ev_stub.fire_event(rec["id"])
+        assert inst["scene"]["status"] == "placeholder"
+
+    def test_regenerate_via_ensure_scene_for_instance(self, world):
+        rec = ev_stub.create_event(
+            world_id=world, kind=KIND_COMMON, name="x",
+            trigger_config={"type": "interval", "seconds": 60},
+            scene_ref_id="scene_x",
+        )
+        inst = ev_stub.fire_event(rec["id"])
+        scene = ev_stub.ensure_scene_for_instance(inst["id"])
+        assert scene is not None
+        assert scene["status"] == "placeholder"
+        # Unknown instance → None.
+        assert ev_stub.ensure_scene_for_instance("inst_nope") is None
+
+    def test_get_instance_scene(self, world):
+        rec = ev_stub.create_event(
+            world_id=world, kind=KIND_COMMON, name="x",
+            trigger_config={"type": "interval", "seconds": 60},
+            scene_ref_id="scene_x",
+        )
+        inst = ev_stub.fire_event(rec["id"])
+        assert ev_stub.get_instance_scene(inst["id"])["status"] == "placeholder"
+        assert ev_stub.get_instance_scene("inst_nope") is None
+
+
+class TestEventEffects:
+    """A4.1 effects → NPC / character / world state."""
+
+    def _npc(self, world):
+        from xijian_api.stubs import npcs as npcs_stub
+        return npcs_stub.create(
+            world_id=world, name="N", state_json={"mood": 50, "health": 80},
+        )
+
+    def test_npc_mood_effect_applied_to_affected_npcs(self, world):
+        from xijian_api.stubs import npcs as npcs_stub
+        npc = self._npc(world)
+        rec = ev_stub.create_event(
+            world_id=world, kind=KIND_COMMON, name="market",
+            trigger_config={"type": "interval", "seconds": 60},
+        )
+        ev_stub.fire_event(
+            rec["id"],
+            payload={"effects": {"npc_mood": 10, "npc_health": -5}},
+            affected_npcs=[npc["id"]],
+        )
+        state_json = npcs_stub.get(npc["id"])["state_json"]
+        assert state_json["mood"] == 60
+        assert state_json["health"] == 75
+
+    def test_character_effect_applied_via_character_state(self, world):
+        from xijian_api.stubs import character_state as cs_stub
+        rec = ev_stub.create_event(
+            world_id=world, kind=KIND_COMMON, name="festival",
+            trigger_config={"type": "interval", "seconds": 60},
+        )
+        ev_stub.fire_event(
+            rec["id"],
+            payload={
+                "effects": {
+                    "character_mood": 5,
+                    "character_stamina": -10,
+                    "character_id": "char_yuki",
+                },
+            },
+        )
+        record = cs_stub.get_state("char_yuki")
+        assert record["mood"] == 75  # 70 default + 5
+        assert record["stamina"] == 90  # 100 default − 10
+
+    def test_character_effect_without_target_is_skipped(self, world, caplog):
+        rec = ev_stub.create_event(
+            world_id=world, kind=KIND_COMMON, name="x",
+            trigger_config={"type": "interval", "seconds": 60},
+        )
+        applied = ev_stub._apply_event_effects(
+            {"event_id": rec["id"], "world_id": world, "affected_npcs": [],
+             "payload": {"effects": {"character_mood": 5}}},
+            rec,
+        )
+        assert applied == []
+
+    def test_world_state_effect_patches_environment(self, world):
+        from xijian_api.stubs import world_environment as env_stub
+        rec = ev_stub.create_event(
+            world_id=world, kind=KIND_COMMON, name="rain",
+            trigger_config={"type": "interval", "seconds": 60},
+        )
+        ev_stub.fire_event(
+            rec["id"],
+            payload={"effects": {"world_state": {"weather": "rain"}}},
+        )
+        assert env_stub.get(world)["weather"] == "rain"
+
+    def test_unsupported_effect_logged_not_raised(self, world, caplog):
+        rec = ev_stub.create_event(
+            world_id=world, kind=KIND_COMMON, name="x",
+            trigger_config={"type": "interval", "seconds": 60},
+        )
+        # Must not raise.
+        inst = ev_stub.fire_event(
+            rec["id"],
+            payload={"effects": {"totally_unknown_effect": 99}},
+        )
+        assert inst is not None
+
+    def test_missing_npc_target_is_best_effort(self, world, caplog):
+        rec = ev_stub.create_event(
+            world_id=world, kind=KIND_COMMON, name="x",
+            trigger_config={"type": "interval", "seconds": 60},
+        )
+        # affected_npcs references a nonexistent NPC — fire must not raise.
+        inst = ev_stub.fire_event(
+            rec["id"],
+            payload={"effects": {"npc_mood": 10}},
+            affected_npcs=["npc_phantom"],
+        )
+        assert inst is not None
+
+
+class TestSceneGenerationRoutes:
+    """/v1/xijian/generation/scene/* — read / regenerate instance scenes."""
+
+    def test_get_scene_returns_placeholder(self, client, auth_headers, world):
+        rec = ev_stub.create_event(
+            world_id=world, kind=KIND_COMMON, name="festival",
+            trigger_config={"type": "interval", "seconds": 60},
+            scene_ref_id="scene_x",
+        )
+        inst = ev_stub.fire_event(rec["id"])
+        res = client.get(
+            f"/v1/xijian/generation/scene/{inst['id']}",
+            headers=auth_headers,
+        )
+        assert res.status_code == 200
+        body = res.get_json()
+        assert body["scene"]["status"] == "placeholder"
+
+    def test_get_scene_unknown_instance_404(self, client, auth_headers):
+        res = client.get(
+            "/v1/xijian/generation/scene/inst_nope",
+            headers=auth_headers,
+        )
+        assert res.status_code == 404
+        assert res.get_json()["error"]["code"] == "event_scene_not_found"
+
+    def test_generate_endpoint_regenerates(self, client, auth_headers, world):
+        rec = ev_stub.create_event(
+            world_id=world, kind=KIND_COMMON, name="festival",
+            trigger_config={"type": "interval", "seconds": 60},
+            scene_ref_id="scene_x",
+        )
+        inst = ev_stub.fire_event(rec["id"])
+        res = client.post(
+            f"/v1/xijian/generation/scene/{inst['id']}/generate",
+            headers=auth_headers, json={},
+        )
+        assert res.status_code == 200
+        assert res.get_json()["scene"]["status"] == "placeholder"
+
+    def test_generate_unknown_instance_404(self, client, auth_headers):
+        res = client.post(
+            "/v1/xijian/generation/scene/inst_nope/generate",
+            headers=auth_headers, json={},
+        )
+        assert res.status_code == 404

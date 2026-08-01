@@ -125,6 +125,14 @@ WHITELISTED_STATE_FIELDS: frozenset[str] = frozenset(
 #: operators a comfortable buffer.
 RESET_TOKEN_TTL_SECONDS = 60.0
 
+#: Max concurrently active worlds (spec AC-1: "单实例支持至少 3 个并发
+#: 世界", fixed at 3).  Creating a world that would push the active
+#: count past this limit is rejected with :class:`WorldError` (the
+#: route layer surfaces it as 400 code=world_error); operators archive
+#: (deactivate) an existing world to free a slot.  Inactive worlds do
+#: not count against the limit.
+MAX_WORLDS = 3
+
 
 # ---------------------------------------------------------------------------
 # Exceptions
@@ -220,6 +228,14 @@ def create(
     new_id = world_id or gen_world_id()
     if new_id in state.worlds:
         raise WorldError(f"world id {new_id!r} already exists")
+    # A4.2 AC-1: enforce the 3-concurrent-world limit for active
+    # worlds.  Inactive creations (is_active=False) don't consume a
+    # slot.
+    if is_active and _count_active_worlds() >= MAX_WORLDS:
+        raise WorldError(
+            f"active world limit reached ({MAX_WORLDS}): archive or "
+            "deactivate an existing world first"
+        )
     timestamp = _now_or(now)
     record = _default_record(
         name=name,
@@ -313,6 +329,27 @@ def switch_active(world_id: str) -> dict | None:
     record["updated_at"] = record["last_active_at"]
     _audit(world_id, "switch_active")
     return record
+
+
+# ---------------------------------------------------------------------------
+# Capacity (A4.2 AC-1 — 3 并发世界上限)
+# ---------------------------------------------------------------------------
+
+
+def _count_active_worlds() -> int:
+    """Number of worlds currently marked ``is_active``."""
+    return sum(1 for record in state.worlds.values() if record.get("is_active"))
+
+
+def worlds_capacity() -> dict:
+    """Return the active-world capacity snapshot (max / current / left)."""
+    active = _count_active_worlds()
+    return {
+        "max_worlds": MAX_WORLDS,
+        "active_worlds": active,
+        "slots_left": max(0, MAX_WORLDS - active),
+        "limit_reached": active >= MAX_WORLDS,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -567,6 +604,7 @@ def summary() -> dict:
     return {
         "worlds_total": len(out),
         "worlds_active": sum(1 for w in out if w.get("is_active")),
+        "max_worlds": MAX_WORLDS,
         "worlds": out,
     }
 
@@ -658,12 +696,15 @@ def reset_for_testing() -> None:
 __all__ = [
     # Constants
     "DEFAULT_WORLD_ID", "WHITELISTED_STATE_FIELDS", "RESET_TOKEN_TTL_SECONDS",
+    "MAX_WORLDS",
     # Errors
     "WorldError",
     # CRUD
     "create", "get", "list_all", "update", "delete",
     # Active
     "switch_active",
+    # Capacity
+    "worlds_capacity", "_count_active_worlds",
     # State & views
     "get_state", "update_state", "patch_state_doc", "summary",
     # Reset

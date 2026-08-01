@@ -36,6 +36,7 @@ from xijian_api.stubs import (
     scene_interactions,
     sessions,
     settings,
+    tts_guard,
     transactions,
     travel_modes,
     video,
@@ -124,11 +125,18 @@ def seed_all() -> None:
     mcp_rules.seed_default()
     mcp.seed_default()
     # A5.3 automatic backup — seeds the policy record if
-    # missing; no default snapshots (operators trigger the
-    # first dump via the route or a key event).
-    # A5.3 自动备份 — 若缺失则播种策略记录；无默认快照
+    # missing, registers the A5.4 ``emergency_dump`` handler, and
+    # starts the hourly scheduled-backup thread (if env allows).
+    # No default snapshots (operators trigger the first dump via the
+    # route or a key event).
+    # A5.3 自动备份 — 若缺失则播种策略记录，注册 A5.4 ``emergency_dump``
+    # 处理器，并在环境允许时启动每小时定时备份线程；无默认快照
     # (运营通过路由或关键事件触发首次转储)。
     snapshots.seed_default()
+    # A5.4 TTS-degradation guard — registers the ``degrade_tts``
+    # overload handler so GPU/ANE pressure trips the TTS flag.
+    # A5.4 TTS 降级守卫 — 注册 ``degrade_tts`` 过载处理器。
+    tts_guard.seed_default()
     # citations module holds no state of its own but exposes its
     # helpers on the package for the chat pipeline to import via
     # ``from xijian_api.stubs import citations``.
@@ -181,6 +189,7 @@ __all__ = [
     "safety_rules",
     "scene_interactions",
     "snapshots",
+    "tts_guard",
     "sessions",
     "settings",
     "transactions",

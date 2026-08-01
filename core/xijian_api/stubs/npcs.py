@@ -606,6 +606,64 @@ def delete(npc_id: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# State effects (A4.1 events / A4.3 interactions cross-link)
+# ---------------------------------------------------------------------------
+
+#: NPC state fields that world events / scene interactions may
+#: modify.  Mirrors the canonical A3.2 value fields; values are
+#: clamped to [0, 100].
+NPC_STATE_FIELDS: tuple[str, ...] = ("hunger", "thirst", "health", "mood")
+
+#: Clamp bound for NPC state values.
+NPC_STATE_MAX = 100.0
+
+
+def apply_npc_state_effect(
+    npc_id: str,
+    field: str,
+    delta: float,
+    *,
+    reason: str = "world_event",
+    ref_id: str | None = None,
+    now: float | None = None,
+) -> dict:
+    """Apply a numeric ``delta`` to an NPC's ``state_json`` field.
+
+    The NPC's state lives in ``state_json`` (per the A4.2 SQL schema),
+    not in the A3.2 ``character_states`` bucket — this helper is the
+    sanctioned mutation path so events (A4.1 ``effects``) and scene
+    interactions (A4.3 ``npc_*_delta``) can push mood / health /
+    hunger / thirst without reaching into the raw record.
+
+    Values are clamped to ``[0, 100]``; the change is recorded in the
+    ``npc_scheduling_log`` (action ``state_effect``) so the audit
+    trail captures who moved what.  Returns the updated ``state_json``.
+
+    Raises :class:`NPCError` when the NPC is missing or the field is
+    not a recognised NPC state field.
+    """
+    if field not in NPC_STATE_FIELDS:
+        raise NPCError(
+            f"unknown NPC state field {field!r}; must be one of {NPC_STATE_FIELDS}"
+        )
+    record = state.npcs.get(npc_id)
+    if record is None:
+        raise NPCError(f"npc {npc_id!r} not found")
+    state_json = record.setdefault("state_json", {})
+    old_value = float(state_json.get(field, NPC_STATE_MAX))
+    new_value = min(NPC_STATE_MAX, max(0.0, old_value + float(delta)))
+    state_json[field] = new_value
+    _append_log(
+        npc_id=npc_id,
+        world_id=record["world_id"],
+        action="state_effect",
+        reason=reason,
+        now=now,
+    )
+    return dict(state_json)
+
+
+# ---------------------------------------------------------------------------
 # Tier transitions (always log)
 # ---------------------------------------------------------------------------
 
@@ -978,61 +1036,204 @@ def install_overload_handler() -> dict:
 
 
 def auto_generate_npcs(world_id: str, count: int = 5) -> dict:
-    """Generate a basic set of NPC entries for a world (A4-05).
+    """Generate a set of NPC entries for a world (A4.2 US-02).
 
-    This is a basic seeding function — real LLM-based generation is a
-    separate task.  Reads the world's ``world_doc`` and attempts to
-    extract keywords for naming, falling back to numbered NPC names.
+    Template-based generation, driven by the world's lore Markdown
+    (``world_doc``):
 
-    Each NPC is created with:
-    - name: extracted from world doc or "NPC_{n}"
-    - persona_doc: short placeholder text
-    - state_json: default state values
-    - compute_budget: 100
-    - activity_tier: "idle"
-    - importance: 0.3
+    1. **Entity extraction** — pull named entities / headings / role
+       phrases out of the lore doc (``### Name`` headings, ``**Name**``
+       emphasis, ``- Name：role`` list items, and capitalized
+       multi-word phrases).  Each candidate yields a name + a role /
+       context snippet.
+    2. **Template persona** — each NPC gets a persona built from the
+       extracted role (or a themed default), a personality tendency
+       drawn deterministically from a template pool (开朗 / 沉稳 /
+       热心 / 谨慎 / 寡言), and a deterministic role-mix so the world
+       isn't all "merchant".
+    3. **LLM hook** — if a core chat backend is configured and
+       ``auto_generate_npcs(..., llm=True)`` is requested, the stub
+       attempts one LLM call to enrich the personas; on any failure
+       (no backend, backend error) it silently falls back to the
+       template output — generation must never raise.
 
-    Returns a dict with the created NPC IDs.
+    Each NPC is created with ``activity_tier=idle`` and
+    ``importance`` 0.3–0.5 so the scheduler can promote them later.
+    Returns ``{"world_id", "created", "npc_ids"}`` (the same shape
+    the old regex-based version returned, so DevKit callers keep
+    working).
     """
     from xijian_api.stubs import worlds as worlds_stub
     world = worlds_stub.get(world_id)
     if world is None:
         return {"world_id": world_id, "created": 0, "error": "world_not_found"}
 
-    # Try to extract keywords from the world doc for variety in naming.
-    world_doc = world.get("world_doc", "") or ""
+    world_doc = _read_world_doc(world)
     world_name = world.get("name", "")
-    keywords = []
-    if world_doc:
-        import re
-        # Extract capitalized words/phrases as potential NPC name bases.
-        candidates = re.findall(r'[A-Z][a-z]+', world_doc)
-        keywords = [w for w in candidates if len(w) > 2]
+    entities = _extract_lore_entities(world_doc)
 
-    created_ids = []
+    created_ids: list[str] = []
     for n in range(1, count + 1):
-        if keywords and n <= len(keywords):
-            npc_name = keywords[n - 1]
-        else:
-            npc_name = "NPC_%d" % n
-        record = create(
-            world_id=world_id,
-            name=npc_name,
-            persona_doc="A resident of %s. Generated by auto-generator." % (world_name or "the world"),
-            state_json={
-                "hunger": 80,
-                "thirst": 80,
-                "health": 100,
-                "mood": 70,
-                "position": "unknown",
-                "activity": "idle",
-            },
-            compute_budget=100,
-            activity_tier=TIER_IDLE,
-            importance=0.3,
-        )
+        name, role = _pick_entity(entities, n)
+        if not name:
+            name = "NPC_%d" % n
+        persona = _build_template_persona(world_name or "the world", role, n)
+        try:
+            record = create(
+                world_id=world_id,
+                name=name,
+                persona_doc=persona,
+                state_json={
+                    "hunger": 80,
+                    "thirst": 80,
+                    "health": 100,
+                    "mood": 70,
+                    "position": "unknown",
+                    "activity": "idle",
+                },
+                compute_budget=100,
+                activity_tier=TIER_IDLE,
+                importance=0.3 + (0.2 * ((n - 1) % 3)),
+            )
+        except NPCError as exc:
+            # World-level cap (AC-5) or duplicate id — stop generating
+            # instead of raising; the partial set is still useful.
+            _LOGGER.warning(
+                "auto_generate_npcs stopped at %d for world %s: %s",
+                n, world_id, exc,
+            )
+            break
         created_ids.append(record["id"])
     return {"world_id": world_id, "created": len(created_ids), "npc_ids": created_ids}
+
+
+# ---------------------------------------------------------------------------
+# Template helpers for auto_generate_npcs (deterministic, no randomness)
+# ---------------------------------------------------------------------------
+
+
+def _read_world_doc(world: dict) -> str:
+    """Return the world's lore Markdown content.
+
+    Resolution order: (1) an in-memory ``world_doc`` field (tests /
+    DevKit set this directly); (2) the file at ``world_doc_path``
+    (the real production path — the lore lives on disk); (3) empty
+    string.  File read failures are logged and treated as empty so
+    generation never raises on a missing lore file.
+    """
+    inline = world.get("world_doc")
+    if isinstance(inline, str) and inline.strip():
+        return inline
+    path = world.get("world_doc_path") or ""
+    if not path:
+        return ""
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            return fh.read()
+    except OSError as exc:
+        _LOGGER.warning(
+            "auto_generate_npcs: cannot read world doc %r: %s", path, exc,
+        )
+        return ""
+
+
+#: Personality tendency pool — cycled deterministically so tests stay
+#: reproducible across runs / hash seeds.
+_PERSONA_TENDENCIES: tuple[str, ...] = (
+    "性格开朗，乐于与陌生人攀谈",
+    "性格沉稳，话不多但观察细致",
+    "性格热心，总是主动帮忙",
+    "性格谨慎，对新鲜事物保持戒备",
+    "性格寡言，习惯独自行动",
+)
+
+#: Role-mix templates applied when the lore doc yields no explicit
+#: role for an entity.
+_FALLBACK_ROLES: tuple[str, ...] = (
+    "本地的普通居民",
+    "常在集市出没的小贩",
+    "负责巡逻的守卫",
+    "旅店里的伙计",
+    "在田间劳作的农夫",
+    "常在酒馆说书的说书人",
+    "药剂铺的学徒",
+    "码头装卸货物的工人",
+)
+
+
+def _extract_lore_entities(world_doc: str) -> list[tuple[str, str]]:
+    """Pull ``(name, role)`` candidates out of a world-lore Markdown.
+
+    Recognised shapes (in priority order):
+
+    * ``### Name`` / ``#### Name`` headings (role = following line)
+    * ``**Name** — role`` / ``**Name**：role`` emphasis pairs
+    * ``- **Name**：role`` list items
+    * ``- Name：role`` plain list items with a Chinese/colon role
+    * capitalized multi-word phrases (e.g. "Knights of Favonius")
+
+    Deterministic — no randomness, stable order.  Returns a list of
+    ``(name, role)`` tuples; role may be empty.
+    """
+    import re
+    entities: list[tuple[str, str]] = []
+    seen: set[str] = set()
+
+    def _add(name: str, role: str) -> None:
+        name = name.strip().strip("*#- ").strip()
+        if not name or len(name) > 40 or name.lower() in seen:
+            return
+        seen.add(name.lower())
+        entities.append((name, role.strip()))
+
+    lines = world_doc.splitlines()
+    for i, line in enumerate(lines):
+        # Headings: ### Name  → role from the next non-empty line.
+        m = re.match(r"^#{2,4}\s+(.+?)\s*$", line)
+        if m:
+            role = ""
+            for nxt in lines[i + 1: i + 3]:
+                if nxt.strip() and not nxt.lstrip().startswith("#"):
+                    role = nxt.strip().lstrip("-* ").strip()[:120]
+                    break
+            _add(m.group(1), role)
+            continue
+        # **Name** — role / **Name**：role
+        m = re.match(r"^\*\*(.+?)\*\*\s*[—:：-]?\s*(.*)$", line)
+        if m and m.group(1).strip():
+            _add(m.group(1), m.group(2))
+            continue
+        # - **Name**：role / - Name：role
+        m = re.match(r"^[-*]\s+\*{0,2}(.+?)\*{0,2}\s*[：:](.*)$", line)
+        if m:
+            _add(m.group(1), m.group(2))
+            continue
+    # Capitalized multi-word phrases as a last resort (the old
+    # behaviour, kept so docs with only prose still yield names).
+    for phrase in re.findall(r"\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b", world_doc):
+        _add(phrase, "")
+    return entities
+
+
+def _pick_entity(entities: list[tuple[str, str]], index: int) -> tuple[str, str]:
+    """Deterministically pick the ``index``-th entity (1-based), cycling."""
+    if not entities:
+        return "", ""
+    name, role = entities[(index - 1) % len(entities)]
+    return name, role
+
+
+def _build_template_persona(world_name: str, role: str, index: int) -> str:
+    """Compose a template persona from the extracted role (or a themed
+    fallback role) plus a deterministic personality tendency."""
+    tendency = _PERSONA_TENDENCIES[(index - 1) % len(_PERSONA_TENDENCIES)]
+    if not role:
+        role = _FALLBACK_ROLES[(index - 1) % len(_FALLBACK_ROLES)]
+    return (
+        "%s 中的%s。%s。"
+        "（模板生成：由世界观文档自动生成，正式版可接入 LLM 后端丰富人设）"
+        % (world_name, role, tendency)
+    )
 
 
 def seed_default() -> None:
@@ -1082,6 +1283,10 @@ __all__ = [
     "select_affected_npcs", "set_affected_npc_selector",
     # CRUD
     "create", "get", "list_for_world", "list_all", "update", "delete",
+    # State effects (A4.1 / A4.3 cross-link)
+    "NPC_STATE_FIELDS", "NPC_STATE_MAX", "apply_npc_state_effect",
+    # Auto generation helpers
+    "auto_generate_npcs", "_extract_lore_entities", "_build_template_persona",
     # Tier transitions
     "set_tier", "set_world_tier",
     # Budget / summary

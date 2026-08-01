@@ -985,3 +985,118 @@ class TestAuthCoverage:
         assert res.status_code in (401, 403), (
             f"{method} {path} should require auth, got {res.status_code}"
         )
+
+
+# ---------------------------------------------------------------------------
+# A4.2 — template-based auto NPC generation + state effects
+# ---------------------------------------------------------------------------
+
+
+class TestAutoGenerateNpcs:
+    """A4.2 US-02 — auto NPC generation driven by the world lore doc
+    (template-based; LLM hook documented but not required)."""
+
+    def _make_world(self, tmp_path, lore: str) -> str:
+        from xijian_api.stubs import worlds as worlds_stub
+        doc_path = tmp_path / "lore.md"
+        doc_path.write_text(lore, encoding="utf-8")
+        world = worlds_stub.create(
+            name="Teyvat",
+            world_doc_path=str(doc_path),
+            config_path="c.json",
+            state_doc_path="s.json",
+        )
+        return world["id"]
+
+    def test_generates_from_lore_headings(self, tmp_path):
+        wid = self._make_world(tmp_path, (
+            "# 提瓦特大陆\n"
+            "## 蒙德城\n"
+            "## 璃月港\n"
+            "**琴团长** — 西风骑士团代理团长\n"
+            "- 可莉：火花骑士\n"
+        ))
+        out = npcs_stub.auto_generate_npcs(wid, count=4)
+        assert out["created"] == 4
+        assert len(out["npc_ids"]) == 4
+        names = [npcs_stub.get(i)["name"] for i in out["npc_ids"]]
+        # Headings / emphasis / list items yield real entity names,
+        # not generic NPC_1 fallbacks.
+        assert any(n != "NPC_1" for n in names)
+
+    def test_persona_includes_tendency_and_role(self, tmp_path):
+        wid = self._make_world(tmp_path, "**商人** — 集市里的盐商\n")
+        out = npcs_stub.auto_generate_npcs(wid, count=1)
+        npc = npcs_stub.get(out["npc_ids"][0])
+        # The entity name becomes the NPC name; the role + tendency
+        # flow into the persona.
+        assert npc["name"] == "商人"
+        assert "集市里的盐商" in npc["persona_doc"]
+        assert "性格" in npc["persona_doc"]
+        assert npc["activity_tier"] == npcs_stub.TIER_IDLE
+
+    def test_fallback_names_when_doc_empty(self):
+        from xijian_api.stubs import worlds as worlds_stub
+        world = worlds_stub.create(
+            name="W", world_doc_path="",
+            config_path="c.json", state_doc_path="s.json",
+        )
+        out = npcs_stub.auto_generate_npcs(world["id"], count=3)
+        assert out["created"] == 3
+        names = [npcs_stub.get(i)["name"] for i in out["npc_ids"]]
+        assert names == ["NPC_1", "NPC_2", "NPC_3"]
+
+    def test_unknown_world_returns_error_marker(self):
+        out = npcs_stub.auto_generate_npcs("world_nope", count=3)
+        assert out["error"] == "world_not_found"
+        assert out["created"] == 0
+
+    def test_respects_50_npc_cap(self):
+        from xijian_api.stubs import worlds as worlds_stub
+        world = worlds_stub.create(
+            name="W", world_doc_path="",
+            config_path="c.json", state_doc_path="s.json",
+        )
+        # Fill the world to the cap then ask for more — the create()
+        # cap raises inside auto_generate; the return must not crash.
+        for i in range(npcs_stub.MAX_NPCS_PER_WORLD):
+            npcs_stub.create(world_id=world["id"], name=f"N{i}")
+        out = npcs_stub.auto_generate_npcs(world["id"], count=3)
+        assert out["created"] == 0
+        assert out["npc_ids"] == []
+
+
+class TestApplyNpcStateEffect:
+    """A4.1 events / A4.3 interactions apply npc_* deltas through this."""
+
+    def test_applies_delta_and_clamps(self, world):
+        npc = npcs_stub.create(
+            world_id=world, name="N",
+            state_json={"mood": 50, "health": 90},
+        )
+        npcs_stub.apply_npc_state_effect(npc["id"], "mood", 20)
+        npcs_stub.apply_npc_state_effect(npc["id"], "health", 200)
+        state_json = npcs_stub.get(npc["id"])["state_json"]
+        assert state_json["mood"] == 70.0
+        assert state_json["health"] == 100.0  # clamped
+
+    def test_unknown_field_rejected(self, world):
+        npc = npcs_stub.create(world_id=world, name="N")
+        with pytest.raises(npcs_stub.NPCError, match="unknown NPC state field"):
+            npcs_stub.apply_npc_state_effect(npc["id"], "mana", 5)
+
+    def test_unknown_npc_rejected(self):
+        with pytest.raises(npcs_stub.NPCError, match="not found"):
+            npcs_stub.apply_npc_state_effect("npc_nope", "mood", 5)
+
+    def test_writes_scheduling_log(self, world):
+        npc = npcs_stub.create(world_id=world, name="N")
+        npcs_stub.apply_npc_state_effect(
+            npc["id"], "mood", 5, reason="world_event", ref_id="evt_1",
+        )
+        logs = [
+            e for e in stubs_state.npc_scheduling_log.values()
+            if e.get("npc_id") == npc["id"]
+        ]
+        assert any(e.get("action") == "state_effect" and e.get("reason") == "world_event"
+                   for e in logs)

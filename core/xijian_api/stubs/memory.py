@@ -39,6 +39,7 @@ test boundary.
 
 from __future__ import annotations
 
+import logging
 import math
 import random
 import threading
@@ -48,6 +49,9 @@ from typing import Any
 from xijian_api.stubs import state
 from xijian_api.utils.ids import gen_memory_id
 from xijian_api.utils.time import now_ts
+
+
+_LOGGER = logging.getLogger("xijian_api.memory")
 
 
 # ---------------------------------------------------------------------------
@@ -547,6 +551,102 @@ def forget(*, entry_ids: list[str] | None = None, decay: str | None = None) -> d
 
 
 # ---------------------------------------------------------------------------
+# A5.4 cross-link — compress_memory action
+# ---------------------------------------------------------------------------
+
+#: Default decay threshold for the overload compression pass — entries
+#: below this decay_score are already near-forgotten by the A1.2 decay
+#: model, so dropping them first is the least destructive cleanup.
+COMPRESS_DECAY_THRESHOLD = 0.3
+
+#: Default importance threshold — only entries below this importance
+#: are eligible for the overload pass (never drop high-value
+#: memories to save RAM).
+COMPRESS_IMPORTANCE_THRESHOLD = 0.5
+
+#: Guard against duplicate handler registration (mirrors the npcs /
+#: snapshots cross-link pattern).
+_INSTALLED = False
+
+
+def compress_for_overload(
+    *,
+    decay_threshold: float = COMPRESS_DECAY_THRESHOLD,
+    importance_threshold: float = COMPRESS_IMPORTANCE_THRESHOLD,
+    event: dict | None = None,
+) -> dict:
+    """A5.4 ``compress_memory`` action: drop low-value short-term
+    memories to free RAM.
+
+    Eligible: ``type == "short"`` entries whose ``decay_score`` is
+    below ``decay_threshold`` **and** whose ``importance`` is below
+    ``importance_threshold`` — i.e. memories the A1.2 decay model has
+    already half-forgotten and that aren't important enough to keep.
+    Long-term memories and high-importance short-term memories are
+    never touched by the overload pass.
+
+    Unlike the user-facing :func:`delete` (soft delete + 7-day undo
+    window), this is an **emergency hard removal** — overload
+    compression exists to free RAM right now, so eligible entries are
+    popped straight out of the store (they're already below the decay
+    floor, so the undo window adds little value).
+
+    Returns ``{"removed": n, "by": "overload_compress", ...}``.
+    Never raises.
+    """
+    removed = 0
+    scanned = 0
+    for key in list(state.memory.keys()):
+        entry = state.memory[key]
+        if entry.get("type") != "short":
+            continue
+        scanned += 1
+        try:
+            decay = float(entry.get("decay_score") or 0.0)
+            importance = float(entry.get("importance") or 0.0)
+        except (TypeError, ValueError):
+            continue
+        if decay < decay_threshold and importance < importance_threshold:
+            state.memory.pop(key, None)
+            removed += 1
+    return {
+        "removed": removed,
+        "scanned": scanned,
+        "by": "overload_compress",
+        "decay_threshold": decay_threshold,
+        "importance_threshold": importance_threshold,
+    }
+
+
+def _compress_for_overload_handler(event: dict) -> None:
+    """A5.4 action-handler wrapper — best-effort, never raises."""
+    try:
+        compress_for_overload(event=event)
+    except Exception as exc:  # noqa: BLE001 — registry logs handler errors
+        _LOGGER.warning("compress_memory handler failed: %s", exc)
+
+
+def install_overload_handler() -> dict:
+    """Register the A5.4 ``compress_memory`` action handler (guarded)."""
+    global _INSTALLED
+    if _INSTALLED:
+        return {"action": "compress_memory", "installed": True, "already": True}
+    from xijian_api.stubs.overload import (
+        ACTION_COMPRESS_MEMORY,
+        register_action_handler,
+    )
+    register_action_handler(ACTION_COMPRESS_MEMORY, _compress_for_overload_handler)
+    _INSTALLED = True
+    return {"action": ACTION_COMPRESS_MEMORY, "installed": True}
+
+
+def reset_for_testing() -> None:
+    """Allow re-registration of the overload handler between tests."""
+    global _INSTALLED
+    _INSTALLED = False
+
+
+# ---------------------------------------------------------------------------
 # Seeding
 # ---------------------------------------------------------------------------
 
@@ -568,6 +668,7 @@ def seed_default(character_id: str | None = None) -> None:
     Calling :func:`seed_default` is idempotent — it only seeds when the
     store is empty.
     """
+    install_overload_handler()
     if state.memory:
         return
     target_char = character_id or _DEFAULT_CHARACTER
@@ -912,4 +1013,9 @@ __all__ = [
     "schedule_consolidate",
     "consolidate_status",
     "forget",
+    # A5.4 cross-link
+    "COMPRESS_DECAY_THRESHOLD",
+    "COMPRESS_IMPORTANCE_THRESHOLD",
+    "compress_for_overload",
+    "install_overload_handler",
 ]

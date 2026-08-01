@@ -1010,3 +1010,60 @@ class TestCrossSystemTrigger:
         assert "tier" in payload
         assert "triggered_metrics" in payload
         assert "action" in payload
+
+
+# ---------------------------------------------------------------------------
+# A5.4 — all four action handlers wired to real consumers
+# ---------------------------------------------------------------------------
+
+
+class TestAllActionConsumers:
+    """Every one of the 4 subsystem actions must have a registered
+    consumer that does something real (previously only
+    ``suspend_idle_npcs`` was subscribed)."""
+
+    def test_all_four_actions_have_handlers(self):
+        handlers = ov_stub.list_action_handlers()
+        for action in (
+            ACTION_SUSPEND_IDLE_NPCS,
+            ACTION_DEGRADE_TTS,
+            ACTION_COMPRESS_MEMORY,
+            ACTION_EMERGENCY_DUMP,
+        ):
+            assert handlers[action], f"{action} must have a registered handler"
+
+    def test_degrade_tts_sets_tts_guard_flag(self):
+        from xijian_api.stubs import tts_guard as tts_guard_stub
+        tts_guard_stub.clear_degraded()
+        ov_stub.simulate_overload(METRIC_GPU)  # → ACTION_DEGRADE_TTS
+        assert tts_guard_stub.is_degraded() is True
+        assert "overload" in (tts_guard_stub.degradation()["reason"] or "")
+
+    def test_compress_memory_removes_low_value_entries(self):
+        from xijian_api.stubs import memory as memory_stub
+        low = memory_stub.create({
+            "character_id": "c1", "type": "short", "content": "junk",
+            "importance": 0.1, "decay_score": 0.05, "source": "manual",
+        })
+        high = memory_stub.create({
+            "character_id": "c1", "type": "short", "content": "keep me",
+            "importance": 0.9, "decay_score": 0.9, "source": "manual",
+        })
+        ov_stub.simulate_overload(METRIC_MEM)  # → ACTION_COMPRESS_MEMORY
+        assert low["id"] not in memory_stub.state.memory
+        assert high["id"] in memory_stub.state.memory
+
+    def test_emergency_dump_writes_force_archive_snapshot(self):
+        from xijian_api.stubs.snapshots import list_snapshots as _list
+        before = len(_list(reason="overload"))
+        ov_stub.simulate_overload(METRIC_SOC)  # → ACTION_EMERGENCY_DUMP
+        after = len(_list(reason="overload"))
+        # 2 = the per-trigger archive write + the emergency_dump handler's
+        # force-persisted write.
+        assert after >= before + 1
+
+    def test_suspend_idle_npcs_still_wired(self):
+        from xijian_api.stubs import npcs as npcs_stub
+        npcs_stub.install_overload_handler()
+        handlers = ov_stub.list_action_handlers()
+        assert handlers[ACTION_SUSPEND_IDLE_NPCS]

@@ -893,15 +893,16 @@ def _record_trigger(result: dict, sample: Sample, tier: str) -> None:
         )
     except Exception as exc:  # noqa: BLE001
         _LOGGER.warning("overload snapshot failed: %s", exc)
-    # A5.3 cross-link: also write a backup-snapshot entry
-    # into the unified ``safety_snapshots`` bucket so the
-    # archive half of A5.3 (capacity accounting, prunable,
-    # file-backed) gets the overload event.  This is the
-    # "关键事件触发" path the spec AC-1 mentions; the
-    # protection module's snapshot above is the
-    # rollback-style hand-off, this is the long-term
-    # archive hand-off.  See ``docs/notes.md`` 2026-07-20
-    # for the split rationale.
+    # A5.3 cross-link: write an archive entry into the unified
+    # ``safety_snapshots`` bucket so every overload trigger lands in
+    # the long-term archive (capacity accounting, prunable,
+    # file-backed) — the "关键事件触发" path the spec AC-1 mentions.
+    # This runs for every trigger regardless of the action label; the
+    # ``emergency_dump`` action handler (registered by
+    # ``snapshots.install_overload_handler``) additionally force-writes
+    # an emergency snapshot so a SoC-temp trip is never lost to a
+    # capacity prompt.  See ``docs/notes.md`` 2026-07-20 for the
+    # bucket split rationale.
     try:
         from xijian_api.stubs.snapshots import (
             REASON_OVERLOAD, SCOPE_MIXED, create_snapshot as _backup_snapshot,

@@ -667,7 +667,12 @@ class TestEnforceCapacity:
         snap_stub.set_policy(max_total_bytes=50)
         snap_stub.create_snapshot(
             scope=SCOPE_WORLD, target_id="x",
-            payload={"a": "x" * 5000},
+            # Large enough that even zstd (AC-3, much tighter than the
+            # old zlib stub) can't squeeze it under the 50-byte
+            # ceiling — the whole point of this test is a real overage.
+            # (足够大，即使 zstd (AC-3，比旧 zlib 存根紧凑得多) 也无法
+            # 将其压缩到 50 字节上限以下 —— 本测试的重点是真实超限。)
+            payload={"a": "x" * 200_000},
             reason=REASON_MANUAL, force=True,
         )
         prompt = snap_stub.enforce_capacity()
@@ -1256,3 +1261,125 @@ class TestAuthCoverage:
             "%s %s should require auth, got %d body=%s"
             % (method, path, res.status_code, res.get_data(as_text=True)[:80])
         )
+
+
+# ---------------------------------------------------------------------------
+# A5.3 AC-3 — zstd compression (real zstandard, not zlib-imitation)
+# ---------------------------------------------------------------------------
+
+
+class TestZstdCompression:
+    """The compressor must be zstd (spec AC-3) when ``zstandard`` is
+    installed — the old stub used zlib with a ``.zst`` extension."""
+
+    def test_zstd_available_in_test_env(self):
+        # The CI / test environment (anaconda python) ships zstandard;
+        # when it's missing the stub falls back with a warning, so we
+        # skip rather than fail on such hosts.
+        if not snap_stub._ZSTD_AVAILABLE:
+            pytest.skip("zstandard not installed in this environment")
+        import zstandard  # noqa: F401
+        assert snap_stub._ZSTD_AVAILABLE is True
+
+    def test_compressor_is_actually_zstd(self):
+        if not snap_stub._ZSTD_AVAILABLE:
+            pytest.skip("zstandard not installed in this environment")
+        # The compressed bytes must be a real zstd frame (magic 0x28B52FFD).
+        compressed, _orig, _size = snap_stub._compress_bytes({"a": 1})
+        assert compressed[:4] == b"\x28\xb5\x2f\xfd"
+
+    def test_zstd_ratio_well_below_target(self):
+        payload = {"key": "x" * 10_000}
+        compressed, original, compressed_size = snap_stub._compress_bytes(payload)
+        assert compressed_size < original * snap_stub.COMPRESSION_RATIO_TARGET
+        # Real zstd should beat the old zlib stub's ratio on the same
+        # payload shape (informational, not a hard gate).
+        import zlib
+        zlib_size = len(zlib.compress(
+            __import__("pickle").dumps(payload, protocol=__import__("pickle").HIGHEST_PROTOCOL),
+            level=6,
+        ))
+        assert compressed_size <= zlib_size
+
+
+# ---------------------------------------------------------------------------
+# A5.3 AC-1 — 每小时定时自动备份 (scheduled backups)
+# ---------------------------------------------------------------------------
+
+
+class TestScheduledBackup:
+    """The background scheduler thread + the one-shot pass it drives."""
+
+    def test_run_scheduled_backup_creates_scheduled_snapshot(self):
+        before = snap_stub.list_snapshots(reason=snap_stub.REASON_SCHEDULED)
+        result = snap_stub.run_scheduled_backup()
+        assert result["created"] is True
+        assert result["reason"] == snap_stub.REASON_SCHEDULED
+        after = snap_stub.list_snapshots(reason=snap_stub.REASON_SCHEDULED)
+        assert len(after) == len(before) + 1
+        snap = after[0]
+        assert snap["scope"] == snap_stub.SCOPE_MIXED
+        assert "worlds" in snap["payload"]
+
+    def test_policy_interval_used_by_scheduler(self):
+        snap_stub.set_policy(backup_interval_seconds=7200)
+        assert snap_stub._current_interval() == 7200.0
+        status = snap_stub.scheduler_status()
+        assert status["policy_interval_s"] == 7200.0
+
+    def test_scheduler_start_stop_lifecycle(self, monkeypatch):
+        monkeypatch.setenv("XIJIAN_BACKUP_SCHEDULER", "1")
+        started = snap_stub.start_scheduler()
+        try:
+            assert started["started"] is True
+            assert snap_stub.scheduler_status()["running"] is True
+            # Idempotent.
+            again = snap_stub.start_scheduler()
+            assert again["started"] is False
+            assert again["reason"] == "already_running"
+        finally:
+            stopped = snap_stub.stop_scheduler()
+            assert stopped["stopped"] is True
+            assert snap_stub.scheduler_status()["running"] is False
+
+    def test_scheduler_thread_fires_scheduled_backup(self, monkeypatch):
+        monkeypatch.setenv("XIJIAN_BACKUP_SCHEDULER", "1")
+        monkeypatch.setenv("XIJIAN_BACKUP_INTERVAL_SECONDS", "1")
+        snap_stub.start_scheduler()
+        try:
+            deadline = time.time() + 5.0
+            while time.time() < deadline:
+                if snap_stub.list_snapshots(reason=snap_stub.REASON_SCHEDULED):
+                    break
+                time.sleep(0.1)
+            assert snap_stub.list_snapshots(reason=snap_stub.REASON_SCHEDULED), \
+                "scheduler thread should have written a scheduled snapshot"
+        finally:
+            snap_stub.stop_scheduler()
+
+    def test_env_zero_disables_scheduler(self, monkeypatch):
+        monkeypatch.setenv("XIJIAN_BACKUP_SCHEDULER", "0")
+        result = snap_stub.start_scheduler()
+        assert result == {"started": False, "reason": "disabled_by_env"}
+
+
+class TestEmergencyDumpHandler:
+    """A5.4 ``emergency_dump`` action → force-persisted archive snapshot."""
+
+    def test_handler_writes_force_snapshot(self):
+        before = len(snap_stub.list_snapshots(reason=snap_stub.REASON_OVERLOAD))
+        snap_stub._emergency_dump_handler({
+            "id": "evt_1", "tier": "strict",
+            "triggered_metrics": ["soc_temp"], "action": "emergency_dump",
+        })
+        after = snap_stub.list_snapshots(reason=snap_stub.REASON_OVERLOAD)
+        assert len(after) == before + 1
+        assert after[0]["target_id"] == "evt_1"
+
+    def test_handler_installed(self):
+        from xijian_api.stubs import overload as ov_stub
+        from xijian_api.stubs import snapshots as snap_stub_mod
+        # Re-install (conftest keeps it wired, but be explicit).
+        snap_stub_mod.install_overload_handler()
+        handlers = ov_stub.list_action_handlers()
+        assert handlers[ov_stub.ACTION_EMERGENCY_DUMP]

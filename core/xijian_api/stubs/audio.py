@@ -77,6 +77,19 @@ def synth(
     if config is not None:
         requested = config.backends.tts.default or None
         fallbacks = config.backends.tts.fallbacks or ()
+    # A5.4 cross-link: when the overload guard has degraded TTS, note
+    # it on the synthesis path so operators can correlate degraded
+    # audio with overload events.  The actual voice-quality switch is
+    # a backend concern; the flag is the authoritative signal.
+    try:
+        from xijian_api.stubs import tts_guard
+        if tts_guard.is_degraded():
+            current_app.logger.warning(
+                "TTS synthesis while degraded (overload): %r",
+                tts_guard.degradation(),
+            )
+    except Exception:  # noqa: BLE001 — guard must never break synthesis
+        pass
     try:
         backend = get_tts_backend(requested, fallbacks)
     except AIBackendUnavailable as exc:

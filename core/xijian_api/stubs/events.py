@@ -71,11 +71,27 @@ Scene generation
 ================
 
 Per US-A4.1-03 ("部分事件会触发场景生成"), event definitions carry a
-``scene_ref_id`` and a derived ``needs_scene`` flag.  This module
-**does not** call into the image / 3D pipeline — it just records the
-flag and the ref id on the fired instance.  Downstream callers (the
-UI scene manager, A2 image routes that already exist as stubs) read
-``world_event_instances[instance_id]["scene_ref_id"]`` and act on it.
+``scene_ref_id`` and a derived ``needs_scene`` flag.  When such an
+event fires, :func:`fire_event` attaches a ``scene`` record to the
+instance (AC-1): it first probes the core AI image-generation stack
+(:func:`_try_core_scene_generation`); if no backend is available or
+it fails, it degrades to a template placeholder scene (AC-2 — never
+raises, never blocks the fire).  The placeholder carries a clear
+``status="placeholder"`` marker so the UI can render a placeholder
+image + text description instead of a blank scene.  Scene records can
+be re-generated on demand via :func:`ensure_scene_for_instance` /
+the ``/v1/xijian/generation/scene/<instance_id>/generate`` route.
+
+Event effects
+=============
+
+Per A4.1 ("事件 → 角色/世界状态写入"), a fired instance's merged
+``payload.effects`` dict is applied to live state by
+:func:`_apply_event_effects`: ``npc_*`` deltas land on every affected
+NPC's ``state_json``, ``character_*`` deltas land on the target
+character's A3.2 state, and ``world_state`` is merged into the
+world's environment.  Unsupported effect keys are logged with a
+warning instead of raising.
 
 Test surface
 ============
@@ -161,6 +177,16 @@ INSTANCE_KEEP_TOTAL = 2000
 #: Env flag names.
 _SCHED_ENV_FLAG = "XIJIAN_EVENT_SCHEDULER"
 _SCHED_INTERVAL_ENV_FLAG = "XIJIAN_EVENT_SCHEDULER_SECONDS"
+
+#: Scene-generation env flag.  ``0`` skips probing the core image /
+#: 3D backend entirely and goes straight to the placeholder scene
+#: (deterministic for CI / tests).  Default: probe the backend once
+#: per event — see :func:`_ensure_scene_generated`.
+_SCENE_GEN_ENV_FLAG = "XIJIAN_SCENE_GENERATION"
+
+#: Scene-ref for the AC-2 placeholder fallback.  Kept in the instance
+#: payload so the UI can render a "placeholder" badge.
+PLACEHOLDER_SCENE_REF = "placeholder_scene"
 
 #: Supported comparison operators for ``condition`` triggers.
 _CONDITION_OPS: tuple[str, ...] = (
@@ -700,6 +726,39 @@ def fire_event(
             "tags": ["world_event", event_kind, event_id, "user_affected"],
         })
 
+    # A4.1 AC-1/AC-2: events that need a scene get one generated now
+    # (real backend when available, template placeholder otherwise,
+    # never raising — the instance is already committed).
+    if instance.get("needs_scene"):
+        try:
+            _ensure_scene_generated(instance, record)
+        except Exception as exc:  # noqa: BLE001 — generation must never break firing
+            _LOGGER.warning(
+                "scene generation for event %s failed unexpectedly: %s",
+                event_id, exc,
+            )
+            try:
+                instance["scene"] = _placeholder_scene(instance, record)
+            except Exception:  # noqa: BLE001 — last-resort inline placeholder
+                instance["scene"] = {
+                    "status": "placeholder",
+                    "ref_id": instance.get("scene_ref_id") or PLACEHOLDER_SCENE_REF,
+                    "title": record.get("name", event_id),
+                    "description": "占位场景（场景生成异常降级，AC-2）。",
+                    "image_url": f"placeholder://scene/{instance.get('scene_ref_id') or 'default'}",
+                    "generated_at": instance.get("fired_at"),
+                }
+
+    # A4.1 effects: parse the merged payload's ``effects`` and apply
+    # them to the affected NPCs / world state / character state.
+    # Best-effort — unsupported effect keys are logged, never raised.
+    try:
+        _apply_event_effects(instance, record)
+    except Exception as exc:  # noqa: BLE001
+        _LOGGER.warning(
+            "event effects application for %s failed: %s", event_id, exc
+        )
+
     return instance
 
 
@@ -749,6 +808,270 @@ def _trim_instances() -> None:
     excess = len(instances) - INSTANCE_KEEP_TOTAL
     for iid in sorted_ids[:excess]:
         instances.pop(iid, None)
+
+
+# ---------------------------------------------------------------------------
+# Scene generation (A4.1 US-A4.1-03 / AC-1 / AC-2)
+# ---------------------------------------------------------------------------
+
+
+def _scene_prompt(instance: dict, event_record: dict) -> str:
+    """Compose a generation prompt from the event definition."""
+    name = event_record.get("name", instance.get("event_id", "event"))
+    description = event_record.get("description") or name
+    kind = event_record.get("kind", "common")
+    return (
+        f"{name}（{kind} 类事件）：{description}。"
+        f"请生成该事件对应的场景画面。"
+    )
+
+
+def _try_core_scene_generation(instance: dict, event_record: dict) -> dict | None:
+    """Attempt a real scene generation through the core AI stack.
+
+    Returns a scene record when a generation backend is available and
+    the call succeeds; ``None`` otherwise (no backend configured,
+    backend raised, or ``XIJIAN_SCENE_GENERATION=0``).  The caller
+    degrades to the placeholder (AC-2) when this returns ``None``.
+
+    Note: this probes the A2 image-generation stack (the same
+    ``ai.registry.get_image_backend`` the ``/v1/images/*`` routes use).
+    The event stub does **not** own image storage — the returned
+    record records the generation attempt + prompt; the A2 routes own
+    the actual asset bytes.
+    """
+    if os.environ.get(_SCENE_GEN_ENV_FLAG) == "0":
+        return None
+    try:
+        from xijian_api.ai.registry import get_image_backend
+        backend = get_image_backend()
+        if backend is None:
+            return None
+        try:
+            results = backend.generate(
+                _scene_prompt(instance, event_record),
+                model_id="scene-gen",
+                n=1,
+                size="1024x1024",
+            )
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.warning(
+                "core scene generation for %s failed: %s",
+                instance.get("event_id"), exc,
+            )
+            return None
+        if not results:
+            return None
+        return {
+            "status": "generated",
+            "ref_id": instance.get("scene_ref_id"),
+            "title": event_record.get("name", "event"),
+            "description": event_record.get("description") or "",
+            "prompt": _scene_prompt(instance, event_record),
+            "backend": getattr(backend, "name", "core"),
+            "generated": bool(results),
+            "image_url": None,  # 真实图片字节由 A2 image 路由落盘
+        }
+    except Exception as exc:  # noqa: BLE001 — probe failure ⇒ degrade
+        _LOGGER.warning(
+            "scene generation backend probe failed for %s: %s",
+            instance.get("event_id"), exc,
+        )
+        return None
+
+
+def _placeholder_scene(instance: dict, event_record: dict) -> dict:
+    """AC-2 fallback: a template placeholder scene (no backend needed).
+
+    Guaranteed to succeed — this is the degradation target when the
+    generation backend is missing or failed.  Records a clear
+    ``status=placeholder`` so the UI can render a placeholder image /
+    text description instead of a blank scene.
+    """
+    name = event_record.get("name", instance.get("event_id", "event"))
+    description = event_record.get("description") or name
+    return {
+        "status": "placeholder",
+        "ref_id": instance.get("scene_ref_id") or PLACEHOLDER_SCENE_REF,
+        "title": f"{name} · 占位场景",
+        "description": (
+            f"占位场景描述：{description}。"
+            "（AC-2 降级：场景生成后端不可用，先用占位图/文字描述代替，"
+            "不会中断事件流程）"
+        ),
+        "image_url": f"placeholder://scene/{instance.get('scene_ref_id') or 'default'}",
+        "generated_at": instance.get("fired_at"),
+    }
+
+
+def _ensure_scene_generated(instance: dict, event_record: dict) -> dict:
+    """Attach a scene record to a fired instance (A4.1 AC-1/AC-2).
+
+    Order: (1) real core generation backend if available; (2)
+    template placeholder otherwise; (3) on any failure the placeholder
+    is used — this function never raises.
+    """
+    scene = _try_core_scene_generation(instance, event_record)
+    if scene is None:
+        scene = _placeholder_scene(instance, event_record)
+    instance["scene"] = scene
+    return scene
+
+
+def get_instance_scene(instance_id: str) -> dict | None:
+    """Return the scene record attached to a fired instance, or ``None``
+    if the instance doesn't exist or didn't need a scene."""
+    instance = state.world_event_instances.get(instance_id)
+    if instance is None:
+        return None
+    return instance.get("scene")
+
+
+def ensure_scene_for_instance(instance_id: str) -> dict | None:
+    """(Re)generate the scene for a fired instance; returns the scene.
+
+    Used by ``POST /v1/xijian/generation/scene/<instance_id>/generate``
+    so a caller can retry after a placeholder was recorded.  Returns
+    ``None`` when the instance doesn't exist or didn't need a scene.
+    """
+    instance = state.world_event_instances.get(instance_id)
+    if instance is None or not instance.get("needs_scene"):
+        return None
+    record = state.world_events.get(instance.get("event_id"))
+    try:
+        return _ensure_scene_generated(instance, record or {})
+    except Exception as exc:  # noqa: BLE001
+        _LOGGER.warning(
+            "scene regeneration for instance %s failed: %s", instance_id, exc
+        )
+        instance["scene"] = _placeholder_scene(instance, record or {})
+        return instance["scene"]
+
+
+# ---------------------------------------------------------------------------
+# Event effects → character / NPC / world state (A4.1)
+# ---------------------------------------------------------------------------
+
+#: Effect key prefix → NPC state field.  ``npc_mood`` → mood, etc.
+_NPC_EFFECT_FIELDS: dict[str, str] = {
+    "npc_mood": "mood",
+    "npc_health": "health",
+    "npc_hunger": "hunger",
+    "npc_thirst": "thirst",
+}
+
+#: Effect key → character_state field (applied via the A3.2 API).
+_CHARACTER_EFFECT_FIELDS: dict[str, str] = {
+    "character_mood": "mood",
+    "character_health": "health",
+    "character_hunger": "hunger",
+    "character_thirst": "thirst",
+    "character_stamina": "stamina",
+}
+
+
+def _apply_event_effects(instance: dict, event_record: dict) -> list[str]:
+    """Apply ``payload.effects`` from a fired event to live state.
+
+    Supported effect keys (deltas applied to the *current* value):
+
+    * ``npc_mood`` / ``npc_health`` / ``npc_hunger`` / ``npc_thirst``
+      → applied to every ``affected_npcs`` entry via
+      :func:`xijian_api.stubs.npcs.apply_npc_state_effect`.
+    * ``character_mood`` / ``character_health`` / ``character_hunger``
+      / ``character_thirst`` / ``character_stamina`` → applied to the
+      character named by ``effects['character_id']`` (or
+      ``target_character_id``) via the A3.2 character_state API.
+    * ``world_state`` (dict) → merged into the world's environment
+      (``weather`` / ``time_of_day`` / ``light_level`` / ``env_meta``).
+
+    Unsupported effect keys are logged with a warning (never raised) so
+    operators can see what the event engine didn't understand.  Returns
+    the list of applied effect keys (empty when none were applicable).
+    """
+    from xijian_api.stubs import npcs as npcs_stub
+    from xijian_api.stubs import character_state as cs_stub
+    from xijian_api.stubs import world_environment as env_stub
+
+    payload = instance.get("payload") or {}
+    effects = payload.get("effects")
+    if not isinstance(effects, dict) or not effects:
+        return []
+
+    event_id = instance.get("event_id")
+    world_id = instance.get("world_id")
+    affected_npcs = instance.get("affected_npcs") or []
+    applied: list[str] = []
+
+    for key, delta in effects.items():
+        # --- NPC effects → every affected NPC ---
+        if key in _NPC_EFFECT_FIELDS:
+            field = _NPC_EFFECT_FIELDS[key]
+            for npc_id in affected_npcs:
+                try:
+                    npcs_stub.apply_npc_state_effect(
+                        npc_id, field, delta,
+                        reason="world_event", ref_id=event_id,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    _LOGGER.warning(
+                        "event effect %s on npc %s failed: %s", key, npc_id, exc,
+                    )
+            applied.append(key)
+            continue
+        # --- character effects → A3.2 character_state ---
+        if key in _CHARACTER_EFFECT_FIELDS:
+            target = effects.get("character_id") or effects.get("target_character_id")
+            if not target:
+                _LOGGER.warning(
+                    "event effect %s needs effects['character_id'] / "
+                    "target_character_id, but none was given — skipped", key,
+                )
+                continue
+            field = _CHARACTER_EFFECT_FIELDS[key]
+            try:
+                record = cs_stub.get_or_init_state(target)
+                current = float(record.get(field, 0.0))
+                if field == "stamina":
+                    cs_stub.apply_extra_field_change(
+                        target, field, current + float(delta),
+                        reason="world_event", ref_id=event_id,
+                    )
+                else:
+                    cs_stub.apply_field_change(
+                        target, field, current + float(delta),
+                        reason="world_event", ref_id=event_id,
+                    )
+            except Exception as exc:  # noqa: BLE001
+                _LOGGER.warning(
+                    "event effect %s on character %s failed: %s", key, target, exc,
+                )
+            applied.append(key)
+            continue
+        # --- world_state dict → world environment ---
+        if key == "world_state":
+            if isinstance(delta, dict) and world_id:
+                try:
+                    env_stub.patch_environment(world_id, delta)
+                except Exception as exc:  # noqa: BLE001
+                    _LOGGER.warning(
+                        "event effect world_state on %s failed: %s", world_id, exc,
+                    )
+                applied.append(key)
+            else:
+                _LOGGER.warning(
+                    "event effect world_state must be a dict (and the instance "
+                    "must have a world_id) — skipped",
+                )
+            continue
+        # --- everything else ---
+        _LOGGER.warning(
+            "unsupported event effect %r on event %s — ignored "
+            "(supported: %s, character_*, world_state)",
+            key, event_id, sorted(_NPC_EFFECT_FIELDS),
+        )
+
+    return applied
 
 
 # ---------------------------------------------------------------------------
@@ -1155,6 +1478,17 @@ __all__ = [
     "get_instance",
     "list_instances",
     "resolve_instance",
+    # Scene generation (A4.1 AC-1/AC-2)
+    "PLACEHOLDER_SCENE_REF",
+    "_ensure_scene_generated",
+    "_placeholder_scene",
+    "_try_core_scene_generation",
+    "get_instance_scene",
+    "ensure_scene_for_instance",
+    # Event effects (A4.1)
+    "_apply_event_effects",
+    "_NPC_EFFECT_FIELDS",
+    "_CHARACTER_EFFECT_FIELDS",
     # Category toggles
     "set_category_disabled",
     "is_category_disabled",

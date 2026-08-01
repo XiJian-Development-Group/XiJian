@@ -68,6 +68,7 @@ Test surface
 from __future__ import annotations
 
 import logging
+import os
 import re
 from typing import Any
 
@@ -359,6 +360,49 @@ def match_action_rules(
 
 
 # ---------------------------------------------------------------------------
+# A5.2 SQL 落库决策 (mcp_action_blacklist)
+# ---------------------------------------------------------------------------
+#
+# Spec §A5.2 lists ``mcp_action_blacklist`` as a SQL table.  In this
+# stub the rulebook lives in ``state.mcp_rules`` — a :class:`DictDB`
+# bucket that the :mod:`xijian_api.store` layer persists **write-through**
+# to SQLite (table ``store_mcp_rules`` inside ``~/.xijian/xijian.db``,
+# overridable via ``XIJIAN_DB_PATH``).  That means the blacklist rules
+# created through this module are already on disk — the "SQL 落库"
+# requirement is satisfied by the store layer, and a rule created in
+# one process is visible to the next (the cache reloads from SQLite
+# on first access / after :meth:`DictDB._invalidate_cache`).
+#
+# Decision: keep the DictDB bucket as the single source of truth.
+# A dedicated ``mcp_action_blacklist`` table with foreign keys /
+# migrations is deferred to the正式版 (production) storage layer;
+# :func:`persistence_info` documents the mapping for operators so
+# nothing about the on-disk layout is implicit.
+
+
+def persistence_info() -> dict:
+    """Document where the rulebook is persisted on disk (A5.2).
+
+    Returns the SQLite table + database path backing
+    ``state.mcp_rules``, plus the mapping note for the spec's
+    ``mcp_action_blacklist`` table.  Read-only — never mutates.
+    """
+    from xijian_api import store
+    db_path = os.environ.get(store.ENV_DB_PATH, str(store.DEFAULT_DB_PATH))
+    return {
+        "table": f"store_{state.mcp_rules.bucket}",
+        "db_path": db_path,
+        "engine": "sqlite-write-through-DictDB",
+        "spec_table": "mcp_action_blacklist",
+        "mapping_note": (
+            "spec 的 mcp_action_blacklist 表映射到 state.mcp_rules "
+            "DictDB（SQLite 表 store_mcp_rules，写透持久化）。"
+            "独立表 + 迁移留给正式版存储层。"
+        ),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Lifecycle
 # ---------------------------------------------------------------------------
 
@@ -395,6 +439,8 @@ __all__ = [
     "create", "get", "list_active", "list_all", "update", "delete",
     # Hot path
     "match_action_rules",
+    # A5.2 SQL 落库决策
+    "persistence_info",
     # Lifecycle
     "seed_default", "reset_for_testing",
 ]

@@ -41,6 +41,15 @@ os.environ.setdefault("XIJIAN_EVENT_SCHEDULER", "0")
 # The NPC tick thread (A4.2) — same posture as A3.2 / A4.1.
 # (NPC 滴答线程 (A4.2) —— 同 A3.2 / A4.1 姿态。)
 os.environ.setdefault("XIJIAN_NPC_TICK", "0")
+# The A5.3 scheduled-backup thread — same posture as the others.
+# (A5.3 定时备份线程 —— 与其它线程相同姿态。)
+os.environ.setdefault("XIJIAN_BACKUP_SCHEDULER", "0")
+# A4.1 scene generation: skip probing the core image backend so
+# event-fire tests are deterministic (placeholder path, AC-2).
+# Individual tests opt in via ``monkeypatch``.
+# (A4.1 场景生成：跳过核心图像后端探测，使事件触发测试确定
+# (占位路径 AC-2)；单个测试通过 ``monkeypatch`` 选择加入。)
+os.environ.setdefault("XIJIAN_SCENE_GENERATION", "0")
 # The A7 proactive-contact scan thread — same posture as the others.
 # (A7 主动发起扫描线程 —— 与其他后台线程同姿态，默认关闭。)
 os.environ.setdefault("XIJIAN_INITIATED_TICK", "0")
@@ -137,6 +146,21 @@ def _reset_state(app):
         # 重新安装 A4.2 → A5.4 交叉链接，以便 ``test_xijian_npcs`` 中的
         # TestOverloadHandler 用例看到 ``_suspend_for_overload`` 处理器。幂等。)
         npcs_stub.install_overload_handler()
+        # A5.4 cross-links for the other three actions — same pattern:
+        # the registry was cleared above, so reset the guarded flags and
+        # re-install each consumer (memory compress / snapshots emergency
+        # dump / tts degrade).
+        # (A5.4 其余三个动作的交叉链接 —— 同样模式：注册表已被清空，
+        # 因此重置受保护标志并重新安装每个消费者。)
+        from xijian_api.stubs import memory as memory_stub
+        memory_stub.reset_for_testing()
+        memory_stub.install_overload_handler()
+        from xijian_api.stubs import snapshots as snapshots_stub
+        snapshots_stub.reset_for_testing()
+        snapshots_stub.install_overload_handler()
+        from xijian_api.stubs import tts_guard as tts_guard_stub
+        tts_guard_stub.reset_for_testing()
+        tts_guard_stub.install_overload_handler()
         from xijian_api.stubs import world_audit as wa_stub
         wa_stub.reset_for_testing()
         from xijian_api.stubs import world_compute_config as wcc_stub

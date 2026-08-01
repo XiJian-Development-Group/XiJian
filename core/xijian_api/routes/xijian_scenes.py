@@ -34,6 +34,8 @@ Travel endpoints
 * ``PATCH  /v1/xijian/scenes/travel-modes/<id>``    — patch
 * ``DELETE /v1/xijian/scenes/travel-modes/<id>``    — delete
 * ``POST   /v1/xijian/scenes/travel-modes/<id>/estimate`` — cost preview
+* ``POST   /v1/xijian/scenes/travel-modes/<id>/execute`` — real trip
+  (AC-3: stamina actually deducted from the acting character)
 
 Scene-interaction endpoints
 ===========================
@@ -276,6 +278,35 @@ def estimate_travel_mode(mode_id: str):
     except tm_stub.TravelModeError as exc:
         raise _err_from_stub(exc, default_code="travel_mode_error")
     return jsonify({"mode_id": mode_id, "preview": preview})
+
+
+@bp.post("/v1/xijian/scenes/travel-modes/<mode_id>/execute")
+def execute_travel_mode(mode_id: str):
+    """Execute a trip with this travel mode — A4.3 AC-3 real deduction.
+
+    Body: ``{"character_id": ..., "from_poi_id"?, "to_poi_id"?,
+    "base_seconds"?, "random_roll"?, "fire_event_id"?}``.  The
+    character's stamina is actually deducted (reason ``travel``) and
+    a ``travel.execute`` audit row is written; the response carries
+    the post-deduction ``stamina_remaining``.
+    """
+    body = _require_json(optional=True)
+    if tm_stub.get(mode_id) is None:
+        raise ApiError(404, f"travel mode {mode_id!r} not found",
+                       "not_found_error", code="travel_mode_not_found")
+    try:
+        result = tm_stub.execute_trip(
+            mode_id,
+            character_id=body.get("character_id"),
+            from_poi_id=body.get("from_poi_id"),
+            to_poi_id=body.get("to_poi_id"),
+            base_seconds=float(body.get("base_seconds", tm_stub.DEFAULT_BASE_TRAVEL_SECONDS)),
+            random_roll=body.get("random_roll"),
+            fire_event_id=body.get("fire_event_id"),
+        )
+    except tm_stub.TravelModeError as exc:
+        raise _err_from_stub(exc, default_code="travel_mode_error")
+    return jsonify(result)
 
 
 # ===========================================================================

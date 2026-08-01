@@ -18,8 +18,11 @@ Semantics
   ``[0.0, 1.0]``.
 
 These three numbers feed straight into the trip planner (A4.3 US-01 /
-AC-3).  We keep the data model tiny so the engine code that uses it
-stays simple.
+AC-3).  :func:`estimate_trip` is the **pure preview** (no mutation);
+:func:`execute_trip` performs the actual trip — it deducts the
+``stamina_cost`` from the acting character's A3.2 state (reason
+``travel``), writes a ``travel.execute`` audit row, and optionally
+fires an A4.1 event when the trip's ``event_chance`` roll triggers.
 
 Test surface
 ============
@@ -32,15 +35,17 @@ Pure helpers (no I/O):
 * :func:`estimate_trip` — combines the three knobs to produce a
   pre-flight cost preview.
 
-Side-effecting functions (CRUD):
+Side-effecting functions (CRUD + execution):
 
 * :func:`create` / :func:`get` / :func:`list_for_world` /
   :func:`list_all` / :func:`update` / :func:`delete`
+* :func:`execute_trip` — real stamina deduction (AC-3)
 * :func:`seed_default` / :func:`reset_for_testing`
 """
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 from xijian_api.stubs import state
@@ -155,6 +160,118 @@ def estimate_trip(
             raise TravelModeError("random_roll must be in [0, 1]")
         out["event_triggered"] = float(random_roll) < chance
     return out
+
+
+def execute_trip(
+    mode_id: str,
+    *,
+    character_id: str,
+    from_poi_id: str | None = None,
+    to_poi_id: str | None = None,
+    base_seconds: float = DEFAULT_BASE_TRAVEL_SECONDS,
+    random_roll: float | None = None,
+    fire_event_id: str | None = None,
+    now: float | None = None,
+) -> dict:
+    """Execute a trip with a travel mode (A4.3 AC-3 — 真实扣减).
+
+    Unlike :func:`estimate_trip` (pure preview), this **actually
+    mutates state**:
+
+    1. Computes the trip via :func:`estimate_trip`.
+    2. Deducts the mode's ``stamina_cost`` from the acting
+       character's A3.2 state (field ``stamina``, reason
+       ``"travel"``, ref = mode id) — the deduction is clamped to
+       ``[0, 100]`` and logged in ``character_state_log``.
+    3. Writes a ``travel.execute`` row to the world audit log so the
+       trip is traceable (A4.3 AC-2).
+    4. If the trip's ``event_chance`` roll triggered (``random_roll``
+       given) and ``fire_event_id`` was provided, best-effort fires
+       that event on the A4.1 bus.
+
+    Returns the trip result including the post-deduction stamina.
+    Raises :class:`TravelModeError` for unknown modes / missing
+    character id / bad numbers.
+    """
+    record = get_required(mode_id)
+    if not isinstance(character_id, str) or not character_id:
+        raise TravelModeError("character_id is required")
+
+    preview = estimate_trip(
+        record,
+        base_seconds=base_seconds,
+        random_roll=random_roll,
+    )
+    stamina_cost = float(preview["stamina_cost"])
+    moment = float(now) if now is not None else float(time.time())
+
+    # AC-3: real stamina deduction on the character's A3.2 state.
+    from xijian_api.stubs import character_state as cs_stub
+    state_record = cs_stub.get_or_init_state(character_id)
+    current_stamina = float(state_record.get("stamina", 100.0))
+    cs_stub.apply_extra_field_change(
+        character_id,
+        "stamina",
+        current_stamina - stamina_cost,
+        reason="travel",
+        ref_id=mode_id,
+        now=moment,
+    )
+    stamina_remaining = float(
+        cs_stub.get_state(character_id).get("stamina", 0.0)
+    )
+
+    # A4.3 AC-2: audit trail.
+    try:
+        from xijian_api.stubs import world_audit as wa_stub
+        wa_stub.record(
+            world_id=record["world_id"],
+            action="travel.execute",
+            actor="user" if character_id else "system",
+            payload={
+                "mode_id": mode_id,
+                "mode_name": record.get("name"),
+                "character_id": character_id,
+                "from_poi_id": from_poi_id,
+                "to_poi_id": to_poi_id,
+                "duration_seconds": preview["duration_seconds"],
+                "stamina_cost": stamina_cost,
+                "stamina_remaining": stamina_remaining,
+                "event_triggered": preview.get("event_triggered", False),
+            },
+            now=moment,
+        )
+    except Exception:  # noqa: BLE001 — audit must never break the trip
+        pass
+
+    # A4.1 cross-link: best-effort event fire on the road.
+    event_triggered = bool(preview.get("event_triggered", False))
+    if event_triggered and fire_event_id:
+        try:
+            from xijian_api.stubs.events import fire_event
+            fire_event(
+                fire_event_id,
+                payload={
+                    "mode_id": mode_id,
+                    "character_id": character_id,
+                    "source": "travel",
+                    "from_poi_id": from_poi_id,
+                    "to_poi_id": to_poi_id,
+                },
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
+    return {
+        "mode_id": mode_id,
+        "world_id": record["world_id"],
+        "character_id": character_id,
+        "preview": preview,
+        "stamina_cost": stamina_cost,
+        "stamina_remaining": stamina_remaining,
+        "event_triggered": event_triggered,
+        "audited": True,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -300,6 +417,7 @@ __all__ = [
     "update",
     "delete",
     "estimate_trip",
+    "execute_trip",
     "seed_default",
     "reset_for_testing",
 ]

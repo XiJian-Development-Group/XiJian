@@ -31,9 +31,11 @@ Trigger semantics
 
 * :func:`trigger` validates the interaction exists, that the target
   is alive (for ``target_type == "npc"``), and that the cooldown has
-  elapsed since the last fire.  On success it writes a row to the
-  world audit log and returns the resolved effects + cooldown_until
-  timestamp.
+  elapsed since the last fire.  On success it **applies the effects**
+  (stamina/health/mood deltas hit the acting character's A3.2 state,
+  ``npc_*_delta`` hit the NPC target's ``state_json``, ``world_state``
+  patches the world environment), writes a row to the world audit log
+  and returns the resolved effects + cooldown_until timestamp.
 * The cooldown is **per** ``(interaction_id, character_id)`` pair so
   one character spamming "open the chest" doesn't lock it for every
   other character.  For object / mechanism targets the cooldown is
@@ -233,6 +235,153 @@ def _character_is_interactable(character_id: str | None) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# Effects application (A4.3 AC-2 / AC-3 — "互动结果必须影响角色/世界")
+# ---------------------------------------------------------------------------
+
+#: Character effect key → A3.2 state field.  ``stamina`` is an extra
+#: value field on the character_state record (see
+#: :mod:`xijian_api.stubs.character_state`).
+_CHARACTER_DELTA_FIELDS: dict[str, str] = {
+    "health_delta": "health",
+    "mood_delta": "mood",
+    "hunger_delta": "hunger",
+    "thirst_delta": "thirst",
+    "stamina_delta": "stamina",
+}
+
+#: NPC-target effect key → NPC ``state_json`` field.
+_NPC_DELTA_FIELDS: dict[str, str] = {
+    "npc_health_delta": "health",
+    "npc_mood_delta": "mood",
+    "npc_hunger_delta": "hunger",
+    "npc_thirst_delta": "thirst",
+}
+
+
+def _apply_effects(
+    effects: dict,
+    *,
+    character_id: str | None,
+    npc_id: str | None,
+    world_id: str,
+    interaction_id: str,
+) -> list[str]:
+    """Apply an interaction's effects to live state.  Returns the list
+    of effect keys that were applied.
+
+    Semantics (per the ``_validate_effects`` docstring — this is what
+    "applied to the character after firing" actually means):
+
+    * ``stamina_delta`` / ``health_delta`` / ``mood_delta`` /
+      ``hunger_delta`` / ``thirst_delta`` → absolute deltas applied
+      to the acting character's A3.2 state (via
+      :func:`character_state.apply_field_change` /
+      :func:`character_state.apply_extra_field_change`).
+    * ``npc_health_delta`` / ``npc_mood_delta`` / ``npc_hunger_delta``
+      / ``npc_thirst_delta`` → applied to the NPC target's
+      ``state_json`` (via :func:`npcs.apply_npc_state_effect`).
+    * ``world_state`` (dict) → merged into the world's environment.
+
+    Unsupported keys are logged (never raised) so a misconfigured
+    interaction can't break the trigger path.  ``fire_event_id`` is
+    handled by the caller (A4.1 cross-link), not here.
+    """
+    import logging
+    logger = logging.getLogger("xijian_api.scene_interactions")
+
+    from xijian_api.stubs import character_state as cs_stub
+    from xijian_api.stubs import npcs as npcs_stub
+    from xijian_api.stubs import world_environment as env_stub
+
+    if not isinstance(effects, dict) or not effects:
+        return []
+
+    applied: list[str] = []
+    for key, delta in effects.items():
+        if key == "fire_event_id":
+            continue  # handled by the A4.1 cross-link in trigger()
+
+        # --- acting-character deltas ---
+        if key in _CHARACTER_DELTA_FIELDS:
+            field = _CHARACTER_DELTA_FIELDS[key]
+            if not character_id:
+                logger.warning(
+                    "scene interaction %s: effect %r needs character_id, "
+                    "but trigger() got none — skipped", interaction_id, key,
+                )
+                continue
+            try:
+                record = cs_stub.get_or_init_state(character_id)
+                current = float(record.get(field, 0.0))
+                if field == "stamina":
+                    cs_stub.apply_extra_field_change(
+                        character_id, field, current + float(delta),
+                        reason="scene_interaction", ref_id=interaction_id,
+                    )
+                else:
+                    cs_stub.apply_field_change(
+                        character_id, field, current + float(delta),
+                        reason="scene_interaction", ref_id=interaction_id,
+                    )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "scene interaction %s: effect %r on character %s failed: %s",
+                    interaction_id, key, character_id, exc,
+                )
+            applied.append(key)
+            continue
+
+        # --- NPC-target deltas ---
+        if key in _NPC_DELTA_FIELDS:
+            field = _NPC_DELTA_FIELDS[key]
+            if not npc_id:
+                logger.warning(
+                    "scene interaction %s: effect %r needs an NPC target "
+                    "(target_type='npc'), got %r — skipped",
+                    interaction_id, key, npc_id,
+                )
+                continue
+            try:
+                npcs_stub.apply_npc_state_effect(
+                    npc_id, field, delta,
+                    reason="scene_interaction", ref_id=interaction_id,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "scene interaction %s: effect %r on npc %s failed: %s",
+                    interaction_id, key, npc_id, exc,
+                )
+            applied.append(key)
+            continue
+
+        # --- world-state patch ---
+        if key == "world_state":
+            if isinstance(delta, dict):
+                try:
+                    env_stub.patch_environment(world_id, delta)
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "scene interaction %s: world_state effect failed: %s",
+                        interaction_id, exc,
+                    )
+                applied.append(key)
+            else:
+                logger.warning(
+                    "scene interaction %s: world_state effect must be a dict — skipped",
+                    interaction_id,
+                )
+            continue
+
+        # --- unsupported ---
+        logger.warning(
+            "scene interaction %s: unsupported effect %r ignored "
+            "(supported: %s, npc_*_delta, world_state)",
+            interaction_id, key, sorted(_CHARACTER_DELTA_FIELDS),
+        )
+    return applied
+
+
+# ---------------------------------------------------------------------------
 # CRUD
 # ---------------------------------------------------------------------------
 
@@ -427,10 +576,16 @@ def trigger(
             "interaction_id": str,
             "world_id": str,
             "effects": dict,
+            "effects_applied": list[str],  # effect keys actually applied
             "cooldown_until": float | None,
             "reason": str | None,    # populated only on reject
             "audit_id": str | None,  # populated only on accept
         }
+
+    Effects are applied to live state via :func:`_apply_effects`
+    (A4.3 AC-2/AC-3) — see that function for the supported keys.
+    Application is best-effort: an unsupported / unapplicable effect
+    is logged and skipped, never raised.
 
     Reasons for rejection:
 
@@ -538,11 +693,26 @@ def trigger(
         except Exception:
             pass
 
+    # A4.3 AC-2/AC-3: actually apply the effects — stamina_delta /
+    # health_delta hit the acting character's A3.2 state, npc_*_delta
+    # hit the NPC target's state_json, world_state patches the world
+    # environment.  This is the behaviour the ``_validate_effects``
+    # docstring promised ("applied to the character after firing")
+    # but the old trigger() never performed.
+    applied = _apply_effects(
+        record["effects"] or {},
+        character_id=character_id,
+        npc_id=record["target_id"] if record["target_type"] == "npc" else None,
+        world_id=record["world_id"],
+        interaction_id=interaction_id,
+    )
+
     return {
         "accepted": True,
         "interaction_id": interaction_id,
         "world_id": record["world_id"],
         "effects": record["effects"],
+        "effects_applied": applied,
         "cooldown_until": cooldown_until,
         "reason": None,
         "audit_id": audit_id,
@@ -572,6 +742,9 @@ __all__ = [
     "SceneInteractionError",
     "VALID_TARGET_TYPES",
     "DEFAULT_COOLDOWN_SECONDS",
+    "_CHARACTER_DELTA_FIELDS",
+    "_NPC_DELTA_FIELDS",
+    "_apply_effects",
     "create",
     "get",
     "get_required",
