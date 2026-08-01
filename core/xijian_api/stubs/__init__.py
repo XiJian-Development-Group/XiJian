@@ -47,6 +47,10 @@ from xijian_api.stubs import (
     world_economy_state,
     world_environment,
     worlds,
+    # A6 / A7 / A8 modules (added 2026-08-01).
+    voice_calls,
+    character_initiated_actions,
+    desktop_pets,
 )
 
 
@@ -131,6 +135,13 @@ def seed_all() -> None:
     # citations 模块不持有自身状态，但在包上暴露其辅助函数，
     # 供聊天管道通过 ``from xijian_api.stubs import citations`` 导入。
     _ = citations
+    # A6 / A7 / A8 seed hooks — no default records, but the A7 hook
+    # starts the proactive-scan tick thread (env-gated).
+    # A6 / A7 / A8 播种钩子 — 无默认记录，但 A7 钩子会启动
+    # 主动扫描 tick 线程 (受环境变量门控)。
+    voice_calls.seed_default()
+    character_initiated_actions.seed_default()
+    desktop_pets.seed_default()
     # ``models`` lives in the routes layer (it has an import-time seed
     # side effect that runs the first time the module is imported).
     # After ``state.reset_for_testing`` the bucket is empty, so re-seed
@@ -182,5 +193,9 @@ __all__ = [
     "world_economy_state",
     "world_environment",
     "worlds",
+    # A6 / A7 / A8 (added 2026-08-01).
+    "voice_calls",
+    "character_initiated_actions",
+    "desktop_pets",
     "seed_all",
 ]

@@ -514,3 +514,81 @@ def gen_snapshot_id(now: _dt.datetime | None = None) -> str:
     moment = now or _dt.datetime.now(_dt.timezone.utc)
     stamp = moment.strftime("%Y%m%d")
     return f"snap_{stamp}_{secrets.token_hex(3)}"
+def gen_voice_call_id() -> str:
+    """Return a voice-call id (``call_<12 hex>``).
+    返回通话 ID (``call_<12 hex>``)。
+
+    A6 realtime call: every call session (user- or character-
+    initiated) gets one of these.  ``voice_calls`` records hang off
+    this handle; ``call_events`` reference it via ``call_id``.
+    A6 实时通话：每次通话会话 (用户发起或角色发起) 获取一个此类 ID。
+    ``voice_calls`` 记录挂在此句柄下；``call_events`` 通过 ``call_id`` 引用它。
+    """
+    return gen_id("call_", _SHORT_HEX_LEN)
+
+
+def gen_call_event_id() -> str:
+    """Return a call-event id (``callevt_<12 hex>``).
+    返回通话事件 ID (``callevt_<12 hex>``)。
+
+    A6 realtime call: one event per speech / motion / effect / song
+    milestone inside a call.  Kind is one of ``speech`` / ``motion`` /
+    ``effect`` / ``song`` (plus lifecycle helpers such as
+    ``barge_in``).
+    A6 实时通话：通话内每个语音/动作/特效/唱歌里程碑一条事件。
+    类型为 ``speech`` / ``motion`` / ``effect`` / ``song`` 之一
+    (以及生命周期辅助类型，如 ``barge_in``)。
+    """
+    return gen_id("callevt_", _SHORT_HEX_LEN)
+
+
+def gen_initiated_action_id() -> str:
+    """Return a character-initiated action id (``init_<12 hex>``).
+    返回角色主动发起动作 ID (``init_<12 hex>``)。
+
+    A7 proactive contact: one record per character-initiated
+    message / voice-call offer.  Status walks ``pending`` → ``sent``
+    → ``accepted`` / ``declined`` / ``ignored``.
+    A7 主动联系：每次角色主动发起的消息/来电邀约一条记录。
+    状态经过 ``pending`` → ``sent`` → ``accepted`` / ``declined`` / ``ignored``。
+    """
+    return gen_id("init_", _SHORT_HEX_LEN)
+
+
+def gen_desktop_pet_id() -> str:
+    """Return a desktop-pet id (``pet_<12 hex>``).
+    返回桌宠 ID (``pet_<12 hex>``)。
+
+    A8 desktop pet: 1..N characters can roam the desktop; each
+    placement is one record.  ``pet_action_log`` rows reference it
+    via ``pet_id``.
+    A8 桌宠：1~N 个角色可在桌面活动；每次放置一条记录。
+    ``pet_action_log`` 行通过 ``pet_id`` 引用它。
+    """
+    return gen_id("pet_", _SHORT_HEX_LEN)
+
+
+def gen_wallpaper_id() -> str:
+    """Return a dynamic-wallpaper id (``wall_<12 hex>``).
+    返回动态壁纸 ID (``wall_<12 hex>``)。
+
+    A8 dynamic wallpaper: one active wallpaper per character at most;
+    the record binds a character + world environment.  ID kept
+    distinct from ``pet_`` so the two resource families never collide.
+    A8 动态壁纸：每个角色最多一张活动壁纸；记录绑定角色 + 世界环境。
+    ID 与 ``pet_`` 保持不同前缀，使两类资源永不相撞。
+    """
+    return gen_id("wall_", _SHORT_HEX_LEN)
+
+
+def gen_pet_action_log_id() -> str:
+    """Return a pet-action-log id (``petlog_<12 hex>``).
+    返回桌宠动作日志 ID (``petlog_<12 hex>``)。
+
+    A8 desktop pet: every auditable "捣乱" action (mouse_click /
+    key_input / window_move / ...) lands one row here so AC-2
+    ("桌宠捣乱必须有可审计日志") is satisfiable.
+    A8 桌宠：每次可审计的"捣乱"动作 (mouse_click / key_input /
+    window_move / ...) 在此落一条记录，使 AC-2 可满足。
+    """
+    return gen_id("petlog_", _SHORT_HEX_LEN)

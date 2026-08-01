@@ -103,6 +103,20 @@ def _enqueue(
     }
     state.mcp_pending_actions[action_id] = record  # type: ignore[attr-defined]
     _LOGGER.info("enqueued desktop action %s (kind=%s)", action_id, kind)
+    # Best-effort WS push so the desktop client can react in real time
+    # (A8 execution loop).  Same swallow-and-log posture as events.py.
+    # 尽力而为的 WS 推送，让桌面客户端能实时响应 (A8 执行闭环)。
+    try:
+        from xijian_api.routes.ws_routes import publish_event
+        publish_event("desktop_pet.pending", {
+            "event": "enqueued",
+            "action_id": action_id,
+            "kind": kind,
+            "status": record["status"],
+            "created_at": record["created_at"],
+        })
+    except Exception:  # noqa: BLE001
+        pass
     return record
 
 
@@ -286,15 +300,17 @@ def _pending_get_handler(args: dict[str, Any], _ctx: dict[str, Any]) -> dict[str
 # Registration / 注册
 # ---------------------------------------------------------------------------
 
-# TODO: Desktop client integration — implement a polling endpoint
-# (GET /v1/xijian/mcp/pending) and a WebSocket push so the desktop
-# client can claim and execute pending actions in real time.
-# TODO: Implement result write-back (POST /v1/xijian/mcp/pending/<id>/result)
-# so the desktop client can report execution results.
-# TODO：桌面客户端集成 — 实现轮询端点 (GET /v1/xijian/mcp/pending) 和 WebSocket 推送，
-# 使桌面客户端能实时认领和执行待办操作。
-# TODO：实现结果回写 (POST /v1/xijian/mcp/pending/<id>/result)，
-# 使桌面客户端可报告执行结果。
+# TODO: Desktop client integration — implemented 2026-08-01 (A8):
+# polling endpoint ``GET /v1/xijian/mcp/pending``, claim + result
+# write-back (``POST /v1/xijian/mcp/pending/<id>/result``) and WS push
+# now live in :mod:`xijian_api.routes.xijian_desktop` /
+# :mod:`xijian_api.stubs.desktop_pets`.  The desktop client polls /
+# subscribes there and executes actions locally.
+# TODO：桌面客户端集成 — 已于 2026-08-01 (A8) 实现：轮询端点
+# ``GET /v1/xijian/mcp/pending``、认领 + 结果回写
+# (``POST /v1/xijian/mcp/pending/<id>/result``) 与 WS 推送现在位于
+# :mod:`xijian_api.routes.xijian_desktop` / :mod:`xijian_api.stubs.desktop_pets`。
+# 桌面客户端在此轮询/订阅并本地执行操作。
 
 register_tool(
     "app_launch",

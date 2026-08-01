@@ -68,6 +68,24 @@ runs: DictDB = bucket("runs")
 messages: DictDB = bucket("messages")
 videos: DictDB = bucket("videos")
 models: DictDB = bucket("models")
+# A6 realtime call — call sessions + per-call event stream.
+# A6 实时通话 — 通话会话 + 每通话事件流。
+voice_calls: DictDB = bucket("voice_calls")
+call_events: DictDB = bucket("call_events")
+# A7 proactive contact — character-initiated actions + per-character
+# / global notification policy.
+# A7 主动联系 — 角色主动发起动作 + 每角色/全局通知策略。
+character_initiated_actions: DictDB = bucket("character_initiated_actions")
+character_initiated_configs: DictDB = bucket("character_initiated_configs")
+# A8 desktop pets — pet placements, dynamic wallpapers, auditable
+# pet action log, and the desktop-client pending-action queue that
+# :mod:`xijian_api.mcp.tools.desktop` fills.
+# A8 桌宠 — 桌宠放置、动态壁纸、可审计桌宠动作日志，以及桌面客户端
+# 待办动作队列 (由 :mod:`xijian_api.mcp.tools.desktop` 填充)。
+desktop_pets: DictDB = bucket("desktop_pets")
+dynamic_wallpapers: DictDB = bucket("dynamic_wallpapers")
+pet_action_log: DictDB = bucket("pet_action_log")
+mcp_pending_actions: DictDB = bucket("mcp_pending_actions")
 
 
 # In-memory special buckets (not suited for key-value SQL)
@@ -140,6 +158,11 @@ def reset_for_testing() -> None:
         safety_snapshots, backup_policies,
         files, batches, fine_tuning_jobs,
         assistants, threads, runs, messages, videos, models,
+        # A6 / A7 / A8 buckets (added 2026-08-01).
+        voice_calls, call_events,
+        character_initiated_actions, character_initiated_configs,
+        desktop_pets, dynamic_wallpapers, pet_action_log,
+        mcp_pending_actions,
     ]
     for db in _all_dictdb:
         db.clear()

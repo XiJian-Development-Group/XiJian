@@ -205,18 +205,20 @@ def ws_endpoint(ws):
             return
 
         last_ping = time.time()
-        # Schedule the dev proactive message.
-        def _delayed_proactive():
-            time.sleep(3)
-            publish_event(
-                "character.proactive_message",
-                {
-                    "character_id": "char_yuki",
-                    "message": "你今天还好吗？",
-                    "emotion": "concerned",
-                },
-            )
-        threading.Thread(target=_delayed_proactive, daemon=True).start()
+        # 2026-08-01: the hardcoded dev demo broadcast
+        # (``character.proactive_message`` 3s after every authenticated
+        # connect) has been REMOVED — it leaked into other tests'
+        # unauthenticated connections in the same process (test_ws
+        # isolation failure).  Real proactive messaging now flows
+        # through A7 (:mod:`xijian_api.stubs.character_initiated_actions`
+        # + its tick thread), which broadcasts
+        # ``character.initiated_action`` only when an action is actually
+        # created — see routes/xijian_initiated.py.
+        # 2026-08-01：硬编码的 dev 演示广播 (连接认证成功后 3 秒广播
+        # ``character.proactive_message``) 已移除 —— 它会泄漏到同进程
+        # 其他测试的未认证连接 (test_ws 隔离失败)。真实的主动消息现在
+        # 走 A7 (character_initiated_actions + tick 线程)，仅在真正
+        # 创建动作时广播 ``character.initiated_action``。
 
         while True:
             try:

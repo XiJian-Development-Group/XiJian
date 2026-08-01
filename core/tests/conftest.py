@@ -41,6 +41,9 @@ os.environ.setdefault("XIJIAN_EVENT_SCHEDULER", "0")
 # The NPC tick thread (A4.2) — same posture as A3.2 / A4.1.
 # (NPC 滴答线程 (A4.2) —— 同 A3.2 / A4.1 姿态。)
 os.environ.setdefault("XIJIAN_NPC_TICK", "0")
+# The A7 proactive-contact scan thread — same posture as the others.
+# (A7 主动发起扫描线程 —— 与其他后台线程同姿态，默认关闭。)
+os.environ.setdefault("XIJIAN_INITIATED_TICK", "0")
 
 from xijian_api import auth  # noqa: E402  (import after env setup)
 from xijian_api.app import create_app  # noqa: E402
@@ -188,6 +191,17 @@ def _reset_state(app):
         # 和策略记录，以便下一个测试从规范默认值 (5 GiB 上限等) 开始。)
         from xijian_api.stubs import snapshots as snap_stub
         snap_stub.reset_for_testing()
+        # A6 / A7 / A8 (added 2026-08-01).  The A6 hooks (reply /
+        # sing engines) and the A7 tick thread are module-level
+        # state that survives ``state.reset_for_testing``.
+        # (A6 / A7 / A8 (2026-08-01 新增)。A6 钩子 (回复/唱歌引擎)
+        # 与 A7 tick 线程是模块级状态，需要显式重置。)
+        from xijian_api.stubs import voice_calls as vc_stub
+        vc_stub.reset_for_testing()
+        from xijian_api.stubs import character_initiated_actions as cia_stub
+        cia_stub.reset_for_testing()
+        from xijian_api.stubs import desktop_pets as dp_stub
+        dp_stub.reset_for_testing()
     yield
 
 
