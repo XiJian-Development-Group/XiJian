@@ -107,7 +107,6 @@ from devkit.character_editor import (
     check_initial_memory_minimum as _ce_check_min,
     get_persona_templates as _ce_persona_templates,
     get_character_config_schema as _ce_config_schema,
-    validate_character_config as _ce_validate_config,
     auto_fill_character_config as _ce_autofill,
 )
 from devkit.memory_editor import (
@@ -1093,14 +1092,6 @@ class DevKitApi:
     def get_character_config_schema(self) -> dict[str, Any]:
         """C2.3 — return the character config JSON schema definition."""
         return _ce_config_schema()
-
-    @_serialize_call
-    def validate_character_config(self, config: Any) -> dict[str, Any]:
-        """C2.3 — schema-validate a character config dict."""
-        if not isinstance(config, dict):
-            raise DevKitError(400, "配置必须是对象", code="bad_data")
-        ok, errors = _ce_validate_config(config)
-        return {"ok": ok, "errors": errors}
 
     @_serialize_call
     def auto_fill_config(self, char_id: Any) -> dict[str, Any]:

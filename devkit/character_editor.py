@@ -36,45 +36,6 @@ def get_character_config_schema() -> dict[str, dict[str, Any]]:
     return dict(CHARACTER_CONFIG_SCHEMA)
 
 
-def validate_character_config(config: dict[str, Any]) -> tuple[bool, list[str]]:
-    """Schema-validate a character config dict (C2.3 AC-1).
-
-    Checks each field against its type/range constraints.
-    Returns ``(ok, [errors])``.
-    """
-    errors: list[str] = []
-    if not isinstance(config, dict):
-        return False, ["配置必须是对象"]
-    for key, rule in CHARACTER_CONFIG_SCHEMA.items():
-        if key not in config:
-            continue
-        value = config[key]
-        kind = rule["type"]
-        if kind == "integer":
-            try:
-                v = int(value)
-            except (TypeError, ValueError):
-                errors.append(f"{rule['label']}（{key}）必须是整数")
-                continue
-            if v < rule["min"]:
-                errors.append(f"{rule['label']}（{key}）不能小于 {rule['min']}")
-            if v > rule["max"]:
-                errors.append(f"{rule['label']}（{key}）不能大于 {rule['max']}")
-        elif kind == "number":
-            try:
-                v = float(value)
-            except (TypeError, ValueError):
-                errors.append(f"{rule['label']}（{key}）必须是数字")
-                continue
-            if v < rule["min"]:
-                errors.append(f"{rule['label']}（{key}）不能小于 {rule['min']}")
-            if v > rule["max"]:
-                errors.append(f"{rule['label']}（{key}）不能大于 {rule['max']}")
-        elif kind == "boolean" and not isinstance(value, bool):
-            errors.append(f"{rule['label']}（{key}）必须是布尔值")
-    return (len(errors) == 0), errors
-
-
 # Built-in persona-doc templates (C2.4).
 _PERSONA_TEMPLATES: dict[str, str] = {
     "通用角色": (

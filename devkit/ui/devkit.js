@@ -736,17 +736,6 @@ const callApi = async (method, ...args) => {
     $("#char-persona-template-picker").style.display = "none";
   };
 
-  const onCharConfigValidate = async () => {
-    let config;
-    try { config = JSON.parse($("#char-config-json").value.trim() || "{}"); }
-    catch { setStatus("#char-config-status", "JSON 格式错误", "err"); return; }
-    const resp = await callApi("validate_character_config", config);
-    if (!resp.ok) { setStatus("#char-config-status", "校验请求失败", "err"); return; }
-    const r = resp.data;
-    if (r.ok) { setStatus("#char-config-status", "配置通过校验", "ok"); }
-    else { setStatus("#char-config-status", (r.errors || []).join("；"), "err"); }
-  };
-
   const onCharConfigAutofill = async () => {
     const persona = $("#char-persona").value.trim();
     if (!persona) { toast("请先填写人设文档", "err"); return; }
@@ -2616,12 +2605,28 @@ const callApi = async (method, ...args) => {
   // --------------------------------------------------------------
 
   const bind = () => {
+    // Refresh the left-hand list when entering a tab; previously only
+    // settings refreshed, so character/world/etc. lists appeared empty
+    // until the user clicked the manual refresh button.
+    const tabRefreshers = {
+      character: renderCharList,
+      memory: renderMemList,
+      world: renderWorldList,
+      model: renderModelList,
+      voice: renderVoiceList,
+      plot: renderPlotList,
+      dialog: renderDialogList,
+      motion: renderMotionList,
+      ai: renderAiLog,
+      settings: loadSettingsTab,
+    };
     $$(".tab-nav__btn").forEach((btn) => {
       btn.addEventListener("click", () => {
-        if (btn.dataset.tab) {
-          switchTab(btn.dataset.tab);
-          if (btn.dataset.tab === "settings") loadSettingsTab();
-        }
+        const tab = btn.dataset.tab;
+        if (!tab) return;
+        switchTab(tab);
+        const refresher = tabRefreshers[tab];
+        if (refresher) refresher();
       });
     });
 
@@ -2658,7 +2663,6 @@ const callApi = async (method, ...args) => {
     on("#char-persona-template-btn", "click", onCharPersonaTemplate);
     on("#char-persona-template-apply-btn", "click", onCharPersonaTemplateApply);
     on("#char-persona-template-cancel-btn", "click", onCharPersonaTemplateCancel);
-    on("#char-config-validate-btn", "click", onCharConfigValidate);
     on("#char-config-autofill-btn", "click", onCharConfigAutofill);
     on("#char-list", "click", (e) => {
       const li = e.target.closest(".item-list__item");
