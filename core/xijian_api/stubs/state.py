@@ -24,6 +24,9 @@ characters: DictDB = bucket("characters")
 interactions: DictDB = bucket("interactions")
 worlds: DictDB = bucket("worlds")
 memory: DictDB = bucket("memory")
+# C3 plot runtime — one record per running plot instance.
+# C3 剧情运行时 — 每个运行中的剧情实例一条记录。
+plot_runtime_states: DictDB = bucket("plot_runtime_states")
 memory_configs: DictDB = bucket("memory_configs")
 sessions: DictDB = bucket("sessions")
 snapshots: DictDB = bucket("snapshots")
@@ -156,7 +159,7 @@ def reset_for_testing() -> None:
         character_handwritings, character_styles, character_asset_cache,
         world_events, world_event_instances,
         npcs, npc_scheduling_log, world_compute_config, world_environment,
-        world_audit_log,
+        world_audit_log, plot_runtime_states,
         pois, travel_modes, scene_interactions,
         world_currencies, wallets, transactions, world_economy_state,
         safety_audit_log, safety_rules,

@@ -49,6 +49,8 @@ from xijian_api.stubs import (
     world_economy_state,
     world_environment,
     worlds,
+    # C3 剧情运行时 (added 2026-08-02).
+    plot_runtime,
     # A6 / A7 / A8 modules (added 2026-08-01).
     voice_calls,
     character_initiated_actions,
@@ -215,6 +217,8 @@ __all__ = [
     "world_economy_state",
     "world_environment",
     "worlds",
+    # C3 剧情运行时 (added 2026-08-02).
+    "plot_runtime",
     # A6 / A7 / A8 (added 2026-08-01).
     "voice_calls",
     "character_initiated_actions",
