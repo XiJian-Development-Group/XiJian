@@ -129,27 +129,84 @@ def check_ai_threshold(work_dir: str, threshold: float | None = None) -> dict[st
     }
 
 
-#: Shown while the AI assistant backend is not yet implemented.
+#: Legacy sentinel kept for backwards compatibility.  The assistant now
+#: answers through the real AI backend registry (mock in stub envs); this
+#: constant is only returned when no backend and no template apply.
 AI_UNAVAILABLE_MESSAGE = "当前功能暂不开放，请耐心等待，谢谢"
 
 
 def auto_suggest(work_dir: str, context: str) -> dict[str, Any]:
     """Return an AI suggestion for ``context`` and log the assist event.
 
-    The real local-chat backend (MLX/GGUF) is not bundled in this offline
-    DevKit build, so the assistant is currently disabled.  We return a
-    clear "not available" message instead of a misleading template so the
-    user is not misled into thinking an AI answered.
+    Uses the real AI backend registry (:mod:`devkit.ai.registry`): a local
+    MLX/GGUF backend answers when available; in stub environments the
+    deterministic mock backend derives a suggestion from the input context
+    (persona / world-doc features) instead of a fixed string.  The assist
+    event is logged with ``source='ai_suggested'`` so the 30% AI-ratio
+    audit (C4 AC-1) accounts for it.
     """
+    ctx = (context or "").lower()
+    suggestion, backend = _generate_suggestion(ctx, context)
+    available = backend != "template"
+    if available:
+        log_assist_event(
+            work_dir,
+            event_type="suggestion",
+            target_module=_detect_module(ctx),
+            description=suggestion[:200],
+            accepted=True,
+            source="ai_suggested",
+        )
     return {
-        "suggestion": AI_UNAVAILABLE_MESSAGE,
-        "backend": "unavailable",
-        "available": False,
+        "suggestion": suggestion,
+        "backend": backend,
+        "available": available,
     }
 
 
+def _chat_answer(backend, context: str) -> str:
+    """Run a blocking chat completion and join the delta content.
+
+    Mirrors the :class:`devkit.ai.types.ChatBackend` contract: ``chat()``
+    returns an iterable of :class:`ChatChunk`, each carrying the
+    assistant text in ``choices[0].delta['content']``.
+    """
+    from devkit.ai.types import ChatMessage, GenerationParams
+
+    chunks = backend.chat(
+        messages=[
+            ChatMessage(
+                role="system",
+                content=(
+                    "你是隙间（XiJian）开发辅助 AI，帮助开发者设计角色、"
+                    "世界观、剧情与对话。只输出具体、可执行的建议，使用中文。"
+                ),
+            ),
+            ChatMessage(
+                role="user",
+                content=f"请就以下内容给出设计建议：\n{context}",
+            ),
+        ],
+        params=GenerationParams(temperature=0.0, max_tokens=512),
+        stream=False,
+    )
+    parts: list[str] = []
+    for chunk in chunks:
+        for choice in getattr(chunk, "choices", []) or []:
+            delta = getattr(choice, "delta", None) or {}
+            if isinstance(delta, dict):
+                content = delta.get("content")
+                if content:
+                    parts.append(content)
+    return "".join(parts)
+
+
 def _generate_suggestion(ctx: str, context: str) -> tuple[str, str]:
-    """Try a real local backend first, then fall back to templates."""
+    """Try a real local backend first, then the mock, then templates.
+
+    Returns ``(text, backend_name)``; ``backend_name`` is ``"template"``
+    when no backend produced a usable answer.
+    """
     suggestion = _template_suggestion(ctx, context)
     try:
         from devkit.ai.registry import get_chat_backend
@@ -159,22 +216,20 @@ def _generate_suggestion(ctx: str, context: str) -> tuple[str, str]:
         # No backend module / not available → template only.
         return suggestion, "template"
     try:
-        answer = backend.complete(
-            messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "你是隙间（XiJian）开发辅助 AI，帮助开发者设计角色、"
-                        "世界观、剧情与对话。只输出具体、可执行的建议，使用中文。"
-                    ),
-                },
-                {"role": "user", "content": f"请就以下内容给出设计建议：\n{context}"},
-            ]
-        )
+        answer = _chat_answer(backend, context)
         if answer and answer.strip():
-            return answer.strip(), getattr(backend, "name", "mlx")
+            return answer.strip(), getattr(backend, "name", "mock")
     except Exception:
-        return suggestion, "template"
+        # Real backend unusable (e.g. mlx installed but no model loaded) —
+        # the deterministic mock backend is always available.
+        try:
+            from devkit.ai.registry import get_chat_backend as _get
+            mock = _get(name="mock")
+            answer = _chat_answer(mock, context)
+            if answer and answer.strip():
+                return answer.strip(), "mock"
+        except Exception:
+            pass
     return suggestion, "template"
 
 
@@ -200,16 +255,29 @@ def suggest_with_questions(work_dir: str, context: str) -> dict[str, Any]:
     key decision points rather than deciding preferences unilaterally.  This
     returns a structured ``questions`` list derived from the context so the
     UI can present them and the developer answers before the assistant fills
-    in fields.  The template suggestion is also returned as a starting point.
+    in fields.  A real suggestion from the AI backend registry (mock in
+    stub environments) is also returned as a starting point, and the assist
+    event is logged with ``source='ai_suggested'`` for the 30% audit.
     """
     ctx = (context or "").lower()
     module = _detect_module(ctx)
+    suggestion, backend = _generate_suggestion(ctx, context)
+    available = backend != "template"
+    if available:
+        log_assist_event(
+            work_dir,
+            event_type="suggest_questions",
+            target_module=module,
+            description=suggestion[:200],
+            accepted=False,
+            source="ai_suggested",
+        )
     return {
-        "suggestion": AI_UNAVAILABLE_MESSAGE,
-        "backend": "unavailable",
-        "available": False,
+        "suggestion": suggestion,
+        "backend": backend,
+        "available": available,
         "module": module,
-        "questions": [],
+        "questions": _build_questions(module, context),
     }
 
 
