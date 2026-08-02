@@ -310,17 +310,42 @@ def generate_model_from_text(
 ) -> dict[str, Any]:
     """C2.8 AI 生成 3D 模型（VRM 1.0）。
 
-    该功能仍在制作中，暂不开放使用——直接以明确提示告知用户，而非产出
-    占位模型，避免用户误以为已生成可用模型。
+    通过 AI 生成服务抽象层执行，fallback 链：
+    远程服务（Tripo/Meshy）→ 本地管线 → HuggingFace 下载 → 确定性生成（永远成功）。
+    生成成功后注册到模型索引并返回注册记录。
+
+    返回格式与 ``register_model`` 一致（含 id / path / format / size_bytes）。
     """
     if not description.strip():
         raise DevKitError(400, "描述文本不能为空", code="empty_description")
 
-    raise DevKitError(
-        501,
-        "AI 生成 3D 模型（VRM 1.0）功能仍在制作中，暂不开放使用。",
-        code="feature_not_available",
+    from devkit.ai_generation.model_generation import (
+        ModelGenerationStatus,
+        create_model_generation_service,
     )
+
+    service = create_model_generation_service()
+    job = service.generate_and_wait(description, name=name)
+    if job.status != ModelGenerationStatus.SUCCEEDED:
+        raise DevKitError(
+            502,
+            f"AI 生成失败: {job.error_message or '未知错误'}",
+            code="generation_failed",
+        )
+    if not job.result_path or not os.path.isfile(job.result_path):
+        raise DevKitError(502, "AI 生成成功但结果文件缺失", code="generation_failed")
+
+    # 生成结果移入 work_dir 的模型目录并注册
+    models_dir = os.path.join(work_dir, _MODELS_SUBDIR)
+    os.makedirs(models_dir, exist_ok=True)
+    dest = os.path.join(models_dir, os.path.basename(job.result_path))
+    import shutil
+    if os.path.abspath(dest) != os.path.abspath(job.result_path):
+        shutil.copy2(job.result_path, dest)
+    else:
+        dest = job.result_path
+
+    return register_model(work_dir, dest)
 
 
 def _download_model_from_hf(description: str) -> str | None:

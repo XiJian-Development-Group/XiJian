@@ -669,3 +669,85 @@ def edit_motion_keyframes_public(
 ) -> dict[str, Any] | None:
     """Public wrapper for keyframe editing."""
     return edit_motion_keyframes(motion_id, work_dir, character_id, keyframes)
+
+
+def generate_motion_from_text(
+    work_dir: str,
+    character_id: str,
+    persona_text: str,
+    name: str = "",
+    motion_type: str = "idle",
+) -> dict[str, Any]:
+    """C2.9 AI 从人设描述推断动作（生成 BVH 并导入角色动效库）。
+
+    通过 AI 动作生成服务抽象层执行，fallback 链：
+    远程视频捕获 → 本地视频推断 → 确定性人设→BVH 生成（永远成功）。
+    生成成功后通过 ``import_motion_file`` 注册到角色动效库。
+
+    返回格式与 ``import_motion_file`` 一致。
+    """
+    if not persona_text.strip():
+        raise DevKitError(400, "人设描述不能为空", code="empty_description")
+
+    from devkit.ai_generation.motion_generation import (
+        MotionGenerationStatus,
+        create_motion_generation_service,
+    )
+
+    service = create_motion_generation_service()
+    job = service.generate_and_wait(
+        "persona",
+        persona_text,
+        character_id or "character",
+        motion_type=motion_type,
+    )
+    if job.status != MotionGenerationStatus.SUCCEEDED:
+        raise DevKitError(
+            502,
+            f"AI 动作生成失败: {job.error_message or '未知错误'}",
+            code="generation_failed",
+        )
+    if not job.result_path or not os.path.isfile(job.result_path):
+        raise DevKitError(502, "AI 动作生成成功但结果文件缺失", code="generation_failed")
+
+    motion_name = name or f"ai_{motion_type}"
+    return import_motion_file(work_dir, character_id, job.result_path, motion_name)
+
+
+def generate_motion_from_video(
+    work_dir: str,
+    character_id: str,
+    video_path: str,
+    name: str = "",
+) -> dict[str, Any]:
+    """C2.9 AI 从视频推断动作（生成 BVH 并导入角色动效库）。
+
+    真实环境接入远程视频动作捕获服务或本地姿态推断管线
+    （见 ai_generation.motion_generation 的 TODO 注释）；
+    stub 环境降级为确定性规则生成，保证流程真实可用。
+    """
+    if not video_path.strip():
+        raise DevKitError(400, "视频路径不能为空", code="empty_path")
+
+    from devkit.ai_generation.motion_generation import (
+        MotionGenerationStatus,
+        create_motion_generation_service,
+    )
+
+    service = create_motion_generation_service()
+    job = service.generate_and_wait(
+        "video",
+        video_path,
+        character_id or "character",
+    )
+    if job.status != MotionGenerationStatus.SUCCEEDED:
+        raise DevKitError(
+            502,
+            f"AI 视频动作推断失败: {job.error_message or '未知错误'}",
+            code="generation_failed",
+        )
+    if not job.result_path or not os.path.isfile(job.result_path):
+        raise DevKitError(502, "AI 动作生成成功但结果文件缺失", code="generation_failed")
+
+    motion_name = name or "ai_video"
+    return import_motion_file(work_dir, character_id, job.result_path, motion_name)
