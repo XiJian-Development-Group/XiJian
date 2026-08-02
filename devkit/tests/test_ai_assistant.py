@@ -63,9 +63,7 @@ def work_dir(tmp_path) -> str:
 
 def test_generate_suggestion_uses_mock_backend(work_dir):
     """Stub env → the registry resolves to the deterministic mock backend."""
-    suggestion, backend = _generate_suggestion(
-        "角色 林晚", "角色 林晚，性格温柔，来自修仙世界"
-    )
+    suggestion, backend = _generate_suggestion("角色 林晚，性格温柔，来自修仙世界")
     assert backend == "mock"
     assert suggestion
     assert "林晚" in suggestion
@@ -74,9 +72,7 @@ def test_generate_suggestion_uses_mock_backend(work_dir):
 def test_generate_suggestion_context_derived(work_dir):
     """The suggestion references features extracted from the input context,
     not a fixed template string."""
-    suggestion, backend = _generate_suggestion(
-        "世界", "世界观 废土科幻，人类灭绝后的地下城"
-    )
+    suggestion, backend = _generate_suggestion("世界观 废土科幻，人类灭绝后的地下城")
     assert backend == "mock"
     # Extracted features from the context should appear in the suggestion.
     assert "废土" in suggestion or "地下城" in suggestion or "科幻" in suggestion
@@ -84,15 +80,15 @@ def test_generate_suggestion_context_derived(work_dir):
 
 def test_generate_suggestion_deterministic(work_dir):
     """Same input → same output (no random source)."""
-    a1, b1 = _generate_suggestion("角色", "角色 林晚，性格温柔")
-    a2, b2 = _generate_suggestion("角色", "角色 林晚，性格温柔")
+    a1, b1 = _generate_suggestion("角色 林晚，性格温柔")
+    a2, b2 = _generate_suggestion("角色 林晚，性格温柔")
     assert (a1, b1) == (a2, b2)
 
 
 def test_generate_suggestion_diverse(work_dir):
     """Different inputs → different suggestions."""
-    a1, _ = _generate_suggestion("角色", "角色 林晚，性格温柔")
-    a2, _ = _generate_suggestion("世界", "世界观 废土科幻")
+    a1, _ = _generate_suggestion("角色 林晚，性格温柔")
+    a2, _ = _generate_suggestion("世界观 废土科幻")
     assert a1 != a2
 
 

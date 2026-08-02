@@ -129,9 +129,9 @@ def check_ai_threshold(work_dir: str, threshold: float | None = None) -> dict[st
     }
 
 
-#: Legacy sentinel kept for backwards compatibility.  The assistant now
-#: answers through the real AI backend registry (mock in stub envs); this
-#: constant is only returned when no backend and no template apply.
+#: Sentinel returned when no AI backend produced a usable answer (real
+#: backends missing/unusable and the deterministic mock failed too).
+#: An honest "not available" message — never a fake template suggestion.
 AI_UNAVAILABLE_MESSAGE = "当前功能暂不开放，请耐心等待，谢谢"
 
 
@@ -146,8 +146,8 @@ def auto_suggest(work_dir: str, context: str) -> dict[str, Any]:
     audit (C4 AC-1) accounts for it.
     """
     ctx = (context or "").lower()
-    suggestion, backend = _generate_suggestion(ctx, context)
-    available = backend != "template"
+    suggestion, backend = _generate_suggestion(context)
+    available = backend != "unavailable"
     if available:
         log_assist_event(
             work_dir,
@@ -201,51 +201,38 @@ def _chat_answer(backend, context: str) -> str:
     return "".join(parts)
 
 
-def _generate_suggestion(ctx: str, context: str) -> tuple[str, str]:
-    """Try a real local backend first, then the mock, then templates.
+def _generate_suggestion(context: str) -> tuple[str, str]:
+    """Generate a design suggestion through the real AI backend registry.
 
-    Returns ``(text, backend_name)``; ``backend_name`` is ``"template"``
-    when no backend produced a usable answer.
+    Tries the configured local backends (MLX/GGUF) first; when none is
+    usable, falls back to the deterministic mock backend, which derives
+    its answer from the input context (persona / world-doc features)
+    instead of a fixed template.  Returns ``(text, backend_name)``;
+    ``backend_name`` is ``"unavailable"`` only when no backend produced
+    a usable answer.
     """
-    suggestion = _template_suggestion(ctx, context)
     try:
         from devkit.ai.registry import get_chat_backend
 
         backend = get_chat_backend(fallbacks=("gguf", "mock"))
-    except Exception:
-        # No backend module / not available → template only.
-        return suggestion, "template"
-    try:
         answer = _chat_answer(backend, context)
         if answer and answer.strip():
             return answer.strip(), getattr(backend, "name", "mock")
     except Exception:
-        # Real backend unusable (e.g. mlx installed but no model loaded) —
-        # the deterministic mock backend is always available.
-        try:
-            from devkit.ai.registry import get_chat_backend as _get
-            mock = _get(name="mock")
-            answer = _chat_answer(mock, context)
-            if answer and answer.strip():
-                return answer.strip(), "mock"
-        except Exception:
-            pass
-    return suggestion, "template"
+        # Real backend missing or unusable (e.g. mlx installed but no
+        # model loaded) — the deterministic mock backend is always
+        # available, so try it explicitly before giving up.
+        pass
+    try:
+        from devkit.ai.registry import get_chat_backend as _get_chat_backend
 
-
-def _template_suggestion(ctx: str, context: str) -> str:
-    if any(k in ctx for k in ("角色", "人设", "性格", "character")):
-        return _character_suggestion(context)
-    elif any(k in ctx for k in ("世界", "世界观", "设定", "world")):
-        return _world_suggestion(context)
-    elif any(k in ctx for k in ("剧情", "故事", "plot", "章节")):
-        return _plot_suggestion(context)
-    elif any(k in ctx for k in ("对话", "台词", "dialog")):
-        return _dialog_suggestion(context)
-    return (
-        "请补充更多上下文（例如：角色名、世界观类型、剧情走向），"
-        "AI 将据此给出更具体的建议。"
-    )
+        mock = _get_chat_backend(name="mock")
+        answer = _chat_answer(mock, context)
+        if answer and answer.strip():
+            return answer.strip(), "mock"
+    except Exception:
+        pass
+    return AI_UNAVAILABLE_MESSAGE, "unavailable"
 
 
 def suggest_with_questions(work_dir: str, context: str) -> dict[str, Any]:
@@ -261,8 +248,8 @@ def suggest_with_questions(work_dir: str, context: str) -> dict[str, Any]:
     """
     ctx = (context or "").lower()
     module = _detect_module(ctx)
-    suggestion, backend = _generate_suggestion(ctx, context)
-    available = backend != "template"
+    suggestion, backend = _generate_suggestion(context)
+    available = backend != "unavailable"
     if available:
         log_assist_event(
             work_dir,
@@ -321,47 +308,3 @@ def _detect_module(ctx: str) -> str:
     if any(k in ctx for k in ("对话", "dialog")):
         return "dialog"
     return "general"
-
-
-def _character_suggestion(context: str) -> str:
-    return (
-        "【人设建议】\n"
-        "· 姓名/外号：贴合世界观，避免与现实名人重名。\n"
-        "· 性格内核：用 1 句话定义核心矛盾（如'温柔却害怕被抛下'）。\n"
-        "· 语言风格：列出 2-3 个口头禅与情绪化表达。\n"
-        "· 记忆基线：先写 8-10 条长期记忆，覆盖身世、执念、人际关系。\n"
-        f"（你的输入：{context.strip()[:120]}）"
-    )
-
-
-def _world_suggestion(context: str) -> str:
-    return (
-        "【世界观建议】\n"
-        "· 时间线：明确'现在'所处的纪元与关键转折。\n"
-        "· 地理：列出 3-5 个主要区域及其冲突。\n"
-        "· 主要势力：每个势力一个核心诉求。\n"
-        "· 规则：写出 1 条'可感知'的超自然/科技法则。\n"
-        f"（你的输入：{context.strip()[:120]}）"
-    )
-
-
-def _plot_suggestion(context: str) -> str:
-    return (
-        "【剧情建议】\n"
-        "1. 起：一个打破日常的事件（如发现古书/收到密信）。\n"
-        "2. 承：主角必须做出选择，触发第一个节点。\n"
-        "3. 转：代价显现，关系重组。\n"
-        "4. 合：收束到角色成长或一个开放悬念。\n"
-        "记得为关键节点绑定角色、世界事件与奖励。\n"
-        f"（你的输入：{context.strip()[:120]}）"
-    )
-
-
-def _dialog_suggestion(context: str) -> str:
-    return (
-        "用户：你好，能跟我说说你自己的事吗？\n"
-        "角色：（稍作停顿）当然。我在这片土地上生活了很久，\n"
-        "      见过太多来来去去的人。你想听哪一段呢？\n"
-        "（建议：让角色用'反问+自述'的方式把对话权交还给用户，"
-        "更容易引出多轮互动。）"
-    )
