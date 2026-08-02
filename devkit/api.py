@@ -166,8 +166,15 @@ from devkit.voice_cloner import (
     list_engines as _vc_engines,
     export_voice_for_submit as _vc_export,
     generate_voice_from_text as _vc_generate_text,
+    generate_voice_from_description as _vc_generate_desc,
     clone_voice_from_file as _vc_clone_file,
     generate_singing as _vc_sing,
+    create_copyright_confirmation as _vc_create_copyright,
+    confirm_copyright as _vc_confirm_copyright,
+    check_copyright_before_upload as _vc_check_copyright,
+    list_copyright_records as _vc_list_copyright,
+    get_diffsinger_model_status as _vc_ds_status,
+    download_diffsinger_model as _vc_ds_download,
 )
 from devkit.tts_engine import (
     get_tts_manager,
@@ -1533,6 +1540,112 @@ class DevKitApi:
             self._work_dir(), character_id, name, text,
             engine=engine_str, params=params_dict,
         )
+
+    @_serialize_call
+    def generate_voice_from_description(
+        self,
+        character_id: Any = None,
+        name: Any = None,
+        description: Any = None,
+        engine: Any = None,
+        params: Any = None,
+    ) -> dict[str, Any]:
+        """C2.1 文本描述生成声音：自然语言描述 → TTS 参数 → 合成。"""
+        if not isinstance(character_id, str) or not character_id:
+            raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
+        if not isinstance(name, str) or not name:
+            raise DevKitError(400, "声音名称不能为空", code="missing_name")
+        if not isinstance(description, str) or not description.strip():
+            raise DevKitError(400, "声音描述不能为空", code="empty_description")
+        engine_str = engine if isinstance(engine, str) else "melo"
+        params_dict = params if isinstance(params, dict) else None
+        return _vc_generate_desc(
+            self._work_dir(), character_id, name, description,
+            engine=engine_str, params=params_dict,
+        )
+
+    @_serialize_call
+    def create_copyright_confirmation(
+        self,
+        character_id: Any = None,
+        voice_id: Any = None,
+        copyright_type: Any = None,
+        declared_by: Any = None,
+        license_info: Any = None,
+        evidence_urls: Any = None,
+        expires_in_days: Any = None,
+    ) -> dict[str, Any]:
+        """C2.1 创建版权确认记录（AC-1 门禁前置步骤）。"""
+        if not isinstance(character_id, str) or not character_id:
+            raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
+        if not isinstance(voice_id, str) or not voice_id:
+            raise DevKitError(400, "声音 ID 不能为空", code="missing_voice_id")
+        if not isinstance(copyright_type, str) or not copyright_type:
+            raise DevKitError(400, "版权类型不能为空", code="bad_copyright_type")
+        if not isinstance(declared_by, str) or not declared_by:
+            raise DevKitError(400, "声明者不能为空", code="missing_declared_by")
+        evidence = evidence_urls if isinstance(evidence_urls, list) else None
+        days = expires_in_days if isinstance(expires_in_days, int) else None
+        return _vc_create_copyright(
+            self._work_dir(), character_id, voice_id, copyright_type,
+            declared_by,
+            license_info=license_info if isinstance(license_info, str) else None,
+            evidence_urls=evidence,
+            expires_in_days=days,
+        )
+
+    @_serialize_call
+    def confirm_copyright(
+        self,
+        copyright_id: Any = None,
+        confirm: Any = None,
+        actor: Any = None,
+    ) -> dict[str, Any]:
+        """C2.1 确认或拒绝版权声明。"""
+        if not isinstance(copyright_id, str) or not copyright_id:
+            raise DevKitError(400, "版权记录 ID 不能为空", code="missing_copyright_id")
+        actor_str = actor if isinstance(actor, str) and actor else "system"
+        return _vc_confirm_copyright(
+            self._work_dir(), copyright_id, actor_str, confirm=bool(confirm),
+        )
+
+    @_serialize_call
+    def check_copyright_before_upload(
+        self,
+        voice_id: Any = None,
+    ) -> dict[str, Any]:
+        """C2.1 AC-1 门禁：上传声音样本前检查版权确认状态。"""
+        if not isinstance(voice_id, str) or not voice_id:
+            raise DevKitError(400, "声音 ID 不能为空", code="missing_voice_id")
+        return _vc_check_copyright(self._work_dir(), voice_id)
+
+    @_serialize_call
+    def list_copyright_records(
+        self,
+        character_id: Any = None,
+    ) -> dict[str, Any]:
+        """C2.1 列出角色的所有版权确认记录。"""
+        if not isinstance(character_id, str) or not character_id:
+            raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
+        return _vc_list_copyright(self._work_dir(), character_id)
+
+    @_serialize_call
+    def get_diffsinger_model_status(
+        self,
+        language: Any = None,
+    ) -> dict[str, Any]:
+        """C2.1 查询 DiffSinger 模型下载状态。"""
+        lang = language if isinstance(language, str) and language else "zh"
+        return _vc_ds_status(lang)
+
+    @_serialize_call
+    def download_diffsinger_model(
+        self,
+        language: Any = None,
+    ) -> dict[str, Any]:
+        """C2.1 下载 DiffSinger 模型（离线环境可能失败）。"""
+        lang = language if isinstance(language, str) and language else "zh"
+        return _vc_ds_download(lang)
 
     @_serialize_call
     def clone_voice_from_file(

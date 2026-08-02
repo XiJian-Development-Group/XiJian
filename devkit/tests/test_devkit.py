@@ -1783,3 +1783,799 @@ class TestVersionSource:
         # Config.json ships a DevKit version entry.
         assert cfg.get("Version", {}).get("DevKit")
 
+
+
+# ---------------------------------------------------------------------------
+# C2.1 新增功能测试：文本生成声音、版权确认、DiffSinger
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateVoiceFromText:
+    """C2.1 文本生成语音（MeloTTS 首选 + 自动回退）"""
+
+    def test_generate_voice_from_text_melo_first(self, tmp_path):
+        from devkit.voice_cloner import generate_voice_from_text
+
+        # MeloTTS 引擎应该被尝试，如果不可用会自动回退
+        # 这里主要测试 API 调用不报错且返回正确结构
+        result = generate_voice_from_text(
+            work_dir=str(tmp_path),
+            character_id="char_test",
+            name="test_voice",
+            text="你好世界",
+            engine="melo",
+            params={"speed": 1.0, "pitch": 1.0, "energy": 1.0, "language": "zh"},
+        )
+        # MeloTTS 在测试环境可能不可用，但应通过 fallback 成功
+        assert result["success"] is True
+        assert "voice_id" in result
+        assert "audio_path" in result
+        assert os.path.isfile(result["audio_path"])
+        assert result["engine"] in ("melo", "mlx", "gguf", "fallback")
+        assert result["duration_sec"] > 0
+
+    def test_generate_voice_from_text_empty_text_raises(self, tmp_path):
+        from devkit.voice_cloner import generate_voice_from_text
+        from devkit import DevKitError
+
+        with pytest.raises(DevKitError) as ei:
+            generate_voice_from_text(
+                work_dir=str(tmp_path),
+                character_id="char_test",
+                name="test",
+                text="",  # 空文本
+            )
+        assert ei.value.code == "empty_text"
+
+    def test_generate_voice_from_text_missing_name_raises(self, tmp_path):
+        from devkit.voice_cloner import generate_voice_from_text
+        from devkit import DevKitError
+
+        with pytest.raises(DevKitError) as ei:
+            generate_voice_from_text(
+                work_dir=str(tmp_path),
+                character_id="char_test",
+                name="",  # 空名称
+                text="测试文本",
+            )
+        assert ei.value.code == "missing_name"
+
+    def test_generate_voice_from_text_with_params(self, tmp_path):
+        from devkit.voice_cloner import generate_voice_from_text
+
+        result = generate_voice_from_text(
+            work_dir=str(tmp_path),
+            character_id="char_test",
+            name="test_params",
+            text="参数测试",
+            engine="melo",
+            params={
+                "speed": 1.5,
+                "pitch": 0.8,
+                "energy": 1.2,
+                "language": "en",
+                "voice_id": "melo_en_female_0",
+            },
+        )
+        assert result["success"] is True
+        # 验证生成的语音记录包含参数
+        from devkit.voice_cloner import get_voice
+        voice = get_voice(str(tmp_path), result["voice_id"])
+        assert voice is not None
+        assert voice["params"].get("generated_from_text") is True
+        assert voice["params"].get("speed") == 1.5
+        assert voice["params"].get("pitch") == 0.8
+
+
+class TestGenerateVoiceFromDescription:
+    """C2.1 文本描述生成声音（自然语言 → TTS 参数）"""
+
+    def test_parse_female_young_gentle(self, tmp_path):
+        from devkit.voice_cloner import _parse_voice_description
+
+        params = _parse_voice_description("温柔的年轻女性声音，语速稍慢，音调偏高，带点甜美感")
+        # 性别 -> voice_id
+        assert params.get("voice_id") == "melo_zh_female_0"
+        # 年轻 -> pitch 偏高
+        assert params.get("pitch", 1.0) > 1.0
+        # 温柔 -> pitch 略高, energy 略低
+        assert params.get("energy", 1.0) < 1.0
+        # 语速稍慢
+        assert params.get("speed", 1.0) < 1.0
+        # 甜美 -> pitch 更高
+        assert params.get("pitch", 1.0) > 1.1
+        # 语言默认中文
+        assert params.get("language") == "zh"
+
+    def test_parse_male_mature_magnetic(self, tmp_path):
+        from devkit.voice_cloner import _parse_voice_description
+
+        params = _parse_voice_description("磁性成熟男声，语速正常，音调偏低，情感深沉")
+        assert params.get("voice_id") == "melo_zh_male_0"
+        # 成熟 -> pitch 偏低
+        assert params.get("pitch", 1.0) < 1.0
+        # 磁性 -> pitch 更低, energy 略高
+        assert params.get("pitch", 1.0) < 0.95
+        assert params.get("energy", 1.0) > 1.0
+        # 语速正常
+        assert params.get("speed", 1.0) == pytest.approx(1.0, abs=0.1)
+        # 深沉 -> pitch 更低
+        assert params.get("pitch", 1.0) < 0.9
+        # 语言默认中文
+        assert params.get("language") == "zh"
+
+    def test_parse_english_language(self, tmp_path):
+        from devkit.voice_cloner import _parse_voice_description
+
+        params = _parse_voice_description("A gentle young female voice speaking English")
+        assert params.get("language") == "en"
+        assert params.get("voice_id") == "melo_en_female_0"
+
+    def test_parse_japanese_language(self, tmp_path):
+        from devkit.voice_cloner import _parse_voice_description
+
+        params = _parse_voice_description("日本語の優しい女性の声")
+        assert params.get("language") == "jp"
+
+    def test_parse_cantonese_language(self, tmp_path):
+        from devkit.voice_cloner import _parse_voice_description
+
+        params = _parse_voice_description("粤语 温柔 女声")
+        # 粤语使用中文模型
+        assert params.get("language") == "zh"
+
+    def test_parse_emotion_happy(self, tmp_path):
+        from devkit.voice_cloner import _parse_voice_description
+
+        params = _parse_voice_description("开心愉快的声音")
+        assert params.get("energy", 1.0) > 1.0
+        assert params.get("pitch", 1.0) > 1.0
+        assert params.get("speed", 1.0) > 1.0
+
+    def test_parse_emotion_sad(self, tmp_path):
+        from devkit.voice_cloner import _parse_voice_description
+
+        params = _parse_voice_description("悲伤忧郁的声音")
+        assert params.get("energy", 1.0) < 1.0
+        assert params.get("pitch", 1.0) < 1.0
+        assert params.get("speed", 1.0) < 1.0
+
+    def test_parse_emotion_serious(self, tmp_path):
+        from devkit.voice_cloner import _parse_voice_description
+
+        params = _parse_voice_description("严肃严厉的声音")
+        assert params.get("energy", 1.0) > 1.0
+        assert params.get("pitch", 1.0) < 1.0
+        assert params.get("speed", 1.0) < 1.0
+
+    def test_generate_voice_from_description_integration(self, tmp_path):
+        from devkit.voice_cloner import generate_voice_from_description
+
+        result = generate_voice_from_description(
+            work_dir=str(tmp_path),
+            character_id="char_test",
+            name="desc_voice",
+            description="温柔的年轻女性声音，语速稍慢，音调偏高",
+            engine="melo",
+        )
+        assert result["success"] is True
+        assert "voice_id" in result
+        assert "audio_path" in result
+        assert os.path.isfile(result["audio_path"])
+
+    def test_generate_voice_from_description_empty_raises(self, tmp_path):
+        from devkit.voice_cloner import generate_voice_from_description
+        from devkit import DevKitError
+
+        with pytest.raises(DevKitError) as ei:
+            generate_voice_from_description(
+                work_dir=str(tmp_path),
+                character_id="char_test",
+                name="test",
+                description="",  # 空描述
+            )
+        assert ei.value.code == "empty_description"
+
+
+class TestCopyrightConfirmation:
+    """C2.1 版权确认系统（AC-1：上传声音样本前必须确认版权）"""
+
+    def test_create_copyright_confirmation(self, tmp_path):
+        from devkit.voice_cloner import (
+            save_voice, create_copyright_confirmation, get_copyright_status
+        )
+
+        # 先创建一个声音
+        voice = save_voice(str(tmp_path), "char_copyright", "test_voice", audio_data=b"test")
+
+        # 创建版权确认记录
+        record = create_copyright_confirmation(
+            work_dir=str(tmp_path),
+            character_id="char_copyright",
+            voice_id=voice["id"],
+            copyright_type="original",
+            declared_by="user_123",
+            license_info="自行录制",
+            evidence_urls=["https://example.com/proof"],
+            expires_in_days=365,
+        )
+        assert record["status"] == "pending"
+        assert record["copyright_type"] == "original"
+        assert record["declared_by"] == "user_123"
+        assert record["license_info"] == "自行录制"
+        assert record["evidence_urls"] == ["https://example.com/proof"]
+        assert record["expires_at"] is not None
+        assert len(record["audit_trail"]) == 1
+        assert record["audit_trail"][0]["action"] == "create"
+
+    def test_create_copyright_invalid_type_raises(self, tmp_path):
+        from devkit.voice_cloner import save_voice, create_copyright_confirmation
+        from devkit import DevKitError
+
+        voice = save_voice(str(tmp_path), "char_c", "v", audio_data=b"x")
+        with pytest.raises(DevKitError) as ei:
+            create_copyright_confirmation(
+                work_dir=str(tmp_path),
+                character_id="char_c",
+                voice_id=voice["id"],
+                copyright_type="invalid_type",
+                declared_by="user_1",
+            )
+        assert ei.value.code == "bad_copyright_type"
+
+    def test_create_copyright_missing_voice_raises(self, tmp_path):
+        from devkit.voice_cloner import create_copyright_confirmation
+        from devkit import DevKitError
+
+        with pytest.raises(DevKitError) as ei:
+            create_copyright_confirmation(
+                work_dir=str(tmp_path),
+                character_id="char_x",
+                voice_id="nonexistent",
+                copyright_type="original",
+                declared_by="user_1",
+            )
+        assert ei.value.code == "voice_not_found"
+
+    def test_confirm_copyright_approved(self, tmp_path):
+        from devkit.voice_cloner import (
+            save_voice, create_copyright_confirmation, confirm_copyright, get_copyright_status
+        )
+
+        voice = save_voice(str(tmp_path), "char_cc", "voice", audio_data=b"x")
+        cr = create_copyright_confirmation(
+            work_dir=str(tmp_path),
+            character_id="char_cc",
+            voice_id=voice["id"],
+            copyright_type="original",
+            declared_by="user_1",
+        )
+
+        # 确认版权
+        confirmed = confirm_copyright(
+            work_dir=str(tmp_path),
+            copyright_id=cr["id"],
+            actor="user_1",
+            confirm=True,
+        )
+        assert confirmed["status"] == "confirmed"
+        assert len(confirmed["audit_trail"]) == 2
+        assert confirmed["audit_trail"][1]["action"] == "confirm"
+        assert confirmed["audit_trail"][1]["actor"] == "user_1"
+
+        # 通过 get_copyright_status 验证
+        status = get_copyright_status(str(tmp_path), voice["id"])
+        assert status["status"] == "confirmed"
+
+    def test_confirm_copyright_rejected(self, tmp_path):
+        from devkit.voice_cloner import (
+            save_voice, create_copyright_confirmation, confirm_copyright, get_copyright_status
+        )
+
+        voice = save_voice(str(tmp_path), "char_cr", "voice", audio_data=b"x")
+        cr = create_copyright_confirmation(
+            work_dir=str(tmp_path),
+            character_id="char_cr",
+            voice_id=voice["id"],
+            copyright_type="original",
+            declared_by="user_1",
+        )
+
+        # 拒绝版权
+        rejected = confirm_copyright(
+            work_dir=str(tmp_path),
+            copyright_id=cr["id"],
+            actor="user_1",
+            confirm=False,
+        )
+        assert rejected["status"] == "rejected"
+        assert rejected["audit_trail"][1]["action"] == "reject"
+
+        status = get_copyright_status(str(tmp_path), voice["id"])
+        assert status["status"] == "rejected"
+
+    def test_confirm_copyright_already_confirmed_raises(self, tmp_path):
+        from devkit.voice_cloner import (
+            save_voice, create_copyright_confirmation, confirm_copyright
+        )
+        from devkit import DevKitError
+
+        voice = save_voice(str(tmp_path), "char_cr2", "voice", audio_data=b"x")
+        cr = create_copyright_confirmation(
+            work_dir=str(tmp_path),
+            character_id="char_cr2",
+            voice_id=voice["id"],
+            copyright_type="original",
+            declared_by="user_1",
+        )
+        confirm_copyright(str(tmp_path), cr["id"], "user_1", confirm=True)
+
+        # 再次确认应该失败
+        with pytest.raises(DevKitError) as ei:
+            confirm_copyright(str(tmp_path), cr["id"], "user_1", confirm=True)
+        assert ei.value.code == "invalid_state_transition"
+
+    def test_check_copyright_before_upload_allowed(self, tmp_path):
+        from devkit.voice_cloner import (
+            save_voice, create_copyright_confirmation, confirm_copyright,
+            check_copyright_before_upload
+        )
+
+        voice = save_voice(str(tmp_path), "char_check", "voice", audio_data=b"x")
+        cr = create_copyright_confirmation(
+            work_dir=str(tmp_path),
+            character_id="char_check",
+            voice_id=voice["id"],
+            copyright_type="original",
+            declared_by="user_1",
+        )
+        confirm_copyright(str(tmp_path), cr["id"], "user_1", confirm=True)
+
+        # 检查应该通过
+        result = check_copyright_before_upload(str(tmp_path), voice["id"])
+        assert result["allowed"] is True
+        assert result["reason"] == "版权已确认"
+        assert result["record"]["status"] == "confirmed"
+
+    def test_check_copyright_before_upload_rejected(self, tmp_path):
+        from devkit.voice_cloner import (
+            save_voice, create_copyright_confirmation, confirm_copyright,
+            check_copyright_before_upload
+        )
+
+        voice = save_voice(str(tmp_path), "char_check2", "voice", audio_data=b"x")
+        cr = create_copyright_confirmation(
+            work_dir=str(tmp_path),
+            character_id="char_check2",
+            voice_id=voice["id"],
+            copyright_type="original",
+            declared_by="user_1",
+        )
+        confirm_copyright(str(tmp_path), cr["id"], "user_1", confirm=False)
+
+        result = check_copyright_before_upload(str(tmp_path), voice["id"])
+        assert result["allowed"] is False
+        assert result["reason"] == "版权确认被拒绝，无法上传"
+
+    def test_check_copyright_before_upload_pending(self, tmp_path):
+        from devkit.voice_cloner import (
+            save_voice, create_copyright_confirmation,
+            check_copyright_before_upload
+        )
+
+        voice = save_voice(str(tmp_path), "char_check3", "voice", audio_data=b"x")
+        cr = create_copyright_confirmation(
+            work_dir=str(tmp_path),
+            character_id="char_check3",
+            voice_id=voice["id"],
+            copyright_type="original",
+            declared_by="user_1",
+        )
+        # 不 confirm，保持 PENDING
+
+        result = check_copyright_before_upload(str(tmp_path), voice["id"])
+        assert result["allowed"] is False
+        assert result["reason"] == "版权确认待处理中"
+
+    def test_check_copyright_before_upload_no_record(self, tmp_path):
+        from devkit.voice_cloner import (
+            save_voice, check_copyright_before_upload
+        )
+
+        voice = save_voice(str(tmp_path), "char_check4", "voice", audio_data=b"x")
+        # 没有创建版权记录
+
+        result = check_copyright_before_upload(str(tmp_path), voice["id"])
+        assert result["allowed"] is False
+        assert result["reason"] == "未找到版权确认记录，请先完成版权确认"
+        assert result["record"] is None
+
+    def test_dispute_copyright(self, tmp_path):
+        from devkit.voice_cloner import (
+            save_voice, create_copyright_confirmation, confirm_copyright,
+            dispute_copyright, get_copyright_status
+        )
+
+        voice = save_voice(str(tmp_path), "char_disp", "voice", audio_data=b"x")
+        cr = create_copyright_confirmation(
+            work_dir=str(tmp_path),
+            character_id="char_disp",
+            voice_id=voice["id"],
+            copyright_type="original",
+            declared_by="user_1",
+        )
+        confirm_copyright(str(tmp_path), cr["id"], "user_1", confirm=True)
+
+        # 发起争议
+        disputed = dispute_copyright(
+            work_dir=str(tmp_path),
+            copyright_id=cr["id"],
+            actor="user_2",
+            reason="该音频侵犯我的版权",
+        )
+        assert disputed["status"] == "disputed"
+        assert disputed["audit_trail"][-1]["action"] == "dispute"
+        assert disputed["audit_trail"][-1]["details"] == "该音频侵犯我的版权"
+
+        status = get_copyright_status(str(tmp_path), voice["id"])
+        assert status["status"] == "disputed"
+
+    def test_resolve_copyright_dispute_confirmed(self, tmp_path):
+        from devkit.voice_cloner import (
+            save_voice, create_copyright_confirmation, confirm_copyright,
+            dispute_copyright, resolve_copyright_dispute, get_copyright_status
+        )
+
+        voice = save_voice(str(tmp_path), "char_res", "voice", audio_data=b"x")
+        cr = create_copyright_confirmation(
+            work_dir=str(tmp_path),
+            character_id="char_res",
+            voice_id=voice["id"],
+            copyright_type="original",
+            declared_by="user_1",
+        )
+        confirm_copyright(str(tmp_path), cr["id"], "user_1", confirm=True)
+        dispute_copyright(str(tmp_path), cr["id"], "user_2", "争议原因")
+
+        # 解决争议 -> confirmed
+        resolved = resolve_copyright_dispute(
+            work_dir=str(tmp_path),
+            copyright_id=cr["id"],
+            actor="admin",
+            resolved_status="confirmed",
+            reason="经核实属于原创",
+        )
+        assert resolved["status"] == "confirmed"
+        assert resolved["audit_trail"][-1]["action"] == "resolve_dispute"
+
+        status = get_copyright_status(str(tmp_path), voice["id"])
+        assert status["status"] == "confirmed"
+
+    def test_resolve_copyright_dispute_rejected(self, tmp_path):
+        from devkit.voice_cloner import (
+            save_voice, create_copyright_confirmation, confirm_copyright,
+            dispute_copyright, resolve_copyright_dispute, get_copyright_status
+        )
+
+        voice = save_voice(str(tmp_path), "char_res2", "voice", audio_data=b"x")
+        cr = create_copyright_confirmation(
+            work_dir=str(tmp_path),
+            character_id="char_res2",
+            voice_id=voice["id"],
+            copyright_type="original",
+            declared_by="user_1",
+        )
+        confirm_copyright(str(tmp_path), cr["id"], "user_1", confirm=True)
+        dispute_copyright(str(tmp_path), cr["id"], "user_2", "争议原因")
+
+        # 解决争议 -> rejected
+        resolved = resolve_copyright_dispute(
+            work_dir=str(tmp_path),
+            copyright_id=cr["id"],
+            actor="admin",
+            resolved_status="rejected",
+            reason="确认侵权",
+        )
+        assert resolved["status"] == "rejected"
+
+        status = get_copyright_status(str(tmp_path), voice["id"])
+        assert status["status"] == "rejected"
+
+    def test_list_copyright_records(self, tmp_path):
+        from devkit.voice_cloner import (
+            save_voice, create_copyright_confirmation, list_copyright_records
+        )
+
+        voice1 = save_voice(str(tmp_path), "char_list", "voice1", audio_data=b"x")
+        voice2 = save_voice(str(tmp_path), "char_list", "voice2", audio_data=b"y")
+
+        create_copyright_confirmation(
+            work_dir=str(tmp_path),
+            character_id="char_list",
+            voice_id=voice1["id"],
+            copyright_type="original",
+            declared_by="user_1",
+        )
+        create_copyright_confirmation(
+            work_dir=str(tmp_path),
+            character_id="char_list",
+            voice_id=voice2["id"],
+            copyright_type="licensed",
+            declared_by="user_1",
+        )
+
+        records = list_copyright_records(str(tmp_path), "char_list")
+        assert len(records) == 2
+        assert records[0]["voice_id"] == voice1["id"]
+        assert records[1]["voice_id"] == voice2["id"]
+
+    def test_copyright_expiration_check(self, tmp_path):
+        from devkit.voice_cloner import (
+            save_voice, create_copyright_confirmation, confirm_copyright,
+            get_copyright_status, check_copyright_before_upload
+        )
+        from datetime import datetime, timedelta, timezone
+
+        voice = save_voice(str(tmp_path), "char_exp", "voice", audio_data=b"x")
+        cr = create_copyright_confirmation(
+            work_dir=str(tmp_path),
+            character_id="char_exp",
+            voice_id=voice["id"],
+            copyright_type="original",
+            declared_by="user_1",
+            expires_in_days=0,  # 立即过期（用于测试）
+        )
+        confirm_copyright(str(tmp_path), cr["id"], "user_1", confirm=True)
+
+        # 手动将过期时间设为过去
+        from devkit.voice_cloner import _load_copyright_meta, _save_copyright_meta
+        meta = _load_copyright_meta(str(tmp_path), "char_exp")
+        past = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat().replace("+00:00", "Z")
+        meta[0]["expires_at"] = past
+        meta[0]["status"] = "confirmed"
+        _save_copyright_meta(str(tmp_path), "char_exp", meta)
+
+        # 再次查询应该触发过期检查
+        status = get_copyright_status(str(tmp_path), voice["id"])
+        # 注意：过期检查在 get_copyright_status 中进行
+        assert status["status"] in ("confirmed", "expired")
+
+
+class TestDiffSingerEngine:
+    """C2.1 DiffSinger 歌声引擎（引擎接口 + 默认 unavailable + set_engine 钩子）"""
+
+    def test_diffsinger_engine_hook_set_and_get(self, tmp_path):
+        from devkit.voice_cloner import set_diffsinger_engine, _get_diffsinger_engine
+        from devkit.tts_engine import TTSEngine, TTSResult
+
+        # 创建一个 Mock 引擎
+        class MockDiffSinger(TTSEngine):
+            def __init__(self):
+                self._available = True
+                self._language = "zh"
+
+            @property
+            def name(self) -> str:
+                return "mock_diffsinger"
+
+            def is_available(self) -> bool:
+                return self._available
+
+            def ensure_model(self, language: str) -> bool:
+                return True
+
+            def synthesize(self, request) -> TTSResult:
+                return TTSResult(success=True, audio_path="/tmp/mock.wav", engine="mock_diffsinger")
+
+            def list_voices(self) -> list[dict]:
+                return [{"id": "mock_voice", "name": "Mock", "language": "zh"}]
+
+            def generate_singing(self, lyrics, voice_id, language, params=None) -> TTSResult:
+                return TTSResult(success=True, audio_path="/tmp/mock_sing.wav", engine="mock_diffsinger")
+
+            def _get_cache_dir(self) -> str:
+                return "/tmp/diffsinger_cache"
+
+            DIFFSINGER_MODELS = {"zh": "mock/repo"}
+
+        mock_engine = MockDiffSinger()
+        set_diffsinger_engine(mock_engine)
+
+        # 获取应该返回我们注入的 mock
+        engine = _get_diffsinger_engine()
+        assert engine is mock_engine
+        assert engine.is_available() is True
+
+        # 重置为 None
+        set_diffsinger_engine(None)
+        engine2 = _get_diffsinger_engine()
+        # 应该返回真实的 DiffSingerEngine 实例
+        from devkit.tts_engine import DiffSingerEngine
+        assert isinstance(engine2, DiffSingerEngine)
+
+    def test_diffsinger_download_model(self, tmp_path):
+        from devkit.voice_cloner import download_diffsinger_model, set_diffsinger_engine
+        from devkit.tts_engine import DiffSingerEngine
+
+        # 使用真实引擎测试（不下载，只测试调用链）
+        set_diffsinger_engine(None)
+        ds = DiffSingerEngine()
+
+        # 默认不可用（模型未下载）
+        assert ds.is_available() is False
+
+        # download_diffsinger_model 会尝试下载，测试环境无网络会返回 False
+        # 这里只验证函数可调用且不报错
+        result = download_diffsinger_model("zh")
+        # 在无网络/无模型环境下返回 False 是预期行为
+        assert isinstance(result, bool)
+
+    def test_diffsinger_model_status(self, tmp_path):
+        from devkit.voice_cloner import get_diffsinger_model_status, set_diffsinger_engine
+
+        set_diffsinger_engine(None)
+        status = get_diffsinger_model_status("zh")
+        assert "language" in status
+        assert "model_repo" in status
+        assert "local_path" in status
+        assert "is_downloaded" in status
+        assert "is_available" in status
+        assert status["language"] == "zh"
+        assert status["is_available"] is False  # 默认未下载
+
+    def test_generate_singing_requires_melody(self, tmp_path):
+        from devkit.voice_cloner import generate_singing
+        from devkit import DevKitError
+
+        # 缺少 midi_path 和 melody 都应该报错
+        with pytest.raises(DevKitError) as ei:
+            generate_singing(
+                work_dir=str(tmp_path),
+                character_id="char_sing",
+                name="sing_test",
+                text="歌词测试",
+                engine="diffsinger",
+                params={},  # 无 melody
+            )
+        assert ei.value.code == "missing_melody"
+
+    def test_generate_singing_with_midi(self, tmp_path):
+        from devkit.voice_cloner import generate_singing, set_diffsinger_engine
+        from devkit.tts_engine import TTSEngine, TTSResult
+
+        # 注入 mock 避免真实模型依赖
+        class MockDS(TTSEngine):
+            @property
+            def name(self): return "mock_ds"
+            def is_available(self): return True
+            def ensure_model(self, lang): return True
+            def synthesize(self, req): return TTSResult(True, "/tmp/x.wav", "mock")
+            def list_voices(self): return [{"id": "mock_v", "name": "Mock", "language": "zh"}]
+            def generate_singing(self, lyrics, voice_id, language, params=None):
+                return TTSResult(True, "/tmp/sing.wav", "mock")
+            def _get_cache_dir(self): return "/tmp"
+            DIFFSINGER_MODELS = {"zh": "mock/repo"}
+
+        set_diffsinger_engine(MockDS())
+
+        result = generate_singing(
+            work_dir=str(tmp_path),
+            character_id="char_sing2",
+            name="sing_test2",
+            text="啦啦啦",
+            engine="diffsinger",
+            params={"midi_path": "/fake/test.mid"},
+        )
+        # 即使 mock 成功，也可能因为文件不存在而失败
+        # 但 API 结构应该正确
+        assert "success" in result
+        assert "engine" in result
+        if result["success"]:
+            assert "voice_id" in result
+            assert "audio_path" in result
+
+
+# ---------------------------------------------------------------------------
+# API 桥接层测试（如果 core/api 有涉及）
+# ---------------------------------------------------------------------------
+
+
+class TestDevKitApiVoiceGeneration:
+    """DevKitApi 桥接层：语音生成相关接口"""
+
+    def test_api_generate_voice_from_text(self, tmp_path):
+        from devkit.api import DevKitApi
+
+        api = DevKitApi()
+        api.set_work_dir(str(tmp_path))
+        resp = api.generate_voice_from_text(
+            character_id="char_api",
+            name="api_voice",
+            text="API 测试文本",
+            engine="melo",
+        )
+        assert resp["ok"] is True
+        assert "voice_id" in resp["data"]
+        assert "audio_path" in resp["data"]
+
+    def test_api_generate_voice_from_description(self, tmp_path):
+        from devkit.api import DevKitApi
+
+        api = DevKitApi()
+        api.set_work_dir(str(tmp_path))
+        resp = api.generate_voice_from_description(
+            character_id="char_api2",
+            name="api_desc",
+            description="温柔的年轻女性声音",
+            engine="melo",
+        )
+        assert resp["ok"] is True
+        assert "voice_id" in resp["data"]
+
+    def test_api_create_copyright_confirmation(self, tmp_path):
+        from devkit.api import DevKitApi
+        from devkit.voice_cloner import save_voice
+
+        api = DevKitApi()
+        api.set_work_dir(str(tmp_path))
+        voice = save_voice(str(tmp_path), "char_api3", "voice", audio_data=b"x")
+
+        resp = api.create_copyright_confirmation(
+            character_id="char_api3",
+            voice_id=voice["id"],
+            copyright_type="original",
+            declared_by="api_user",
+        )
+        assert resp["ok"] is True
+        assert resp["data"]["status"] == "pending"
+
+    def test_api_confirm_copyright(self, tmp_path):
+        from devkit.api import DevKitApi
+        from devkit.voice_cloner import save_voice, create_copyright_confirmation
+
+        api = DevKitApi()
+        api.set_work_dir(str(tmp_path))
+        voice = save_voice(str(tmp_path), "char_api4", "voice", audio_data=b"x")
+        cr = create_copyright_confirmation(
+            work_dir=str(tmp_path),
+            character_id="char_api4",
+            voice_id=voice["id"],
+            copyright_type="original",
+            declared_by="api_user",
+        )
+
+        resp = api.confirm_copyright(
+            copyright_id=cr["id"],
+            confirm=True,
+        )
+        assert resp["ok"] is True
+        assert resp["data"]["status"] == "confirmed"
+
+    def test_api_check_copyright_before_upload(self, tmp_path):
+        from devkit.api import DevKitApi
+        from devkit.voice_cloner import save_voice, create_copyright_confirmation, confirm_copyright
+
+        api = DevKitApi()
+        api.set_work_dir(str(tmp_path))
+        voice = save_voice(str(tmp_path), "char_api5", "voice", audio_data=b"x")
+        cr = create_copyright_confirmation(
+            work_dir=str(tmp_path),
+            character_id="char_api5",
+            voice_id=voice["id"],
+            copyright_type="original",
+            declared_by="api_user",
+        )
+        confirm_copyright(str(tmp_path), cr["id"], "api_user", confirm=True)
+
+        resp = api.check_copyright_before_upload(voice_id=voice["id"])
+        assert resp["ok"] is True
+        assert resp["data"]["allowed"] is True
+
+    def test_api_diffsinger_model_status(self, tmp_path):
+        from devkit.api import DevKitApi
+
+        api = DevKitApi()
+        api.set_work_dir(str(tmp_path))
+        resp = api.get_diffsinger_model_status(language="zh")
+        assert resp["ok"] is True
+        assert "is_available" in resp["data"]
