@@ -101,6 +101,7 @@ from typing import Any
 
 from xijian_api.stubs import mcp_rules as rules_stub
 from xijian_api.stubs import state
+from xijian_api.stubs import manual_backups
 from xijian_api.utils.ids import (
     gen_mcp_audit_id,
     gen_mcp_freeze_id,
@@ -899,6 +900,12 @@ def confirm_safety_stop(
             freeze_id, FREEZE_RESTORED,
             snapshot_id=snapshot_id, restore_summary=summary, now=moment,
         )
+        # A1.1 cross-link: after a confirmed safety-stop, back up every
+        # auto-backup-enabled character (hook owned by manual_backups).
+        try:
+            manual_backups.notify_safe_termination()
+        except Exception as exc:  # noqa: BLE001
+            _LOGGER.warning("safe-termination backup hook failed: %s", exc)
         return state.mcp_freezes[freeze_id]
 
 
