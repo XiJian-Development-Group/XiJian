@@ -11,6 +11,7 @@ from xijian_api.pagination import paginate
 from xijian_api.stubs import files as files_stub
 from xijian_api.stubs import state
 from xijian_api.utils.ids import gen_file_id
+from xijian_api.utils.params import safe_header_value
 from xijian_api.utils.time import now_ts
 
 
@@ -105,7 +106,12 @@ def get_file_content(file_id: str):
     if payload is None:
         raise ApiError(404, f"file not found: {file_id}", "not_found_error", code="file_not_found")
     record = state.files.get(file_id, {})
-    filename = record.get("filename", f"{file_id}.bin")
+    # Scrub CR/LF + control chars from the filename before embedding it
+    # in a response header — a hostile filename would otherwise raise
+    # ValueError in Werkzeug (500) or inject extra headers.
+    # 在把文件名嵌入响应头之前清除 CR/LF 和控制字符——否则恶意的
+    # 文件名会在 Werkzeug 中触发 ValueError (500) 或注入额外响应头。
+    filename = safe_header_value(record.get("filename", f"{file_id}.bin"))
     content_type = record.get("content_type", "application/octet-stream")
     response = Response(payload, mimetype=content_type)
     response.headers["Content-Disposition"] = f'attachment; filename="{Path(filename).name}"'

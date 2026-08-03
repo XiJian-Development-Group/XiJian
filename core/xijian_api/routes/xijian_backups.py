@@ -190,7 +190,7 @@ def resolve_capacity():
             action=action,
             incoming_bytes=int(body.get("incoming_bytes", 0)),
         )
-    except snap_stub.SnapshotError as exc:
+    except (snap_stub.SnapshotError, TypeError, ValueError) as exc:
         raise ApiError(
             400, str(exc), "invalid_request_error", code="capacity_error",
         )

@@ -191,6 +191,11 @@ def overload_simulate():
     metric = payload.get("metric", ov_stub.METRIC_CPU)
     try:
         duration_s = float(payload.get("duration_s", 0.0)) or None
+        if duration_s is not None and (
+            duration_s != duration_s
+            or duration_s in (float("inf"), float("-inf"))
+        ):
+            raise ValueError
     except ValueError as exc:
         raise ApiError(
             400, "duration_s must be a number", "invalid_request_error", code="bad_duration"

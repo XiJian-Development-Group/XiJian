@@ -13,7 +13,16 @@ bp = Blueprint("xijian_sessions", __name__)
 
 @bp.post("/v1/xijian/sessions")
 def create_session():
-    return jsonify(sessions_stub.create(request.get_json(silent=True) or {})), 201
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        raise ApiError(
+            400,
+            "Request body must be a JSON object",
+            "invalid_request_error",
+            code="invalid_request_body",
+            param="body",
+        )
+    return jsonify(sessions_stub.create(payload)), 201
 
 
 @bp.post("/v1/xijian/sessions/<session_id>/messages")

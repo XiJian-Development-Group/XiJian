@@ -816,7 +816,7 @@ class TestCategory13NaNAndNull:
             json.dumps(_chat_body(temperature=float("nan"))),
             auth_headers,
         )
-        _assert_never_500(res)
+        assert res.status_code == 400
 
     def test_chat_temperature_infinity(self, client, auth_headers):
         for v in (float("inf"), float("-inf")):
@@ -826,7 +826,7 @@ class TestCategory13NaNAndNull:
                 json.dumps(_chat_body(temperature=v)),
                 auth_headers,
             )
-            _assert_never_500(res)
+            assert res.status_code == 400
 
     def test_chat_numeric_fields_nan(self, client, auth_headers):
         for field in ("temperature", "top_p"):
@@ -834,7 +834,7 @@ class TestCategory13NaNAndNull:
             res = self._post_raw_json(
                 client, "/v1/chat/completions", raw, auth_headers
             )
-            _assert_never_500(res)
+            assert res.status_code == 400
 
     def test_chat_null_numeric_fields(self, client, auth_headers):
         for field in ("temperature", "top_p", "max_tokens", "n"):
@@ -865,7 +865,7 @@ class TestCategory13NaNAndNull:
                 json={"amount": v},
                 headers=auth_headers,
             )
-            _assert_never_500(res)
+            assert res.status_code == 400
 
     def test_wallet_amount_null(self, client, auth_headers):
         world = _new_world(client, auth_headers).get_json()["id"]
@@ -887,7 +887,7 @@ class TestCategory13NaNAndNull:
             json={"query": "hi", "min_score": float("nan")},
             headers=auth_headers,
         )
-        _assert_never_500(res)
+        assert res.status_code == 400
 
 
 # ---------------------------------------------------------------------------
@@ -1356,3 +1356,153 @@ class TestCategory19PostAbuseRegression:
             )
         except Exception:  # noqa: BLE001
             pass
+
+
+# ---------------------------------------------------------------------------
+# 20. 丝柯克复核补刀（QA 复审发现的同类洞）— follow-up fixes
+# ---------------------------------------------------------------------------
+
+
+class TestCategory20FollowupFixes:
+    """Regressions for the holes found during QA review:
+    QA 复核发现的同类洞的回归测试：
+    non-dict ``xijian`` block, response-header injection, unlocked
+    ``transfer``, backups ``expires_at`` / ``incoming_bytes``,
+    array body on sessions.
+    """
+
+    def test_chat_xijian_non_dict_string(self, client, auth_headers):
+        res = client.post(
+            "/v1/chat/completions",
+            json=_chat_body(xijian="nope"),
+            headers=auth_headers,
+        )
+        assert res.status_code == 400
+
+    def test_chat_xijian_non_dict_list(self, client, auth_headers):
+        res = client.post(
+            "/v1/chat/completions",
+            json=_chat_body(xijian=[1, 2]),
+            headers=auth_headers,
+        )
+        assert res.status_code == 400
+
+    def test_chat_xijian_non_dict_number(self, client, auth_headers):
+        res = client.post(
+            "/v1/chat/completions",
+            json=_chat_body(xijian=42),
+            headers=auth_headers,
+        )
+        assert res.status_code == 400
+
+    def test_chat_xijian_dict_still_works(self, client, auth_headers):
+        res = client.post(
+            "/v1/chat/completions",
+            json=_chat_body(xijian={"backend": "stub"}),
+            headers=auth_headers,
+        )
+        assert res.status_code == 200
+
+    def test_file_download_hostile_filename_no_500(self, client, auth_headers):
+        # Upload via raw body + ``filename`` query param (the path that
+        # actually reaches the Content-Disposition header); downloading
+        # must not crash or inject extra headers (regression: header
+        # injection via CR/LF in filename).
+        # 通过 raw body + ``filename`` 查询参数上传（真正到达
+        # Content-Disposition 头的路径）；下载时不得崩溃或注入额外头。
+        evil = "evil\r\nX-Injected: 1.txt"
+        url = "/v1/files?filename=" + evil.replace("\r", "%0d").replace("\n", "%0a")
+        up = client.post(
+            url,
+            data=b"hello",
+            headers={**auth_headers, "Content-Type": "application/octet-stream"},
+        )
+        assert up.status_code == 201
+        file_id = up.get_json()["id"]
+        res = client.get(f"/v1/files/{file_id}/content", headers=auth_headers)
+        assert res.status_code == 200
+        disposition = res.headers.get("Content-Disposition", "")
+        assert "\r" not in disposition and "\n" not in disposition
+        # The CR/LF was scrubbed, so no separate injected header exists.
+        # CR/LF 已被清除，因此不存在独立的注入头。
+        assert res.headers.get("X-Injected") is None
+
+    def test_wallet_transfer_concurrent_no_lost_update(self, app, auth_headers, token):
+        # Concurrent transfers must not lose updates (transfer was the
+        # one mutation path left unlocked).  ``wallets.transfer`` is a
+        # stub-layer API (exposed via crime/theft), so drive it directly
+        # with per-thread app contexts.
+        # 并发转账不得丢失更新（transfer 曾是唯一未加锁的变更路径）。
+        # ``wallets.transfer`` 是 stub 层 API（经 crime/theft 暴露），
+        # 因此用每线程 app 上下文直接驱动。
+        import threading
+
+        from xijian_api.stubs import wallets as wstub
+
+        with app.app_context():
+            world = _new_world(app.test_client(), auth_headers).get_json()["id"]
+            client = app.test_client()
+            client.post(
+                "/v1/xijian/currencies",
+                json={"world_id": world, "code": "mora", "name": "Mora"},
+                headers=auth_headers,
+            )
+            wstub.ensure_wallet("user", "from_acc", world, "mora")
+            wstub.ensure_wallet("user", "to_acc", world, "mora")
+            wstub.deposit("user", "from_acc", world, "mora", 100.0)
+            wstub.deposit("user", "to_acc", world, "mora", 0.0)
+
+            errors = []
+            barrier = threading.Barrier(5)
+
+            def worker():
+                try:
+                    barrier.wait(timeout=10)
+                    for _ in range(4):
+                        try:
+                            wstub.transfer(
+                                "user", "from_acc", "user", "to_acc",
+                                world, "mora", 1.0,
+                            )
+                        except wstub.WalletError as exc:
+                            errors.append(repr(exc))
+                except Exception as exc:  # noqa: BLE001
+                    errors.append(repr(exc))
+
+            threads = [threading.Thread(target=worker) for _ in range(5)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join(timeout=30)
+
+            assert errors == []
+            from_acc = wstub.get("user", "from_acc", world, "mora")
+            to_acc = wstub.get("user", "to_acc", world, "mora")
+            assert from_acc["balance"] == 100.0 - 20.0, from_acc
+            assert to_acc["balance"] == 20.0, to_acc
+
+    def test_backups_snapshot_expires_at_garbage(self, client, auth_headers):
+        # Creating a snapshot with a non-numeric expires_at must be a
+        # clean 400 so a later prune pass cannot crash on float().
+        # 用非数字 expires_at 创建快照必须干净 400，避免后续 prune
+        # 在 float() 上崩溃。
+        res = client.post(
+            "/v1/xijian/backups/snapshots",
+            json={"scope": "world", "target_id": "w1", "expires_at": "garbage"},
+            headers=auth_headers,
+        )
+        assert res.status_code == 400
+
+    def test_backups_resolve_capacity_incoming_bytes_garbage(self, client, auth_headers):
+        res = client.post(
+            "/v1/xijian/backups/capacity/resolve",
+            json={"action": "compress", "incoming_bytes": "abc"},
+            headers=auth_headers,
+        )
+        assert res.status_code == 400
+
+    def test_sessions_array_body_400(self, client, auth_headers):
+        res = client.post(
+            "/v1/xijian/sessions", json=[1, 2, 3], headers=auth_headers
+        )
+        assert res.status_code == 400

@@ -473,6 +473,17 @@ def create_snapshot(
     scope = _validate_scope(scope)
     reason = _validate_reason(reason)
     target_id = _validate_target_id(target_id)
+    # Reject non-numeric ``expires_at`` here so a later prune pass
+    # (which calls ``float(expires_at)``) cannot crash with a 500.
+    # 在此拒绝非数字的 ``expires_at``，使后续 prune 流程
+    # （内部调用 ``float(expires_at)``）不会以 500 崩溃。
+    if expires_at is not None:
+        try:
+            expires_at = float(expires_at)
+        except (TypeError, ValueError):
+            raise SnapshotError(
+                "expires_at must be a number (epoch seconds)"
+            ) from None
     moment = _now_or(now)
     with _LOCK:
         estimated = _estimate_payload_bytes(payload)

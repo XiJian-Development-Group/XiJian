@@ -547,31 +547,36 @@ def transfer(
     amt = _validate_amount(amount)
     if from_kind == to_kind and from_id == to_id:
         raise WalletError("cannot transfer to the same wallet")
-    from_wallet = state.wallets.get(_key(from_kind, from_id, world_id, currency_code))
-    to_wallet = state.wallets.get(_key(to_kind, to_id, world_id, currency_code))
-    if from_wallet is None or to_wallet is None:
-        raise WalletError(
-            "both wallets must exist; from=%s to_wallet=%s"
-            % (
-                "present" if from_wallet is not None else "missing",
-                "present" if to_wallet is not None else "missing",
+    # Serialize the read-modify-write across both wallets so concurrent
+    # transfers cannot lose updates (same pattern as deposit/withdraw).
+    # 串行化跨两个钱包的读-改-写，使并发转账不会丢失更新
+    # （与 deposit/withdraw 相同的模式）。
+    with _MUTATION_LOCK:
+        from_wallet = state.wallets.get(_key(from_kind, from_id, world_id, currency_code))
+        to_wallet = state.wallets.get(_key(to_kind, to_id, world_id, currency_code))
+        if from_wallet is None or to_wallet is None:
+            raise WalletError(
+                "both wallets must exist; from=%s to_wallet=%s"
+                % (
+                    "present" if from_wallet is not None else "missing",
+                    "present" if to_wallet is not None else "missing",
+                )
             )
-        )
-    if amt == 0:
+        if amt == 0:
+            return from_wallet, to_wallet
+        if allow_overdraft is None:
+            allow_overdraft = _overdraft_allowed(world_id)
+        new_from_balance = round(from_wallet["balance"] - amt, 6)
+        if new_from_balance < 0 and not allow_overdraft:
+            raise WalletError(
+                "insufficient funds for transfer: balance=%g, amount=%g, overdraft=disabled"
+                % (from_wallet["balance"], amt)
+            )
+        from_wallet["balance"] = new_from_balance
+        from_wallet["updated_at"] = now_ts()
+        to_wallet["balance"] = round(to_wallet["balance"] + amt, 6)
+        to_wallet["updated_at"] = now_ts()
         return from_wallet, to_wallet
-    if allow_overdraft is None:
-        allow_overdraft = _overdraft_allowed(world_id)
-    new_from_balance = round(from_wallet["balance"] - amt, 6)
-    if new_from_balance < 0 and not allow_overdraft:
-        raise WalletError(
-            "insufficient funds for transfer: balance=%g, amount=%g, overdraft=disabled"
-            % (from_wallet["balance"], amt)
-        )
-    from_wallet["balance"] = new_from_balance
-    from_wallet["updated_at"] = now_ts()
-    to_wallet["balance"] = round(to_wallet["balance"] + amt, 6)
-    to_wallet["updated_at"] = now_ts()
-    return from_wallet, to_wallet
 
 
 # ---------------------------------------------------------------------------

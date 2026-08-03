@@ -8,83 +8,12 @@ from xijian_api import abort as abort_registry
 from xijian_api.errors import ApiError
 from xijian_api.stubs import chat as chat_stub
 from xijian_api.streaming import build_stream_response
-
-
-def _parse_float(value: object, param: str) -> float:
-    """Parse a float, raising ApiError(400) on failure.
-    解析 float，失败时抛出 ApiError(400)。"""
-    if value is None:
-        return 0.0
-    # Reject bools explicitly (bool is subclass of int in Python).
-    # 显式拒绝 bool（Python 中 bool 是 int 的子类）。
-    if isinstance(value, bool):
-        raise ApiError(
-            400,
-            f"`{param}` must be a valid number",
-            "invalid_request_error",
-            code="invalid_numeric_value",
-            param=param,
-        )
-    try:
-        # Reject NaN / Infinity explicitly (JSON doesn't have them natively
-        # but some clients may send them via Python's json module).
-        # 显式拒绝 NaN / Infinity（JSON 原生无此类值，但某些客户端可能
-        # 通过 Python json 模块发送）。
-        f = float(value)
-        if f != f or f in (float("inf"), float("-inf")):  # NaN or Infinity
-            raise ValueError
-        return f
-    except (TypeError, ValueError):
-        raise ApiError(
-            400,
-            f"`{param}` must be a valid number",
-            "invalid_request_error",
-            code="invalid_numeric_value",
-            param=param,
-        )
-
-
-def _parse_int(value: object, param: str) -> int:
-    """Parse an int, raising ApiError(400) on failure.
-    解析 int，失败时抛出 ApiError(400)。"""
-    if value is None:
-        return 0
-    try:
-        # Reject bools explicitly (bool is subclass of int in Python).
-        # 显式拒绝 bool（Python 中 bool 是 int 的子类）。
-        if isinstance(value, bool):
-            raise TypeError
-        return int(value)
-    except (TypeError, ValueError):
-        raise ApiError(
-            400,
-            f"`{param}` must be a valid integer",
-            "invalid_request_error",
-            code="invalid_numeric_value",
-            param=param,
-        )
-
-
-def _parse_int_optional(value: object, param: str) -> int | None:
-    """Parse an optional int, returning None if missing/empty.
-    解析可选 int，缺失/空值返回 None。"""
-    if value is None or value == "":
-        return None
-    return _parse_int(value, param)
-
-
-def _safe_header_value(value: object) -> str:
-    """Strip CR/LF and control characters from a response-header value.
-
-    A hostile ``model`` / ``user`` string may contain newlines which
-    raise ``ValueError`` in Werkzeug when assigned to a header; scrub
-    them so the request still completes with 200 instead of 500.
-
-    从响应头值中去除 CR/LF 和控制字符。恶意的 ``model``/``user`` 字符串
-    可能包含换行符，在赋给响应头时会导致 Werkzeug 抛 ``ValueError``；
-    这里将其清除，使请求仍以 200 完成而不是 500。
-    """
-    return "".join(ch for ch in str(value or "") if ch not in "\r\n" and ord(ch) >= 0x20)
+from xijian_api.utils.params import (
+    parse_float,
+    parse_int,
+    parse_int_optional,
+    safe_header_value,
+)
 
 
 bp = Blueprint("chat", __name__)
@@ -120,13 +49,26 @@ def chat_completions():
             param="messages",
         )
     model = payload.get("model", "stub-model")
-    temperature = _parse_float(payload.get("temperature", 0.7), "temperature")
-    top_p = _parse_float(payload.get("top_p", 1.0), "top_p")
-    max_tokens = _parse_int_optional(payload.get("max_tokens"), "max_tokens")
+    temperature = parse_float(payload.get("temperature"), "temperature", 0.7)
+    top_p = parse_float(payload.get("top_p"), "top_p", 1.0)
+    max_tokens = parse_int_optional(payload.get("max_tokens"), "max_tokens")
     stop = payload.get("stop")
-    n = _parse_int(payload.get("n", 1), "n")
+    n = parse_int(payload.get("n"), "n", 1)
     user = payload.get("user")
-    xijian_ext = payload.get("xijian")
+    # A5.1 extension block must be an object; anything else is rejected
+    # instead of crashing downstream ``(xijian or {}).get(...)`` with a 500.
+    # A5.1 扩展块必须是对象；其他类型直接 400，避免下游
+    # ``(xijian or {}).get(...)`` 崩溃成 500。
+    xijian_raw = payload.get("xijian")
+    if xijian_raw is not None and not isinstance(xijian_raw, dict):
+        raise ApiError(
+            400,
+            "`xijian` must be a JSON object",
+            "invalid_request_error",
+            code="invalid_xijian_block",
+            param="xijian",
+        )
+    xijian_ext = xijian_raw
     tools = payload.get("tools")
     tool_choice = payload.get("tool_choice")
 
@@ -158,8 +100,8 @@ def chat_completions():
             tool_choice=tool_choice,
         )
         resp = jsonify(response)
-        resp.headers["X-XiJian-Model-Id"] = _safe_header_value(model)
-        resp.headers["X-XiJian-Backend"] = _safe_header_value(
+        resp.headers["X-XiJian-Model-Id"] = safe_header_value(model)
+        resp.headers["X-XiJian-Backend"] = safe_header_value(
             (xijian_ext or {}).get("backend", "stub")
         )
         return resp
@@ -190,8 +132,8 @@ def chat_completions():
             abort_registry.cleanup(request_id)
 
     response = build_stream_response(stream_with_context(_gen()))
-    response.headers["X-XiJian-Model-Id"] = _safe_header_value(model)
-    response.headers["X-XiJian-Backend"] = _safe_header_value(
+    response.headers["X-XiJian-Model-Id"] = safe_header_value(model)
+    response.headers["X-XiJian-Backend"] = safe_header_value(
         (xijian_ext or {}).get("backend", "stub")
     )
     return response

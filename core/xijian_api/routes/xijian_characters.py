@@ -200,6 +200,8 @@ def tick_character_state(character_id: str):
         # specific values for manual UI tests.
         try:
             value = float(payload["value"])
+            if value != value or value in (float("inf"), float("-inf")):
+                raise ValueError
         except (TypeError, ValueError) as exc:
             raise ApiError(400, "value must be numeric", "invalid_request_error", code="bad_value") from exc
         record = cs_stub.apply_field_change(
