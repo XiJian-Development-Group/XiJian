@@ -64,6 +64,7 @@ from flask import Blueprint, jsonify, request
 from xijian_api.errors import ApiError
 from xijian_api.pagination import paginate
 from xijian_api.stubs import desktop_pets as pets_stub
+from xijian_api.utils.params import parse_float
 
 
 bp = Blueprint("xijian_desktop", __name__)
@@ -145,8 +146,8 @@ def create_pet():
             character_id=character_id,
             can_fly=bool(body.get("can_fly", False)),
             can_interact=bool(body.get("can_interact", False)),
-            spawn_x=float(body.get("spawn_x", 0.0)),
-            spawn_y=float(body.get("spawn_y", 0.0)),
+            spawn_x=parse_float(body.get("spawn_x"), "spawn_x", 0.0),
+            spawn_y=parse_float(body.get("spawn_y"), "spawn_y", 0.0),
             is_active=bool(body.get("is_active", True)),
             name=body.get("name"),
         )

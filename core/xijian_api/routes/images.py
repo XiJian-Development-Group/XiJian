@@ -8,14 +8,32 @@ from flask import Blueprint, jsonify, request
 
 from xijian_api.errors import ApiError
 from xijian_api.stubs import image as image_stub
+from xijian_api.utils.params import parse_float, parse_int
 
 
 bp = Blueprint("images", __name__)
 
 
+def _xijian_character_id(payload: dict) -> str | None:
+    """Safely extract ``xijian.character_id`` (guard non-dict ``xijian``).
+    安全提取 ``xijian.character_id``（防御非字典的 ``xijian``）。"""
+    xijian = payload.get("xijian")
+    if isinstance(xijian, dict):
+        return xijian.get("character_id")
+    return None
+
+
 @bp.post("/v1/images/generations")
 def generations():
-    payload = request.get_json(silent=True) or {}
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        raise ApiError(
+            400,
+            "Request body must be a JSON object",
+            "invalid_request_error",
+            code="invalid_request_body",
+            param="body",
+        )
     if "prompt" not in payload:
         raise ApiError(
             400,
@@ -26,11 +44,11 @@ def generations():
         )
     response = image_stub.generate(
         payload["prompt"],
-        n=int(payload.get("n", 1)),
+        n=parse_int(payload.get("n"), "n", 1),
         size=payload.get("size", "1024x1024"),
         response_format=payload.get("response_format", "b64_json"),
         model=payload.get("model", "stub-image"),
-        character_id=(payload.get("xijian") or {}).get("character_id"),
+        character_id=_xijian_character_id(payload),
     )
     return jsonify(response)
 
@@ -68,7 +86,7 @@ def edits():
     response = image_stub.edit(
         image_bytes,
         prompt,
-        n=int(request.form.get("n", 1)),
+        n=parse_int(request.form.get("n"), "n", 1),
         size=request.form.get("size", "1024x1024"),
         response_format=response_format,
     )
@@ -88,7 +106,7 @@ def variations():
     response_format = request.form.get("response_format", "b64_json")
     response = image_stub.variation(
         image_bytes,
-        n=int(request.form.get("n", 1)),
+        n=parse_int(request.form.get("n"), "n", 1),
         size=request.form.get("size", "1024x1024"),
         response_format=response_format,
     )
@@ -181,7 +199,7 @@ def understanding():
     result = multimodal_understand(
         messages,
         model=model,
-        temperature=float(payload.get("temperature", 0.7)),
+        temperature=parse_float(payload.get("temperature"), "temperature", 0.7),
         max_tokens=payload.get("max_tokens"),
     )
     return jsonify(result)

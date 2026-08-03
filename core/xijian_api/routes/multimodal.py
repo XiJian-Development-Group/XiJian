@@ -24,6 +24,11 @@ from xijian_api import abort as abort_registry
 from xijian_api.errors import ApiError
 from xijian_api.stubs import multimodal as multimodal_stub
 from xijian_api.streaming import build_stream_response
+from xijian_api.utils.params import (
+    parse_float,
+    parse_int_optional,
+    safe_header_value,
+)
 
 
 bp = Blueprint("multimodal", __name__)
@@ -41,8 +46,17 @@ def multimodal_completions():
     接受包含任意组合内容片段的消息：
     ``text``, ``image_url``, ``audio_url``, ``video_url``, ``file_url``。
     """
-    payload = request.get_json(silent=True) or {}
-    if not payload.get("messages"):
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        raise ApiError(
+            400,
+            "Request body must be a JSON object",
+            "invalid_request_error",
+            code="invalid_request_body",
+            param="body",
+        )
+    messages = payload.get("messages")
+    if not isinstance(messages, list) or not messages:
         raise ApiError(
             400,
             "`messages` is required and must be a non-empty list",
@@ -50,19 +64,29 @@ def multimodal_completions():
             code="missing_messages",
             param="messages",
         )
+    if not all(isinstance(m, dict) for m in messages):
+        raise ApiError(
+            400,
+            "each item in `messages` must be a JSON object",
+            "invalid_request_error",
+            code="invalid_messages",
+            param="messages",
+        )
     model = payload.get("model", "stub-multimodal")
-    temperature = float(payload.get("temperature", 0.7))
-    top_p = float(payload.get("top_p", 1.0))
-    max_tokens = payload.get("max_tokens")
+    temperature = parse_float(payload.get("temperature"), "temperature", 0.7)
+    top_p = parse_float(payload.get("top_p"), "top_p", 1.0)
+    max_tokens = parse_int_optional(payload.get("max_tokens"), "max_tokens")
     stop = payload.get("stop")
 
     stream = bool(payload.get("stream", False))
-    stream_options = payload.get("stream_options") or {}
+    stream_options = payload.get("stream_options")
+    if not isinstance(stream_options, dict):
+        stream_options = {}
     include_usage = bool(stream_options.get("include_usage", False))
 
     if not stream:
         response = multimodal_stub.understand(
-            payload["messages"],
+            messages,
             model=model,
             temperature=temperature,
             top_p=top_p,
@@ -70,7 +94,7 @@ def multimodal_completions():
             stop=stop,
         )
         resp = jsonify(response)
-        resp.headers["X-XiJian-Model-Id"] = model
+        resp.headers["X-XiJian-Model-Id"] = safe_header_value(model)
         return resp
 
     request_id = getattr(g, "request_id", None) or "req_unknown"
@@ -91,7 +115,7 @@ def multimodal_completions():
         生成器，产出 SSE 数据块并尊重中止信号。"""
         try:
             for chunk in multimodal_stub.understand_stream(
-                payload["messages"],
+                messages,
                 model=model,
                 temperature=temperature,
                 top_p=top_p,
@@ -106,7 +130,7 @@ def multimodal_completions():
             abort_registry.cleanup(request_id)
 
     response = build_stream_response(stream_with_context(_gen()))
-    response.headers["X-XiJian-Model-Id"] = model
+    response.headers["X-XiJian-Model-Id"] = safe_header_value(model)
     return response
 
 
@@ -144,7 +168,15 @@ def multimodal_abort():
 
     通过 request_id 中止流式全模态请求。
     """
-    payload = request.get_json(silent=True) or {}
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        raise ApiError(
+            400,
+            "Request body must be a JSON object",
+            "invalid_request_error",
+            code="invalid_request_body",
+            param="body",
+        )
     request_id = payload.get("request_id", "")
     if not request_id:
         raise ApiError(

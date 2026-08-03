@@ -9,6 +9,7 @@ from xijian_api.pagination import paginate
 from xijian_api.stubs import memory as memory_stub
 from xijian_api.stubs import memory_config as memory_config_stub
 from xijian_api.utils.ids import gen_audit_id
+from xijian_api.utils.params import parse_float, parse_int
 
 
 bp = Blueprint("xijian_memory", __name__)
@@ -57,14 +58,16 @@ def delete_entry(entry_id: str):
 
 @bp.post("/v1/xijian/memory/search")
 def search_entries():
-    payload = request.get_json(silent=True) or {}
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        raise ApiError(400, "request body must be a JSON object", "invalid_request_error", code="invalid_body")
     if "query" not in payload:
         raise ApiError(400, "`query` is required", "invalid_request_error", code="missing_query", param="query")
     hits = memory_stub.search(
         query=payload["query"],
         character_id=payload.get("character_id"),
-        top_k=int(payload.get("top_k", 5)),
-        min_score=float(payload.get("min_score", 0.0)),
+        top_k=parse_int(payload.get("top_k"), "top_k", 5),
+        min_score=parse_float(payload.get("min_score"), "min_score", 0.0),
     )
     return jsonify(
         {

@@ -93,11 +93,18 @@ Test surface
 from __future__ import annotations
 
 import logging
+import math
+import threading
 from typing import Any
 
 from xijian_api.stubs import state
 from xijian_api.utils.ids import gen_wallet_id
 from xijian_api.utils.time import now_ts
+
+#: Serialises wallet read-modify-write mutations (deposit / withdraw /
+#: transfer) so concurrent requests can't lose updates.
+#: 串行化钱包的读-改-写变更（存款/取款/转账），防止并发请求丢失更新。
+_MUTATION_LOCK = threading.Lock()
 
 
 _LOGGER = logging.getLogger("xijian_api.wallets")
@@ -203,6 +210,8 @@ def _validate_amount(amount: Any) -> float:
         raise WalletError(
             "amount must be a number, got %s" % type(amount).__name__
         )
+    if isinstance(amount, float) and not math.isfinite(amount):
+        raise WalletError("amount must be a finite number")
     if amount < 0:
         raise WalletError("amount must be >= 0")
     if amount > MAX_SINGLE_AMOUNT:
@@ -468,14 +477,15 @@ def deposit(
         if not allow_create:
             raise WalletError("wallet does not exist and allow_create=False")
         return ensure_wallet(owner_kind, owner_id, world_id, currency_code)
-    record = state.wallets.get(_key(owner_kind, owner_id, world_id, currency_code))
-    if record is None:
-        if not allow_create:
-            raise WalletError("wallet does not exist and allow_create=False")
-        record = ensure_wallet(owner_kind, owner_id, world_id, currency_code)
-    record["balance"] = round(record["balance"] + amt, 6)
-    record["updated_at"] = now_ts()
-    return record
+    with _MUTATION_LOCK:
+        record = state.wallets.get(_key(owner_kind, owner_id, world_id, currency_code))
+        if record is None:
+            if not allow_create:
+                raise WalletError("wallet does not exist and allow_create=False")
+            record = ensure_wallet(owner_kind, owner_id, world_id, currency_code)
+        record["balance"] = round(record["balance"] + amt, 6)
+        record["updated_at"] = now_ts()
+        return record
 
 
 def withdraw(
@@ -494,22 +504,23 @@ def withdraw(
     ``allow_overdraft`` 为真（或调用者传递 ``allow_overdraft=True``）。
     """
     amt = _validate_amount(amount)
-    record = state.wallets.get(_key(owner_kind, owner_id, world_id, currency_code))
-    if record is None:
-        raise WalletError("wallet does not exist")
-    if amt == 0:
+    with _MUTATION_LOCK:
+        record = state.wallets.get(_key(owner_kind, owner_id, world_id, currency_code))
+        if record is None:
+            raise WalletError("wallet does not exist")
+        if amt == 0:
+            return record
+        if allow_overdraft is None:
+            allow_overdraft = _overdraft_allowed(world_id)
+        new_balance = round(record["balance"] - amt, 6)
+        if new_balance < 0 and not allow_overdraft:
+            raise WalletError(
+                "insufficient funds: balance=%g, withdraw=%g, overdraft=disabled"
+                % (record["balance"], amt)
+            )
+        record["balance"] = new_balance
+        record["updated_at"] = now_ts()
         return record
-    if allow_overdraft is None:
-        allow_overdraft = _overdraft_allowed(world_id)
-    new_balance = round(record["balance"] - amt, 6)
-    if new_balance < 0 and not allow_overdraft:
-        raise WalletError(
-            "insufficient funds: balance=%g, withdraw=%g, overdraft=disabled"
-            % (record["balance"], amt)
-        )
-    record["balance"] = new_balance
-    record["updated_at"] = now_ts()
-    return record
 
 
 def transfer(

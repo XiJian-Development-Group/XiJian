@@ -60,6 +60,7 @@ from xijian_api.pagination import paginate
 from xijian_api.stubs import pois as pois_stub
 from xijian_api.stubs import scene_interactions as si_stub
 from xijian_api.stubs import travel_modes as tm_stub
+from xijian_api.utils.params import parse_float
 
 
 bp = Blueprint("xijian_scenes", __name__)
@@ -272,7 +273,7 @@ def estimate_travel_mode(mode_id: str):
     try:
         preview = tm_stub.estimate_trip(
             record,
-            base_seconds=float(body.get("base_seconds", tm_stub.DEFAULT_BASE_TRAVEL_SECONDS)),
+            base_seconds=parse_float(body.get("base_seconds"), "base_seconds", tm_stub.DEFAULT_BASE_TRAVEL_SECONDS),
             random_roll=body.get("random_roll"),
         )
     except tm_stub.TravelModeError as exc:
@@ -300,7 +301,7 @@ def execute_travel_mode(mode_id: str):
             character_id=body.get("character_id"),
             from_poi_id=body.get("from_poi_id"),
             to_poi_id=body.get("to_poi_id"),
-            base_seconds=float(body.get("base_seconds", tm_stub.DEFAULT_BASE_TRAVEL_SECONDS)),
+            base_seconds=parse_float(body.get("base_seconds"), "base_seconds", tm_stub.DEFAULT_BASE_TRAVEL_SECONDS),
             random_roll=body.get("random_roll"),
             fire_event_id=body.get("fire_event_id"),
         )
