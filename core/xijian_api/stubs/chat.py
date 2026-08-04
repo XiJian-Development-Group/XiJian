@@ -1069,6 +1069,49 @@ def _build_oai_tools(
     return oai_tools, mcp_names
 
 
+def _mcp_gate_check(
+    name: str,
+    args: dict[str, Any],
+    *,
+    world_id: str | None,
+) -> dict | None:
+    """Run the A5.2 gate for a chat-dispatched MCP tool call (T0-1).
+
+    Returns the gate result dict when the call must be **refused**
+    (``verdict != "allowed"``), or ``None`` when the call is allowed.
+    Tools that declare no ``action_kind`` (internal domain tools)
+    bypass the gate — this mirrors the registry's own semantics in
+    :func:`xijian_api.mcp.registry.call_tool`, where ``action_kind``
+    is the switch that opts a tool into protection.
+
+    The audit entry is written by :func:`xijian_api.stubs.mcp.check`
+    itself, so a refusal is always queryable via ``mcp.count_audit``
+    (AC-1: 黑名单动作 100% 拦截).
+    """
+    # Lazy import to avoid a module-load cycle: ``stubs/__init__``
+    # imports ``chat`` before ``mcp``.
+    # 惰性导入避免模块加载循环：``stubs/__init__`` 先导入 ``chat`` 再导入 ``mcp``。
+    from xijian_api.mcp.registry import get_tool as mcp_get_tool
+    from xijian_api.stubs import mcp as mcp_stub
+
+    record = mcp_get_tool(name)
+    if record is None:
+        # Unknown tool — let the registry surface ``tool_not_found``.
+        return None
+    action_kind = record.get("action_kind")
+    if action_kind is None:
+        # Domain tool (no action_kind) — bypass, like the registry.
+        return None
+    gate = mcp_stub.check(
+        action_kind=action_kind,
+        args=args,
+        world_id=world_id,
+    )
+    if gate.get("verdict") == mcp_stub.VERDICT_ALLOWED:
+        return None
+    return gate
+
+
 def _execute_mcp_tool_call(
     name: str,
     arguments: dict[str, Any],
@@ -1243,6 +1286,41 @@ def _run_tools_pipeline(
                 pass  # audit must never crash the pipeline
 
             if name in mcp_names:
+                # T0-1: chat → MCP safety gate.  Every MCP tool call
+                # must pass ``mcp.check()`` **before** dispatch; a
+                # verdict != "allowed" refuses execution (the audit
+                # entry is written by check() itself).
+                # T0-1: chat → MCP 安全闸。每个 MCP 工具调用在派发前
+                # 必须通过 ``mcp.check()``；verdict != "allowed" 时
+                # 拒绝执行（审计条目由 check() 自身写入）。
+                gate = _mcp_gate_check(name, args, world_id=world_id)
+                if gate is not None:
+                    exec_result = {
+                        "content": (
+                            "工具调用被安全策略拒绝"
+                            "（verdict=%s, blocked=%s）"
+                            % (gate.get("verdict"), gate.get("blocked"))
+                        ),
+                        "isError": True,
+                        "error_type": "gate_denied",
+                        "gate": gate,
+                    }
+                    all_tool_calls_log.append({
+                        "tool_call_id": tc.get("id"),
+                        "name": name,
+                        "arguments": args_str,
+                        "result": exec_result["content"],
+                        "is_error": True,
+                        "error_type": "gate_denied",
+                        "gate": gate,
+                    })
+                    tool_messages.append({
+                        "role": "tool",
+                        "tool_call_id": tc.get("id"),
+                        "name": name,
+                        "content": exec_result["content"],
+                    })
+                    continue
                 exec_result = _execute_mcp_tool_call(
                     name, args, world_id=world_id,
                 )
