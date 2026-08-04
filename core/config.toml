@@ -357,6 +357,25 @@ rate_limit = false
 dev_test_emit = false
 
 # ---------------------------------------------------------------------------
+# Snapshots / automatic backup (A5.3)
+# 快照 / 自动备份（A5.3）
+#
+# ``compression_backend`` selects the compressor for snapshot archives.
+# ``auto`` = zstd when the ``zstandard`` package is installed, else zlib
+# fallback (spec AC-3: 压缩采用 zstd).  ``zstd`` / ``zlib`` pin the
+# algorithm explicitly.  ``max_single_snapshot_bytes`` overrides the
+# per-snapshot size cap (default 500 MiB); omit to keep the default.
+# ``compression_backend`` 选择快照归档的压缩器。``auto`` = 安装了
+# ``zstandard`` 包时用 zstd，否则回退 zlib（规范 AC-3：压缩采用 zstd）。
+# ``zstd`` / ``zlib`` 显式固定算法。``max_single_snapshot_bytes``
+# 覆盖单快照大小上限（默认 500 MiB）；省略则保持默认。
+# ---------------------------------------------------------------------------
+
+[snapshots]
+compression_backend = "auto"
+# max_single_snapshot_bytes = 536870912   # 500 MiB (default) / 默认
+
+# ---------------------------------------------------------------------------
 # System overload protection (A5.4)
 # 系统过载保护（A5.4）
 #

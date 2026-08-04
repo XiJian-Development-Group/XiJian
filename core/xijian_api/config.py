@@ -347,6 +347,22 @@ class FeaturesConfig:
 
 
 @dataclass(frozen=True)
+class SnapshotsConfig:
+    """A5.3 automatic-backup knobs.
+
+    A5.3 自动备份旋钮。
+
+    * ``compression_backend`` — ``zstd`` / ``zlib`` / ``auto``.
+      ``auto`` prefers zstd (spec AC-3) and falls back to zlib
+      when the ``zstandard`` package is missing.
+    * ``max_single_snapshot_bytes`` — per-snapshot size cap;
+      ``None`` keeps the stub's module-level default (500 MiB).
+    """
+    compression_backend: str = "auto"
+    max_single_snapshot_bytes: int | None = None
+
+
+@dataclass(frozen=True)
 class Config:
     """Top-level configuration holding all sub-configs.
 
@@ -359,6 +375,7 @@ class Config:
     ai: AIConfig = field(default_factory=AIConfig)
     models: tuple[ModelEntry, ...] = field(default_factory=tuple)
     features: FeaturesConfig = field(default_factory=FeaturesConfig)
+    snapshots: SnapshotsConfig = field(default_factory=SnapshotsConfig)
     source_path: str | None = None
 
     # Convenience properties used by the existing call sites.
@@ -536,6 +553,28 @@ def _build_config(
         dev_test_emit=_truthy(features_data.get("dev_test_emit", False)),
     )
 
+    snap_data = dict(data.get("snapshots", {}))
+    snapshots = SnapshotsConfig(
+        compression_backend=str(snap_data.get("compression_backend", "auto") or "auto"),
+        max_single_snapshot_bytes=snap_data.get("max_single_snapshot_bytes"),
+    )
+    if snapshots.max_single_snapshot_bytes is not None:
+        try:
+            snapshots = SnapshotsConfig(
+                compression_backend=snapshots.compression_backend,
+                max_single_snapshot_bytes=int(snapshots.max_single_snapshot_bytes),
+            )
+        except (TypeError, ValueError):
+            raise ValueError(
+                "[snapshots] max_single_snapshot_bytes must be an int, got %r"
+                % snap_data.get("max_single_snapshot_bytes")
+            ) from None
+    if snapshots.compression_backend not in {"zstd", "zlib", "auto"}:
+        raise ValueError(
+            "[snapshots] compression_backend must be zstd|zlib|auto, got %r"
+            % snapshots.compression_backend
+        )
+
     if source_path is None:
         for candidate in _config_search_paths():
             if candidate and candidate.exists():
@@ -550,6 +589,7 @@ def _build_config(
         ai=ai,
         models=models,
         features=features,
+        snapshots=snapshots,
         source_path=source_path,
     )
 
@@ -688,6 +728,7 @@ __all__ = [
     "ModelEntry",
     "AIConfig",
     "FeaturesConfig",
+    "SnapshotsConfig",
     "Config",
     "token_file_path",
 ]

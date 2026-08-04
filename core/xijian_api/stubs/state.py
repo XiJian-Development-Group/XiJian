@@ -61,6 +61,14 @@ mcp_audit: DictDB = bucket("mcp_audit")
 mcp_freezes: DictDB = bucket("mcp_freezes")
 mcp_snapshots: DictDB = bucket("mcp_snapshots")
 safety_snapshots: DictDB = bucket("safety_snapshots")
+# A5.3 backup policy — single-row record persisted via DictDB
+# (SQLite write-through).  Carries the configurable compression
+# backend (``compression_backend``: zstd|zlib|auto) and the
+# per-snapshot cap (``max_single_snapshot_bytes``) so both survive
+# restarts without extra wiring.
+# A5.3 备份策略 — 通过 DictDB（SQLite 写透）持久化的单行记录。
+# 携带可配置压缩后端（``compression_backend``: zstd|zlib|auto）
+# 与单快照上限（``max_single_snapshot_bytes``），两者重启后保留。
 backup_policies: DictDB = bucket("backup_policies")
 # A1.1 manual backup system — protected-module registry, per-character
 # module associations and the manual backup records.

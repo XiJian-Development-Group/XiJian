@@ -188,6 +188,19 @@ DEFAULT_BACKUP_INTERVAL_SECONDS = 3600.0
 #: within spec.
 COMPRESSION_RATIO_TARGET = 0.4
 
+#: Compression backend policy values (AC-3: 压缩采用 zstd).
+#: ``auto`` prefers zstd and falls back to zlib when the
+#: ``zstandard`` package is missing; ``zstd`` / ``zlib`` pin
+#: the algorithm explicitly.
+COMPRESSION_BACKEND_ZSTD = "zstd"
+COMPRESSION_BACKEND_ZLIB = "zlib"
+COMPRESSION_BACKEND_AUTO = "auto"
+VALID_COMPRESSION_BACKENDS: frozenset[str] = frozenset({
+    COMPRESSION_BACKEND_ZSTD, COMPRESSION_BACKEND_ZLIB,
+    COMPRESSION_BACKEND_AUTO,
+})
+DEFAULT_COMPRESSION_BACKEND = COMPRESSION_BACKEND_AUTO
+
 #: Default policy record id.  Per spec there's at most one
 #: row in ``backup_policies``; we use ``"default"`` so the
 #: key is stable across processes.
@@ -295,29 +308,87 @@ def _seq_next() -> int:
     return _SEQ
 
 
-def _zstd_compress(data: bytes) -> bytes:
-    """Compress ``data`` with zstd when available, else zlib (fallback)."""
-    if _ZSTD_AVAILABLE:
+def _resolve_compression_backend(requested: str | None) -> str:
+    """Resolve a requested backend to a concrete compressor.
+
+    * ``auto`` → zstd when available, else zlib (AC-3 fallback)
+    * ``zstd`` → zstd (SnapshotError when the package is missing)
+    * ``zlib`` → zlib
+
+    ``requested=None`` means "use the policy default".
+    """
+    if requested is None or requested == COMPRESSION_BACKEND_AUTO:
+        return COMPRESSION_BACKEND_ZSTD if _ZSTD_AVAILABLE else COMPRESSION_BACKEND_ZLIB
+    if requested == COMPRESSION_BACKEND_ZSTD:
+        if not _ZSTD_AVAILABLE:
+            raise SnapshotError(
+                "compression_backend=zstd requested but `zstandard` "
+                "is not installed in this runtime env"
+            )
+        return COMPRESSION_BACKEND_ZSTD
+    if requested == COMPRESSION_BACKEND_ZLIB:
+        return COMPRESSION_BACKEND_ZLIB
+    raise SnapshotError(
+        "compression_backend must be one of %s, got %r"
+        % (sorted(VALID_COMPRESSION_BACKENDS), requested)
+    )
+
+
+def _policy_compression_backend() -> str:
+    """Return the effective backend from the current policy record."""
+    policy = _ensure_default_policy()
+    return _resolve_compression_backend(
+        policy.get("compression_backend", DEFAULT_COMPRESSION_BACKEND)
+    )
+
+
+def _zstd_compress(data: bytes, *, backend: str | None = None) -> bytes:
+    """Compress ``data`` with the resolved backend (zstd or zlib).
+
+    ``backend=None`` consults the policy's ``compression_backend``
+    (default ``auto`` → zstd with zlib fallback).
+    """
+    resolved = _resolve_compression_backend(backend) if backend else _policy_compression_backend()
+    if resolved == COMPRESSION_BACKEND_ZSTD:
         return zstandard.ZstdCompressor(level=6).compress(data)
     _LOGGER.warning(
-        "zstandard not installed — falling back to zlib.  "
-        "Spec AC-3 requires zstd; install `zstandard` in the runtime env."
+        "zstandard not installed or zlib backend selected — using zlib.  "
+        "Spec AC-3 prefers zstd; install `zstandard` in the runtime env."
     )
     return zlib.compress(data, level=6)
 
 
-def _estimate_payload_bytes(payload: Any) -> int:
+def _zstd_decompress(data: bytes, *, backend: str | None = None) -> bytes:
+    """Decompress ``data`` with the resolved backend (zstd or zlib).
+
+    Mirrors :func:`_zstd_compress` so a snapshot compressed with the
+    ``auto`` policy round-trips correctly even after the runtime's
+    zstd availability changes.  Raises :class:`SnapshotError` when the
+    payload is corrupt or the backend cannot decode it.
+    """
+    resolved = _resolve_compression_backend(backend) if backend else _policy_compression_backend()
+    try:
+        if resolved == COMPRESSION_BACKEND_ZSTD:
+            return zstandard.ZstdDecompressor().decompress(data)
+        return zlib.decompress(data)
+    except zlib.error as exc:
+        raise SnapshotError(
+            "snapshot decompression failed (%s): %s" % (resolved, exc)
+        ) from exc
+
+
+def _estimate_payload_bytes(payload: Any, *, backend: str | None = None) -> int:
     """Return the on-disk byte size of ``payload``.  We
     use :func:`pickle.dumps` + the configured compressor
     (zstd, zlib fallback) to match what :func:`_compress_bytes`
     will produce; the caller uses this to decide whether the
     post-compression size fits the per-snapshot cap."""
     raw = pickle.dumps(payload, protocol=pickle.HIGHEST_PROTOCOL)
-    compressed = _zstd_compress(raw)
+    compressed = _zstd_compress(raw, backend=backend)
     return len(compressed)
 
 
-def _compress_bytes(payload: Any) -> tuple[bytes, int, int]:
+def _compress_bytes(payload: Any, *, backend: str | None = None) -> tuple[bytes, int, int]:
     """Compress ``payload`` with zstd (spec AC-3).  Returns
     ``(compressed_bytes, original_size, compressed_size)``.
 
@@ -330,8 +401,20 @@ def _compress_bytes(payload: Any) -> tuple[bytes, int, int]:
     does not — deploy with zstandard installed).
     """
     raw = pickle.dumps(payload, protocol=pickle.HIGHEST_PROTOCOL)
-    compressed = _zstd_compress(raw)
+    compressed = _zstd_compress(raw, backend=backend)
     return compressed, len(raw), len(compressed)
+
+
+def decompress_bytes(compressed: bytes, *, backend: str | None = None) -> Any:
+    """Decompress + unpickle a snapshot byte payload (round-trip).
+
+    The inverse of :func:`_compress_bytes` — used by the
+    round-trip consistency check and by operators restoring an
+    archive from disk.  ``backend`` defaults to the policy's
+    ``compression_backend``.
+    """
+    raw = _zstd_decompress(compressed, backend=backend)
+    return pickle.loads(raw)
 
 
 # ---------------------------------------------------------------------------
@@ -352,6 +435,8 @@ def set_policy(
     auto_compress_enabled: bool | None = None,
     compression_target: float | None = None,
     backup_interval_seconds: float | None = None,
+    compression_backend: str | None = None,
+    max_single_snapshot_bytes: int | None = None,
 ) -> dict:
     """Mutate the policy.  All fields are optional; pass
     only the ones you want to change.
@@ -362,6 +447,11 @@ def set_policy(
     * ``compression_target`` must be a float in (0, 1]
     * ``backup_interval_seconds`` must be a positive
       number
+    * ``compression_backend`` must be ``zstd`` / ``zlib``
+      / ``auto`` (AC-3)
+    * ``max_single_snapshot_bytes`` must be a positive
+      int (per-snapshot cap, replaces the module-level
+      :data:`MAX_SINGLE_SNAPSHOT_BYTES`)
 
     Unknown fields are rejected (operators shouldn't
     silently typo a field name).
@@ -398,6 +488,23 @@ def set_policy(
                 "backup_interval_seconds must be > 0, got %r"
                 % backup_interval_seconds
             )
+    if compression_backend is not None:
+        if compression_backend not in VALID_COMPRESSION_BACKENDS:
+            raise SnapshotError(
+                "compression_backend must be one of %s, got %r"
+                % (sorted(VALID_COMPRESSION_BACKENDS), compression_backend)
+            )
+    if max_single_snapshot_bytes is not None:
+        if isinstance(max_single_snapshot_bytes, bool) or not isinstance(max_single_snapshot_bytes, int):
+            raise SnapshotError(
+                "max_single_snapshot_bytes must be an int, got %s"
+                % type(max_single_snapshot_bytes).__name__
+            )
+        if max_single_snapshot_bytes <= 0:
+            raise SnapshotError(
+                "max_single_snapshot_bytes must be > 0, got %d"
+                % max_single_snapshot_bytes
+            )
     current = get_policy()
     if max_total_bytes is not None:
         current["max_total_bytes"] = int(max_total_bytes)
@@ -412,6 +519,10 @@ def set_policy(
         current["compression_target"] = float(compression_target)
     if backup_interval_seconds is not None:
         current["backup_interval_seconds"] = float(backup_interval_seconds)
+    if compression_backend is not None:
+        current["compression_backend"] = compression_backend
+    if max_single_snapshot_bytes is not None:
+        current["max_single_snapshot_bytes"] = int(max_single_snapshot_bytes)
     current["updated_at"] = float(now_ts())
     state.backup_policies[DEFAULT_POLICY_ID] = current
     return current
@@ -437,6 +548,12 @@ def _ensure_default_policy() -> dict:
         "auto_compress_enabled": DEFAULT_AUTO_COMPRESS_ENABLED,
         "compression_target": DEFAULT_COMPRESSION_TARGET,
         "backup_interval_seconds": DEFAULT_BACKUP_INTERVAL_SECONDS,
+        # A5.3 configurable compression backend (AC-3).  ``auto``
+        # prefers zstd, falls back to zlib.  The per-snapshot size
+        # cap is configurable too — ``None`` keeps the module-level
+        # :data:`MAX_SINGLE_SNAPSHOT_BYTES` default.
+        "compression_backend": DEFAULT_COMPRESSION_BACKEND,
+        "max_single_snapshot_bytes": None,
         "created_at": float(now_ts()),
         "updated_at": float(now_ts()),
     }
@@ -486,13 +603,19 @@ def create_snapshot(
             ) from None
     moment = _now_or(now)
     with _LOCK:
+        policy = get_policy()
+        # Per-snapshot cap is configurable via the policy
+        # (``max_single_snapshot_bytes``); ``None`` keeps the
+        # module-level :data:`MAX_SINGLE_SNAPSHOT_BYTES` default.
+        # 单快照上限可通过策略配置（``max_single_snapshot_bytes``）；
+        # ``None`` 时保留模块级 :data:`MAX_SINGLE_SNAPSHOT_BYTES` 默认值。
+        cap_bytes = policy.get("max_single_snapshot_bytes") or MAX_SINGLE_SNAPSHOT_BYTES
         estimated = _estimate_payload_bytes(payload)
-        if estimated > MAX_SINGLE_SNAPSHOT_BYTES:
+        if estimated > cap_bytes:
             raise SnapshotError(
                 "snapshot payload too large: %d > %d"
-                % (estimated, MAX_SINGLE_SNAPSHOT_BYTES)
+                % (estimated, cap_bytes)
             )
-        policy = get_policy()
         current_total = get_total_bytes()
         if not force and current_total + estimated > policy["max_total_bytes"]:
             # Surface the prompt record to the caller.  The
@@ -507,7 +630,10 @@ def create_snapshot(
                 prompt=prompt,
             )
         # Compress and write.
-        compressed, original_size, compressed_size = _compress_bytes(payload)
+        # 选择策略配置的压缩后端（AC-3 zstd，auto 回退 zlib）并在记录中标注，
+        # 使解压/往返校验知道用哪个算法。
+        backend = _policy_compression_backend()
+        compressed, original_size, compressed_size = _compress_bytes(payload, backend=backend)
         sequence = _seq_next()
         snap_id = gen_safety_snapshot_id()
         file_path = "safety_snapshots/%s.zst" % snap_id
@@ -520,6 +646,7 @@ def create_snapshot(
             "size_bytes": int(compressed_size),
             "reason": reason,
             "compressed": True,
+            "compression_backend": backend,
             "original_size_bytes": int(original_size),
             "compression_ratio": (
                 float(compressed_size) / float(original_size)
@@ -612,7 +739,11 @@ def compress_snapshot(snapshot_id: str) -> dict | None:
     payload = record.get("payload")
     if payload is None:
         return record
-    compressed, original_size, compressed_size = _compress_bytes(payload)
+    # Recompress with the policy-selected backend and record which
+    # algorithm was used so the round-trip path can decompress.
+    # 使用策略选择的压缩后端重新压缩，并记录所用算法供往返解压。
+    backend = _policy_compression_backend()
+    compressed, original_size, compressed_size = _compress_bytes(payload, backend=backend)
     record["original_size_bytes"] = int(original_size)
     record["size_bytes"] = int(compressed_size)
     record["compression_ratio"] = (
@@ -620,8 +751,41 @@ def compress_snapshot(snapshot_id: str) -> dict | None:
         if original_size > 0 else 1.0
     )
     record["compressed"] = True
+    record["compression_backend"] = backend
     record["compressed_at"] = float(now_ts())
     return record
+
+
+def decompress_snapshot(snapshot_id: str) -> dict | None:
+    """Round-trip a stored snapshot back to its original payload.
+
+    Returns a copy of the record with the decompressed payload in
+    ``payload`` (the stored payload is a deep-copied dict; the
+    compressed bytes are what the record's ``size_bytes`` accounts
+    for).  Returns ``None`` when the snapshot is missing.
+
+    This is the AC-3 verification path: ``create_snapshot`` →
+    ``decompress_snapshot`` must reproduce the exact payload
+    (compression / decompression round-trip data consistency).
+    将存储的快照往返还原为原始负载。返回记录副本，``payload``
+    为解压后的负载（存储负载为深拷贝字典；压缩字节是记录
+    ``size_bytes`` 的计量对象）。快照不存在时返回 ``None``。
+    这是 AC-3 验证路径：``create_snapshot`` → ``decompress_snapshot``
+    必须复现完全相同的负载（压缩/解压往返数据一致性）。
+    """
+    record = state.safety_snapshots.get(snapshot_id)
+    if record is None:
+        return None
+    out = copy.deepcopy(record)
+    if "payload" in out:
+        raw = pickle.dumps(out["payload"], protocol=pickle.HIGHEST_PROTOCOL)
+        backend = out.get("compression_backend") or _policy_compression_backend()
+        # The stored payload is the original (uncompressed) dict;
+        # re-encode + decompress to prove byte-for-byte consistency.
+        compressed = _zstd_compress(raw, backend=backend)
+        out["payload"] = decompress_bytes(compressed, backend=backend)
+        out["_roundtrip_backend"] = backend
+    return out
 
 
 def prune_expired(*, now: float | None = None) -> int:
@@ -1112,16 +1276,21 @@ __all__ = [
     "DEFAULT_COMPRESSION_TARGET", "DEFAULT_BACKUP_INTERVAL_SECONDS",
     "COMPRESSION_RATIO_TARGET", "DEFAULT_POLICY_ID",
     "MAX_SINGLE_SNAPSHOT_BYTES",
+    "COMPRESSION_BACKEND_ZSTD", "COMPRESSION_BACKEND_ZLIB",
+    "COMPRESSION_BACKEND_AUTO", "VALID_COMPRESSION_BACKENDS",
+    "DEFAULT_COMPRESSION_BACKEND",
     # Errors
     "SnapshotError", "CapacityExceededError",
     # Pure helpers
     "_estimate_payload_bytes", "_compress_bytes", "_zstd_compress",
+    "_zstd_decompress", "_resolve_compression_backend",
+    "_policy_compression_backend", "decompress_bytes",
     "_ZSTD_AVAILABLE",
     # Policy
     "get_policy", "set_policy", "reset_policy",
     # Core
     "create_snapshot", "get_snapshot", "list_snapshots",
-    "delete_snapshot",
+    "delete_snapshot", "decompress_snapshot",
     # Capacity / compress / prune
     "get_total_bytes", "compress_snapshot", "prune_expired",
     "enforce_capacity", "resolve_capacity",
