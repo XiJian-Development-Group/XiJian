@@ -102,6 +102,7 @@ from typing import Any
 from xijian_api.stubs import mcp_rules as rules_stub
 from xijian_api.stubs import state
 from xijian_api.stubs import manual_backups
+from xijian_api.stubs import snapshots as snapshots_stub
 from xijian_api.utils.ids import (
     gen_mcp_audit_id,
     gen_mcp_freeze_id,
@@ -900,6 +901,39 @@ def confirm_safety_stop(
             freeze_id, FREEZE_RESTORED,
             snapshot_id=snapshot_id, restore_summary=summary, now=moment,
         )
+        # A5.3 cross-link (T0-2): double-write the confirmed safety-stop
+        # into the A5.3 archive bucket, mirroring the A5.4 overload
+        # ``emergency_dump`` pattern.  The ``mcp_snapshots`` entry is the
+        # working copy used for the restore; the A5.3 entry is the
+        # long-term archive copy (reason="safety_stop") that capacity
+        # accounting / scheduled pruning can manage independently.
+        # Best-effort: an archive failure must not fail the confirm.
+        # A5.3 交叉链接 (T0-2)：将已确认的安全停止双写进 A5.3 归档桶，
+        # 镜像 A5.4 过载 ``emergency_dump`` 模式。``mcp_snapshots`` 条目是
+        # 用于恢复的工作副本；A5.3 条目是长期归档副本（reason="safety_stop"），
+        # 由容量核算 / 定时修剪独立管理。尽力而为：归档失败不阻断确认。
+        try:
+            archive = snapshots_stub.create_snapshot(
+                scope=snapshots_stub.SCOPE_MIXED,
+                target_id=str(record.get("world_id") or "safety_stop"),
+                payload={
+                    "freeze_id": freeze_id,
+                    "world_id": record.get("world_id"),
+                    "reason": record.get("reason"),
+                    "restore_summary": summary,
+                    "mcp_snapshot_id": snapshot_id,
+                },
+                reason=snapshots_stub.REASON_SAFETY_STOP,
+                ref_id=freeze_id,
+                force=True,
+                now=moment,
+            )
+            record["a53_archive_id"] = archive["id"]
+        except Exception as exc:  # noqa: BLE001 — best-effort cross-link
+            _LOGGER.warning(
+                "A5.3 archive double-write failed for freeze %s: %s",
+                freeze_id, exc,
+            )
         # A1.1 cross-link: after a confirmed safety-stop, back up every
         # auto-backup-enabled character (hook owned by manual_backups).
         try:

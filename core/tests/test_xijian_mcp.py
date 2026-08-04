@@ -732,6 +732,27 @@ class TestConfirmSafetyStop:
         with pytest.raises(MCPError):
             mcp_stub.confirm_safety_stop("mcpf_phantom")
 
+    def test_confirm_double_writes_a53_archive_snapshot(self):
+        """Confirming a safety-stop archives an A5.3 snapshot with
+        reason="safety_stop" (T0-2), mirroring the A5.4 overload
+        emergency_dump double-write pattern.
+        (确认安全停止时，将 A5.3 快照归档，reason="safety_stop" (T0-2)，
+        镜像 A5.4 过载 emergency_dump 双写模式。)
+        """
+        from xijian_api.stubs import snapshots as snapshots_stub
+        before = len(snapshots_stub.list_snapshots(reason="safety_stop"))
+        record = mcp_stub.safety_stop(world_id="world_x", reason="test")
+        confirmed = mcp_stub.confirm_safety_stop(record["id"])
+        assert confirmed["status"] == FREEZE_RESTORED
+        # The A5.3 archive bucket gained exactly one safety_stop entry.
+        after = snapshots_stub.list_snapshots(reason="safety_stop")
+        assert len(after) == before + 1
+        archive = after[0]
+        assert archive["ref_id"] == record["id"]
+        assert archive["compressed"] is True
+        # The freeze record carries the archive id for operator lookup.
+        assert confirmed.get("a53_archive_id") == archive["id"]
+
 
 class TestCancelSafetyStop:
     def test_cancel_transitions_to_cancelled(self):
