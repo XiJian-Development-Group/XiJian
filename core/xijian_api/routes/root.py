@@ -13,10 +13,13 @@ from __future__ import annotations
 from flask import Blueprint, jsonify
 
 from xijian_api.config import API_VERSION
+from xijian_api._version import CORE_VERSION_NORMALIZED
 
-# Server version follows the package version (kept as a literal here
-# so we don't need to import the package metadata).
-SERVER_VERSION = "0.1.0"
+# Server version follows the generated ``_version`` module (sourced from
+# ``Config/Config.json`` → ``Version.CoreApi`` via scripts/sync-versions.py).
+# 服务版本跟随生成的 ``_version`` 模块（由 scripts/sync-versions.py 从
+# ``Config/Config.json`` → ``Version.CoreApi`` 同步而来）。
+SERVER_VERSION = CORE_VERSION_NORMALIZED
 
 
 def _capabilities() -> list[str]:

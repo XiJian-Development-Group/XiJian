@@ -1,6 +1,6 @@
 [project]
 name = "xijian-api"
-version = "0.1.0"
+version = "1.2.0a0"
 description = "隙间 (XiJian) local Flask API server — core skeleton."
 requires-python = ">=3.11"
 dependencies = [
@@ -9,6 +9,9 @@ dependencies = [
   "psutil>=5.9",
   "simple-websocket>=1.0",
   "waitress>=3.0",
+  # 资源包系统：7z 固实归档读写（B 节）。zip 用标准库 zipfile 兜底。
+  # Resource packs: 7z solid archive I/O (§B).  zip falls back to stdlib zipfile.
+  "py7zr>=0.21",
 ]
 
 [project.optional-dependencies]
@@ -20,7 +23,6 @@ dependencies = [
 # 因此保持可选。
 devkit = [
   "pywebview>=5.0",
-  "py7zr>=0.21",
 ]
 test = [
   "pytest>=8",
