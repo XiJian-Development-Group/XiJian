@@ -48,11 +48,14 @@ token_file = "/tmp/xijian-{pid}.token"
 # ---------------------------------------------------------------------------
 
 [storage]
-base_dir = "~/.xijian"
+base_dir = "~/Library/Application Support/XiJian/Core"
 files_subdir = "files"
 models_subdir = "models"     # 统一存放所有模型权重；具体路径见 [[models]]
 snapshots_subdir = "snapshots"
 audit_subdir = "audit"
+# 资源包系统：安装后的包解压目录（见 B 节「资源包系统」）。
+# Resource packs: extraction root for installed packs (see §B).
+packs_subdir = "packs"
 
 # ---------------------------------------------------------------------------
 # Backend preference per task.  When the default backend is not

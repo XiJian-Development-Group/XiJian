@@ -196,19 +196,22 @@ def default_storage_dir() -> Path:
 
     返回默认存储根目录。
 
-    * Packaged mode: ``<executable_dir>/data/``
-    * Dev mode: ``~/.xijian`` (compatible with original behaviour)
+    Dev mode and packaged mode both resolve to the unified CORE_ROOT
+    (``~/Library/Application Support/XiJian/Core``), overridable via
+    the ``XIJIAN_DATA_DIR`` environment variable.
 
-    * 打包模式：``<executable_dir>/data/``
-    * 开发模式：``~/.xijian``（保持与原行为兼容）
+    开发模式与打包模式统一解析到 CORE_ROOT
+    (``~/Library/Application Support/XiJian/Core``)，
+    可通过 ``XIJIAN_DATA_DIR`` 环境变量覆盖。
 
     Used to store model weights, user uploads, snapshots, audit logs, etc.
 
     该目录用于存放模型权重、用户上传文件、快照、审计日志等。
     """
-    if _FROZEN:
-        return executable_dir() / "data"
-    return Path(os.path.expanduser("~/.xijian"))
+    env_dir = os.environ.get("XIJIAN_DATA_DIR")
+    if env_dir:
+        return Path(env_dir).expanduser()
+    return Path("~/Library/Application Support/XiJian/Core").expanduser()
 
 
 def setup_external_libs() -> None:
@@ -238,19 +241,28 @@ def setup_external_libs() -> None:
 
 
 def ensure_runtime_dirs() -> None:
-    """Ensure runtime directories exist (logs/, run/, data/).
+    """Ensure runtime directories exist (logs/, run/, storage root).
 
-    确保运行时需要的目录存在（logs/、run/、data/）。
+    确保运行时需要的目录存在（logs/、run/、存储根目录）。
 
-    In packaged mode, call this at startup to create the necessary
-    directory structure.  No-op in dev mode.
+    Always creates the unified storage root (CORE_ROOT) plus its ``logs/``
+    and ``run/`` subdirectories so dev and packaged modes share the same
+    layout.  In packaged mode additionally creates the executable-side
+    ``logs/`` and ``run/`` directories.
 
-    在打包模式下，启动时调用此函数创建必要的目录结构。
-    开发模式下为空操作。
+    始终创建统一存储根目录 (CORE_ROOT) 及其 ``logs/``、``run/`` 子目录，
+    使开发模式与打包模式共享同一布局。打包模式下额外创建可执行文件侧的
+    ``logs/`` 与 ``run/`` 目录。
     """
-    if not _FROZEN:
-        return
-    for d in (default_log_dir(), default_token_dir(), default_storage_dir()):
+    storage = default_storage_dir()
+    targets = [
+        default_log_dir(),
+        default_token_dir(),
+        storage,
+        storage / "logs",
+        storage / "run",
+    ]
+    for d in targets:
         try:
             d.mkdir(parents=True, exist_ok=True)
         except OSError:

@@ -81,6 +81,9 @@ _OPTIONAL_ROUTE_MODULES: tuple[str, ...] = (
     "xijian_api.routes.xijian_voice_calls",
     "xijian_api.routes.xijian_initiated",
     "xijian_api.routes.xijian_desktop",
+    # 存储统一迁移 / 资源包系统 (added 2026-08-03).
+    "xijian_api.routes.xijian_migration",
+    "xijian_api.routes.xijian_packs",
 )
 
 

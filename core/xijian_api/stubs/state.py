@@ -103,6 +103,13 @@ safety_state: dict[str, Any] = {}
 overload: dict[str, Any] = {}
 audits: list[dict[str, Any]] = []
 
+# Resource pack index — package_id → {kind, target_ids, path, manifest}.
+# Rebuilt at startup from scan_packs(); package directories are the
+# source of truth for what is installed.
+# 资源包索引 — package_id → {kind, target_ids, path, manifest}。
+# 启动时由 scan_packs() 重建；包目录是已安装状态的唯一事实源。
+packs_index: dict[str, Any] = {}
+
 # world_event_categories_disabled uses set values — stored via a
 # dedicated DictDB bucket with list↔set conversion.
 # world_event_categories_disabled 使用 set 值 — 通过专用 DictDB 桶
@@ -180,6 +187,7 @@ def reset_for_testing() -> None:
     safety_state.clear()
     overload.clear()
     audits.clear()
+    packs_index.clear()
     _world_event_categories_db.clear()
     world_event_categories_disabled.clear()
 

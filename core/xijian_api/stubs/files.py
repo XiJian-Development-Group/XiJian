@@ -1,17 +1,41 @@
-"""Stub file storage — kept in-memory plus a temp-dir byte dump.
-文件存根存储 — 保存在内存中加上临时目录字节转储。
+"""Stub file storage — kept in-memory plus a config-based byte dump.
+文件存根存储 — 保存在内存中加上基于配置的字节转储。
+
+The on-disk directory is no longer hardcoded to ``/tmp/xijian_files``;
+it is resolved from the storage config (``storage.files_path``), which
+defaults to ``<CORE_ROOT>/files``.  Kept lazy so module import never
+touches the filesystem and the path follows the active config
+(app context → ``Config.from_env()``).
+
+磁盘目录不再硬编码为 ``/tmp/xijian_files``，而是从存储配置
+(``storage.files_path``) 解析，默认 ``<CORE_ROOT>/files``。
+保持惰性解析，模块导入不触碰文件系统，路径跟随当前配置
+(app 上下文 → ``Config.from_env()``)。
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-import tempfile
 
 from xijian_api.stubs import state
 
 
-_FILE_DIR = Path(tempfile.gettempdir()) / "xijian_files"
-_FILE_DIR.mkdir(parents=True, exist_ok=True)
+def _file_dir() -> Path:
+    """Resolve the on-disk file directory from config storage.
+
+    从配置存储解析磁盘文件目录。
+    """
+    try:
+        from flask import current_app
+
+        cfg = current_app.config.get("XIJIAN_CONFIG")
+        if cfg is not None:
+            return cfg.storage.files_path
+    except Exception:
+        pass
+    from xijian_api.config import Config
+
+    return Config.from_env().storage.files_path
 
 
 def _public_record(record: dict) -> dict:
@@ -32,7 +56,8 @@ def persist(file_id: str, payload: bytes, *, purpose: str, filename: str) -> dic
     """Write ``payload`` to disk and create a state record.
     将 ``payload`` 写入磁盘并创建状态记录。
     """
-    target = _FILE_DIR / file_id
+    target = _file_dir() / file_id
+    target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(payload)
     record = {
         "id": file_id,

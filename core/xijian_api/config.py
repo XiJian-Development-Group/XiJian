@@ -146,11 +146,12 @@ class StorageConfig:
     这是操作员编辑以将所有权重移动到不同文件系统（符号链接、单独卷等）的唯一位置。
     """
 
-    base_dir: str = "~/.xijian"
+    base_dir: str = "~/Library/Application Support/XiJian/Core"
     files_subdir: str = "files"
     models_subdir: str = "models"
     snapshots_subdir: str = "snapshots"
     audit_subdir: str = "audit"
+    packs_subdir: str = "packs"
 
     @property
     def base_path(self) -> Path:
@@ -175,6 +176,14 @@ class StorageConfig:
     @property
     def audit_path(self) -> Path:
         return self.base_path / self.audit_subdir
+
+    @property
+    def packs_path(self) -> Path:
+        """Root directory for installed resource packs.
+
+        已安装资源包（packs）的根目录。
+        """
+        return self.base_path / self.packs_subdir
 
     def ensure_base(self) -> Path:
         """Make sure the base directory exists and return it.
@@ -494,12 +503,23 @@ def _build_config(
     auth = AuthConfig(token_file=data.get("auth", {}).get("token_file", AuthConfig.token_file))
 
     storage_data = dict(data.get("storage", {}))
+    # ``XIJIAN_DATA_DIR`` is the unified override for the whole storage
+    # root — it wins over the TOML ``base_dir`` (used by tests to keep
+    # the suite hermetic, and by power users to relocate everything).
+    # ``XIJIAN_DATA_DIR`` 是存储根目录的统一覆盖项 — 优先于 TOML ``base_dir``
+    # （测试用它保持套件隔离，高级用户用它整体搬迁数据）。
+    base_dir = (
+        os.environ.get("XIJIAN_DATA_DIR")
+        or storage_data.get("base_dir")
+        or "~/Library/Application Support/XiJian/Core"
+    )
     storage = StorageConfig(
-        base_dir=storage_data.get("base_dir", "~/.xijian"),
+        base_dir=base_dir,
         files_subdir=storage_data.get("files_subdir", "files"),
         models_subdir=storage_data.get("models_subdir", "models"),
         snapshots_subdir=storage_data.get("snapshots_subdir", "snapshots"),
         audit_subdir=storage_data.get("audit_subdir", "audit"),
+        packs_subdir=storage_data.get("packs_subdir", "packs"),
     )
 
     backends = _build_backends(data.get("backends", {}))

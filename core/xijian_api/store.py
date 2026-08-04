@@ -52,19 +52,34 @@ from typing import Any
 
 _LOGGER = logging.getLogger(__name__)
 
-#: Default database location.
-#: 默认数据库位置。
-DEFAULT_DB_DIR = Path.home() / ".xijian"
+#: Unified storage root (CORE_ROOT) — dev mode and packaged mode share
+#: the same location.  Overridable wholesale via ``XIJIAN_DATA_DIR``.
+#: 统一存储根目录 (CORE_ROOT) — 开发模式与打包模式共用同一位置。
+#: 可通过 ``XIJIAN_DATA_DIR`` 整体覆盖。
+DEFAULT_DB_DIR = Path("~/Library/Application Support/XiJian/Core").expanduser()
 DEFAULT_DB_PATH = DEFAULT_DB_DIR / "xijian.db"
 ENV_DB_PATH = "XIJIAN_DB_PATH"
+ENV_DATA_DIR = "XIJIAN_DATA_DIR"
 
 
 def _db_path() -> str:
     """Return the database file path from environment or default.
 
     返回数据库文件路径，从环境变量或默认值获取。
+
+    Priority: ``XIJIAN_DB_PATH`` > ``XIJIAN_DATA_DIR`` (→ ``<dir>/xijian.db``)
+    > default (``CORE_ROOT/xijian.db``).
+
+    优先级：``XIJIAN_DB_PATH`` > ``XIJIAN_DATA_DIR``（→ ``<dir>/xijian.db``）
+    > 默认值（``CORE_ROOT/xijian.db``）。
     """
-    return os.environ.get(ENV_DB_PATH, str(DEFAULT_DB_PATH))
+    env_db = os.environ.get(ENV_DB_PATH)
+    if env_db:
+        return env_db
+    env_dir = os.environ.get(ENV_DATA_DIR)
+    if env_dir:
+        return str(Path(env_dir).expanduser() / "xijian.db")
+    return str(DEFAULT_DB_PATH)
 
 
 # ---------------------------------------------------------------------------
@@ -351,4 +366,5 @@ __all__ = [
     "close_connections",
     "DEFAULT_DB_PATH",
     "ENV_DB_PATH",
+    "ENV_DATA_DIR",
 ]

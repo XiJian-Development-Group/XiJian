@@ -103,12 +103,46 @@ def create_app(*, testing: bool = False, config: Config | None = None) -> Flask:
     # 加载 Bearer 令牌（从磁盘加载，或在测试模式下生成占位符）。
     auth.setup_token(config)
 
+    # A.5 — Legacy data migration (``~/.xijian`` → CORE_ROOT).  Runs
+    # synchronously once at startup, before seeding, so the unified
+    # storage root is populated before any handler reads from it.
+    # Failures are logged but never block startup.
+    # A.5 — 旧数据迁移（``~/.xijian`` → CORE_ROOT）。在播种之前启动时
+    # 同步执行一次，使统一存储根目录在任何处理器读取之前就已填充。
+    # 失败仅记日志，绝不阻塞启动。
+    try:
+        from xijian_api.stubs import migration as migration_stub
+
+        migration_result = migration_stub.migrate_legacy_data()
+        _LOGGER.info(
+            "legacy migration: migrated=%s conflicts=%d",
+            migration_result.get("migrated"),
+            len(migration_result.get("conflicts", []) or []),
+        )
+    except Exception as exc:  # noqa: BLE001 - migration is best-effort
+        _LOGGER.warning("legacy migration failed (non-fatal): %s", exc)
+
     # Seed in-memory stub state so endpoints that expect default
     # records (Yuki, world_modern_tokyo, ...) have something to return.
     # 播种内存中的存根状态，使期望默认记录（Yuki, world_modern_tokyo 等）的端点有数据可返回。
     from xijian_api.stubs import seed_all
 
     seed_all()
+
+    # B.3 — Resource packs.  Install preload packs (idempotent) then
+    # scan + load already-installed packs into runtime state.  Failures
+    # are logged but never block startup.
+    # B.3 — 资源包。安装预置包（幂等），然后扫描并加载已安装的包。
+    # 失败仅记日志，绝不阻塞启动。
+    try:
+        from xijian_api.stubs import packs as packs_stub
+
+        preload = packs_stub.ensure_preload_packs()
+        _LOGGER.info("preload packs installed: %d", len(preload.get("installed", []) or []))
+        scan = packs_stub.scan_packs()
+        _LOGGER.info("installed packs: %d", len(scan.get("installed", []) or []))
+    except Exception as exc:  # noqa: BLE001 - packs init is best-effort
+        _LOGGER.warning("resource packs init failed (non-fatal): %s", exc)
 
     # Middleware first: request-id / trace-id / auth / idempotency.
     # 先安装中间件：请求 ID / 追踪 ID / 认证 / 幂等性。
