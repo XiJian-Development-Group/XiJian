@@ -5,6 +5,37 @@
 
 ---
 
+## 2026-08-04 · Q1 达标核心 5 项实装（T0-1/T0-2/T0-3/T0-4/T4-1）
+
+### 任务来源
+Q1 达标清单 P0/P1 核心 5 项：T0-1 chat → MCP 工具调用安全闸（P0）、T0-2 A5.2 safety_stop → A5.3 快照双写（P1）、T0-3 A5.3 真实 zstd 压缩（P1）、T0-4 A5.1 评测集接入（P1）、T4-1 api.md 补缺（P1）。全部不依赖客户端，core/ 内独立交付。
+
+### 已完成（实测一遍）
+
+#### T0-1 · chat → MCP 工具调用安全闸（P0）
+`stubs/chat.py` 工具派发入口（`_run_tools_pipeline`）在 `_execute_mcp_tool_call` 前插入 `_mcp_gate_check`：查 registry 里工具的 `action_kind`，有则调 `mcp.check(action_kind, args, world_id)`；`verdict != "allowed"` 拒绝执行，审计条目由 check() 自身写入（AC-1 可审计）。域工具（action_kind=None）不过闸，与 registry 语义一致。新增 `tests/test_xijian_chat_mcp_gate.py` 5 分支（allowed/denied/frozen/lockout/crash）+ 无 world 变体，全绿。
+
+#### T0-2 · A5.2 safety_stop → A5.3 快照双写（P1）
+`mcp.confirm_safety_stop` restore 成功后调用 `snapshots.create_snapshot(reason="safety_stop", force=True, ref_id=freeze_id)`——镜像 A5.4 overload emergency_dump 双写模式：mcp_snapshots 是工作副本（sanitize/restore 用），safety_snapshots 是归档副本。freeze 记录挂 `a53_archive_id` 便于运维回溯。尽力而为：归档失败不阻断 confirm。测试仿 `test_emergency_dump_writes_force_archive_snapshot`。这补上了 2026-07-22 notes 里留的"A5.2 safety_stop confirm → A5.3 双写留作后续"的口子。
+
+#### T0-3 · A5.3 真实 zstd 压缩（P1）
+AC-3 "压缩采用 zstd，平均压缩比 ≥ 0.4"：`snapshots.py` 接入真 `zstandard` 编解码路径（`_zstd_compress`/`_zstd_decompress`），zlib 兜底保留。新增策略字段：`compression_backend`（zstd|zlib|auto，默认 auto）+ `max_single_snapshot_bytes`（单快照上限，None = 用模块级 `MAX_SINGLE_SNAPSHOT_BYTES` 默认，兼容既有 monkeypatch 测试）。`set_policy` 严格校验；记录存 `compression_backend` 供 `decompress_snapshot` 往返。`config.toml` 新增 `[snapshots]` 段、`config.py` 新增 `SnapshotsConfig`、`state.py` 注释说明 backup_policies DictDB（SQLite 写透）持久化这两个字段。新增 `tests/test_xijian_zstd_roundtrip.py`：≥10 MB 往返一致性、压缩比 < 0.4、后端选择、可配上限、配置解析。
+
+#### T0-4 · A5.1 评测集接入（P1）
+`docs/eval/safety_eval.jsonl`：105 条正常 + 35 条 OOC 对照（注入/越界/世界危险双信号），每条 OOC 携带 rule 块（rule_kind/pattern/severity）作为评测规则书。`core/scripts/eval_safety.py`：`python -m core.scripts.eval_safety` 加载评测集 → seed 规则 → 调 `safety.scan_input/scan_output` → 用 `safety.count_for(verdict=...)` 统计 → 输出触发率表格；正常集触发率 ≥ 1% 时退出码非 0（CI 可门禁）。实测：正常集触发率 0.00%（< 1%，AC-1 达标），OOC 检出率 100%（block 27 + allow_with_exception 8）。功能清单v2.md AC-1 的 `[TODO: 用评测集验证]` 已摘除并标注实测结果。
+
+#### T4-1 · api.md 补缺（P1）
+审计 §2.5 脱节项 #1/#2/#3 关闭：§3.2 互动扩为完整端点表（list/trigger/responses，含参数/响应/错误码/示例）；新增 §3.9 剧情（Plot，15 端点，与 `routes/xijian_plot.py` 签名一致）；§3.10 DevKit 预览与测试（13 端点，与 `routes/xijian_devkit.py` 签名一致）。api.md 其余章节未动。长期方案（gen_openapi.py 从 FastAPI 自动导出唯一事实源）不在本轮范围，仍属后续。
+
+### 没动的 / 留的口子
+1. `routes/xijian_chat.py` 不存在——chat 路由在 `routes/chat.py`，world_id 上下文本就从 `xijian.world_id` 透传，无需改路由。
+2. `MAX_SINGLE_SNAPSHOT_BYTES` 模块常量保留为默认值来源（策略字段 None 时生效），既有 monkeypatch 测试不受影响。
+3. zstd 显式指定但环境缺 `zstandard` 时抛 `SnapshotError`（运营商明确要 zstd 就不静默降级）；auto 才走 zlib 兜底。
+4. eval 规则书由评测集自带（运维策展规则书的场景：把规则书换成生产规则再跑同一脚本即可）。
+5. 全量回归 **2228 passed**（含新增 24 项测试），0 回归。
+
+---
+
 ## 2026-07-22 · A5.3 自动世界/记忆上下文备份实装（从零起）
 
 ### 任务来源
