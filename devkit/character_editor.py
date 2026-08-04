@@ -407,19 +407,43 @@ def auto_fill_character_config(
 
 
 def export_character_for_submit(work_dir: str, char_id: str) -> dict[str, Any]:
+    """Export a character as a pack-compatible archive payload.
+
+    以包兼容的归档负载导出一个角色。
+
+    The returned ``files`` list uses the **resource-pack layout**
+    (``characters/<id>/character.json``, ``characters/<id>/persona.md``,
+    ``memories/<id>/entries.json``) so the produced 7Z/zip archive can be
+    installed directly by the core resource-pack engine (§B) — DevKit
+    export equals pack, one format two uses.
+
+    返回的 ``files`` 列表使用**资源包布局**（``characters/<id>/character.json``、
+    ``characters/<id>/persona.md``、``memories/<id>/entries.json``），
+    这样产出的 7Z/zip 归档可被核心资源包引擎（§B）直接安装 ——
+    DevKit 导出即包，一套格式两用。
+    """
     record = get_character(work_dir, char_id)
     if not record:
         raise DevKitError(404, f"角色 {char_id} 不存在", code="not_found")
     files = []
+    prefix = f"characters/{char_id}"
+    char_path = _char_path(work_dir, char_id)
+    if os.path.isfile(char_path):
+        files.append({"path": char_path, "arcname": f"{prefix}/character.json"})
     persona_path = _persona_path(work_dir, char_id)
     if os.path.isfile(persona_path):
-        files.append({"path": persona_path, "arcname": "persona.md"})
+        files.append({"path": persona_path, "arcname": f"{prefix}/persona.md"})
+    mem_path = os.path.join(work_dir, "memories", char_id, "entries.json")
+    if os.path.isfile(mem_path):
+        files.append({"path": mem_path, "arcname": f"memories/{char_id}/entries.json"})
+    display = record.get("display_name") or record.get("name") or char_id
     export = {
         "target_kind": "character",
         "target_id": char_id,
         "payload": {
-            "notes": f"角色: {record.get('display_name', record['name'])} ({record['name']})",
-            "files": [persona_path] if files else [],
+            "name": display,
+            "notes": f"角色: {display} ({record.get('name', char_id)})",
+            "files": [entry["path"] for entry in files],
         },
         "files": files,
     }

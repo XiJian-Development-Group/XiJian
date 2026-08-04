@@ -331,6 +331,18 @@ def build_manifest(
     files = payload.get("files") or []
     if not isinstance(files, list):
         files = []
+    # Pack-compatible fields (§B): the same archive installs directly
+    # into the core resource-pack engine, so the manifest doubles as a
+    # pack manifest (schema stays the submission schema — the core
+    # validator accepts both).
+    # 包兼容字段（§B）：同一归档可直接安装进核心资源包引擎，
+    # 因此 manifest 兼作包清单（schema 保持提交 schema —— 核心校验器两者都接受）。
+    try:
+        from devkit.version import get_app_version
+
+        pack_version = get_app_version()
+    except Exception:  # noqa: BLE001 — best-effort version resolution
+        pack_version = ""
     return {
         "schema": "xijian.devkit.submission/v1",
         "developer_id": developer_id,
@@ -340,6 +352,14 @@ def build_manifest(
         "ai_ratio": float(ai_ratio),
         "files": [str(f) for f in files],
         "notes": str(payload.get("notes", "")),
+        # Pack fields (§B) — 包字段。
+        "name": str(payload.get("name") or target_id),
+        "version": pack_version or "0.0.0",
+        "kind": target_kind,
+        "author": developer_id,
+        "description": str(payload.get("notes", "")),
+        "dependencies": [],
+        "package_id": target_id,
     }
 
 

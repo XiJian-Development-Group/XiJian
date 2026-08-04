@@ -228,22 +228,39 @@ def delete_world(work_dir: str, world_id: str) -> bool:
 
 
 def export_world_for_submit(work_dir: str, world_id: str) -> dict[str, Any]:
+    """Export a world as a pack-compatible archive payload.
+
+    以包兼容的归档负载导出一个世界。
+
+    Uses the **resource-pack layout** (``worlds/<id>/world.json``,
+    ``worlds/<id>/world_doc.md``, ``worlds/<id>/world_config.json``)
+    so the produced archive installs directly via the core resource-pack
+    engine (§B).
+
+    使用**资源包布局**（``worlds/<id>/world.json``、``worlds/<id>/world_doc.md``、
+    ``worlds/<id>/world_config.json``），产出的归档可被核心资源包引擎（§B）直接安装。
+    """
     record = get_world(work_dir, world_id)
     if not record:
         raise DevKitError(404, f"世界观 {world_id} 不存在", code="not_found")
-    doc_path = _world_doc_path(work_dir, world_id)
+    prefix = f"worlds/{world_id}"
     files = []
+    wjson_path = _world_path(work_dir, world_id)
+    if os.path.isfile(wjson_path):
+        files.append({"path": wjson_path, "arcname": f"{prefix}/world.json"})
+    doc_path = _world_doc_path(work_dir, world_id)
     if os.path.isfile(doc_path):
-        files.append({"path": doc_path, "arcname": "world_doc.md"})
+        files.append({"path": doc_path, "arcname": f"{prefix}/world_doc.md"})
     cfg_path = _world_config_path(work_dir, world_id)
     if os.path.isfile(cfg_path):
-        files.append({"path": cfg_path, "arcname": "world.json"})
+        files.append({"path": cfg_path, "arcname": f"{prefix}/world_config.json"})
     return {
         "target_kind": "world",
         "target_id": world_id,
         "payload": {
-            "notes": f"世界观: {record['name']}",
-            "files": [doc_path],
+            "name": record.get("name") or world_id,
+            "notes": f"世界观: {record.get('name', world_id)}",
+            "files": [entry["path"] for entry in files],
         },
         "files": files,
     }

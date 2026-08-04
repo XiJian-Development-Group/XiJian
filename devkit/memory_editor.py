@@ -141,5 +141,7 @@ def export_entries_for_submit(work_dir: str, character_id: str) -> dict[str, Any
             "notes": f"记忆条目导出: {character_id} ({len(entries)} 条)",
             "files": [export_path],
         },
-        "files": [{"path": export_path, "arcname": "memory_entries.json"}],
+        # Resource-pack layout (§B): memories live under ``memories/<id>/``.
+        # 资源包布局（§B）：记忆位于 ``memories/<id>/`` 下。
+        "files": [{"path": export_path, "arcname": f"memories/{character_id}/entries.json"}],
     }
