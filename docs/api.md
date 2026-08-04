@@ -681,9 +681,13 @@ multipart/form-data：`file`（必填）、`purpose`（必填：`assistants` / `
 
 ### 3.2 互动（Interaction）
 
+互动是角色对特定情境的预设回应集（回应 + 动作映射）。
+
 #### `GET /v1/xijian/interactions`
 
-列出可用互动类型。
+列出所有可用互动类型（分页）。
+
+**响应 200**：
 
 ```json
 {
@@ -697,17 +701,56 @@ multipart/form-data：`file`（必填）、`purpose`（必填：`assistants` / `
       "cooldown_seconds": 60,
       "requires_state": {"intimacy": {"min": 20}}
     }
-  ]
+  ],
+  "has_more": false
 }
 ```
+
+**错误码**：无（分页参数非法时 400）。
 
 #### `POST /v1/xijian/interactions/{interaction_id}/trigger`
 
 手动触发互动（绕过角色自主决策）。
 
+**请求体**：
+
+```json
+{
+  "character_id": "char_yuki",
+  "context": {"location": "home", "mood": 70},
+  "nsfw_allowed": false
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+| ---- | ---- | ---- | ---- |
+| `character_id` | string | 否 | 目标角色；缺省用默认角色 |
+| `context` | object | 否 | 触发上下文（位置 / 心情等） |
+| `nsfw_allowed` | boolean | 否 | 是否允许 NSFW 回应，默认 `false` |
+
+**响应 200**：`{accepted, reason, response, action, ...}`。
+
+**错误码**：
+
+| 状态码 | code | 说明 |
+| ------ | ---- | ---- |
+| 404 | `interaction_not_found` | 互动不存在 |
+
 #### `GET /v1/xijian/interactions/{interaction_id}/responses`
 
-查询某互动下角色可能的所有回应与动作映射。
+查询某互动下角色所有可能的回应与动作映射。
+
+**响应 200**：
+
+```json
+{
+  "object": "list",
+  "data": [{"text": "…", "action": {"type": "hug", "target": "character"}}],
+  "has_more": false
+}
+```
+
+**错误码**：404 `interaction_not_found`。
 
 ### 3.3 世界（World）
 
@@ -931,6 +974,176 @@ DevKit 导出的归档即为合法资源包（一套格式两用）。安装后�
 
 查询导入任务；完成时 ``status="completed"`` 且带 ``package_id`` 与结果摘要，
 失败时 ``status="failed"`` 且带 ``error`` 描述。
+
+---
+
+### 3.9 剧情（Plot）
+
+C3 剧情运行时：加载 DevKit 导出的剧情设计（节点/边图），在世界内推进剧情。
+
+#### `GET /v1/xijian/plots/designs`
+
+列出 DevKit 工作目录下所有可用剧情设计（分页）。
+
+**响应 200**：``{object, data: [{plot_id, title, node_count, edge_count}], has_more}``。
+
+#### `GET /v1/xijian/plots/designs/{plot_id}`
+
+读取剧情设计详情（节点/边/初始变量）。
+
+**错误码**：404 ``plot_not_found``。
+
+#### `GET /v1/xijian/plots/designs/{plot_id}/nodes`
+
+列出剧情设计的全部节点。
+
+#### `GET /v1/xijian/plots/designs/{plot_id}/edges`
+
+列出剧情设计的全部边。
+
+#### `POST /v1/xijian/plots/runtime`
+
+创建并启动一个剧情运行时实例。
+
+**请求体**：
+
+```json
+{
+  "plot_id": "plot_demo",
+  "world_id": "world_modern_tokyo",
+  "initial_variables": {"player_name": "阿月"}
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+| ---- | ---- | ---- | ---- |
+| `plot_id` | string | ✅ | 剧情设计 id |
+| `world_id` | string | ✅ | 目标世界 |
+| `initial_variables` | object | 否 | 初始剧情变量 |
+
+**响应 201**：运行时记录（含 ``runtime_id``、``current_node_id``、``status``）。
+
+**错误码**：400 ``missing_fields`` / ``plot_error``；404 ``world_not_found``。
+
+#### `GET /v1/xijian/plots/runtime`
+
+列出运行时实例。查询参数：``world_id`` / ``plot_id`` / ``status``（可选）。
+
+#### `GET /v1/xijian/plots/runtime/{runtime_id}`
+
+读取运行时状态。**错误码**：404 ``runtime_not_found``。
+
+#### `POST /v1/xijian/plots/runtime/{runtime_id}/advance`
+
+推进剧情（执行当前节点、流转边）。
+
+**请求体**（可选）：
+
+```json
+{ "choose_edge_id": "edge_1_to_2" }
+```
+
+**错误码**：400 ``plot_error``。
+
+#### `POST /v1/xijian/plots/runtime/{runtime_id}/pause` / `.../resume`
+
+暂停 / 恢复剧情。**错误码**：400 ``plot_error``。
+
+#### `DELETE /v1/xijian/plots/runtime/{runtime_id}`
+
+删除运行时实例；成功 204。**错误码**：404 ``runtime_not_found``。
+
+#### `GET /v1/xijian/plots/runtime/{runtime_id}/nodes`
+
+列出运行时所有节点（含 ``is_current`` / ``is_completed`` / ``is_unlocked`` 标记）。
+
+#### `GET /v1/xijian/plots/runtime/{runtime_id}/nodes/{node_id}`
+
+读取单节点详情。**错误码**：404 ``node_not_found``。
+
+#### `GET /v1/xijian/plots/runtime/{runtime_id}/edges`
+
+列出运行时所有边；可选 ``?node_id=`` 过滤出边。
+
+#### `POST /v1/xijian/plots/scheduler/tick`
+
+手动触发一次剧情触发器评估（仅开发环境，``XIJIAN_DEV=1`` 时可用）。
+
+**请求体**（可选）：``{"world_id": "..."}``（缺省评估全世界）。
+
+**错误码**：404 ``route_not_found``（非 dev 环境）。
+
+---
+
+### 3.10 DevKit 预览与测试
+
+桥接独立 DevKit 进程的保存目录：发现、预览、加载角色/世界（C0 本地预览循环）。
+
+#### `GET /v1/xijian/devkit/status`
+
+检查 DevKit 目录可用性并返回摘要：
+
+```json
+{
+  "available": true,
+  "directory": "/Users/.../DevKit",
+  "character_count": 3,
+  "world_count": 1,
+  "loaded_characters": 2,
+  "loaded_worlds": 0
+}
+```
+
+不可用时返回 ``available: false`` 与 ``error``。
+
+#### `GET /v1/xijian/devkit/characters`
+
+列出 DevKit 目录下的角色。查询参数：``loaded_only=true`` 只返回已加载角色。
+每条记录附 ``_loaded`` / ``_persona_exists`` / ``_memories_count`` 预览元数据。
+
+#### `GET /v1/xijian/devkit/characters/{id}`
+
+返回单个角色的完整预览数据。**错误码**：404 ``not_found``。
+
+#### `POST /v1/xijian/devkit/characters/{id}/load`
+
+将角色加载进核心运行时（重复加载会替换旧记录）。
+
+**响应 200**：``{ok: true, data: <加载后的角色记录>}``。**错误码**：404 ``not_found``。
+
+#### `DELETE /v1/xijian/devkit/characters/{id}`（或 `POST .../unload`）
+
+从核心运行时卸载角色。**错误码**：404 ``not_found``。
+
+#### `GET /v1/xijian/devkit/worlds`
+
+列出 DevKit 目录下的世界（附 ``_loaded`` / ``_doc_exists`` / ``_config_exists``）。
+
+#### `GET /v1/xijian/devkit/worlds/{id}`
+
+返回单个世界的完整预览数据。**错误码**：404 ``not_found``。
+
+#### `POST /v1/xijian/devkit/worlds/{id}/load`
+
+将世界加载进核心运行时。**错误码**：404 ``not_found``。
+
+#### `DELETE /v1/xijian/devkit/worlds/{id}`（或 `POST .../unload`）
+
+从核心运行时卸载世界。**错误码**：404 ``not_found``。
+
+#### `GET /v1/xijian/devkit/loaded`
+
+返回全部已加载项，按 ``characters`` / ``worlds`` 分组。
+
+#### `POST /v1/xijian/devkit/reload`
+
+重新扫描 DevKit 目录并重新加载。查询参数：``kind=character|world``（可选，缺省两者）。
+
+**响应 200**：``{ok: true, reloaded: {characters: n, worlds: n}}``。**错误码**：400 ``invalid_kind``。
+
+#### `GET /v1/xijian/devkit/{kind}` / `GET /v1/xijian/devkit/{kind}/{id}`
+
+通用访问别名；``kind`` 为 ``characters`` 或 ``worlds``。**错误码**：400 ``invalid_kind``；404 ``not_found``。
 
 ---
 
