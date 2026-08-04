@@ -21,7 +21,7 @@ XiJian Core API 使用 [PyInstaller](https://pyinstaller.org/) 将 Flask 应用
 | 配置文件 | `core/config.toml` | `<exe_dir>/config.toml` |
 | 日志文件 | `/tmp/xijian.log` | `<exe_dir>/logs/xijian-api.log` |
 | Token 文件 | `/tmp/xijian-<pid>.token` | `<exe_dir>/run/xijian-<pid>.token` |
-| 存储目录 | `~/.xijian` | `<exe_dir>/data/` |
+| 存储目录 | `~/Library/Application Support/XiJian/Core` | 同左（统一 CORE_ROOT，`XIJIAN_DATA_DIR` 可整体覆盖） |
 | 外部 AI 依赖 | conda/pip 安装 | `<exe_dir>/external_libs/` |
 
 运行时环境检测由 [runtime.py](file:///Users/mofan/Documents/MyProjects/XiJian/core/xijian_api/runtime.py) 负责，通过 `sys.frozen` 判断当前模式。

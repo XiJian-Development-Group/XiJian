@@ -882,13 +882,55 @@ multipart/form-data：`file`（必填）、`purpose`（必填：`assistants` / `
 
 查询当前用户已授予的系统权限状态。
 
-### 3.8 资源与导入
+### 3.8 资源与导入（资源包系统 §B）
+
+资源包（pack）是固实 7z（或 zip）归档，根级包含 ``manifest.json`` 与
+``characters/<id>/``、``worlds/<id>/``、``memories/<id>/`` 目录。
+DevKit 导出的归档即为合法资源包（一套格式两用）。安装后的包解压到
+``<存储根>/packs/<package_id>/``。
+
+#### `GET /v1/xijian/packs`
+
+列出所有已安装资源包。返回包记录数组（JSON array；每项含
+``package_id``/``kind``/``name``/``version``/``path``/``manifest``/``loaded``）。
+
+#### `GET /v1/xijian/packs/{package_id}`
+
+查询单个资源包详情；不存在返回 404（``pack_not_found``）。
+
+#### `POST /v1/xijian/packs/install`
+
+安装资源包。两种入参：
+
+* multipart 表单，``file`` 字段上传归档；
+* JSON ``{"path": "/abs/path/to/pack.7z"}``（服务端本地路径，用于目录投放）。
+
+校验 manifest、解压到 ``packs/`` 并加载进运行时；成功 201 返回包记录。
+
+#### `DELETE /v1/xijian/packs/{package_id}`
+
+卸载资源包（移除运行时记录并删除包目录）；不存在返回 404。
+
+#### `POST /v1/xijian/packs/rescan`
+
+重新扫描 ``packs/`` 目录（例如用户手动把归档拖进目录后触发），
+返回 ``{installed: n, errors: [...]}``。
 
 #### `POST /v1/xijian/resources/import`
 
-异步导入一个角色 / 世界 / 场景资源包（zip / 7z）。
+异步导入资源包（zip / 7z）。请求体：
+
+```json
+{ "name": "显示名", "kind": "character", "path": "/abs/path/to/pack.7z" }
+```
+
+也支持 ``"file_id"``（先经 ``POST /v1/files`` 上传，再引用归档 id）。
+后台线程完成解压与加载；202 返回 ``{job_id, status: "queued"}``。
 
 #### `GET /v1/xijian/resources/imports/{job_id}`
+
+查询导入任务；完成时 ``status="completed"`` 且带 ``package_id`` 与结果摘要，
+失败时 ``status="failed"`` 且带 ``error`` 描述。
 
 ---
 
@@ -1100,9 +1142,10 @@ wscat -c "ws://127.0.0.1:$PORT/v1/ws" \
 
 ### 10.3 日志位置
 
-- API 服务日志：`~/.xijian/logs/api-<date>.log`
-- 安全模块审计日志：进程内 `state.safety_audit_log` + `state.audits`，经 `/v1/xijian/safety/audit` 查询
-- AI backend 日志：`~/.xijian/logs/backend-<date>.log`
+- API 服务日志：默认仅输出到 stderr；设置 ``XIJIAN_LOG_FILE`` 后写入指定文件
+  （打包模式默认 ``<exe_dir>/logs/xijian-api.log``，开发模式 ``/tmp/xijian-logs/xijian-api.log``）
+- 安全模块审计日志：进程内 ``state.safety_audit_log`` + ``state.audits``，经 ``/v1/xijian/safety/audit`` 查询
+- AI backend 日志：随 backend 子进程 stderr 输出（若设置 ``XIJIAN_LOG_FILE`` 则与其同文件）
 
 ---
 

@@ -992,6 +992,29 @@ new file:   core/tests/test_xijian_scene_interactions.py  (810 行)
 
 ---
 
+## 2026-08-04 · 资源包系统（§B）+ 存储统一 + 版本同步
+
+**主题**：用户可自行下载并加载角色/世界资源包；存储根统一到 CORE_ROOT；版本号单一事实源。
+
+**改动清单**：
+
+- 存储统一：`~/.xijian` → `~/Library/Application Support/XiJian/Core`（CORE_ROOT）。涉及 `config.py`（base_dir/packs_subdir/XIJIAN_DATA_DIR 覆盖）、`config.toml`、`store.py`（DEFAULT_DB_DIR + XIJIAN_DATA_DIR）、`runtime.py`（default_storage_dir/ensure_runtime_dirs）、`stubs/files.py`（文件目录从 /tmp 改为 storage.files_path，惰性解析）。
+- 旧数据迁移：`stubs/migration.py` + `routes/xijian_migration.py`（GET status / GET conflicts / POST resolve）。幂等（.migrated_from_xijian 标记）、非破坏、冲突记录 + 选择保留（legacy/new）。
+- 资源包引擎：`stubs/packs.py` + `routes/xijian_packs.py`（LIST/DETAIL/INSTALL/DELETE/RESCAN）。7z（py7zr 固实）与 zip 双格式解压，路径穿越防护，manifest 校验（schema xijian.pack/v1，兼容 xijian.devkit.submission/v1），包目录 `<存储根>/packs/<package_id>/`，启动扫描 + 预置包（env XIJIAN_PRELOAD_PACKS_DIR / core/preload_packs）。
+- 资源导入真链路：`stubs/resources.py` 从假 zip 改为真实安装（path/file_id 两种入参，后台线程，job 状态 completed/failed）。
+- DevKit 导出对齐：`character_editor.py`/`world_editor.py`/`memory_editor.py` 导出改为资源包布局（characters/<id>/、worlds/<id>/、memories/<id>/），修复 world_config.json 被错标为 world.json 的 bug；`build_manifest` 增加包字段（name/version/kind/author/dependencies/package_id），schema 保持 submission/v1（核心校验器两者兼容）。DevKit 导出即包。
+- 版本同步：`core/scripts/sync-versions.py`（--dry-run/--check）。Config/Config.json 为唯一事实源 → pyproject.toml / __init__.py / 生成 `_version.py` / devkit version.py / devkit spec。`root.py` SERVER_VERSION 改读 `_version.py`。
+- 文档：`docs/api.md`（§3.8 重写 + packs 端点）、`docs/BuildGuide.md`、`docs/CoreStartupGuide.md` 同步新存储路径；新增保姆级维护教程 `docs/维护教程.md`。
+
+**没动的与原因**：
+
+- macapp 全部（用户明确：将删除重写，仅文档提及）。
+- `.github/`、`Config/` 之外项目根文件（规则只允许 docs/core/devkit）。
+- API 协议版本 `api_version=1.0.0` 不参与同步（是兼容性契约，非构建版本）。
+- 测试套件不设 XIJIAN_DATA_DIR（沿用现有 session 级 app），packs/migration 用 `_set_paths_for_test` 隔离。
+
+---
+
 ## 维护约定
 
 - 每次改完一个章节，**当日**补一条到本文件，格式：日期 + 章节 + 改动清单 + 没动的与原因

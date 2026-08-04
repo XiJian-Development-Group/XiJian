@@ -237,7 +237,7 @@ python -m xijian_api --version
 [xijian-api] 2026-07-22 21:54:56 INFO  [xijian_api] 监听地址      : 127.0.0.1:18600
 [xijian-api] 2026-07-22 21:54:56 INFO  [xijian_api] 开发模式      : True
 [xijian-api] 2026-07-22 21:54:56 INFO  [xijian_api] 配置文件      : /path/to/config.toml
-[xijian-api] 2026-07-22 21:54:56 INFO  [xijian_api] 存储根目录    : /Users/.../.xijian
+[xijian-api] 2026-07-22 21:54:56 INFO  [xijian_api] 存储根目录    : ~/Library/Application Support/XiJian/Core
 [xijian-api] 2026-07-22 21:54:56 INFO  [xijian_api] 已注册模型    : 3 个
 [xijian-api] 2026-07-22 21:54:56 INFO  [xijian_api] 日志级别      : DEBUG
 [xijian-api] 2026-07-22 21:54:56 INFO  [xijian_api] ================================================================

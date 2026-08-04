@@ -208,7 +208,7 @@ mlx = [
 ### 3.2 模型目录结构
 
 ```
-~/.xijian/models/
+~/Library/Application Support/XiJian/Core/models/
 ├── chat/
 │   ├── qwen2.5-7b-mlx-4bit/
 │   │   ├── config.json
@@ -380,7 +380,7 @@ gguf = [
 ### 4.2 模型目录
 
 ```
-~/.xijian/models/
+~/Library/Application Support/XiJian/Core/models/
 ├── chat/
 │   └── qwen2.5-7b-gguf-q4km/
 │       ├── model-q4_k_m.gguf
