@@ -36,7 +36,7 @@ xijian-api/                    # 解压后的根目录
 │                               # 或 xijian-api.exe（Windows）
 ├── _internal/                  # PyInstaller 运行时
 │   ├── Python 解释器
-│   ├── 依赖库（Flask/waitress/...）
+│   ├── 依赖库（Flask/werkzeug/waitress/...）
 │   └── xijian_api 包代码
 ├── config.toml                # 默认配置（用户可编辑）
 ├── README.txt                 # 使用说明
@@ -173,7 +173,7 @@ UI 程序（如 Electron / Tauri / 原生应用）的工作流程：
 3. 启动子进程:
    <app_data>/xijian-core/xijian-api --port 18500 --config <path>/config.toml
 4. 等待服务就绪:
-   - 监听 stdout/stderr 出现 "waitress 服务启动"
+   - 监听 stdout/stderr 出现 "werkzeug 服务启动"（或 "waitress 服务启动"，若显式 `--server waitress`）
    - 或轮询 GET /healthz 直到返回 200
 5. 使用 API
 6. 退出时发送 SIGTERM (Unix) / Ctrl+C (Windows) 或 kill 进程
@@ -181,7 +181,10 @@ UI 程序（如 Electron / Tauri / 原生应用）的工作流程：
 
 ### 6.2 就绪检测
 
-服务启动后，日志会输出 `waitress 服务启动: 127.0.0.1:<port>`。
+服务启动后，日志会输出 `werkzeug 服务启动: 127.0.0.1:<port> (WebSocket 可用)`。
+默认服务器驱动为 werkzeug（支持 /v1/ws WebSocket）；如显式指定 `--server waitress`
+（或 config.toml `[server].driver = "waitress"`），则输出 `waitress 服务启动` 并带
+WARNING「waitress 不支持 WebSocket，/v1/ws 将不可用」。
 UI 程序可通过以下方式检测就绪：
 
 ```javascript

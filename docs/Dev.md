@@ -110,7 +110,7 @@
 - Flask 体积小、依赖少，打进包不会显著膨胀。
 - Flask-SocketIO / SSE 生态成熟，能同时支持请求-响应、流式响应、推送。
 - 团队已有 Flask 经验。
-- 性能上 Flask + gunicorn / waitress 完全够本地单用户使用。
+- 性能上 Flask + werkzeug（默认服务器驱动，支持 /v1/ws WebSocket）/ waitress（可显式 `--server waitress` 切换，但不支持 WebSocket）完全够本地单用户使用。
 
 如未来需要切换到 FastAPI，迁移成本低（接口形态不变即可）。
 

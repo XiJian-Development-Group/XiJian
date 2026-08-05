@@ -235,13 +235,14 @@ python -m xijian_api --version
 [xijian-api] 2026-07-22 21:54:56 INFO  [xijian_api] ================================================================
 [xijian-api] 2026-07-22 21:54:56 INFO  [xijian_api] XiJian Core API 启动
 [xijian-api] 2026-07-22 21:54:56 INFO  [xijian_api] 监听地址      : 127.0.0.1:18600
+[xijian-api] 2026-07-22 21:54:56 INFO  [xijian_api] 服务器驱动    : werkzeug (WebSocket 可用)
 [xijian-api] 2026-07-22 21:54:56 INFO  [xijian_api] 开发模式      : True
 [xijian-api] 2026-07-22 21:54:56 INFO  [xijian_api] 配置文件      : /path/to/config.toml
 [xijian-api] 2026-07-22 21:54:56 INFO  [xijian_api] 存储根目录    : ~/Library/Application Support/XiJian/Core
 [xijian-api] 2026-07-22 21:54:56 INFO  [xijian_api] 已注册模型    : 3 个
 [xijian-api] 2026-07-22 21:54:56 INFO  [xijian_api] 日志级别      : DEBUG
 [xijian-api] 2026-07-22 21:54:56 INFO  [xijian_api] ================================================================
-[xijian-api] 2026-07-22 21:54:56 INFO  [xijian_api] waitress 服务启动: 127.0.0.1:18600
+[xijian-api] 2026-07-22 21:54:56 INFO  [xijian_api] werkzeug 服务启动: 127.0.0.1:18600 (WebSocket 可用)
 ```
 
 ### 5.3 开发/调试模式
@@ -249,7 +250,7 @@ python -m xijian_api --version
 `--dev`（或 `XIJIAN_DEV=1`）启用开发模式：
 - Token 写入 `/tmp/xijian-{pid}.token` 并在日志/终端打印明文
 - 启用 `/v1/xijian/_test/emit` 等测试路由
-- 如未安装 `waitress` 自动回退到 Flask 单线程开发服务器（并写 WARNING）
+- 默认服务器驱动为 `werkzeug`（多线程，WebSocket 可用）；也可用 `--server waitress` 显式切换，但 waitress 不支持 WebSocket（/v1/ws 不可用）
 
 ### 5.4 启动韧性（自动错误修正）
 
@@ -260,7 +261,7 @@ python -m xijian_api --version
 | 配置文件缺失/解析失败 | 回退到内置默认配置 | WARNING |
 | 存储目录不存在 | 自动创建 base/files/models/snapshots/audit | DEBUG（失败 WARNING） |
 | 生产模式缺 token 文件 | 降级为开发模式、自动生成 token | WARNING（失败+恢复各一条） |
-| `waitress` 未安装 | 回退到 Flask 开发服务器 | WARNING |
+| `waitress` 未安装 | 回退到 `werkzeug`（多线程，WebSocket 可用） | WARNING |
 | 端口越界 (1-65535) | 回退到默认端口 18500 | ERROR |
 | 端口被占用 | 明确提示并退出（需 `--port` 换端口） | ERROR |
 | 路由模块导入失败 | 跳过该模块、其余正常注册 | WARNING |
@@ -396,7 +397,8 @@ curl -s http://<SERVER_IP>:18500/healthz
 |------|------|------|
 | 端口被占用、服务退出 | 端口已被其他进程占用 | `--port` 换端口，或释放该端口 |
 | 日志出现「已降级为开发模式启动」 | 生产模式未预置 token 文件 | 已自动修正；正式部署请预置 token 文件或检查 `XIJIAN_DEV` |
-| 日志出现「waitress 未安装」 | 未安装 waitress | `pip install waitress`（已自动回退 Flask 开发服务器） |
+| 日志出现「waitress 不支持 WebSocket」 | 显式使用了 `--server waitress` | 如需 WebSocket（/v1/ws）请改回默认 werkzeug（去掉 `--server` 或 `driver = "auto"`）；纯 HTTP 场景可继续用 waitress |
+| 日志出现「waitress 未安装」 | 未安装 waitress | `pip install waitress`（已自动回退 werkzeug，WebSocket 可用） |
 | 日志出现「配置加载失败」 | config.toml 缺失或语法错误 | 已自动回退默认配置；检查 TOML 语法 |
 | 外部无法访问 | 默认仅监听 `127.0.0.1`（安全基线） | 如确需外部访问，显式设置 `XIJIAN_HOST=0.0.0.0` 并放行端口与防火墙 |
 | `ImportError: No module named 'mlx'` | macOS 非 Apple Silicon / Windows/Linux | 配置 `backends.*.default = "gguf"` |
