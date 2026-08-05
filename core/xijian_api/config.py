@@ -112,6 +112,14 @@ class ServerConfig:
     keep_token_file: bool = False
     testing: bool = False
     api_version: str = API_VERSION
+    # WSGI server driver: ``auto`` (resolves to ``werkzeug`` because the
+    # WebSocket endpoint /v1/ws — spec A6/A7 — requires a WSGI environment
+    # that exposes the raw socket, which waitress does not provide), or an
+    # explicit ``werkzeug`` / ``waitress``.
+    # WSGI 服务器驱动：``auto``（解析为 ``werkzeug``，因为 /v1/ws WebSocket
+    # 端点（规格 A6/A7）要求 WSGI 环境暴露原始 socket，waitress 不提供），
+    # 或显式 ``werkzeug`` / ``waitress``。
+    server_driver: str = "auto"
 
 
 @dataclass(frozen=True)
@@ -508,6 +516,12 @@ def _build_config(
     # 之前我们使用 ``setdefault``，当文件已有 ``testing = false`` 时会静默丢失覆盖
     # ——这导致测试套件引导失败。
     server_data["testing"] = bool(testing)
+    server_driver = str(server_data.get("driver", "auto") or "auto").strip().lower()
+    if server_driver not in {"auto", "werkzeug", "waitress"}:
+        raise ValueError(
+            "[server] driver must be auto|werkzeug|waitress, got %r"
+            % server_data.get("driver")
+        )
     server = ServerConfig(
         host=server_data.get("host", DEFAULT_HOST),
         port=int(server_data.get("port", DEFAULT_PORT)),
@@ -515,6 +529,7 @@ def _build_config(
         keep_token_file=_truthy(server_data.get("keep_token_file")),
         testing=bool(server_data.get("testing", False)),
         api_version=server_data.get("api_version", API_VERSION),
+        server_driver=server_driver,
     )
 
     auth = AuthConfig(token_file=data.get("auth", {}).get("token_file", AuthConfig.token_file))

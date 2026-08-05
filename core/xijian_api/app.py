@@ -32,6 +32,8 @@ from typing import Optional
 
 from flask import Flask
 
+from werkzeug.serving import make_server as _werkzeug_make_server
+
 import atexit
 
 from xijian_api import auth
@@ -260,6 +262,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="完成初始化与自检后不启动 WSGI 服务 (用于冒烟测试)",
     )
     parser.add_argument(
+        "--server",
+        default=None,
+        choices=["auto", "werkzeug", "waitress"],
+        help="WSGI 服务器驱动: auto (默认，解析为 werkzeug，WebSocket 可用) / werkzeug / waitress (不支持 WebSocket) (默认 auto，或 config.toml [server].driver)",
+    )
+    parser.add_argument(
         "--version",
         action="store_true",
         help="打印版本信息并退出",
@@ -387,6 +395,7 @@ def _print_banner(
     port: int,
     dev: bool,
     log_file: Optional[str],
+    server_driver: str = "werkzeug",
 ) -> None:
     """Emit a startup banner summarising the resolved configuration.
 
@@ -398,6 +407,8 @@ def _print_banner(
     _LOGGER.info(bar)
     _LOGGER.info("XiJian Core API 启动")
     _LOGGER.info("监听地址      : %s:%d", host, port)
+    ws_hint = "WebSocket 可用" if server_driver == "werkzeug" else "WebSocket 不可用 (/v1/ws)"
+    _LOGGER.info("服务器驱动    : %s (%s)", server_driver, ws_hint)
     _LOGGER.info("开发模式      : %s", dev)
     _LOGGER.info("测试模式      : %s", config.testing)
     _LOGGER.info("配置文件      : %s", config.source_path or "(内置默认)")
@@ -419,41 +430,116 @@ def _print_banner(
 
 
 # ---------------------------------------------------------------------------
+# Server driver selection
+# 服务器驱动选型
+# ---------------------------------------------------------------------------
+
+
+def resolve_server_driver(cli_value: str | None, config_value: str | None) -> str:
+    """Resolve the effective WSGI server driver.
+
+    解析实际生效的 WSGI 服务器驱动。
+
+    Priority is CLI > config > default.  ``auto`` always resolves to
+    ``werkzeug``: the WebSocket endpoint ``/v1/ws`` (feature list A6/A7)
+    depends on flask-sock, which needs the raw socket from the WSGI
+    environment — waitress does not provide it, so the handshake 500s.
+    An explicit ``waitress`` is honoured, with a startup warning that
+    ``/v1/ws`` will be unavailable.  Unknown values fall back to
+    ``auto`` (→ ``werkzeug``).
+
+    优先级为 CLI > 配置 > 默认。``auto`` 始终解析为 ``werkzeug``：
+    WebSocket 端点 ``/v1/ws``（功能清单 A6/A7）依赖 flask-sock，
+    需要 WSGI 环境暴露原始 socket——waitress 不提供，握手会 500。
+    显式 ``waitress`` 会被采纳，但启动时会警告 ``/v1/ws`` 不可用。
+    未知值回退到 ``auto``（→ ``werkzeug``）。
+
+    Returns
+    -------
+    str
+        ``"werkzeug"`` or ``"waitress"`` (never ``"auto"``).
+
+        返回 ``"werkzeug"`` 或 ``"waitress"``（永远不会是 ``"auto"``）。
+    """
+    chosen = (cli_value or config_value or "auto").strip().lower()
+    if chosen not in {"auto", "werkzeug", "waitress"}:
+        _LOGGER.warning(
+            "未知的服务器驱动 %r，回退到 auto (werkzeug)",
+            chosen,
+        )
+        chosen = "auto"
+    if chosen == "auto":
+        # WebSocket (A6/A7) 是功能清单核心，必须可用 → 默认 werkzeug。
+        return "werkzeug"
+    return chosen
+
+
+# ---------------------------------------------------------------------------
 # main() — production-style startup
 # main() — 生产风格启动
 # ---------------------------------------------------------------------------
 
 
-def _serve(app: Flask, host: str, port: int) -> None:
-    """Start a WSGI server.  Prefer ``waitress``; fall back to Flask.
+def _serve(app: Flask, host: str, port: int, server: str = "auto") -> None:
+    """Start a WSGI server according to the resolved driver.
 
-    启动 WSGI 服务器。优先使用 ``waitress``；回退到 Flask。
+    按解析后的驱动启动 WSGI 服务器。
 
-    ``waitress`` is preferred because it is multi-threaded and
-    matches what we will use in production.  When it is not
-    installed (e.g. during very early development or in a stripped
-    environment) we fall back to ``app.run`` which is single-threaded
-    but adequate for local development.
+    ``auto`` (default) resolves to ``werkzeug`` (threaded), because the
+    WebSocket endpoint ``/v1/ws`` — spec A6/A7 — is a core capability and
+    requires a WSGI environment that exposes the raw socket (flask-sock);
+    waitress does not provide one, so the handshake fails with 500.
+    Pass ``server="waitress"`` to opt into waitress (faster for plain
+    HTTP, but ``/v1/ws`` will be unavailable and a WARNING is logged).
+    If waitress is requested but not installed, we fall back to
+    ``werkzeug`` so the server still starts.
 
-    ``waitress`` 是首选，因为它是多线程的，与生产环境一致。
-    当它未安装时（例如在早期开发或精简环境中），我们回退到 ``app.run``，
-    后者是单线程的，但足以用于本地开发。
+    ``auto``（默认）解析为 ``werkzeug``（多线程）：WebSocket 端点
+    ``/v1/ws``（规格 A6/A7）是核心能力，要求 WSGI 环境暴露原始
+    socket（flask-sock 依赖）；waitress 不提供，握手会 500。
+    传入 ``server="waitress"`` 可选择 waitress（纯 HTTP 更快，但
+    ``/v1/ws`` 不可用，且会记录 WARNING）。若请求 waitress 但未安装，
+    回退到 ``werkzeug`` 以保证服务仍能启动。
     """
-    try:
-        from waitress import serve  # type: ignore[import-not-found]
-    except ImportError:
+    driver = resolve_server_driver(server, None)
+
+    if driver == "waitress":
+        try:
+            from waitress import serve  # type: ignore[import-not-found]
+        except ImportError:
+            _LOGGER.warning(
+                "waitress 未安装，回退到 werkzeug (WebSocket 可用)",
+            )
+            driver = "werkzeug"
+
+    if driver == "waitress":
         _LOGGER.warning(
-            "waitress 未安装，回退到 Flask 开发服务器 (不建议生产使用)",
+            "waitress 不支持 WebSocket，/v1/ws 将不可用（如需 WebSocket 请改用 werkzeug）",
         )
-        # ``threaded=True`` so the test client / curl smoke checks
-        # don't deadlock under load.
-        # ``threaded=True`` 确保测试客户端 / curl 冒烟检查不会在负载下死锁。
-        app.run(host=host, port=port, debug=False, use_reloader=False, threaded=True)
+        _LOGGER.info("waitress 服务启动: %s:%d", host, port)
+        try:
+            serve(app, host=host, port=port, ident="xijian-api")
+        except OSError as exc:
+            # EADDRINUSE on macOS/BSD is 48, on Linux 98.
+            # macOS/BSD 上 EADDRINUSE 为 48，Linux 上为 98。
+            if getattr(exc, "errno", None) in (48, 98) or "Address already in use" in str(exc):
+                _LOGGER.error(
+                    "端口 %d 已被占用，请使用 --port 指定其他端口或释放该端口",
+                    port,
+                )
+            raise
+        except KeyboardInterrupt:
+            _LOGGER.info("收到中断信号，正在关闭服务")
+            raise
         return
 
-    _LOGGER.info("waitress 服务启动: %s:%d", host, port)
+    # werkzeug (threaded) — the reliable path also used by the test
+    # suite (tests/test_ws.py); WebSocket handshake works here.
+    # werkzeug（多线程）— 与测试套件 (tests/test_ws.py) 一致且可靠的路径；
+    # WebSocket 握手在此驱动下可用。
+    _LOGGER.info("werkzeug 服务启动: %s:%d (WebSocket 可用)", host, port)
     try:
-        serve(app, host=host, port=port, ident="xijian-api")
+        httpd = _werkzeug_make_server(host, port, app, threaded=True)
     except OSError as exc:
         # EADDRINUSE on macOS/BSD is 48, on Linux 98.
         # macOS/BSD 上 EADDRINUSE 为 48，Linux 上为 98。
@@ -463,6 +549,8 @@ def _serve(app: Flask, host: str, port: int) -> None:
                 port,
             )
         raise
+    try:
+        httpd.serve_forever()
     except KeyboardInterrupt:
         _LOGGER.info("收到中断信号，正在关闭服务")
         raise
@@ -611,7 +699,22 @@ def _run(args: argparse.Namespace, log_file: Optional[str]) -> int:
     # 6. Startup banner.
     # 6. 启动横幅。
     # ------------------------------------------------------------------
-    _print_banner(effective_config, host, port, effective_dev, log_file)
+    # Resolve the WSGI server driver once (CLI > config > auto) so the
+    # banner and the actual serve step agree.
+    # 只解析一次 WSGI 服务器驱动 (CLI > config > auto)，使横幅与实际
+    # 服务步骤一致。
+    server_driver = resolve_server_driver(
+        args.server,
+        effective_config.server.server_driver,
+    )
+    _print_banner(
+        effective_config,
+        host,
+        port,
+        effective_dev,
+        log_file,
+        server_driver=server_driver,
+    )
 
     # ------------------------------------------------------------------
     # 7. Optionally skip serving (smoke test mode).
@@ -637,7 +740,7 @@ def _run(args: argparse.Namespace, log_file: Optional[str]) -> int:
     # 9. 启动服务。
     # ------------------------------------------------------------------
     try:
-        _serve(app, host, port)
+        _serve(app, host, port, server=server_driver)
     except OSError as exc:
         # Port-in-use already has a targeted message in _serve.
         # 端口被占用的情况已在 _serve 中有针对性的消息。
@@ -655,4 +758,4 @@ def _run(args: argparse.Namespace, log_file: Optional[str]) -> int:
     return 0
 
 
-__all__ = ["create_app", "main", "parse_args"]
+__all__ = ["create_app", "main", "parse_args", "resolve_server_driver"]

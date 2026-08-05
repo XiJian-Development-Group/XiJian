@@ -35,8 +35,9 @@ UI 程序的工作流程::
        可选地解压 AI 扩展包到 external_libs/
     3. Launch subprocess: <app_data>/xijian-core/xijian-api --port 18500
        启动子进程
-    4. Wait for "waitress 服务启动" on stdout/stderr or poll /v1/health
-       等待 stdout/stderr 出现 "waitress 服务启动" 或轮询 /v1/health
+    4. Wait for the server-started log line (e.g. "werkzeug 服务启动") on
+       stdout/stderr or poll /v1/health
+       等待 stdout/stderr 出现服务启动日志（如 "werkzeug 服务启动"）或轮询 /v1/health
     5. Use the API; send SIGTERM / Ctrl+C on exit
        使用 API；退出时发送 SIGTERM / Ctrl+C
 """

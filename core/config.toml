@@ -23,6 +23,12 @@ dev = false
 keep_token_file = false
 testing = false
 api_version = "1.0.0"
+# WSGI 服务器驱动（server driver）:
+#   auto      —— 默认。解析为 werkzeug（多线程 + WebSocket 可用）。
+#   werkzeug  —— 显式指定 werkzeug 线程服务器；/v1/ws WebSocket（A6/A7）可用。
+#   waitress  —— 显式指定 waitress；性能更好但**不支持 WebSocket**，/v1/ws 握手会 500。
+# 也可用命令行 --server {auto,werkzeug,waitress} 覆盖（CLI 优先于本配置）。
+driver = "auto"
 
 # ---------------------------------------------------------------------------
 # Auth — authentication settings
