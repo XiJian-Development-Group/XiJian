@@ -161,10 +161,7 @@ def chat_abort():
             param="request_id",
         )
     signalled = abort_registry.abort(request_id)
-    # Per api.md, 204 even if no signal existed (idempotent cancel).
-    # 按 api.md，即使没有活跃的信号也返回 204（幂等取消）。
-    response = jsonify({"aborted": signalled, "request_id": request_id})
-    response.status_code = 204 if signalled else 200
+    # Per api.md: 已注册的 request_id 返回 204（幂等取消）；未知返回 200 {"aborted": false}。
     if not signalled:
         # Return a tiny JSON body when there's no active stream.
         # 当没有活跃流时返回一个微小的 JSON 体。
