@@ -700,6 +700,54 @@ def _build_paths(routes: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
+# Static WebSocket entry / WebSocket 静态条目
+# ---------------------------------------------------------------------------
+
+
+def _build_ws_static_entry(module_path: Path) -> list[dict[str, Any]]:
+    """Add a static OpenAPI entry for the flask-sock WebSocket endpoint.
+
+    为 flask-sock WebSocket 端点补充静态 OpenAPI 条目。
+
+    ``@sock.route("/v1/ws")`` is not a ``bp.*`` decorator, so the AST
+    walker cannot parse it — without this entry ``/v1/ws`` would be
+    missing from the contract.  The handshake is a GET + ``Upgrade``
+    (RFC 6455); we document it under a ``WS`` operation key and explain
+    the upgrade in the description.
+
+    ``@sock.route("/v1/ws")`` 不是 ``bp.*`` 装饰器，AST 遍历无法解析——
+    没有该条目时 ``/v1/ws`` 会从契约中缺失。握手本质是 GET + ``Upgrade``
+    (RFC 6455)；这里以 ``WS`` 操作键记录，并在描述中说明升级过程。
+    """
+    if module_path.name != "ws_routes.py":
+        return []
+    source = module_path.read_text(encoding="utf-8")
+    if '@sock.route("/v1/ws"' not in source:
+        return []
+    return [
+        {
+            "path": "/ws",
+            "method": "WS",
+            "operationId": "ws_endpoint",
+            "summary": "WebSocket 双向通道 /v1/ws (角色主动消息、AI 控制信号)",
+            "description": (
+                "WebSocket 端点，经 GET + Upgrade (RFC 6455) 握手建立。"
+                "认证方式：`Sec-WebSocket-Protocol: xijian.v1, bearer.<token>`"
+                "（或首帧 `{\"type\":\"auth\",\"token\":\"...\"}` 信封）。"
+                "帧协议见 docs/api.md §5。仅在 werkzeug 服务器驱动下可用"
+                "（waitress 不支持 WSGI socket 注入，握手会 500）。"
+            ),
+            "tag": "websocket",
+            "module": "ws_routes",
+            "dev_only": False,
+            "body_fields": [],
+            "query_params": [],
+            "response_fields": [],
+        }
+    ]
+
+
+# ---------------------------------------------------------------------------
 # Merge and write / 合并与写入
 # ---------------------------------------------------------------------------
 
@@ -774,14 +822,20 @@ def _merge_paths(existing: dict[str, Any], generated: dict[str, Any]) -> dict[st
       generated 中无精细化的 operation → 保留 existing（若存在），否则用 generated
     - Existing but not in generated → keep
       existing 中有但 generated 没有的路径/方法 → 保留
+
+    Both iteration levels are sorted so the emitted YAML is
+    byte-for-byte reproducible across runs (set iteration order is
+    hash-randomised and used to differ between processes).
+    两层迭代均排序，使输出的 YAML 跨运行逐字节可复现
+    （set 迭代顺序受哈希随机化影响，此前会随进程不同而变化）。
     """
     merged: dict[str, Any] = {}
-    all_paths = set(existing.keys()) | set(generated.keys())
+    all_paths = sorted(set(existing.keys()) | set(generated.keys()))
     for p in all_paths:
         ex_ops = existing.get(p, {})
         gen_ops = generated.get(p, {})
         merged_ops: dict[str, Any] = {}
-        all_methods = set(ex_ops.keys()) | set(gen_ops.keys())
+        all_methods = sorted(set(ex_ops.keys()) | set(gen_ops.keys()))
         for m in all_methods:
             ex_op = ex_ops.get(m)
             gen_op = gen_ops.get(m)
@@ -843,6 +897,11 @@ def main() -> int:
         if py.name == "__init__.py":
             continue
         all_routes.extend(_extract_routes_from_module(py, route_analyzer))
+    # flask-sock decorators (@sock.route) are invisible to the AST
+    # walker; add the static /v1/ws entry when the module declares it.
+    # flask-sock 装饰器 (@sock.route) 对 AST 遍历不可见；
+    # 当模块声明了该端点时静态补充 /v1/ws 条目。
+    all_routes.extend(_build_ws_static_entry(ROUTES_DIR / "ws_routes.py"))
 
     print(f"Extracted {len(all_routes)} routes from {len(list(ROUTES_DIR.glob('*.py')))} modules")
     print(f"从 {len(list(ROUTES_DIR.glob('*.py')))} 个模块提取到 {len(all_routes)} 个路由")
