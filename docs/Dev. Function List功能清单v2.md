@@ -141,11 +141,11 @@
   -- 记忆条目（详见 A1.2）
   ```
 
-- **接口定义**
-  - `GET /v1/characters/{cid}/memory/entries?type=&page=` — 分页查询
-  - `POST /v1/characters/{cid}/memory/entries` — 新增（body 校验：`type` ∈ {long, short}）
-  - `PATCH /v1/entries/{eid}` — 修改（仅 `content`/`importance`/`tags` 可改）
-  - `DELETE /v1/entries/{eid}` — 软删除（写入 `deleted_at`）
+- **接口定义**（实际路径与 api.md §3.4 一致，均为 `/v1/xijian/memory/*`）：
+  - `GET /v1/xijian/memory/entries` — 分页查询（`character_id`/`tags`/`importance` 等过滤）
+  - `POST /v1/xijian/memory/entries` — 新增（body：`character_id` + `content` + 可选 `attributes`/`tags`；`type` ∈ {long, short}）
+  - `PATCH /v1/xijian/memory/entries/{entry_id}` — 修改（仅 `content`/`importance`/`tags` 等可改）
+  - `DELETE /v1/xijian/memory/entries/{entry_id}` — 软删除（写入 `deleted_at`，保留 7 天可恢复）
   - `POST /v1/backups` — 触发手动备份
   - `POST /v1/backups/{bid}/restore` — 恢复（可选 `scope`）
   - `GET /v1/protected-modules` — 列出受保护模块

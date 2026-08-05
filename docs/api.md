@@ -76,7 +76,7 @@ ws://127.0.0.1:{port}/v1/ws
 | 422    | 语义错误（OAI 风格用得多，隙间扩展偶尔使用）                          |
 | 429    | 速率限制（理论上本地不会触发，留作未来）                              |
 | 500    | 服务端内部错误                                                        |
-| 503    | 服务不可用（模型未加载 / 进程启动中）                                |
+| 503    | 服务不可用（模型未加载 / 生成类后端未配置 `backend_unavailable` / 进程启动中） |
 
 ### 1.4 错误响应双格式
 
@@ -88,13 +88,15 @@ Content-Type: application/json
 
 {
   "error": {
-    "message": "Invalid value for 'temperature': must be between 0 and 2",
+    "message": "`temperature` must be a valid number",
     "type": "invalid_request_error",
     "param": "temperature",
-    "code": "invalid_value"
+    "code": "invalid_numeric_value"
   }
 }
 ```
+
+> **数值校验范围**：数字字段（如 `temperature` / `top_p`）只拒绝**非数字**、布尔值、`NaN` / `±Infinity`（返回 400 `invalid_numeric_value`），**不做** `[0, 2]` 之类的范围钳制——`temperature: 99` 会被接受并原样传给后端。这与 OpenAI 的严格范围校验不同，属设计取舍。
 
 #### 1.4.2 JSON-RPC 2.0 错误格式（`Accept: application/json-rpc`）
 
@@ -110,8 +112,8 @@ Content-Type: application/json
     "message": "Invalid params",
     "data": {
       "param": "temperature",
-      "expected": "float in [0, 2]",
-      "got": 3.5
+      "expected": "valid number (non-NaN / non-Infinity)",
+      "got": "abc"
     }
   }
 }
@@ -149,6 +151,8 @@ Content-Type: application/json
 ```
 
 查询参数：`limit`（默认 20，最大 100）、`order`（`asc` / `desc`）、`after` / `before`（游标）。
+
+> **宽容行为**（与 OpenAI 严格 400 不同）：`limit` 超界**静默钳制**到 `[1, 100]`（非数字回退默认 20）；`order` 非法值**静默回退** `asc`；均不返回 400。游标语义：`after=<id>` 保留 id 严格排序在游标之后（desc 为之前）的项目，`before` 对称；两者同时给出时 `after` 优先。
 
 ### 1.6 幂等性
 
@@ -253,7 +257,7 @@ Content-Type: application/json
   "xijian": {
     "character_id": "char_yuki",
     "world_id": "world_modern_tokyo",
-    "nsfw_allowed": false
+    "recall": {"enabled": true}
   }
 }
 ```
@@ -262,12 +266,16 @@ Content-Type: application/json
 
 | 字段              | 类型     | 说明                                                |
 | ----------------- | -------- | --------------------------------------------------- |
-| `character_id`    | string   | 当前角色 ID，启用角色系统 Prompt 注入                |
-| `world_id`        | string   | 当前世界 ID，注入世界状态                              |
-| `nsfw_allowed`    | bool     | 是否放行 NSFW 内容（默认 false）                     |
-| `inject_memory`   | bool     | 是否自动检索长期记忆并注入（默认 true）              |
-| `memory_top_k`    | int      | 注入的记忆条数（默认 5）                              |
-| `guard_level`     | string   | `strict` / `standard` / `relaxed`（默认 `standard`） |
+| `character_id`    | string   | 当前角色 ID；配合 `recall.enabled` 启用角色系统 Prompt 注入（角色设定/人设/状态/世界上下文）与强制记忆召回管线；也用于对话记忆写入与 A3.2 角色状态门控 |
+| `world_id`        | string   | 当前世界 ID；在 MCP 工具管线（`tools.enabled`）中作为 A5.2 门控的世界上下文 |
+| `recall.enabled`  | bool     | 是否启用强制记忆召回管线（记忆注入 + `recall_memory` 工具 + 引用审计；默认 `false`；角色级 `memory_config.force_recall_on_history` 为 0 时即使请求置 true 也跳过） |
+| `recall.audit`    | bool     | 引用审计开关（默认 `true`） |
+| `tools.enabled`   | bool     | 是否启用 MCP 工具管线（与 OAI `tools` 字段等价的入口；开启时优先于召回管线） |
+| `backend`         | string   | 仅用于响应头 `X-XiJian-Backend` 标识，不参与后端选择 |
+| `inject_memory`   | bool     | **当前版本不生效**：无对应实现；记忆注入由 `recall.enabled` 控制，不按此字段开关 |
+| `memory_top_k`    | int      | **当前版本不生效**：无对应实现；注入条数由角色 `memory_config`（`max_long_term` / `max_short_term`）决定 |
+| `guard_level`     | string   | **当前版本在 `/v1/chat/completions` 中不生效**：该字段是 safety gate 的全局记录字段（见 §3.5 `GET /v1/xijian/safety/gate/status`），不是请求级参数 |
+| `nsfw_allowed`    | bool     | **当前版本在 `/v1/chat/completions` 中不生效**：仅用于 `POST /v1/xijian/interactions/{interaction_id}/trigger`（放行 soft/explicit 互动）与 `POST /v1/xijian/characters`（角色属性）；聊天请求本身不做 NSFW 分级过滤 |
 
 **非流式响应**（200）：
 
@@ -332,6 +340,11 @@ data: [DONE]
 #### `POST /v1/embeddings`
 
 完整 OAI 兼容，支持 `input` 为字符串或字符串数组。
+
+> **出厂配置**：默认 `config.toml` 仅注册 mock chat / multimodal / video_understanding 模型，
+> 未配置任何 embedding 后端。未配置模型后端时本端点返回 **503 `backend_unavailable`**；
+> 需在 `[[models]]` 中注册 `type = "embeddings"` 条目（bge-m3 等）并配置 `[backends.embeddings]` 后可用。
+> audio（TTS/STT）、images/videos 生成类端点同理（见 §2.4-§2.6）。
 
 ```json
 {
@@ -1147,6 +1160,279 @@ C3 剧情运行时：加载 DevKit 导出的剧情设计（节点/边图），�
 
 ---
 
+### 3.11 实时通话（A6）
+
+通话会话状态机：``idle → ringing → active → ended``。所有 ``call_id`` 不存在时返回 404
+（``voice_call_not_found``）；状态迁移非法时返回 400 ``voice_call_error``。
+
+#### `GET /v1/xijian/voice-calls`
+
+列出通话记录（分页，按 ``started_at`` 倒序）。查询参数：``character_id`` / ``status`` / ``direction``（可选过滤）。
+
+#### `POST /v1/xijian/voice-calls`
+
+创建通话会话（状态 ``idle``）。
+
+**请求体**：
+
+```json
+{
+  "character_id": "char_yuki",
+  "direction": "user_initiated",   // user_initiated | character_initiated
+  "user_id": "local_user"
+}
+```
+
+**响应 201**：通话记录（含 ``call_id``、``status: "idle"``、``direction``）。
+**错误码**：400 ``missing_character_id``。
+
+#### `GET /v1/xijian/voice-calls/{call_id}`
+
+查询通话详情。**错误码**：404 ``voice_call_not_found``。
+
+#### `POST /v1/xijian/voice-calls/{call_id}/ring`
+
+发起来电（``idle → ringing``）。**错误码**：404；400 ``voice_call_error``（状态不允许）。
+
+#### `POST /v1/xijian/voice-calls/{call_id}/accept`
+
+接听（``ringing → active``）。
+
+#### `POST /v1/xijian/voice-calls/{call_id}/reject`
+
+拒接（→ ``ended``）。
+
+#### `POST /v1/xijian/voice-calls/{call_id}/end`
+
+结束通话（→ ``ended``）。
+
+#### `GET /v1/xijian/voice-calls/{call_id}/events`
+
+通话事件流（按时间正序）。查询参数：``kind``（可选过滤）、``limit``（默认 100）。
+
+#### `POST /v1/xijian/voice-calls/{call_id}/speech`
+
+向通话投喂一段用户语音（STT → AI 回复 → TTS 全双工循环）。请求体 ``audio_base64``（原始音频字节的
+base64）与 ``text``（显式文本，跳过 STT）二选一；可选 ``language``、``synchronous``（默认 false，后台线程执行）。
+
+**响应 200**：``{ok: true, turn, user_text, reply, interrupted_previous}``。
+**错误码**：400 ``invalid_audio`` / ``invalid_text`` / ``voice_call_error``（通话未激活）；
+STT 后端不可用时不抛异常，返回 **503** ``{ok: false, error: ...}``（通话可继续）。
+
+#### `POST /v1/xijian/voice-calls/{call_id}/barge-in`
+
+置位/清除打断标志（AC-3：新语音到达时中断当前 TTS 播放）。请求体 ``{"active": true}``（缺省 true）。
+
+#### `POST /v1/xijian/voice-calls/{call_id}/song`
+
+歌唱 stub（DiffSinger 风格）。请求体 ``lyrics``（必填）、``voice_part``（默认 ``lead``）、可选
+``melody`` / ``midi_path``。**错误码**：400 ``missing_lyrics`` / ``voice_call_error``。
+
+> WS 推送：通话状态迁移时广播 ``call.state_changed``，追加事件时广播 ``call.event``。
+> 注意：语音链路（STT/TTS）依赖已配置的模型后端，默认出厂配置下返回 503（见 §2.4）。
+
+---
+
+### 3.12 主动发起（A7）
+
+角色主动联系用户的消息/来电动作队列（状态机 ``pending → sent → accepted|declined|ignored``）。
+
+#### `GET /v1/xijian/initiated-actions`
+
+列出动作（分页）。查询参数：``character_id`` / ``kind``（``message``|``voice_call``） / ``status`` / ``user_response``。
+
+#### `POST /v1/xijian/initiated-actions`
+
+手动创建一条主动发起动作。
+
+**请求体**：
+
+```json
+{ "character_id": "char_yuki", "kind": "message", "payload": {"text": "在吗？"} }
+```
+
+**响应 201**：动作记录（``action_id``、``status: "pending"``）。**错误码**：400 ``missing_character_id``。
+
+#### `GET /v1/xijian/initiated-actions/{action_id}`
+
+查询动作详情。**错误码**：404 ``initiated_action_not_found``。
+
+#### `POST /v1/xijian/initiated-actions/{action_id}/respond`
+
+用户回应。请求体 ``user_response`` 必填，取 ``accepted`` | ``declined`` | ``ignored``。
+拒绝（``declined``）时在 stub 层触发 AC-2「角色理解」记忆回写。**错误码**：400 ``invalid_user_response``。
+
+#### `POST /v1/xijian/initiated-actions/scan`
+
+手动触发一次触发器扫描（后台 tick 线程亦会周期性执行）。返回 ``{scanned: true, created_count, created: [...]}``。
+
+#### `GET /v1/xijian/initiated-actions/notifications`
+
+全局 + 各角色通知权限摘要（AC-3）。
+
+#### `PATCH /v1/xijian/initiated-actions/notifications`
+
+修改全局通知策略（``enabled`` / ``max_per_hour`` / ``cooldown_seconds`` 等）。
+
+#### `GET/PATCH /v1/xijian/initiated-actions/notifications/{character_id}`
+
+单角色通知权限的读取/修改。
+
+> WS 推送：创建动作时广播 ``character.initiated_action``，用户回应时广播 ``character.initiated_response``。
+> 推送依赖 WebSocket 通道，waitress 服务器下不可用（见 §5.6）。
+
+---
+
+### 3.13 桌面宠物与动态壁纸（A8）
+
+桌宠（pet）与动态壁纸（wallpaper）的 CRUD + 激活状态 + 动作审计日志 + 桌面客户端执行循环。
+
+#### `GET /v1/xijian/desktop/pets` / `POST /v1/xijian/desktop/pets`
+
+列出（分页；``?character_id=`` / ``?is_active=`` 过滤）/ 创建桌宠。创建请求体：
+``character_id``（必填）、``can_fly``、``can_interact``、``spawn_x`` / ``spawn_y``（float）、``is_active``、``name``。
+**响应 201**：宠物记录。**错误码**：400 ``missing_character_id``。
+
+#### `GET /v1/xijian/desktop/pets/{pet_id}` / `PATCH ...` / `DELETE ...`
+
+查询 / 修改（``update_pet`` 宽容合并）/ 删除桌宠。**错误码**：404 ``desktop_pet_not_found``。
+
+#### `POST /v1/xijian/desktop/pets/{pet_id}/activate` / `.../deactivate`
+
+显示 / 隐藏桌宠。
+
+#### `GET /v1/xijian/desktop/wallpapers` / `POST /v1/xijian/desktop/wallpapers`
+
+列出 / 创建动态壁纸。创建请求体：``character_id``（必填）、``world_id``、``env_settings``、
+``can_layout``（默认 true）、``is_active``（默认 false）。**响应 201**。**错误码**：400 ``missing_character_id``。
+
+#### `GET /v1/xijian/desktop/wallpapers/{wallpaper_id}` / `PATCH ...` / `DELETE ...`
+
+查询 / 修改 / 删除壁纸。**错误码**：404 ``wallpaper_not_found``。
+
+#### `POST /v1/xijian/desktop/wallpapers/{wallpaper_id}/activate` / `.../deactivate`
+
+激活壁纸会使同角色的桌宠自动隐藏（AC-4），反之为互斥语义。
+
+#### `GET /v1/xijian/desktop/actions`
+
+全局桌宠动作审计日志。查询参数：``action_kind``、``limit``（默认 100）。
+
+#### `GET /v1/xijian/desktop/pets/{pet_id}/actions`
+
+单宠物动作日志。**错误码**：404 ``desktop_pet_not_found``。
+
+#### `POST /v1/xijian/desktop/pets/{pet_id}/actions`
+
+派发 / 记录一次桌宠动作（AC-2 审计）。请求体 ``action_kind``（必填）、``payload``。**响应 201**。
+**错误码**：400 ``missing_action_kind``。
+
+#### 桌面客户端执行循环（A5.2 标记缺口）
+
+* `GET /v1/xijian/mcp/pending` — 轮询待执行动作队列（``?status=``、``?limit=`` 默认 50、``?claim=1`` 顺手认领）
+* `GET /v1/xijian/mcp/pending/{action_id}` — 单条查询；**错误码**：404 ``pending_action_not_found``
+* `POST /v1/xijian/mcp/pending/{action_id}/claim` — 认领执行（``pending → claimed``）
+* `POST /v1/xijian/mcp/pending/{action_id}/result` — 回写结果，``status`` 取 ``executed`` | ``failed``，
+  可选 ``pet_id``；AC-4 门控（壁纸模式禁写）在 stub 层强制。**错误码**：400 ``invalid_result_status``
+
+> WS 推送：``desktop_pet.event`` / ``wallpaper.event`` / ``desktop_pet.action`` / ``desktop_pet.pending``
+> 为 stub 层尽力而为的广播（不保证送达）。
+
+---
+
+### 3.14 旧数据迁移（v2.10）
+
+旧 ``~/.xijian`` 目录首次启动自动迁移到 CORE_ROOT（``~/Library/Application Support/XiJian/Core``）：
+幂等（写 ``.migrated_from_xijian`` 标记）、非破坏（旧目录永不删除）、冲突感知（同名不同内容不覆盖，记入冲突清单）。
+
+#### `GET /v1/xijian/migration/status`
+
+迁移状态：``legacy_exists`` / ``migrated`` / ``items`` / ``conflicts`` / ``error``。
+
+#### `GET /v1/xijian/migration/conflicts`
+
+已记录的冲突清单（``{conflicts: [...]}``）。
+
+#### `POST /v1/xijian/migration/resolve`
+
+解决一条冲突。请求体 ``conflict_id``（必填）、``keep`` 取 ``legacy``（保留旧版本）| ``new``（保留新位置版本）。
+
+**错误码**：400 ``missing_conflict_id`` / ``invalid_keep`` / ``resolve_failed``；404 ``conflict_not_found``。
+
+---
+
+### 3.15 场景生成（A4.1）
+
+已触发世界事件实例（``instance_id``）附带场景记录的读取与（重新）生成。
+
+#### `GET /v1/xijian/generation/scene/{instance_id}`
+
+读取事件实例附带的场景记录。**错误码**：404 ``event_scene_not_found``（实例不存在或不需要场景）。
+
+#### `POST /v1/xijian/generation/scene/{instance_id}/generate`
+
+（重新）生成实例场景。尽力而为：核心图像后端不可用时**降级为占位场景**（``status: "placeholder"``，AC-2），
+不报错。**错误码**：404 ``event_scene_not_found``。
+
+> 通用生成中断仍走 §4.2 的 `POST /v1/xijian/generation/abort`。
+
+---
+
+### 3.16 手动备份与受保护模块（A1.1）
+
+A1.1 用户管理与自动备份的 HTTP 面：受保护模块注册表 + 手动备份/恢复。备份文件为 zstd 压缩的
+``{character_id}_{ISO8601}_v{n}.bak``，单角色最多保留 10 个版本（AC-3）。
+
+#### `GET /v1/protected-modules`
+
+受保护模块注册表（分页）。查询参数：``character_id``（可选，返回该角色关联视图）。
+出厂注册 4 个模块：``memory_entries`` / ``character_documents`` / ``world_documents`` / ``safety_snapshots``。
+
+#### `GET /v1/characters/{character_id}/protected-modules`
+
+单角色的受保护模块关联视图（含 ``auto_backup`` / ``last_backup_at``）。
+
+#### `PATCH /v1/characters/{character_id}/protected-modules`
+
+切换角色的自动备份开关。请求体 ``module_name``（必填）、``enabled``（或 ``auto_backup``，默认 true）。
+**错误码**：400 ``missing_module_name`` / ``unknown_protected_module``。
+
+#### `POST /v1/backups`
+
+触发一次手动备份。
+
+**请求体**：
+
+```json
+{
+  "character_id": "char_yuki",
+  "scope": "all",        // all | memory_only | state_only | doc_only
+  "created_by": "user"   // user | system
+}
+```
+
+**响应 201**：备份记录（``backup_id``、``file_path``、``size_bytes``、``created_at``）。
+**错误码**：400 ``missing_character_id`` / ``invalid_created_by`` / ``invalid_scope``；404 ``character_not_found``。
+
+#### `GET /v1/backups`
+
+列出备份（分页）。查询参数：``character_id``、``limit``（默认 50）。
+
+#### `GET /v1/backups/{backup_id}`
+
+查询备份详情。**错误码**：404 ``backup_not_found``。
+
+#### `DELETE /v1/backups/{backup_id}`
+
+删除备份。**错误码**：404 ``backup_not_found``。
+
+#### `POST /v1/backups/{backup_id}/restore`
+
+恢复备份（US-A1.1-03：可恢复至任意角色，可只恢复部分切片）。请求体可选 ``scope``、
+``target_character_id``。**错误码**：404 ``backup_not_found``；400 ``invalid_scope``。
+
+---
+
 ## 4. 取消与中断
 
 ### 4.1 流式请求的取消
@@ -1157,7 +1443,8 @@ C3 剧情运行时：加载 DevKit 导出的剧情设计（节点/边图），�
 // Request
 { "request_id": "req_8f3a2b1c" }
 
-// Response 204
+// Response 204（有活跃流时中止成功，无 body）
+// Response 200（无活跃流：幂等，返回 {"aborted": false, "request_id": ...}）
 ```
 
 服务端立即停止对应生成，释放上下文。任何 SSE/NDJSON 连接收到 `event: abort` 块后关闭：
@@ -1277,6 +1564,19 @@ Sec-WebSocket-Protocol: xijian.v1, bearer.<token>
 }
 ```
 
+### 5.6 服务器驱动要求（重要）
+
+`/v1/ws` 依赖 `flask-sock`（simple-websocket），**只有 werkzeug 服务器驱动支持 WebSocket**：
+
+* **默认（`--server auto` / `--server werkzeug`）**：解析为 werkzeug 多线程服务器，`/v1/ws` 可用
+  （hello / auth.ok / ping→pong / client.cancel_request ack / 事件广播实测通过）。
+* **`--server waitress`（或 config.toml ``[server] driver = "waitress"``）**：性能更好但**不支持
+  WebSocket**——`/v1/ws` 握手即返回 500 `internal_error`（`Cannot obtain socket from WSGI
+  environment`）。
+
+依赖 WS 的功能（A6 实时通话状态推送、A7 主动发起通知、UI 双向控制）在 waitress 模式下不可用；
+生产部署如需 WS，请使用默认 werkzeug 驱动或通过独立通道提供。
+
 ---
 
 ## 6. 内容分级与保护联动
@@ -1315,6 +1615,8 @@ Sec-WebSocket-Protocol: xijian.v1, bearer.<token>
 - 路径前缀带版本（当前 `/v1`）。破坏性变更走 `/v2`，旧版保留至少 6 个月。
 - 响应中带 `X-XiJian-API-Version: 1.0.0`。
 - 客户端可通过 `GET /v1`（根信息）查询服务端版本与能力集。
+  > 注意：`GET /v1` 的 `capabilities` 是**协议能力声明**（静态列表），不代表对应模型后端已配置——
+  > 生成类能力（embeddings/audio/images/videos 生成）未配置后端时实际请求仍返回 503（见 §2.3）。
 
 ---
 
@@ -1349,9 +1651,12 @@ wscat -c "ws://127.0.0.1:$PORT/v1/ws" \
 ### 10.2 错误排查
 
 - **401**：检查 token 文件是否正确写入并被读取
-- **404 + model not found**：模型未加载，先调 `/v1/models/{id}/load`
+- **404 + model not found**：`GET /v1/models/{id}` 对未注册 id 返回 404；但 **chat 请求中的未知 model_id 不会 404**——
+  它走「自由 model_id」回退路径：按配置的默认 chat 后端链（`[backends.chat] default/fallbacks`）选择后端；
+  mock 后端存在（开发/测试配置）时返回 200，否则 503 `backend_unavailable`（见 §2.2 与 AIBackend.md §6.2）
 - **403 + protection_error**：触发保护模块，查看审计日志
-- **503 + backend unavailable**：MLX / GGUF backend 进程退出，查看 `/v1/xijian/safety/audit` 与进程日志
+- **503 + backend unavailable**：生成类端点（embeddings/TTS/STT/image/video 生成）未配置模型后端；
+  查看 `/v1/xijian/safety/audit` 与进程日志
 
 ### 10.3 日志位置
 
