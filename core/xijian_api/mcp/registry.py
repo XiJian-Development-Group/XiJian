@@ -255,6 +255,7 @@ def call_tool(
     *,
     world_id: str | None = None,
     caller: str | None = None,
+    skip_gate: bool = False,
 ) -> dict[str, Any]:
     """Dispatch a tool call, routing through the A5.2 gate if needed.
     分发工具调用，必要时经 A5.2 门禁路由。
@@ -263,6 +264,17 @@ def call_tool(
     返回 MCP ``tools/call`` 结果信封::
 
         {"content": [...], "isError": False}
+
+    ``skip_gate=True`` tells the dispatcher the caller **already** ran
+    the A5.2 gate (e.g. the chat pipeline's T0-1 ``_mcp_gate_check``)
+    so the inner ``mcp.check()`` is not repeated — this avoids a
+    duplicate audit entry for the same allowed call.  Denied /
+    frozen / lockout / crash verdicts are still surfaced by the
+    caller's own gate; a ``skip_gate`` caller is responsible for them.
+    ``skip_gate`` 为真时表示调用方**已**执行过 A5.2 门禁（例如聊天管线
+    的 T0-1 ``_mcp_gate_check``），内层不再重复 ``mcp.check()``，避免
+    同一次 allowed 调用写入两条审计。denied/frozen/lockout/crash 仍由
+    调用方自己的闸门处理；使用 ``skip_gate`` 的调用方对其负责。
 
     Raises :class:`ToolNotFoundError` if the tool isn't registered,
     :class:`ToolGateError` if the A5.2 gate denies the call, and
@@ -282,10 +294,12 @@ def call_tool(
         "tool_name": name,
     }
 
-    # A5.2 gate — only for tools that declare an action_kind.
-    # A5.2 门禁 — 仅对声明了 action_kind 的工具执行。
+    # A5.2 gate — only for tools that declare an action_kind, and only
+    # when the caller hasn't already run the gate (skip_gate).
+    # A5.2 门禁 — 仅对声明了 action_kind 的工具执行，且仅在调用方尚未
+    # 执行过门禁时执行（skip_gate）。
     action_kind = record.get("action_kind")
-    if action_kind is not None:
+    if action_kind is not None and not skip_gate:
         gate_result = mcp_stub.check(
             action_kind=action_kind,
             args=arguments,

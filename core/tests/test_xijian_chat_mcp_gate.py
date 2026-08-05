@@ -105,8 +105,14 @@ class TestChatMCPGateAllowed:
         assert tc["is_error"] is False
         assert tc["error_type"] is None
         assert tc["result"] == "probe-ok"
-        # check() still wrote an ``allowed`` audit entry.
-        assert mcp_stub.count_audit(verdict="allowed", world_id="w_gate") >= 1
+        # check() still wrote an ``allowed`` audit entry — and exactly
+        # one: the chat pipeline ran the gate itself (T0-1) and told the
+        # registry ``skip_gate=True``, so the inner dispatcher must NOT
+        # re-check and double-audit the same allowed call (R1).
+        # check() 仍写入一条 ``allowed`` 审计——且恰好一条：聊天管线
+        # 自行执行了门禁（T0-1）并向注册表传递 ``skip_gate=True``，
+        # 因此内层分发器不得重复检查、对同一次 allowed 调用写两条审计（R1）。
+        assert mcp_stub.count_audit(verdict="allowed", world_id="w_gate") == 1
 
 
 class TestChatMCPGateDenied:

@@ -125,6 +125,18 @@ except ImportError:  # pragma: no cover — depends on the runtime env
     zstandard = None
     _ZSTD_AVAILABLE = False
 
+# Exception tuple for decompression.  Built eagerly so the ``except``
+# clause never dereferences ``zstandard`` when it is ``None`` (a
+# missing optional dependency must not turn a corrupt-payload error
+# into an AttributeError).
+# 解压异常元组。预先构建，避免在 ``zstandard`` 为 ``None`` 时于
+# ``except`` 子句中解引用（可选依赖缺失时，损坏载荷错误不应变成
+# AttributeError）。
+if _ZSTD_AVAILABLE:
+    _DECOMPRESS_ERRORS = (zlib.error, zstandard.ZstdError)
+else:  # pragma: no cover — depends on the runtime env
+    _DECOMPRESS_ERRORS = (zlib.error,)
+
 
 _LOGGER = logging.getLogger("xijian_api.snapshots")
 
@@ -371,7 +383,7 @@ def _zstd_decompress(data: bytes, *, backend: str | None = None) -> bytes:
         if resolved == COMPRESSION_BACKEND_ZSTD:
             return zstandard.ZstdDecompressor().decompress(data)
         return zlib.decompress(data)
-    except zlib.error as exc:
+    except _DECOMPRESS_ERRORS as exc:
         raise SnapshotError(
             "snapshot decompression failed (%s): %s" % (resolved, exc)
         ) from exc
@@ -414,7 +426,12 @@ def decompress_bytes(compressed: bytes, *, backend: str | None = None) -> Any:
     ``compression_backend``.
     """
     raw = _zstd_decompress(compressed, backend=backend)
-    return pickle.loads(raw)
+    try:
+        return pickle.loads(raw)
+    except (pickle.UnpicklingError, EOFError) as exc:
+        raise SnapshotError(
+            "snapshot unpickle failed: %s" % exc
+        ) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -533,6 +550,32 @@ def reset_policy() -> dict:
     call re-seeds the default)."""
     state.backup_policies.pop(DEFAULT_POLICY_ID, None)
     return _ensure_default_policy()
+
+
+def apply_config(snap_cfg) -> dict:
+    """Apply the ``[snapshots]`` config section (R5) to the
+    runtime policy at startup.
+
+    Only non-default values are pushed into the stub policy;
+    the default ``auto`` / ``None`` (module-level cap) are left
+    untouched so operators who never configure the section get
+    exactly the spec defaults.  Returns the updated policy.
+
+    将 ``[snapshots]`` 配置段（R5）在启动时应用到运行时策略。
+    仅推送非默认值；默认的 ``auto`` / ``None``（模块级上限）保持
+    原样，使未配置该段的运营者获得与规范完全一致的默认值。
+    返回更新后的策略。
+    """
+    kwargs: dict[str, Any] = {}
+    backend = getattr(snap_cfg, "compression_backend", None)
+    cap = getattr(snap_cfg, "max_single_snapshot_bytes", None)
+    if backend is not None and backend != COMPRESSION_BACKEND_AUTO:
+        kwargs["compression_backend"] = backend
+    if cap is not None:
+        kwargs["max_single_snapshot_bytes"] = cap
+    if kwargs:
+        return set_policy(**kwargs)
+    return get_policy()
 
 
 def _ensure_default_policy() -> dict:

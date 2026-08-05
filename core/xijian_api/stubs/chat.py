@@ -1117,6 +1117,7 @@ def _execute_mcp_tool_call(
     arguments: dict[str, Any],
     *,
     world_id: str | None = None,
+    skip_gate: bool = False,
 ) -> dict[str, Any]:
     """Execute an MCP tool call through the registry (A5.2 gate).
 
@@ -1130,7 +1131,7 @@ def _execute_mcp_tool_call(
     )
 
     try:
-        result = call_tool(name, arguments, world_id=world_id)
+        result = call_tool(name, arguments, world_id=world_id, skip_gate=skip_gate)
     except ToolNotFoundError:
         return {
             "content": "错误：工具 %s 不存在" % name,
@@ -1323,6 +1324,7 @@ def _run_tools_pipeline(
                     continue
                 exec_result = _execute_mcp_tool_call(
                     name, args, world_id=world_id,
+                    skip_gate=True,
                 )
                 all_tool_calls_log.append({
                     "tool_call_id": tc.get("id"),

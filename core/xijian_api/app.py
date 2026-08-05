@@ -129,6 +129,22 @@ def create_app(*, testing: bool = False, config: Config | None = None) -> Flask:
 
     seed_all()
 
+    # A5.3 — Apply the ``[snapshots]`` config section (R5) to the
+    # runtime backup policy so operators' config.toml edits take
+    # effect at startup.  Non-default values only; a missing/empty
+    # section leaves the stub's spec defaults untouched.
+    # A5.3 — 将 ``[snapshots]`` 配置段（R5）应用到运行时备份策略，
+    # 使运营者在 config.toml 中的修改在启动时生效。仅应用非默认值；
+    # 缺失/空配置段时保持存根的规范默认值不变。
+    try:
+        from xijian_api.stubs import snapshots as snapshots_stub
+
+        snapshots_stub.apply_config(config.snapshots)
+    except Exception as exc:  # noqa: BLE001 - startup is best-effort
+        _LOGGER.warning(
+            "applying [snapshots] config failed (non-fatal): %s", exc
+        )
+
     # B.3 — Resource packs.  Install preload packs (idempotent) then
     # scan + load already-installed packs into runtime state.  Failures
     # are logged but never block startup.

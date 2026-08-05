@@ -174,3 +174,64 @@ class TestSnapshotsConfigParsing:
             content = fp.read()
         assert "[snapshots]" in content
         assert "compression_backend" in content
+
+
+class TestCorruptPayloadErrors:
+    """R2/R3 — corrupt payloads raise SnapshotError, never a raw
+    zlib/zstandard/pickle exception."""
+
+    def test_corrupt_zstd_payload_raises_snapshot_error(self):
+        with pytest.raises(SnapshotError, match="decompression failed"):
+            snap_stub.decompress_bytes(
+                b"\x28\xb5\x2f\xfd not-a-real-zstd-frame",
+                backend=COMPRESSION_BACKEND_ZSTD,
+            )
+
+    def test_corrupt_zlib_payload_raises_snapshot_error(self):
+        with pytest.raises(SnapshotError, match="decompression failed"):
+            snap_stub.decompress_bytes(
+                b"not-zlib-data",
+                backend=COMPRESSION_BACKEND_ZLIB,
+            )
+
+    def test_valid_compression_but_bad_pickle_raises_snapshot_error(self):
+        # Compressed bytes that decode fine but are not a pickle stream.
+        # 可正常解压但不是 pickle 流的字节。
+        import zlib as _zlib
+
+        bogus = _zlib.compress(b"this is not a pickle")
+        with pytest.raises(SnapshotError, match="unpickle failed"):
+            snap_stub.decompress_bytes(bogus, backend=COMPRESSION_BACKEND_ZLIB)
+
+
+class TestApplyConfig:
+    """R5 — the ``[snapshots]`` config section wires into the stub
+    policy at startup (non-default values only)."""
+
+    def test_defaults_leave_policy_untouched(self):
+        from xijian_api.config import Config
+
+        cfg = Config.from_dict({})
+        before = snap_stub.get_policy()
+        after = snap_stub.apply_config(cfg.snapshots)
+        assert after == before
+        assert after["compression_backend"] == COMPRESSION_BACKEND_AUTO
+
+    def test_non_default_backend_applied(self):
+        from xijian_api.config import Config
+
+        cfg = Config.from_dict({
+            "snapshots": {"compression_backend": "zlib"},
+        })
+        after = snap_stub.apply_config(cfg.snapshots)
+        assert after["compression_backend"] == COMPRESSION_BACKEND_ZLIB
+        assert snap_stub._policy_compression_backend() == COMPRESSION_BACKEND_ZLIB
+
+    def test_non_default_cap_applied(self):
+        from xijian_api.config import Config
+
+        cfg = Config.from_dict({
+            "snapshots": {"max_single_snapshot_bytes": 1048576},
+        })
+        after = snap_stub.apply_config(cfg.snapshots)
+        assert after["max_single_snapshot_bytes"] == 1048576
