@@ -3,9 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>隙间 XiJian — 二次元 AI 聊天</title>
-<meta name="description" content="隙间（XiJian）—— 二次元 AI 聊天程序。实时语音对话、3D 角色回应、模拟世界、长期记忆。数据本地运行，完全开源免费。">
-<meta property="og:title" content="隙间 XiJian — 二次元 AI 聊天">
+<title>隙间 — 二次元 AI 聊天</title>
+<meta name="description" content="隙间（XiJian）—— 二次元 AI 聊天。实时语音、3D 角色、模拟世界、长期记忆。数据本地运行，完全开源免费。">
+<meta property="og:title" content="隙间 — 二次元 AI 聊天">
 <meta property="og:description" content="与你的角色实时对话，数据始终留在本地。完全开源免费。">
 <meta property="og:type" content="website">
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
@@ -18,24 +18,18 @@
   <div class="nav-inner">
     <a href="#top" class="brand">
       <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
-        <rect x="2" y="6" width="11" height="20" rx="2.5" fill="var(--c-panel)"/>
-        <rect x="19" y="6" width="11" height="20" rx="2.5" fill="var(--c-panel)"/>
-        <path d="M13.5 8c0 6 5 12 5 16" stroke="url(#g1)" stroke-width="2.4" stroke-linecap="round" fill="none"/>
-        <defs>
-          <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stop-color="#a78bfa"/>
-            <stop offset="1" stop-color="#f472b6"/>
-          </linearGradient>
-        </defs>
+        <rect x="2" y="7" width="11" height="18" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/>
+        <rect x="19" y="7" width="11" height="18" rx="2.5" fill="none" stroke="currentColor" stroke-width="2"/>
+        <path d="M13.5 9c0 5.5 4.5 9.5 4.5 14" stroke="#8b7cf6" stroke-width="2" stroke-linecap="round" fill="none"/>
       </svg>
-      <span class="brand-text">隙间 <small>XiJian</small></span>
+      <span class="brand-text">隙间</span>
     </a>
     <nav class="nav-links" id="navLinks">
       <a href="#features">功能</a>
       <a href="#platform">平台</a>
       <a href="#about">开发组</a>
       <a href="#join">加入我们</a>
-      <a href="https://github.com/XiJian-Development-Group/" class="btn btn-ghost btn-sm" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/XiJian-Development-Group/" target="_blank" rel="noopener">GitHub</a>
     </nav>
     <button class="nav-toggle" id="navToggle" aria-label="菜单" aria-expanded="false">
       <span></span><span></span><span></span>
@@ -45,155 +39,160 @@
 
 <!-- ===== Hero ===== -->
 <section class="hero" id="top">
-  <div class="hero-bg" aria-hidden="true">
-    <div class="orb orb-1"></div>
-    <div class="orb orb-2"></div>
-    <div class="orb orb-3"></div>
-    <div class="grid-lines"></div>
+  <p class="hero-eyebrow">二次元 AI 聊天 · 开发中</p>
+  <h1 class="hero-title">隙间</h1>
+  <p class="hero-sub">在屏幕的缝隙里，藏着一个会记得你的世界。<br>
+  实时语音、3D 角色、模拟世界、长期记忆——数据始终留在你的本地。</p>
+  <div class="hero-actions">
+    <a href="#join" class="btn btn-primary">参与内测</a>
+    <a href="#features" class="btn btn-secondary">了解功能</a>
   </div>
-  <div class="hero-inner">
-    <p class="hero-eyebrow">二次元 AI 聊天 · 开发中</p>
-    <h1 class="hero-title">隙 间</h1>
-    <p class="hero-sub">在屏幕的缝隙里，藏着一个会记得你的世界。<br>
-    实时语音、3D 角色、模拟世界、长期记忆——<br>一切数据，始终留在你的本地。</p>
-    <div class="hero-actions">
-      <a href="#join" class="btn btn-primary">参与内测</a>
-      <a href="#features" class="btn btn-ghost">了解功能</a>
-    </div>
-    <p class="hero-note">首个正式版预计 2026 年 12 月 1 日前发布 · 完全开源免费（MIT License）</p>
-  </div>
+  <p class="hero-note">首个正式版预计 2026 年 12 月 1 日前发布</p>
 </section>
 
 <!-- ===== 理念 ===== -->
-<section class="section section-tight">
+<section class="section">
   <div class="container">
     <div class="philosophy">
       <div class="philosophy-item">
         <h3>本地 AI</h3>
-        <p>默认在本地运行全部 AI。数据不出你的设备，隐私由你自己保管。未来也支持连接 OpenAI 兼容 API 服务。</p>
+        <p>默认在本地运行全部 AI，数据不出你的设备。未来也支持连接 OpenAI 兼容 API。</p>
       </div>
       <div class="philosophy-item">
         <h3>真实的互动</h3>
-        <p>记忆系统、模拟世界、状态系统——所有模块都为「更真实的互动」而设计。你的每一次互动，都会留下痕迹。</p>
+        <p>记忆系统、模拟世界、状态系统——都为「更真实的互动」而设计。每一次互动，都会留下痕迹。</p>
       </div>
       <div class="philosophy-item">
         <h3>完全免费</h3>
-        <p>项目完全开源免费，使用 MIT License。请不要售卖或付费购买本项目。</p>
+        <p>项目开源免费，使用 MIT License。请不要售卖或付费购买本项目。</p>
       </div>
     </div>
   </div>
 </section>
 
 <!-- ===== 功能 ===== -->
-<section class="section" id="features">
+<section class="section section-alt" id="features">
   <div class="container">
     <h2 class="section-title">功能</h2>
-    <p class="section-desc">丰富而强大的功能，为真实互动而生</p>
+    <p class="section-desc">为真实互动而设计</p>
     <div class="cards">
       <article class="card">
-        <div class="card-icon">🎙️</div>
+        <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+        </svg>
         <h3>实时对话</h3>
-        <p>与角色进行实时语音对话。角色会通过 3D 模型做出回应，让每一次交流都有「在场感」。</p>
+        <p>与角色实时语音对话，角色通过 3D 模型做出回应，让交流有「在场感」。</p>
       </article>
       <article class="card">
-        <div class="card-icon">🌍</div>
+        <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="9"/>
+          <path d="M3 12h18M12 3c2.5 2.6 3.8 5.7 3.8 9S14.5 18.4 12 21c-2.5-2.6-3.8-5.7-3.8-9S9.5 5.6 12 3z"/>
+        </svg>
         <h3>模拟世界</h3>
-        <p>乘不同交通工具前往不同场景，途中可能遭遇各种突发事件。内置经济、健康、饮食、体力、心智等角色状态系统。</p>
+        <p>乘不同交通方式前往不同场景，途中可能遭遇突发事件。内置经济、健康、饮食、体力、心智状态系统。</p>
       </article>
       <article class="card">
-        <div class="card-icon">💞</div>
+        <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/>
+        </svg>
         <h3>互动系统</h3>
-        <p>各种互动让你与角色增进感情。角色会同意或拒绝，让互动更真实。包含 NSFW 内容的互动默认隐藏。</p>
+        <p>各种互动让你与角色增进感情。角色会同意或拒绝，让互动更真实。含 NSFW 内容的互动默认隐藏。</p>
       </article>
       <article class="card">
-        <div class="card-icon">💬</div>
+        <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+          <path d="M13 9l3 3-3 3M16 12H8"/>
+        </svg>
         <h3>主动聊天</h3>
-        <p>角色可以主动向你发送消息。把角色放进动态壁纸，壁纸中的角色依然能正常回应、互动，就像在 App 里一样。</p>
+        <p>角色会主动向你发送消息。把角色放进动态壁纸，壁纸里的她依然能回应、互动，就像在 App 中一样。</p>
       </article>
       <article class="card">
-        <div class="card-icon">🧠</div>
+        <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M6 3h12v18l-6-4-6 4V3z"/>
+          <path d="M9 8h6M9 12h6"/>
+        </svg>
         <h3>长期记忆</h3>
-        <p>每一次互动都会被记住：一部分成为长期记忆，一部分渐渐遗忘。你也可以手动管理记忆，增删改查、设置属性。</p>
+        <p>每一次互动都会被记住：一部分成为长期记忆，一部分渐渐遗忘。你也可以手动增删改记忆，设置属性。</p>
       </article>
       <article class="card">
-        <div class="card-icon">🛡️</div>
+        <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 2l8 3.5v5.7c0 5-3.2 8.6-8 10.8-4.8-2.2-8-5.8-8-10.8V5.5L12 2z"/>
+          <path d="M9 11.5l2.2 2.2L15.5 9"/>
+        </svg>
         <h3>自主保护</h3>
-        <p>防止提示词注入与角色 OOC。数据每次变更都会被记录，异常时可回滚到以前的版本。系统过载时强制保护你的数据。</p>
+        <p>防止提示词注入与角色 OOC。数据每次变更都会被记录，异常时可回滚。系统过载时强制保护你的数据。</p>
       </article>
     </div>
-    <p class="section-more">更多细节，见功能清单文档（docs/Dev. Function List功能清单v2.md）</p>
   </div>
 </section>
 
 <!-- ===== 平台 ===== -->
-<section class="section section-alt" id="platform">
+<section class="section" id="platform">
   <div class="container">
     <h2 class="section-title">支持平台</h2>
     <p class="section-desc">本地运行 AI，对设备有一定要求</p>
     <div class="platforms">
       <div class="platform">
-        <div class="platform-icon">🍎</div>
         <h3>macOS</h3>
-        <p>macOS ≥ 26.0<br>需 M 系列芯片，16GB 内存起</p>
+        <p>macOS ≥ 26.0<br>M 系列芯片，16GB 内存起</p>
       </div>
       <div class="platform">
-        <div class="platform-icon">🪟</div>
         <h3>Windows</h3>
         <p>Windows ≥ 24H2<br>建议 20GB 可用显存，固态硬盘</p>
       </div>
       <div class="platform">
-        <div class="platform-icon">📱</div>
         <h3>iOS / Android</h3>
-        <p>适配计划中<br>可连接运行隙间的电脑使用全部功能</p>
+        <p>适配计划中<br>可连接运行隙间的电脑，使用全部功能</p>
       </div>
     </div>
   </div>
 </section>
 
 <!-- ===== 开发组 ===== -->
-<section class="section" id="about">
+<section class="section section-alt" id="about">
   <div class="container">
     <h2 class="section-title">隙间开发组</h2>
     <p class="section-desc">XiJian Development Group · 以项目命名的开发组</p>
     <div class="team-grid">
-      <div class="team-card"><div class="team-avatar" style="--h:210deg">S</div><h4>Skyc8266</h4><p>全职 · 除了美术类，几乎啥都得干点</p></div>
-      <div class="team-card"><div class="team-avatar" style="--h:280deg">浅</div><h4>浅忆</h4><p>绘画 · UI 设计 · 角色制作</p></div>
-      <div class="team-card"><div class="team-avatar" style="--h:330deg">绿</div><h4>绿豆糕</h4><p>互动设计 · 绘画</p></div>
-      <div class="team-card"><div class="team-avatar" style="--h:20deg">徐</div><h4>徐铭泽</h4><p>功能设计 · 互动设计 · 角色制作</p></div>
-      <div class="team-card"><div class="team-avatar" style="--h:160deg">潘</div><h4>潘庆轩</h4><p>项目测试</p></div>
-      <div class="team-card"><div class="team-avatar" style="--h:45deg">黄</div><h4>黄亦彤</h4><p>绘画 · 角色制作</p></div>
-      <div class="team-card"><div class="team-avatar" style="--h:120deg">孙</div><h4>孙靖洋</h4><p>代码 · 视频制作</p></div>
-      <div class="team-card"><div class="team-avatar" style="--h:250deg">赵</div><h4>赵晨希</h4><p>角色制作</p></div>
+      <div class="team-card"><div class="team-avatar">S</div><h4>Skyc8266</h4><p>全职 · 除了美术类，几乎啥都得干点</p></div>
+      <div class="team-card"><div class="team-avatar">浅</div><h4>浅忆</h4><p>绘画 · UI 设计 · 角色制作</p></div>
+      <div class="team-card"><div class="team-avatar">绿</div><h4>绿豆糕</h4><p>互动设计 · 绘画</p></div>
+      <div class="team-card"><div class="team-avatar">徐</div><h4>徐铭泽</h4><p>功能设计 · 互动设计 · 角色制作</p></div>
+      <div class="team-card"><div class="team-avatar">潘</div><h4>潘庆轩</h4><p>项目测试</p></div>
+      <div class="team-card"><div class="team-avatar">黄</div><h4>黄亦彤</h4><p>绘画 · 角色制作</p></div>
+      <div class="team-card"><div class="team-avatar">孙</div><h4>孙靖洋</h4><p>代码 · 视频制作</p></div>
+      <div class="team-card"><div class="team-avatar">赵</div><h4>赵晨希</h4><p>角色制作</p></div>
     </div>
     <div class="about-links">
-      <a href="https://github.com/XiJian-Development-Group/" class="btn btn-ghost" target="_blank" rel="noopener">GitHub 主页</a>
-      <a href="https://github.com/XiJian-Development-Group/XiJian" class="btn btn-ghost" target="_blank" rel="noopener">隙间仓库</a>
+      <a href="https://github.com/XiJian-Development-Group/" class="btn btn-secondary" target="_blank" rel="noopener">GitHub 主页</a>
+      <a href="https://github.com/XiJian-Development-Group/XiJian" class="btn btn-secondary" target="_blank" rel="noopener">隙间仓库</a>
     </div>
   </div>
 </section>
 
 <!-- ===== 加入我们 ===== -->
-<section class="section section-alt" id="join">
+<section class="section" id="join">
   <div class="container">
     <h2 class="section-title">加入我们</h2>
     <p class="section-desc">测试、反馈、开发、制作角色——我们都欢迎</p>
     <div class="join-grid">
       <div class="join-card">
         <h3>参与内测</h3>
-        <p>成为首批体验者，和我们一起打磨隙间。内测阶段将提供云端 AI 接入，无需高配设备即可体验。</p>
-        <p class="join-qq">QQ 联系管理员：<strong class="qq-num" id="qqTester">2500693887</strong> <button class="copy-btn" data-copy="2500693887">复制</button></p>
+        <p>成为首批体验者，和我们一起打磨隙间。内测阶段提供云端 AI 接入，无需高配设备即可体验。</p>
+        <p class="join-qq">QQ 联系管理员：<strong class="qq-num">2500693887</strong> <button class="copy-btn" data-copy="2500693887" type="button">复制</button></p>
         <a href="mailto:panmofan@icloud.com" class="btn btn-primary btn-sm">邮件联系</a>
       </div>
       <div class="join-card">
         <h3>反馈建议</h3>
         <p>你的想法会得到认真聆听。请将建议发送至项目组管理员邮箱，并附上邮件主题格式。</p>
-        <a href="mailto:panmofan@icloud.com?subject=%5BXiJian%20Project%3A%20Contact%20Us%2Fsuggestions%5D%20%E6%82%A8%E7%9A%84%E4%B8%BB%E9%A2%98" class="btn btn-ghost btn-sm">发送邮件</a>
+        <p class="join-qq">管理员邮箱：<strong class="qq-num">panmofan@icloud.com</strong></p>
+        <a href="mailto:panmofan@icloud.com?subject=%5BXiJian%20Project%3A%20Contact%20Us%2Fsuggestions%5D%20%E6%82%A8%E7%9A%84%E4%B8%BB%E9%A2%98" class="btn btn-secondary btn-sm">发送邮件</a>
       </div>
       <div class="join-card">
         <h3>加入开发组</h3>
         <p>会写代码、会画角色、会做 UI、会配音、会写剧情——如果你愿意且有精力，欢迎加入隙间开发组。</p>
-        <p class="join-qq">QQ 联系管理员：<strong class="qq-num" id="qqDev">2500693887</strong> <button class="copy-btn" data-copy="2500693887">复制</button></p>
-        <a href="mailto:panmofan@icloud.com" class="btn btn-ghost btn-sm">邮件联系</a>
+        <p class="join-qq">QQ 联系管理员：<strong class="qq-num">2500693887</strong> <button class="copy-btn" data-copy="2500693887" type="button">复制</button></p>
+        <a href="mailto:panmofan@icloud.com" class="btn btn-secondary btn-sm">邮件联系</a>
       </div>
     </div>
   </div>
@@ -207,8 +206,7 @@
       <ul>
         <li>本项目具有操控用户设备的功能（需用户手动启用），并具备生成文本、图片、音频与视频的能力。因使用本项目所造成的任何损失与后果，均由使用者承担，与开发组无关。</li>
         <li>请勿滥用开发者工具。开发者工具仅供提交合法的创作内容使用，不得用于任何其他行为。</li>
-        <li>本项目完全开源免费（MIT License），请不要售卖或付费购买本项目。</li>
-        <li>本项目使用了若干开源项目，详见文档 docs/Deps.md。</li>
+        <li>本项目完全开源免费（MIT License），请不要售卖或付费购买本项目。本项目使用了若干开源项目，详见 docs/Deps.md。</li>
       </ul>
     </div>
   </div>
@@ -216,11 +214,9 @@
 
 <!-- ===== 页脚 ===== -->
 <footer class="footer">
-  <div class="container">
-    <p><strong>隙间 XiJian</strong> · 二次元 AI 聊天</p>
-    <p>隙间开发组 XiJian Development Group · <a href="https://github.com/XiJian-Development-Group/" target="_blank" rel="noopener">GitHub</a> · <a href="mailto:panmofan@icloud.com">panmofan@icloud.com</a></p>
-    <p class="footer-meta">MIT License · 制作中，敬请期待</p>
-  </div>
+  <p><strong>隙间 XiJian</strong> · 二次元 AI 聊天</p>
+  <p>隙间开发组 XiJian Development Group · <a href="https://github.com/XiJian-Development-Group/" target="_blank" rel="noopener">GitHub</a> · <a href="mailto:panmofan@icloud.com">panmofan@icloud.com</a></p>
+  <p class="footer-meta">MIT License · 制作中，敬请期待</p>
 </footer>
 
 <script src="assets/js/main.js"></script>

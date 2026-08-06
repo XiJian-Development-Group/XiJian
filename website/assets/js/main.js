@@ -2,7 +2,7 @@
 (function () {
   "use strict";
 
-  // 导航滚动阴影
+  // 导航滚动状态
   var nav = document.getElementById("nav");
   function onScroll() {
     if (nav) {
@@ -41,11 +41,6 @@
           btn.textContent = "复制";
         }, 1800);
       }
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        navigator.clipboard.writeText(text).then(done, function () { fallback(); });
-      } else {
-        fallback();
-      }
       function fallback() {
         var ta = document.createElement("textarea");
         ta.value = text;
@@ -56,20 +51,11 @@
         try { document.execCommand("copy"); done(); } catch (e) {}
         document.body.removeChild(ta);
       }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, fallback);
+      } else {
+        fallback();
+      }
     });
   });
-
-  // 滚动显现动画（渐进增强，不支持 IntersectionObserver 时静默跳过）
-  var revealEls = document.querySelectorAll(".card, .team-card, .join-card, .philosophy-item, .platform");
-  if ("IntersectionObserver" in window && revealEls.length) {
-    var io = new IntersectionObserver(function (entries) {
-      entries.forEach(function (entry) {
-        if (entry.isIntersecting) {
-          entry.target.classList.add("revealed");
-          io.unobserve(entry.target);
-        }
-      });
-    }, { threshold: 0.12, rootMargin: "0px 0px -40px 0px" });
-    revealEls.forEach(function (el) { io.observe(el); });
-  }
 })();
