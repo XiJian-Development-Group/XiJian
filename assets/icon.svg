@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 隙间 XiJian 图标：蜿蜒小河 + 发亮星星 + 伸手的人 -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="river" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#64d2ff"/>
+      <stop offset="1" stop-color="#0a84ff"/>
+    </linearGradient>
+    <radialGradient id="starGlow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.75"/>
+      <stop offset="0.55" stop-color="#ffd60a" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#ffd60a" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- 背景圆角方块 -->
+  <rect x="4" y="4" width="56" height="56" rx="14" fill="#1c1c28" stroke="#3a3a52" stroke-width="1.5"/>
+
+  <!-- 蜿蜒小河：自上而下贯穿 -->
+  <path d="M32 6 C 23 14, 43 20, 32 28 C 22 35, 44 42, 32 58"
+        fill="none" stroke="url(#river)" stroke-width="5" stroke-linecap="round"/>
+
+  <!-- 星星光晕 + 四角星（河右侧） -->
+  <circle cx="46" cy="21" r="12" fill="url(#starGlow)"/>
+  <path d="M46 12 L48.2 19.8 L56 22 L48.2 24.2 L46 32 L43.8 24.2 L36 22 L43.8 19.8 Z"
+        fill="#ffd60a"/>
+
+  <!-- 人：左侧站姿，仰头伸手向星星 -->
+  <g stroke="#f5f5f7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <!-- 刘海弧 + 侧发 -->
+    <path d="M10.9 28.4a4.1 4.1 0 0 1 8.2 0" stroke-width="2.4"/>
+    <path d="M10.9 28.4c-.2 1.8.4 3.4 1.2 4.6" stroke-width="1.6"/>
+    <!-- 头 -->
+    <circle cx="15" cy="28.5" r="4.5" fill="#f5f5f7" stroke="none"/>
+    <!-- 眼睛（望向星星，偏右上） -->
+    <circle cx="16.4" cy="27.6" r="0.6" fill="#1c1c28" stroke="none"/>
+    <circle cx="13.4" cy="27.6" r="0.6" fill="#1c1c28" stroke="none"/>
+    <!-- 微笑 -->
+    <path d="M13.6 29.6c.5.5 1.3.5 1.8 0" stroke="#1c1c28" stroke-width="0.7" stroke-linecap="round"/>
+    <!-- 脖子 -->
+    <path d="M15 33v1.5" stroke-width="1.7"/>
+    <!-- 躯干轮廓（上衣） -->
+    <path d="M15 34.6 L12.2 35.9 V42.6 H17.8 V35.9 Z" stroke-width="1.7"/>
+    <!-- 领口 V 形 -->
+    <path d="M15 34.6 L12.2 35.9 M15 34.6 L17.8 35.9" stroke-width="1.1"/>
+    <!-- 衣摆 -->
+    <path d="M12.2 40.4 H17.8" stroke-width="1.1" opacity="0.75"/>
+    <!-- 左臂（自然下垂，带手） -->
+    <path d="M12.6 36.4 L10 41.4" stroke-width="2"/>
+    <circle cx="10" cy="41.8" r="0.9" fill="#f5f5f7" stroke="none"/>
+    <!-- 右臂（伸向星星，带肘部与手） -->
+    <path d="M17.2 36.2 L21.4 31.2 L28.4 24.4" stroke-width="2"/>
+    <circle cx="28.4" cy="24.4" r="1.2" fill="#f5f5f7" stroke="none"/>
+    <!-- 腿 -->
+    <path d="M13.6 42.6 L12 48.8" stroke-width="2"/>
+    <path d="M16.4 42.6 L18 48.8" stroke-width="2"/>
+    <!-- 鞋 -->
+    <path d="M9.9 49.6 H13.9" stroke-width="2.4"/>
+    <path d="M16.1 49.6 H20.1" stroke-width="2.4"/>
+  </g>
+</svg>
