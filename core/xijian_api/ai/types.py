@@ -153,6 +153,7 @@ def resolve_part_content(part: dict) -> bytes | str | None:
         return text if isinstance(text, str) else None
 
     # image_url, audio_url, video_url, file_url
+    # 媒体内容部件类型：image_url、audio_url、video_url、file_url
     url_field = ptype.replace("_url", "") + "_url" if ptype.endswith("_url") else ptype
     spec = part.get(url_field, {})
     if isinstance(spec, dict):
@@ -164,6 +165,7 @@ def resolve_part_content(part: dict) -> bytes | str | None:
         return None
 
     # data: URI → direct decode
+    # data: URI → 直接解码
     if isinstance(url, str) and url.startswith("data:"):
         try:
             import base64
@@ -173,6 +175,7 @@ def resolve_part_content(part: dict) -> bytes | str | None:
             return None
 
     # http(s):// → download
+    # http(s):// → 下载
     if isinstance(url, str) and url.startswith("http"):
         try:
             import httpx
@@ -183,6 +186,7 @@ def resolve_part_content(part: dict) -> bytes | str | None:
             pass
 
     # file:// or bare path
+    # file:// 或裸路径
     path = resolve_part_to_path(part)
     if path:
         try:

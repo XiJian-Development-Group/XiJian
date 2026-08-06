@@ -1,7 +1,7 @@
-"""3D model viewer backend for the Developer Kit.
+"""开发者工具的 3D 模型查看器后端。
 
-Manages local 3D model file references (VRM, GLB, etc.) and
-provides a file listing for the UI to render via three.js.
+管理本地 3D 模型文件引用（VRM、GLB 等），并提供文件列表
+供 UI 通过 three.js 渲染。
 """
 
 from __future__ import annotations
@@ -53,10 +53,10 @@ def register_model(work_dir: str, path: str) -> dict[str, Any]:
         raise DevKitError(400, f"文件不存在: {path}", code="file_not_found")
     ext = os.path.splitext(path)[1].lower()
     if ext == ".fbx":
-        # Allow FBX registration but mark it as needing conversion to VRM.
-        # The UI will show a warning that FBX cannot be previewed directly
-        # and must be converted to VRM 1.0 using Blender/Unity (UniVRM) externally.
-        pass  # Continue to register
+        # 允许注册 FBX，但标记为需要转换为 VRM。
+        # UI 会显示警告：FBX 无法直接预览，必须使用 Blender/Unity
+        # （UniVRM）在外部转换为 VRM 1.0。
+        pass  # 继续注册
     elif ext not in (".vrm", ".glb", ".gltf"):
         raise DevKitError(400, f"不支持的模型格式: {ext}（仅支持 .vrm / .glb / .gltf / .fbx）", code="bad_format")
     index = _load_index(work_dir)
@@ -72,7 +72,7 @@ def register_model(work_dir: str, path: str) -> dict[str, Any]:
         "size_bytes": os.path.getsize(path),
         "needs_conversion": ext == ".fbx",
     }
-    # C2.8 AC-3: Enforce model size limit (< 50 MB required, < 20 MB recommended)
+    # C2.8 AC-3：强制模型大小限制（必须 < 50 MB，建议 < 20 MB）
     size_mb = entry["size_bytes"] / (1024 * 1024)
     if size_mb > 50:
         raise DevKitError(
@@ -81,7 +81,7 @@ def register_model(work_dir: str, path: str) -> dict[str, Any]:
             code="model_too_large",
         )
     elif size_mb > 20:
-        # Warning only - not blocking
+        # 仅警告 - 不阻止
         entry["size_warning"] = f"模型大小 {size_mb:.1f} MB 超过推荐的 20 MB，可能影响加载性能"
 
     index.append(entry)
@@ -107,21 +107,21 @@ def get_model_info(work_dir: str, model_id: str) -> dict[str, Any] | None:
     return None
 
 
-#: MIME types for the 3D formats the UI's three.js loader handles.
+#: UI 的 three.js 加载器处理的 3D 格式的 MIME 类型。
 _FORMAT_MIMES = {
-    ".vrm": "model/gltf-binary",   # VRM 0.x / 1.0 are GLB with extras
+    ".vrm": "model/gltf-binary",   # VRM 0.x / 1.0 是带 extras 的 GLB
     ".glb": "model/gltf-binary",
     ".gltf": "model/gltf+json",
-    ".fbx": "application/octet-stream",  # FBX not directly viewable in three.js
+    ".fbx": "application/octet-stream",  # three.js 中无法直接查看 FBX
 }
 
 
 def _read_gltf_json(path: str) -> dict[str, Any] | None:
-    """Best-effort extraction of the glTF/VRM JSON description.
+    """尽力提取 glTF/VRM JSON 描述。
 
-    Handles both plain ``.gltf`` (JSON text) and binary ``.glb`` / ``.vrm``
-    (GLB container: 12-byte header + JSON chunk).  Returns ``None`` on any
-    parse failure so callers can report a clear validation error.
+    同时处理纯 ``.gltf``（JSON 文本）和二进制 ``.glb`` / ``.vrm``
+    （GLB 容器：12 字节头 + JSON 块）。任何解析失败都返回 ``None``，
+    以便调用方报告清晰的验证错误。
     """
     ext = os.path.splitext(path)[1].lower()
     try:
@@ -132,7 +132,7 @@ def _read_gltf_json(path: str) -> dict[str, Any] | None:
             header = f.read(12)
             if len(header) < 12 or header[0:4] != b"glTF":
                 return None
-            # chunk 0: length (uint32 LE) + type (4 bytes, 'JSON')
+            # 块 0：长度（uint32 小端）+ 类型（4 字节，'JSON'）
             chunk_header = f.read(8)
             if len(chunk_header) < 8:
                 return None
@@ -147,14 +147,14 @@ def _read_gltf_json(path: str) -> dict[str, Any] | None:
 
 
 def validate_model_format(work_dir: str, model_id: str) -> dict[str, Any]:
-    """Validate a registered model against the VRM 1.0 specification (C2.8 AC-4).
+    """对照 VRM 1.0 规范验证已注册的模型（C2.8 AC-4）。
 
-    ``.vrm`` / ``.glb`` / ``.gltf`` are parsed and checked for the VRM
-    extension (``VRM`` / ``VRMC_vrm`` / ``VRMC_vrm_animation``).  ``.fbx``
-    cannot be validated as VRM directly — it must be converted first, so the
-    check returns a non-blocking warning instead of a hard failure.
+    ``.vrm`` / ``.glb`` / ``.gltf`` 会被解析并检查 VRM 扩展
+    （``VRM`` / ``VRMC_vrm`` / ``VRMC_vrm_animation``）。``.fbx``
+    无法直接作为 VRM 验证——必须先转换，因此该检查返回非阻塞警告
+    而非硬性失败。
 
-    Returns ``{"ok": bool, "format": str, "errors": [...], "warnings": [...]}``.
+    返回 ``{"ok": bool, "format": str, "errors": [...], "warnings": [...]}``。
     """
     info = get_model_info(work_dir, model_id)
     if not info:
@@ -192,19 +192,19 @@ def validate_model_format(work_dir: str, model_id: str) -> dict[str, Any]:
             "warnings": [],
         }
 
-    # Deeper VRM 1.0 validation: check required VRM extension fields
+    # 更深入的 VRM 1.0 验证：检查必需的 VRM 扩展字段
     vrm_ext_key = next((k for k in ("VRM", "VRMC_vrm") if k in gltf.get("extensions", {})), None)
     if vrm_ext_key:
         vrm_ext = gltf["extensions"][vrm_ext_key]
         errors = []
         warnings = []
 
-        # Check specVersion
+        # 检查 specVersion
         spec_version = vrm_ext.get("specVersion", "1.0")
         if not spec_version.startswith("1."):
             warnings.append(f"VRM 规范版本为 {spec_version}，建议使用 1.0")
 
-        # Check meta (required in VRM 1.0)
+        # 检查 meta（VRM 1.0 中必需）
         meta = vrm_ext.get("meta")
         if not meta:
             errors.append("缺少 VRM meta 信息（标题、版本、作者等）")
@@ -216,7 +216,7 @@ def validate_model_format(work_dir: str, model_id: str) -> dict[str, Any]:
             if not meta.get("author"):
                 warnings.append("VRM meta 缺少 author（作者）")
 
-        # Check humanoid (required for animation retargeting)
+        # 检查 humanoid（动作重定向所必需）
         humanoid = vrm_ext.get("humanoid")
         if not humanoid:
             warnings.append("缺少 humanoid 信息（动作重定向可能受影响）")
@@ -225,12 +225,12 @@ def validate_model_format(work_dir: str, model_id: str) -> dict[str, Any]:
             if not human_bones:
                 warnings.append("humanoid.humanBones 为空（动作重定向可能受影响）")
 
-        # Check firstPerson (optional but recommended)
+        # 检查 firstPerson（可选但建议）
         first_person = vrm_ext.get("firstPerson")
         if not first_person:
             warnings.append("缺少 firstPerson 设置（第一人称视角配置）")
 
-        # Check blendShapeMaster (optional but recommended for expressions)
+        # 检查 blendShapeMaster（表情可选但建议）
         blend_shape = vrm_ext.get("blendShapeMaster")
         if not blend_shape:
             warnings.append("缺少 blendShapeMaster（表情/BlendShape 可能无法使用）")
@@ -245,16 +245,14 @@ def validate_model_format(work_dir: str, model_id: str) -> dict[str, Any]:
 
 
 def read_model_bytes(work_dir: str, model_id: str) -> dict[str, Any] | None:
-    """Return the raw file bytes + MIME for a registered model.
+    """返回已注册模型的原始文件字节 + MIME。
 
-    The JS previewer calls this to dodge the ``file://`` CORS wall —
-    pywebview's WKWebView will not ``fetch()`` a local file path, so
-    we hand it base64 over the ``js_api`` bridge and let it build an
-    object URL.
+    JS 预览器调用此函数来绕开 ``file://`` CORS 墙——pywebview 的
+    WKWebView 不会 ``fetch()`` 本地文件路径，因此我们通过 ``js_api``
+    桥传递 base64，让它构建 object URL。
 
-    Returns ``None`` if the model id is unknown.  The caller is
-    expected to surface a clean error; we do not raise here because
-    the UI treats "model vanished" as a soft failure (re-list).
+    如果模型 id 未知则返回 ``None``。调用方应负责呈现清晰的错误；
+    这里不抛出异常，因为 UI 将“模型消失”视为软失败（重新列出）。
     """
     info = get_model_info(work_dir, model_id)
     if not info:
@@ -349,18 +347,18 @@ def generate_model_from_text(
 
 
 def _download_model_from_hf(description: str) -> str | None:
-    """Attempt to download a matching model from Hugging Face.
+    """尝试从 Hugging Face 下载匹配的模型。
 
-    Uses HF_MIRROR environment variable for Chinese users (defaults to hf-mirror.com).
-    Returns local file path if successful, None otherwise.
+    为中国用户使用 HF_MIRROR 环境变量（默认为 hf-mirror.com）。
+    成功时返回本地文件路径，否则返回 None。
     """
     try:
         from huggingface_hub import hf_hub_download, login
     except ImportError:
         return None
 
-    # Search for models matching the description (simplified - in reality you'd use HF API search)
-    # For now, we'll try a few known character model repositories
+    # 搜索与描述匹配的模型（简化——实际上你会使用 HF API 搜索）
+    # 目前，我们尝试几个已知的角色模型仓库
     hf_token = os.environ.get("HF_TOKEN")
     mirror = os.environ.get("HF_MIRROR", "https://hf-mirror.com")
 
@@ -370,7 +368,7 @@ def _download_model_from_hf(description: str) -> str | None:
         except Exception:
             pass
 
-    # Known good repositories for VRM/GLB character models
+    # 已知的 VRM/GLB 角色模型仓库
     repos = [
         "p1atdev/dart-3d-character",
         "shinkon/vrm-characters",
@@ -379,11 +377,11 @@ def _download_model_from_hf(description: str) -> str | None:
 
     for repo in repos:
         try:
-            # Try to find a matching .vrm or .glb file
-            # This is a simplified version - real implementation would search by tags
+            # 尝试找到匹配的 .vrm 或 .glb 文件
+            # 这是简化版本——实际实现会按标签搜索
             files = hf_hub_download(
                 repo_id=repo,
-                filename="model.vrm",  # or model.glb
+                filename="model.vrm",  # 或 model.glb
                 token=hf_token,
                 endpoint=mirror,
             )
@@ -396,7 +394,7 @@ def _download_model_from_hf(description: str) -> str | None:
 
 
 # ---------------------------------------------------------------------------
-# C2.8: FBX/GLB → VRM conversion (external tool orchestration)
+# C2.8：FBX/GLB → VRM 转换（外部工具编排）
 # ---------------------------------------------------------------------------
 
 def convert_fbx_to_vrm(
@@ -404,17 +402,17 @@ def convert_fbx_to_vrm(
     output_path: str | None = None,
     tool: str = "univrm",
 ) -> str:
-    """Convert FBX to VRM using external tools (Blender/UniVRM/bvh2vrm).
+    """使用外部工具（Blender/UniVRM/bvh2vrm）将 FBX 转换为 VRM。
 
-    This is a wrapper that calls external CLI tools. The actual conversion
-    must be done externally; this function just orchestrates the call.
+    这是一个调用外部 CLI 工具的包装器。实际转换必须在外部完成；
+    此函数只负责编排调用。
 
-    Supported tools:
-    - "univrm": Unity's UniVRM CLI (requires Unity + UniVRM package)
-    - "blender": Blender Python script with VRM addon
-    - "vrm-validator": VRM validator CLI (for validation only)
+    支持的工具：
+    - "univrm"：Unity 的 UniVRM CLI（需要 Unity + UniVRM 包）
+    - "blender"：带 VRM 插件的 Blender Python 脚本
+    - "vrm-validator"：VRM 验证器 CLI（仅用于验证）
 
-    Returns the output VRM file path.
+    返回输出的 VRM 文件路径。
     """
     if not os.path.isfile(fbx_path):
         raise DevKitError(400, f"FBX 文件不存在: {fbx_path}", code="file_not_found")
@@ -427,7 +425,7 @@ def convert_fbx_to_vrm(
         output_path = os.path.splitext(fbx_path)[0] + ".vrm"
 
     if tool == "univrm":
-        # Unity command-line batch mode with UniVRM
+        # 带 UniVRM 的 Unity 命令行批处理模式
         unity_path = os.environ.get("UNITY_PATH", "/Applications/Unity/Hub/Editor/2022.3.0f1/Unity.app/Contents/MacOS/Unity")
         project_path = os.environ.get("UNITY_PROJECT_PATH", os.path.expanduser("~/UnityProjects/VRMConverter"))
         cmd = [
@@ -465,14 +463,14 @@ def convert_bvh_to_vrm(
     vrm_template: str,
     output_path: str | None = None,
 ) -> str:
-    """Convert BVH motion capture data to VRM animation using bvh2vrm.
+    """使用 bvh2vrm 将 BVH 动作捕捉数据转换为 VRM 动画。
 
-    Args:
-        bvh_path: Path to the .bvh motion file
-        vrm_template: Path to a VRM model to apply the animation to
-        output_path: Output .vrm or .vrmc_animation path
+    参数：
+        bvh_path: .bvh 动作文件路径
+        vrm_template: 用于应用动画的 VRM 模型路径
+        output_path: 输出的 .vrm 或 .vrmc_animation 路径
 
-    Returns the output file path.
+    返回输出文件路径。
     """
     if not os.path.isfile(bvh_path):
         raise DevKitError(400, f"BVH 文件不存在: {bvh_path}", code="file_not_found")
@@ -482,7 +480,7 @@ def convert_bvh_to_vrm(
     if output_path is None:
         output_path = os.path.splitext(bvh_path)[0] + ".vrm"
 
-    # Use bvh2vrm (Python package) if available
+    # 如果可用，使用 bvh2vrm（Python 包）
     try:
         import bvh2vrm
         bvh2vrm.convert(bvh_path, vrm_template, output_path)
@@ -490,7 +488,7 @@ def convert_bvh_to_vrm(
     except ImportError:
         pass
 
-    # Fallback: call CLI if available
+    # 回退：如果 CLI 可用则调用
     bvh2vrm_cli = os.environ.get("BVH2VRM_CLI", "bvh2vrm")
     cmd = [bvh2vrm_cli, bvh_path, vrm_template, output_path]
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
@@ -509,16 +507,16 @@ def import_fbx_model(
     convert_to_vrm: bool = True,
     tool: str = "univrm",
 ) -> dict[str, Any]:
-    """Import an FBX file, optionally converting to VRM.
+    """导入 FBX 文件，可选择转换为 VRM。
 
-    Returns the registered model entry.
+    返回已注册的模型条目。
     """
     if convert_to_vrm:
         vrm_path = os.path.splitext(fbx_path)[0] + ".vrm"
         convert_fbx_to_vrm(fbx_path, vrm_path, tool)
         return register_model(work_dir, vrm_path)
     else:
-        # Just register the FBX (will be flagged as needing conversion)
+        # 仅注册 FBX（将被标记为需要转换）
         return register_model(work_dir, fbx_path)
 
 
@@ -526,7 +524,7 @@ def import_glb_model(
     work_dir: str,
     glb_path: str,
 ) -> dict[str, Any]:
-    """Import a GLB/GLTF model (may be VRM-compatible)."""
+    """导入 GLB/GLTF 模型（可能兼容 VRM）。"""
     return register_model(work_dir, glb_path)
 
 
@@ -534,5 +532,5 @@ def import_vrm_model(
     work_dir: str,
     vrm_path: str,
 ) -> dict[str, Any]:
-    """Import a VRM model directly."""
+    """直接导入 VRM 模型。"""
     return register_model(work_dir, vrm_path)

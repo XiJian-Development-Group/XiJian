@@ -34,7 +34,7 @@ from xijian_api.stubs.character_state import STATUS_CRITICAL
 
 
 # ---------------------------------------------------------------------------
-# A3.1 — startup auto-load of is_active models
+# A3.1 — 启动时自动加载 is_active 模型
 # ---------------------------------------------------------------------------
 
 
@@ -98,19 +98,19 @@ class TestAutoLoadActiveModels:
         assert chars_stub.get(char["id"])["loaded"] is False
 
     def test_auto_load_runs_via_seed_all(self):
-        # The startup path (seed_all → auto_load_active_models) runs on
-        # every reset; the demo char has no models so stays unloaded.
+        # 启动路径（seed_all → auto_load_active_models）在每次
+        # 重置时都会运行；演示角色没有模型，因此保持未加载。
         assert chars_stub.get("char_yuki")["loaded"] is False
-        # A character with an active model created *before* a reset is
-        # loaded after the next reset.
+        # 在 *重置之前* 创建了激活模型的角色，
+        # 会在下次重置后被加载。
         cid = self._seed_character_with_active_model()
         stubs_state.reset_for_testing()
-        assert chars_stub.get(cid) is None  # reset wipes custom records
+        assert chars_stub.get(cid) is None  # 重置会清除自定义记录
         assert chars_stub.get("char_yuki")["loaded"] is False
 
 
 # ---------------------------------------------------------------------------
-# A3.1 — cross-modal generation references
+# A3.1 — 跨模态生成引用
 # ---------------------------------------------------------------------------
 
 
@@ -139,7 +139,7 @@ class TestGenerationReferences:
                 "is_default": True,
             },
         )
-        # pose_image asset in the cache (asset_kind key).
+        # pose_image 资源位于缓存中（asset_kind 键）。
         cache = stubs_state.character_asset_cache.setdefault(cid, {})
         cache["pose1"] = {
             "character_id": cid,
@@ -172,9 +172,9 @@ class TestGenerationReferences:
                 "xijian": {"character_id": cid},
             },
         )
-        # Mock image backend may 503; if it succeeds, references must
-        # be present in the envelope.  Either way the injection path
-        # must not crash the request.
+        # Mock 图像后端可能返回 503；若成功，引用必须
+        # 出现在信封中。无论哪种情况，注入路径
+        # 都不能使请求崩溃。
         if response.status_code == 503:
             return
         assert response.status_code == 200
@@ -184,7 +184,7 @@ class TestGenerationReferences:
 
 
 # ---------------------------------------------------------------------------
-# A3.2 — Critical handler subscriber
+# A3.2 — Critical 处理器订阅者
 # ---------------------------------------------------------------------------
 
 

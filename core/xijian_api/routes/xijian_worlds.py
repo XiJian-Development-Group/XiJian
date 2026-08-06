@@ -1,51 +1,51 @@
-"""``/v1/xijian/worlds/*`` routes — A4.2.
+"""``/v1/xijian/worlds/*`` 路由 — A4.2。
 
 CRUD
 ====
 
-* ``GET    /v1/xijian/worlds``                       — list
-* ``POST   /v1/xijian/worlds``                       — create
-* ``GET    /v1/xijian/worlds/<wid>``                 — get
-* ``PATCH  /v1/xijian/worlds/<wid>``                 — patch mutable fields
-* ``DELETE /v1/xijian/worlds/<wid>``                 — delete
+* ``GET    /v1/xijian/worlds``                       — 列表
+* ``POST   /v1/xijian/worlds``                       — 创建
+* ``GET    /v1/xijian/worlds/<wid>``                 — 获取
+* ``PATCH  /v1/xijian/worlds/<wid>``                 — 修改可变字段
+* ``DELETE /v1/xijian/worlds/<wid>``                 — 删除
 
-Lifecycle
+生命周期
 =========
 
-* ``POST   /v1/xijian/worlds/<wid>/switch``          — mark as active
-* ``POST   /v1/xijian/worlds/<wid>/reset/preview``   — start AC-4 reset handshake
-* ``POST   /v1/xijian/worlds/<wid>/reset/confirm``  — finish the reset
-* ``POST   /v1/xijian/worlds/<wid>/reset/cancel``   — drop a pending token
+* ``POST   /v1/xijian/worlds/<wid>/switch``          — 标记为活动
+* ``POST   /v1/xijian/worlds/<wid>/reset/preview``   — 启动 AC-4 重置握手
+* ``POST   /v1/xijian/worlds/<wid>/reset/confirm``  — 完成重置
+* ``POST   /v1/xijian/worlds/<wid>/reset/cancel``   — 丢弃待处理令牌
 
-State & views
+状态与视图
 =============
 
-* ``GET    /v1/xijian/worlds/<wid>/state``           — combined view
-* ``PATCH  /v1/xijian/worlds/<wid>/state``           — white-listed state patch
-* ``POST   /v1/xijian/worlds/<wid>/state/doc``       — operator-only path
-                                                       update
-* ``GET    /v1/xijian/worlds/<wid>/summary``         — same as get_state,
-                                                       alias kept for tests
-* ``GET    /v1/xijian/worlds/summary``               — global summary
+* ``GET    /v1/xijian/worlds/<wid>/state``           — 组合视图
+* ``PATCH  /v1/xijian/worlds/<wid>/state``           — 白名单状态补丁
+* ``POST   /v1/xijian/worlds/<wid>/state/doc``       — 仅操作员的路径
+                                                       更新
+* ``GET    /v1/xijian/worlds/<wid>/summary``         — 同 get_state，
+                                                       为测试保留别名
+* ``GET    /v1/xijian/worlds/summary``               — 全局摘要
 
-Cross-module
+跨模块
 ============
 
-* ``GET    /v1/xijian/worlds/<wid>/compute``         — compute config
-* ``PATCH  /v1/xijian/worlds/<wid>/compute``         — patch compute config
-* ``POST   /v1/xijian/worlds/<wid>/compute/tier``    — flip active tier
-                                                       (AC-6 binary switch)
-* ``GET    /v1/xijian/worlds/<wid>/environment``     — environment state
-* ``PATCH  /v1/xijian/worlds/<wid>/environment``     — patch environment
-* ``GET    /v1/xijian/worlds/<wid>/audit``           — per-world audit log
+* ``GET    /v1/xijian/worlds/<wid>/compute``         — 计算配置
+* ``PATCH  /v1/xijian/worlds/<wid>/compute``         — 修改计算配置
+* ``POST   /v1/xijian/worlds/<wid>/compute/tier``    — 切换活动 tier
+                                                       (AC-6 二元开关)
+* ``GET    /v1/xijian/worlds/<wid>/environment``     — 环境状态
+* ``PATCH  /v1/xijian/worlds/<wid>/environment``     — 修改环境
+* ``GET    /v1/xijian/worlds/<wid>/audit``           — 按世界审计日志
 
-Legacy aliases (pre-A4.2)
+旧版别名（pre-A4.2）
 =========================
 
-* ``POST   /v1/xijian/worlds/<wid>/transition``      — legacy location
-                                                       transition (kept)
-* ``POST   /v1/xijian/worlds/<wid>/event``           — legacy per-world
-                                                       event log (kept)
+* ``POST   /v1/xijian/worlds/<wid>/transition``      — 旧版位置
+                                                       转换（保留）
+* ``POST   /v1/xijian/worlds/<wid>/event``           — 旧版按世界
+                                                       事件日志（保留）
 """
 
 from __future__ import annotations
@@ -70,12 +70,12 @@ _LOGGER = logging.getLogger("xijian_api.routes.xijian_worlds")
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# 辅助函数
 # ---------------------------------------------------------------------------
 
 
 def _require_json() -> dict:
-    """Return the parsed JSON body or raise a 400."""
+    """返回解析后的 JSON body，否则抛出 400。"""
     body = request.get_json(silent=True)
     if not isinstance(body, dict):
         raise ApiError(
@@ -151,7 +151,7 @@ def delete_world(world_id: str):
 
 
 # ---------------------------------------------------------------------------
-# Lifecycle
+# 生命周期
 # ---------------------------------------------------------------------------
 
 
@@ -187,7 +187,7 @@ def reset_confirm(world_id: str):
     if out is None:
         raise ApiError(404, "world not found", "not_found_error", code="world_not_found")
     if not out.get("ok"):
-        # Map error → HTTP code per the spec's double-confirm pattern.
+        # 按规范的双重确认模式将错误映射为 HTTP 状态码。
         err = out.get("error")
         if err == "token_expired":
             raise ApiError(
@@ -214,7 +214,7 @@ def reset_cancel(world_id: str):
 
 
 # ---------------------------------------------------------------------------
-# State & views
+# 状态与视图
 # ---------------------------------------------------------------------------
 
 
@@ -262,7 +262,7 @@ def world_summary(world_id: str):
 
 
 # ---------------------------------------------------------------------------
-# Cross-module views
+# 跨模块视图
 # ---------------------------------------------------------------------------
 
 
@@ -337,7 +337,7 @@ def get_world_audit(world_id: str):
 
 
 # ---------------------------------------------------------------------------
-# NPC convenience — list NPCs from the worlds surface
+# NPC 便捷入口 — 从世界层面列出 NPC
 # ---------------------------------------------------------------------------
 
 
@@ -361,7 +361,7 @@ def world_compute_summary(world_id: str):
 
 
 # ---------------------------------------------------------------------------
-# Legacy aliases (pre-A4.2 compat)
+# 旧版别名（pre-A4.2 兼容）
 # ---------------------------------------------------------------------------
 
 

@@ -31,7 +31,7 @@ _spec.loader.exec_module(sv)
 
 
 # ---------------------------------------------------------------------------
-# Version transforms
+# 版本转换
 # ---------------------------------------------------------------------------
 
 
@@ -64,7 +64,7 @@ class TestNumericPart:
 
 
 # ---------------------------------------------------------------------------
-# Per-target sync helpers (against temp files)
+# 按目标同步辅助函数（基于临时文件）
 # ---------------------------------------------------------------------------
 
 
@@ -137,12 +137,12 @@ class TestSyncDevkitSpec:
 
 
 # ---------------------------------------------------------------------------
-# End-to-end run_sync with a temporary config + target map
+# 使用临时配置 + 目标映射的端到端 run_sync
 # ---------------------------------------------------------------------------
 
 
 def _make_repo(tmp_path: Path) -> dict[str, Path]:
-    """Create a mini repo layout with an out-of-sync version everywhere."""
+    """创建一个处处版本不同步的迷你仓库布局。"""
     config = tmp_path / "Config" / "Config.json"
     config.parent.mkdir(parents=True)
     config.write_text(
@@ -198,15 +198,15 @@ def test_load_versions_missing_coreapi_raises(tmp_path):
 
 
 def test_cli_check_exit_code(tmp_path, monkeypatch):
-    """``--check`` exits 1 when out of sync, 0 when in sync."""
+    """``--check`` 在版本不同步时退出码为 1，同步时为 0。"""
     repo = _make_repo(tmp_path)
     monkeypatch.setattr(sv, "DEFAULT_TARGETS", repo["targets"])
 
-    # Out of sync → exit 1.
+    # 不同步 → 退出码 1。
     rc = sv.main(["--check", "--config", str(repo["config"])])
     assert rc == 1
 
-    # Sync, then check → exit 0.
+    # 先同步，再检查 → 退出码 0。
     sv.main(["--config", str(repo["config"])])
     rc = sv.main(["--check", "--config", str(repo["config"])])
     assert rc == 0

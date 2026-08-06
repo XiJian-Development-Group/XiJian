@@ -20,7 +20,7 @@ from xijian_api.utils.time import now_ts
 bp = Blueprint("assistants", __name__)
 
 
-# --- assistants --------------------------------------------------------------
+# --- assistants（助手） --------------------------------------------------------------
 
 
 @bp.post("/v1/assistants")
@@ -80,7 +80,7 @@ def delete_assistant(assistant_id: str):
     return ("", 204)
 
 
-# --- threads -----------------------------------------------------------------
+# --- threads（线程） -----------------------------------------------------------------
 
 
 @bp.post("/v1/threads")
@@ -127,7 +127,7 @@ def delete_thread(thread_id: str):
     return ("", 204)
 
 
-# --- messages ----------------------------------------------------------------
+# --- messages（消息） ----------------------------------------------------------------
 
 
 @bp.post("/v1/threads/<thread_id>/messages")
@@ -161,7 +161,7 @@ def get_message(thread_id: str, message_id: str):
     return jsonify(record)
 
 
-# --- runs --------------------------------------------------------------------
+# --- runs（运行） --------------------------------------------------------------------
 
 
 @bp.post("/v1/threads/<thread_id>/runs")

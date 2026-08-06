@@ -43,7 +43,7 @@ from xijian_api.stubs.mcp_rules import (
 
 
 # ---------------------------------------------------------------------------
-# Pure helpers
+# 纯辅助函数
 # ---------------------------------------------------------------------------
 
 
@@ -88,8 +88,8 @@ class TestValidatePattern:
         assert rules_stub._validate_pattern("foo") == "foo"
 
     def test_regex_chars_allowed(self):
-        # MCP rules are always regex (not literal), so
-        # metachars must be accepted.
+        # MCP 规则始终是正则（而非字面量），因此
+        # 元字符必须被接受。
         assert rules_stub._validate_pattern("rm\\s+-rf\\s+/") == "rm\\s+-rf\\s+/"
 
     @pytest.mark.parametrize("bad", ["", None, 123, []])
@@ -276,7 +276,7 @@ class TestListActive:
         )
         out = rules_stub.list_active()
         ids = [r["id"] for r in out]
-        # All three present, in severity desc order.
+        # 三者都在，按严重级别降序排列。
         assert ids.index(high["id"]) < ids.index(mid["id"]) < ids.index(low["id"])
 
 
@@ -383,7 +383,7 @@ class TestDelete:
 
 
 # ---------------------------------------------------------------------------
-# Hot path
+# 热路径
 # ---------------------------------------------------------------------------
 
 
@@ -428,7 +428,7 @@ class TestMatchActionRules:
         assert rules_stub.match_action_rules(KIND_SHELL, "x") == []
 
     def test_skips_broken_regex(self):
-        # Pattern doesn't compile → matcher skips silently.
+        # 模式无法编译 → 匹配器静默跳过。
         rules_stub.create(
             action_kind=KIND_SHELL, pattern="[broken",
             mode=MODE_BLACKLIST, severity=5,
@@ -436,8 +436,8 @@ class TestMatchActionRules:
         assert rules_stub.match_action_rules(KIND_SHELL, "anything") == []
 
     def test_unknown_kind_returns_empty(self):
-        # Unknown action_kind must NOT fall through to a
-        # different kind's rules.
+        # 未知的 action_kind 绝不能落到
+        # 其它 kind 的规则上。
         rules_stub.create(
             action_kind=KIND_SHELL, pattern="x", mode=MODE_BLACKLIST,
         )
@@ -473,7 +473,7 @@ class TestMatchActionRules:
 
 
 # ---------------------------------------------------------------------------
-# Lifecycle
+# 生命周期
 # ---------------------------------------------------------------------------
 
 
@@ -492,7 +492,7 @@ class TestLifecycle:
 
 
 # ---------------------------------------------------------------------------
-# HTTP / route layer
+# HTTP / 路由层
 # ---------------------------------------------------------------------------
 
 
@@ -729,9 +729,9 @@ class TestAuthCoverage:
 
 
 class TestPersistence:
-    """The rulebook is a DictDB bucket — write-through persisted to
-    SQLite (``store_mcp_rules``), so blacklist rules survive a cache
-    reload / process restart within the same DB file."""
+    """规则簿是一个 DictDB 桶 —— 写穿持久化到
+    SQLite（``store_mcp_rules``），因此黑名单规则在同一个 DB 文件中
+    能经受缓存重载 / 进程重启。"""
 
     def test_persistence_info_documents_table(self):
         info = rules_stub.persistence_info()
@@ -747,8 +747,8 @@ class TestPersistence:
             mode=MODE_BLACKLIST,
             severity=5,
         )
-        # Drop the in-memory cache; the next read must come back from
-        # the SQLite table (the store layer's write-through guarantee).
+        # 丢弃内存缓存；下次读取必须从
+        # SQLite 表返回（存储层的写穿保证）。
         rules_stub.state.mcp_rules._invalidate_cache()
         reloaded = rules_stub.get(rule["id"])
         assert reloaded is not None

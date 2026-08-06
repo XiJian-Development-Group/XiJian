@@ -216,7 +216,7 @@ def test_serve_waitress_missing_falls_back_to_werkzeug(app, monkeypatch, caplog)
     (请求 ``waitress`` 但未安装时，回退到 ``werkzeug``（WebSocket 仍可用），
     而不是崩溃。)
     """
-    monkeypatch.setitem(sys.modules, "waitress", None)  # ``from waitress import serve`` raises ImportError
+    monkeypatch.setitem(sys.modules, "waitress", None)  # 此时 ``from waitress import serve`` 会抛出 ImportError
 
     class _FakeHttpd:
         def serve_forever(self):

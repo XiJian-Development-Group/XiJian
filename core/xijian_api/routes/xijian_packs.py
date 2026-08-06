@@ -81,7 +81,7 @@ def install_pack():
         ApiError(413): File too large (handled by Flask's MAX_CONTENT_LENGTH).
         ApiError(400/422): Pack validation failed (PackValidationError → 400).
     """
-    # multipart file upload
+    # multipart 文件上传
     if "file" in request.files:
         file = request.files["file"]
         if not file or file.filename == "":
@@ -92,7 +92,7 @@ def install_pack():
                 code="no_file",
                 param="file",
             )
-        # Validate extension
+        # 校验扩展名
         if not file.filename.lower().endswith((".7z", ".zip")):
             raise ApiError(
                 400,
@@ -101,7 +101,7 @@ def install_pack():
                 code="invalid_extension",
                 param="file",
             )
-        # Save to a temp file and install
+        # 保存到临时文件并安装
         import tempfile
         with tempfile.NamedTemporaryFile(suffix=Path(file.filename).suffix, delete=False) as tmp:
             file.save(tmp.name)
@@ -128,7 +128,7 @@ def install_pack():
                     pass
         return jsonify(record), 201
 
-    # JSON with server-side path
+    # JSON 方式：服务端路径
     payload = request.get_json(silent=True) or {}
     if "path" not in payload:
         raise ApiError(

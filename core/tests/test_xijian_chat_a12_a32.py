@@ -50,7 +50,7 @@ def _reset_memory():
 
 
 # ---------------------------------------------------------------------------
-# AC-4 block → regenerate
+# AC-4 拦截 → 重新生成
 # ---------------------------------------------------------------------------
 
 
@@ -103,7 +103,7 @@ class TestRegenerateOnBlock:
         )
         assert response.status_code == 200
         body = response.get_json()
-        # 1 original + 2 regenerations = 3 audits total.
+        # 1 条原始 + 2 次重新生成 = 共 3 条审计。
         assert body["xijian"]["recall"]["regenerations"] == 2
         assert calls["n"] == 3
         assert body["xijian"]["audit"]["verdict"] == VERDICT_BLOCK
@@ -133,7 +133,7 @@ class TestRegenerateOnBlock:
 
 
 # ---------------------------------------------------------------------------
-# Dialogue memory write-back
+# 对话记忆写回
 # ---------------------------------------------------------------------------
 
 
@@ -159,7 +159,7 @@ class TestDialogueWriteBack:
 
     def test_dialogue_write_back_bumps_cited_access(self, client, auth_headers):
         _reset_memory()
-        # Seed a recallable entry and capture its access_count.
+        # 播种一条可被召回的记忆条目并记录其 access_count。
         target = memory_stub.create(
             {
                 "character_id": "char_yuki",
@@ -179,11 +179,11 @@ class TestDialogueWriteBack:
             },
         )
         assert response.status_code == 200
-        # The recall pipeline itself bumps access via recall_search /
-        # load_context; the write-back helper also bumps the cited set.
+        # 召回管道本身会通过 recall_search /
+        # load_context 增加访问计数；写回辅助函数还会增加被引用集合。
         cited = response.get_json()["xijian"]["recall"]["citations"]
         assert target["id"] in cited
-        # At least one dialogue entry exists.
+        # 至少存在一条对话记忆条目。
         assert any(
             e.get("source") == "dialogue"
             for e in stubs_state.memory.values()
@@ -219,7 +219,7 @@ class TestDialogueWriteBack:
 
 
 # ---------------------------------------------------------------------------
-# A3.2 can_dialogue gate
+# A3.2 can_dialogue 闸门
 # ---------------------------------------------------------------------------
 
 
@@ -228,7 +228,7 @@ class TestCanDialogueGate:
         from xijian_api.stubs import character_state as cs_stub
 
         _reset_memory()
-        # Drive the character to Critical (health ≤ 0).
+        # 将角色状态驱动到 Critical（health ≤ 0）。
         cs_stub.apply_field_change("char_yuki", "health", 0.0, reason="manual")
         assert cs_stub.can_dialogue("char_yuki") is False
 

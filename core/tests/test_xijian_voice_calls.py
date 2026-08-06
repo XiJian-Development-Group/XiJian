@@ -1,18 +1,18 @@
-"""Tests for ``stubs.voice_calls`` (A6) and ``/v1/xijian/voice-calls/*``.
+"""针对 ``stubs.voice_calls``（A6）和 ``/v1/xijian/voice-calls/*`` 的测试。
 
-Covers:
+覆盖范围：
 
-* **CRUD** — create / list / get a call session.
-* **Lifecycle** — ring (idle → ringing), accept (→ active), reject,
-  end (→ ended + duration computed).
-* **Events** — add_event / list_events (kind validation, filtering).
-* **Barge-in (AC-3)** — flag set/clear + ``barge_in`` events.
-* **Call loop** — STT (monkeypatched) → reply handler → TTS
-  (monkeypatched) → speech events, plus the barge-in-interrupts-TTS
-  path.
-* **Singing (US-A6-03)** — default DiffSinger stub returns
-  ``unavailable``; a registered engine hook is called instead.
-* **Routes** — HTTP smoke tests with Bearer auth.
+* **CRUD** — 创建 / 列表 / 查询通话会话。
+* **生命周期** — ring（idle → ringing）、accept（→ active）、reject、
+  end（→ ended + 计算通话时长）。
+* **事件** — add_event / list_events（kind 校验、过滤）。
+* **Barge-in（AC-3）** — 标志设置/清除 + ``barge_in`` 事件。
+* **通话循环** — STT（monkeypatch）→ 回复处理器 → TTS
+  （monkeypatch）→ 语音事件，以及 barge-in 打断 TTS
+  的路径。
+* **歌唱（US-A6-03）** — 默认 DiffSinger stub 返回
+  ``unavailable``；注册的引擎钩子会被调用。
+* **路由** — 使用 Bearer 认证的 HTTP 冒烟测试。
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ from xijian_api.stubs.characters import create as create_character
 
 
 # ---------------------------------------------------------------------------
-# Fixtures
+# 夹具
 # ---------------------------------------------------------------------------
 
 
@@ -89,7 +89,7 @@ class TestCRUD:
 
 
 # ---------------------------------------------------------------------------
-# Lifecycle state machine
+# 生命周期状态机
 # ---------------------------------------------------------------------------
 
 
@@ -126,7 +126,7 @@ class TestLifecycle:
         call = vc_stub.create_call(character_id=character, now=1000.0)
         vc_stub.accept_call(call["id"])
         record = vc_stub.end_call(call["id"], )
-        # end_call uses the real clock; just assert shape + reason.
+        # end_call 使用真实时钟；仅断言形状 + 原因。
         assert record["status"] == vc_stub.CALL_STATUS_ENDED
         assert record["ended_reason"] == "ended"
         assert record["ended_at"] is not None
@@ -140,7 +140,7 @@ class TestLifecycle:
 
 
 # ---------------------------------------------------------------------------
-# Events
+# 事件
 # ---------------------------------------------------------------------------
 
 
@@ -159,14 +159,14 @@ class TestEvents:
         vc_stub.add_event(active_call, vc_stub.KIND_SPEECH, {"turn": 1})
         vc_stub.add_event(active_call, vc_stub.KIND_MOTION, {"name": "wave"})
         vc_stub.add_event(active_call, vc_stub.KIND_SPEECH, {"turn": 2})
-        # Note: accept_call already emitted a state-change EFFECT event.
+        # 注意：accept_call 已发出一个状态变更 EFFECT 事件。
         speech = vc_stub.list_events(active_call, kind=vc_stub.KIND_SPEECH)
         assert [e["payload"].get("turn") for e in speech] == [1, 2]
         motion = vc_stub.list_events(active_call, kind=vc_stub.KIND_MOTION)
         assert len(motion) == 1
         effect = vc_stub.list_events(active_call, kind=vc_stub.KIND_EFFECT)
         assert any(e["payload"].get("kind") == "state_change" for e in effect)
-        assert len(vc_stub.list_events(active_call)) == 4  # state_change + 3
+        assert len(vc_stub.list_events(active_call)) == 4  # state_change + 3 个事件
 
     def test_events_are_scoped_to_call(self, active_call, character):
         other = vc_stub.accept_call(
@@ -177,7 +177,7 @@ class TestEvents:
 
 
 # ---------------------------------------------------------------------------
-# Barge-in (AC-3)
+# Barge-in（AC-3）
 # ---------------------------------------------------------------------------
 
 
@@ -201,7 +201,7 @@ class TestBargeIn:
 
 
 # ---------------------------------------------------------------------------
-# Call loop orchestration
+# 通话循环编排
 # ---------------------------------------------------------------------------
 
 
@@ -250,11 +250,11 @@ class TestCallLoop:
         """AC-3: 新语音到达（tts_busy）→ 打断当前 TTS 播放."""
         vc_stub.set_reply_handler(lambda c, t: f"reply-{t}")
         monkeypatch.setattr("xijian_api.stubs.audio.synth", lambda *a, **k: b"x")
-        # Turn 1 makes tts_busy True (synchronous).
+        # 第 1 轮使 tts_busy 为 True（同步）。
         vc_stub.submit_user_speech(active_call, text="first", synchronous=True)
         assert vc_stub.get_call(active_call)["tts_busy"] is False
-        # Simulate an in-flight TTS turn: mark busy, then a new
-        # user speech arrives → barge-in flag set.
+        # 模拟一个进行中的 TTS 轮次：标记忙碌，然后新的
+        # 用户语音到达 → 设置 barge-in 标志。
         vc_stub.get_call(active_call)["tts_busy"] = True
         out = vc_stub.submit_user_speech(active_call, text="打断", synchronous=True)
         assert out["interrupted_previous"] is True
@@ -272,14 +272,14 @@ class TestCallLoop:
         for i in range(25):
             vc_stub.submit_user_speech(active_call, text=f"t{i}", synchronous=True)
         ctx = vc_stub.get_call(active_call)["dialogue_context"]
-        # Both sides of the dialogue are stored: 25 turns × 2 = 50
-        # entries, trimmed to the last 20 (10 turns → starts at t15).
+        # 对话两侧都被存储：25 轮 × 2 = 50 条
+        # 条目，裁剪到最近 20 条（10 轮 → 从 t15 开始）。
         assert len(ctx) == 20
-        assert ctx[0]["text"] == "t15"  # oldest dropped
+        assert ctx[0]["text"] == "t15"  # 最旧的被丢弃
 
 
 # ---------------------------------------------------------------------------
-# Singing — DiffSinger interface stub (US-A6-03)
+# 歌唱 — DiffSinger 接口 stub（US-A6-03）
 # ---------------------------------------------------------------------------
 
 
@@ -311,7 +311,7 @@ class TestSinging:
 
 
 # ---------------------------------------------------------------------------
-# Routes
+# 路由
 # ---------------------------------------------------------------------------
 
 
@@ -329,7 +329,7 @@ class TestVoiceCallRoutes:
         assert got.get_json()["status"] == vc_stub.CALL_STATUS_IDLE
 
     def test_list_requires_no_auth_failure(self, client):
-        # Auth middleware rejects missing token.
+        # 认证中间件拒绝缺失 token 的请求。
         res = client.get("/v1/xijian/voice-calls")
         assert res.status_code in (401, 403)
 
@@ -376,8 +376,8 @@ class TestVoiceCallRoutes:
             json={"audio_base64": payload, "synchronous": True},
             headers=auth_headers,
         )
-        # Without a real STT backend the loop records an error event
-        # and returns 503 — that is the designed degraded path.
+        # 没有真实 STT 后端时，循环记录错误事件
+        # 并返回 503 —— 这是设计好的降级路径。
         assert res.status_code in (200, 503)
 
     def test_song_route(self, client, auth_headers, character):

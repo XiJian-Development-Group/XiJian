@@ -1,8 +1,8 @@
-"""Core API discovery for the DevKit.
+"""用于 DevKit 的 Core API 发现。
 
-Reads the discovery file written by the Core API at
-``~/.xijian/xijian_core.json`` and provides helpers to verify
-the connection and push data for preview/testing.
+读取 Core API 写入的发现文件（位于
+``~/.xijian/xijian_core.json``），并提供辅助函数以验证
+连接并推送数据用于预览/测试。
 """
 
 from __future__ import annotations
@@ -20,16 +20,16 @@ DISCOVERY_FILE = Path.home() / ".xijian" / "xijian_core.json"
 
 
 def discover_core() -> dict[str, Any] | None:
-    """Locate a running Core API instance.
+    """定位正在运行的 Core API 实例。
 
-    Reads the well-known discovery file, verifies the instance is
-    still alive via ``/healthz``, and returns the connection info.
+    读取众所周知的发现文件，通过 ``/healthz`` 验证实例
+    仍然存活，并返回连接信息。
 
-    Returns
+    返回
     -------
-    A dict with ``port``, ``host``, ``auth_token``, ``pid``,
-    ``version``, ``healthy``, ``started_at``, or ``None`` if the
-    Core API is not available.
+    包含 ``port``、``host``、``auth_token``、``pid``、
+    ``version``、``healthy``、``started_at`` 的 dict；
+    如果 Core API 不可用则返回 ``None``。
     """
     if not DISCOVERY_FILE.is_file():
         _LOGGER.debug("Core discovery file not found at %s", DISCOVERY_FILE)
@@ -41,7 +41,7 @@ def discover_core() -> dict[str, Any] | None:
         _LOGGER.warning("Core discovery file corrupted, ignoring")
         return None
 
-    # Quickly verify the Core is still there.
+    # 快速验证 Core 仍然在线。
     if not _check_health(data):
         _LOGGER.debug("Core at %s:%s is not responding", data.get("host"), data.get("port"))
         return None
@@ -50,7 +50,7 @@ def discover_core() -> dict[str, Any] | None:
 
 
 def _check_health(info: dict) -> bool:
-    """Check that the Core API identified by ``info`` is alive."""
+    """检查 ``info`` 标识的 Core API 是否存活。"""
     host = info.get("host", "127.0.0.1")
     port = info.get("port")
     if not isinstance(port, int):
@@ -66,12 +66,11 @@ def _check_health(info: dict) -> bool:
 
 
 def push_character_for_preview(character_id: str) -> dict[str, Any]:
-    """Push a DevKit character to the running Core API for preview.
+    """将 DevKit 角色推送到正在运行的 Core API 以供预览。
 
-    Loads the character into the Core runtime so the user can
-    immediately interact with it.
+    将角色加载到 Core 运行时中，使用户可以立即与之交互。
 
-    Returns the Core API's response dict.
+    返回 Core API 的响应 dict。
     """
     core = discover_core()
     if core is None:
@@ -97,7 +96,7 @@ def push_character_for_preview(character_id: str) -> dict[str, Any]:
 
 
 def push_world_for_preview(world_id: str) -> dict[str, Any]:
-    """Push a DevKit world to the running Core API for preview."""
+    """将 DevKit 世界推送到正在运行的 Core API 以供预览。"""
     core = discover_core()
     if core is None:
         return {"ok": False, "error": "Core API not available; make sure 隙间 is running"}
@@ -122,7 +121,7 @@ def push_world_for_preview(world_id: str) -> dict[str, Any]:
 
 
 def reload_all() -> dict[str, Any]:
-    """Tell the Core API to rescan and reload all DevKit items."""
+    """告诉 Core API 重新扫描并重新加载所有 DevKit 条目。"""
     core = discover_core()
     if core is None:
         return {"ok": False, "error": "Core API not available"}
@@ -141,7 +140,7 @@ def reload_all() -> dict[str, Any]:
 
 
 def core_status() -> dict[str, Any]:
-    """Return status of the Core API connection."""
+    """返回 Core API 连接的状态。"""
     core = discover_core()
     if core is None:
         return {"available": False, "error": "Core API not available"}

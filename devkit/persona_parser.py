@@ -1,20 +1,20 @@
-"""Persona document parser for extracting key features."""
+"""用于提取关键特征的人设文档解析器。"""
 
 import re
 
 
 def extract_persona_features(persona_doc: str) -> dict:
-    """Extract key personality features from persona document (C2.4).
+    """从人设文档中提取关键性格特征（C2.4）。
 
-    Parses the persona markdown and extracts:
-    - name, age, gender, occupation
-    - core personality traits
-    - speech patterns / catchphrases
-    - relationships
-    - quirks/habits
-    - backstory
+    解析人设 markdown 并提取：
+    - 姓名、年龄、性别、职业
+    - 核心性格特征
+    - 语言风格 / 口头禅
+    - 人际关系
+    - 癖好 / 习惯
+    - 背景故事
 
-    Returns a structured dict for use in consistency checking (C2.7).
+    返回结构化 dict，用于一致性检查（C2.7）。
     """
     if not persona_doc or not persona_doc.strip():
         return {}
@@ -95,7 +95,7 @@ def extract_persona_features(persona_doc: str) -> dict:
 
 
 def get_persona_templates() -> dict[str, str]:
-    """Return built-in persona-doc markdown templates (C2.4)."""
+    """返回内置的人设文档 markdown 模板（C2.4）。"""
     return {
         "通用角色": (
             "## 基本信息\n\n"

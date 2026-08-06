@@ -1,17 +1,16 @@
-"""``/v1/xijian/generation/*`` — generation-scope helpers for A4.1.
+"""``/v1/xijian/generation/*`` — A4.1 的生成作用域辅助。
 
-Two concerns live in this blueprint:
+此蓝图包含两件事：
 
-* ``POST /v1/xijian/generation/abort`` — broad-scope abort (original).
-* ``GET  /v1/xijian/generation/scene/<instance_id>`` — read the scene
-  record attached to a fired world-event instance (A4.1 US-A4.1-03).
+* ``POST /v1/xijian/generation/abort`` — 广域中止（原有）。
+* ``GET  /v1/xijian/generation/scene/<instance_id>`` — 读取已触发世界事件
+  实例所附的场景记录（A4.1 US-A4.1-03）。
 * ``POST /v1/xijian/generation/scene/<instance_id>/generate`` —
-  (re)generate the scene for an instance; when the core backend is
-  unavailable it degrades to a placeholder (A4.1 AC-2).
+  （重新）生成实例场景；当核心后端不可用时降级为占位场景（A4.1 AC-2）。
 
-The actual generation lives in :mod:`xijian_api.stubs.events`
-(:func:`~xijian_api.stubs.events._ensure_scene_generated`) — the
-route layer is a thin HTTP shell.
+实际生成位于 :mod:`xijian_api.stubs.events`
+（:func:`~xijian_api.stubs.events._ensure_scene_generated`）—
+路由层只是薄薄的 HTTP 外壳。
 """
 
 from __future__ import annotations
@@ -45,7 +44,7 @@ def generation_abort():
 
 @bp.get("/v1/xijian/generation/scene/<instance_id>")
 def get_event_scene(instance_id: str):
-    """Return the scene record attached to a fired event instance."""
+    """返回已触发事件实例所附的场景记录。"""
     scene = events_stub.get_instance_scene(instance_id)
     if scene is None:
         raise ApiError(
@@ -59,10 +58,10 @@ def get_event_scene(instance_id: str):
 
 @bp.post("/v1/xijian/generation/scene/<instance_id>/generate")
 def generate_event_scene(instance_id: str):
-    """(Re)generate the scene for a fired event instance.
+    """（重新）为已触发事件实例生成场景。
 
-    Best-effort: when the core image backend is unavailable the stub
-    degrades to a placeholder scene (A4.1 AC-2) instead of failing.
+    尽力而为：当核心图像后端不可用时，存根降级为占位场景
+    （A4.1 AC-2）而不是失败。
     """
     scene = events_stub.ensure_scene_for_instance(instance_id)
     if scene is None:

@@ -103,6 +103,7 @@ def _extract_frames(
     max_frames: int = 5,
     *,
     quality: int = 2,  # ffmpeg -q:v 1~5, 1=best quality
+    # ffmpeg -q:v 1~5，1=最佳质量
     use_scene_detect: bool = True,
     max_width: int = 1024,
 ) -> list[str]:
@@ -296,6 +297,7 @@ class MLXMultimodalBackend(MultimodalBackend):
         self._has_mlx_lm = _try_mlx_lm_available()
 
         # Check STT availability lazily
+        # 惰性检查 STT 可用性
         try:
             stt = get_stt_backend("mlx", ())
             self._has_stt = stt.is_available()
@@ -577,6 +579,7 @@ class MLXMultimodalBackend(MultimodalBackend):
                    [{"type": "text", "text": f"[file: {mime}]"}]
 
         # Try to extract text
+        # 尝试提取文本
         if isinstance(data, bytes):
             try:
                 text = data.decode("utf-8")
@@ -591,7 +594,7 @@ class MLXMultimodalBackend(MultimodalBackend):
 
     @staticmethod
     def _download_video(url: str) -> str | None:
-        """Download video from URL."""
+        """从 URL 下载视频。"""
         try:
             import httpx
             ext = os.path.splitext(url.split("?")[0])[1][:8] or ".mp4"

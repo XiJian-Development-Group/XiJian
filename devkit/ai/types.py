@@ -1,4 +1,4 @@
-"""AI types for the DevKit — copied & adapted from core/xijian_api/ai/types.py."""
+"""DevKit 的 AI 类型 —— 复制并改编自 core/xijian_api/ai/types.py。"""
 
 from dataclasses import dataclass, field
 from typing import Sequence

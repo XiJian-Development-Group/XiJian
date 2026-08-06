@@ -101,7 +101,7 @@ def test_migrate_no_legacy_returns_status(paths):
     """
     import shutil as _shutil
 
-    _shutil.rmtree(paths["legacy"])  # simulate a machine with no legacy dir
+    _shutil.rmtree(paths["legacy"])  # 模拟一台没有旧版目录的机器
     status = migration_stub.migrate_legacy_data()
     assert status["legacy_exists"] is False
     assert status["migrated"] is False

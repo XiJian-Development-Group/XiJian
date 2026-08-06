@@ -1,21 +1,18 @@
-"""Developer config persistence for the DevKit.
+"""DevKit 的开发者配置持久化。
 
-Stores the developer's own SMTP settings in a JSON config file that
-survives restarts and manual edits.  Located in the work directory.
+将开发者自己的 SMTP 设置存储在一个 JSON 配置文件中，
+该文件在重启和手动编辑后仍然保留，位于工作目录下。
 
-Security
+安全
 --------
-The SMTP password is **never** stored in plaintext.  On save it is
-encrypted with Fernet (AES-128-GCM, from the ``cryptography`` package)
-using a key that lives in a sibling file ``devkit_config.key`` with
-``0600`` permissions, inside the user's private work directory
-(``~/Library/Application Support/XiJian/DevKit`` by default).  The
-cleartext password is only ever reconstructed in memory when the DevKit
-actually sends a submission.
+SMTP 密码**绝不**以明文存储。保存时使用 Fernet（AES-128-GCM，
+来自 ``cryptography`` 包）加密，密钥存放在同级文件
+``devkit_config.key`` 中（权限 ``0600``），位于用户的私有工作目录下
+（默认为 ``~/Library/Application Support/XiJian/DevKit``）。
+明文密码只会在 DevKit 实际发送提交时于内存中重建。
 
-No SMTP credentials are hard-coded in source — the developer must fill
-in their own SMTP account.  The recipient mailbox is the XiJian
-developer-group inbox used for submission routing.
+源码中不硬编码任何 SMTP 凭据——开发者必须填写自己的 SMTP 账号。
+收件邮箱是 XiJian 开发者群组收件箱，用于提交路由。
 """
 
 from __future__ import annotations
@@ -35,17 +32,16 @@ except Exception:  # pragma: no cover — cryptography is a declared dep
 CONFIG_FILENAME = "devkit_config.json"
 _KEY_FILENAME = "devkit_config.key"
 
-#: XiJian developer-group inbox — submission routing destination.
-#: This is *not* a credential; it is the fixed recipient the DevKit
-#: delivers packaged submissions to.  The developer fills in their own
-#: SMTP server / login via the UI.
+#: XiJian 开发者群组收件箱 —— 提交路由的目的地。
+#: 这不是凭据；它是 DevKit 投递打包提交的固定收件人。
+#: 开发者通过 UI 填写自己的 SMTP 服务器 / 登录信息。
 #:
-#: The recipient is hard-coded here and is **intentionally not** read from
-#: the per-project ``devkit_config.json`` file — see :func:`get_recipient`.
+#: 收件人硬编码在此，**刻意不**从每个项目的 ``devkit_config.json``
+#: 文件中读取 —— 参见 :func:`get_recipient`。
 DEFAULT_RECIPIENT = "panmofan@icloud.com"
 
-#: Default config structure.  Every SMTP *credential* field is empty —
-#: the developer must supply their own account.  Nothing is hard-coded.
+#: 默认配置结构。每个 SMTP *凭据*字段都为空——
+#: 开发者必须提供自己的账号。不硬编码任何内容。
 DEFAULT_CONFIG: dict[str, Any] = {
     "smtp": {
         "host": "",
@@ -56,10 +52,10 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "from_addr": "",
     },
     "recipient": DEFAULT_RECIPIENT,
-    "rate_limit_seconds": 600,  # 10 minutes (function list C5 AC-2)
-    "max_attachment_bytes": 512_000_000,  # 512 MB (macOS units)
-    # Auto-update (C6).  Network is only touched on an explicit check or,
-    # when this flag is on, once silently at launch.  User-toggleable.
+    "rate_limit_seconds": 600,  # 10 分钟（功能清单 C5 AC-2）
+    "max_attachment_bytes": 512_000_000,  # 512 MB（macOS 单位）
+    # 自动更新（C6）。仅在进行显式检查时访问网络，或者在该标志开启时
+    # 于启动时静默检查一次。用户可切换。
     "auto_check_update": True,
 }
 
@@ -67,7 +63,7 @@ _ENC_PREFIX = "enc:"
 
 
 # ---------------------------------------------------------------------------
-# Encryption helpers (Fernet, key in a 0600 sibling file)
+# 加密辅助函数（Fernet，密钥在 0600 权限的同级文件中）
 # ---------------------------------------------------------------------------
 
 
@@ -107,22 +103,22 @@ def _get_fernet(work_dir: str):
 
 
 def _encrypt_secret(work_dir: str, plaintext: str) -> str:
-    """Encrypt ``plaintext`` for at-rest storage.  Returns '' for empty."""
+    """加密 ``plaintext`` 以便静态存储。空字符串返回 ''。"""
     if not plaintext:
         return ""
     f = _get_fernet(work_dir)
     if f is None:
-        # No crypto available — store as-is (degraded, but functional).
+        # 没有可用的加密库——原样存储（降级，但可用）。
         return plaintext
     return _ENC_PREFIX + f.encrypt(plaintext.encode("utf-8")).decode("ascii")
 
 
 def _decrypt_secret(work_dir: str, stored: str) -> str:
-    """Decrypt a value produced by :func:`_encrypt_secret`."""
+    """解密 :func:`_encrypt_secret` 产生的值。"""
     if not stored:
         return ""
     if not stored.startswith(_ENC_PREFIX):
-        return stored  # legacy plaintext
+        return stored  # 遗留明文
     f = _get_fernet(work_dir)
     if f is None:
         return ""
@@ -133,7 +129,7 @@ def _decrypt_secret(work_dir: str, stored: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Public API
+# 公共 API
 # ---------------------------------------------------------------------------
 
 
@@ -142,7 +138,7 @@ def _config_path(work_dir: str) -> str:
 
 
 def load_config(work_dir: str) -> dict[str, Any]:
-    """Load developer config from JSON file, merging with defaults."""
+    """从 JSON 文件加载开发者配置，并与默认值合并。"""
     fpath = _config_path(work_dir)
     if not os.path.isfile(fpath):
         return dict(DEFAULT_CONFIG)
@@ -155,7 +151,7 @@ def load_config(work_dir: str) -> dict[str, Any]:
     merged.update(data)
     if "smtp" in data and isinstance(data["smtp"], dict):
         merged["smtp"] = {**DEFAULT_CONFIG["smtp"], **data["smtp"]}
-        # Reveal the cleartext password only in memory.
+        # 仅在内存中还原明文密码。
         merged["smtp"]["password"] = _decrypt_secret(
             work_dir, merged["smtp"].get("password", "")
         )
@@ -163,7 +159,7 @@ def load_config(work_dir: str) -> dict[str, Any]:
 
 
 def save_config(work_dir: str, config: dict[str, Any]) -> None:
-    """Persist developer config to JSON file (password stored encrypted)."""
+    """将开发者配置持久化到 JSON 文件（密码加密存储）。"""
     os.makedirs(work_dir, exist_ok=True)
     smtp_in = config.get("smtp", DEFAULT_CONFIG["smtp"])
     to_save = {
@@ -191,41 +187,41 @@ def save_config(work_dir: str, config: dict[str, Any]) -> None:
 
 
 def get_smtp_config(work_dir: str) -> dict[str, Any]:
-    """Get SMTP config for sending emails (password returned in cleartext)."""
+    """获取用于发送邮件的 SMTP 配置（密码以明文返回）。"""
     config = load_config(work_dir)
     return config.get("smtp", DEFAULT_CONFIG["smtp"])
 
 
 def get_recipient(work_dir: str) -> str:
-    """Return the recipient email (the XiJian developer-group inbox).
+    """返回收件邮箱（XiJian 开发者群组收件箱）。
 
-    The recipient is fixed in code (:data:`DEFAULT_RECIPIENT`) and is
-    **deliberately not** read from the per-project ``devkit_config.json``
-    file, so it can never be changed via configuration.
+    收件人在代码中固定（:data:`DEFAULT_RECIPIENT`），**刻意不**从
+    每个项目的 ``devkit_config.json`` 文件读取，因此永远无法
+    通过配置更改。
     """
     return DEFAULT_RECIPIENT
 
 
 def get_rate_limit(work_dir: str) -> int:
-    """Get rate limit in seconds."""
+    """获取限流秒数。"""
     config = load_config(work_dir)
     return int(config.get("rate_limit_seconds", DEFAULT_CONFIG["rate_limit_seconds"]))
 
 
 def get_max_attachment_bytes(work_dir: str) -> int:
-    """Get max attachment size in bytes."""
+    """获取最大附件大小（字节）。"""
     config = load_config(work_dir)
     return int(config.get("max_attachment_bytes", DEFAULT_CONFIG["max_attachment_bytes"]))
 
 
 def get_auto_check_update(work_dir: str) -> bool:
-    """Whether to silently check for updates at launch."""
+    """是否在启动时静默检查更新。"""
     config = load_config(work_dir)
     return bool(config.get("auto_check_update", DEFAULT_CONFIG["auto_check_update"]))
 
 
 def set_auto_check_update(work_dir: str, enabled: bool) -> None:
-    """Persist the launch-time auto-update-check preference."""
+    """持久化启动时自动检查更新的偏好。"""
     config = load_config(work_dir)
     config["auto_check_update"] = bool(enabled)
     save_config(work_dir, config)

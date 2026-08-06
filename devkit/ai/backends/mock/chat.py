@@ -13,15 +13,13 @@
 * ``load()`` 接受任意 ``model_path``（从不打开文件系统 —— 模拟器
   没有权重可加载）。
 
-Mock chat backend for the DevKit.
+DevKit 版模拟聊天后端。
 
-Used in stub environments without a local MLX/GGUF model: always
-``is_available()`` and never touches the filesystem.  ``chat()``
-extracts features from the input context (last user message) and
-emits deterministic, diverse suggestions — the same input always
-yields the same output, and different inputs yield different
-outputs, so the C4 AI design assistant is reproducible and
-assertable in offline / test environments.
+用于没有本地 MLX/GGUF 模型的 stub 环境：始终 ``is_available()``
+且从不接触文件系统。``chat()`` 从输入上下文（最后一条用户消息）
+中提取特征，并生成确定性的多样化建议 —— 相同输入始终产生相同
+输出，不同输入产生不同输出，因此 C4 AI 设计辅助在离线/测试
+环境下可复现、可断言。
 """
 
 from __future__ import annotations
@@ -57,7 +55,7 @@ def _build_chunk(
     finish_reason: str | None = None,
     usage: ChatUsage | None = None,
 ) -> ChatChunk:
-    """Assemble a :class:`ChatChunk` from its OAI-style pieces."""
+    """根据 OAI 风格片段组装一个 :class:`ChatChunk`。"""
     return ChatChunk(
         id=chunk_id,
         model=model,
@@ -231,7 +229,7 @@ class MockChatBackend(ChatBackend):
     def __init__(self) -> None:
         self._loaded: bool = False
 
-    # -- introspection ------------------------------------------------------
+    # -- 自省 ----------------------------------------------------------
 
     def is_available(self) -> bool:
         # 始终可用 —— 这就是模拟器的意义。
@@ -240,7 +238,7 @@ class MockChatBackend(ChatBackend):
     def is_loaded(self) -> bool:
         return self._loaded
 
-    # -- lifecycle ----------------------------------------------------------
+    # -- 生命周期 ----------------------------------------------------------
 
     def load(self, model_path, **kwargs) -> None:
         """记录路径；从不接触文件系统。"""
@@ -249,7 +247,7 @@ class MockChatBackend(ChatBackend):
     def unload(self) -> None:
         self._loaded = False
 
-    # -- generation ---------------------------------------------------------
+    # -- 生成 ---------------------------------------------------------
 
     def chat(
         self,

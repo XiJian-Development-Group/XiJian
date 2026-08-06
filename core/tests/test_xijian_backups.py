@@ -1264,18 +1264,18 @@ class TestAuthCoverage:
 
 
 # ---------------------------------------------------------------------------
-# A5.3 AC-3 — zstd compression (real zstandard, not zlib-imitation)
+# A5.3 AC-3 — zstd 压缩（真实 zstandard，而非 zlib 模仿）
 # ---------------------------------------------------------------------------
 
 
 class TestZstdCompression:
-    """The compressor must be zstd (spec AC-3) when ``zstandard`` is
-    installed — the old stub used zlib with a ``.zst`` extension."""
+    """安装 ``zstandard`` 时，压缩器必须是 zstd（规格 AC-3）——
+    旧的 stub 使用 zlib 却带 ``.zst`` 扩展名。"""
 
     def test_zstd_available_in_test_env(self):
-        # The CI / test environment (anaconda python) ships zstandard;
-        # when it's missing the stub falls back with a warning, so we
-        # skip rather than fail on such hosts.
+        # CI / 测试环境（anaconda python）自带 zstandard；
+        # 缺少时 stub 会降级并发出警告，因此在这类主机上
+        # 我们跳过而不是失败。
         if not snap_stub._ZSTD_AVAILABLE:
             pytest.skip("zstandard not installed in this environment")
         import zstandard  # noqa: F401
@@ -1284,7 +1284,7 @@ class TestZstdCompression:
     def test_compressor_is_actually_zstd(self):
         if not snap_stub._ZSTD_AVAILABLE:
             pytest.skip("zstandard not installed in this environment")
-        # The compressed bytes must be a real zstd frame (magic 0x28B52FFD).
+        # 压缩后的字节必须是真正的 zstd 帧（魔数 0x28B52FFD）。
         compressed, _orig, _size = snap_stub._compress_bytes({"a": 1})
         assert compressed[:4] == b"\x28\xb5\x2f\xfd"
 
@@ -1292,8 +1292,8 @@ class TestZstdCompression:
         payload = {"key": "x" * 10_000}
         compressed, original, compressed_size = snap_stub._compress_bytes(payload)
         assert compressed_size < original * snap_stub.COMPRESSION_RATIO_TARGET
-        # Real zstd should beat the old zlib stub's ratio on the same
-        # payload shape (informational, not a hard gate).
+        # 真实 zstd 在同一载荷形态上的压缩率应优于旧的 zlib stub
+        # （仅供参考，非硬性门槛）。
         import zlib
         zlib_size = len(zlib.compress(
             __import__("pickle").dumps(payload, protocol=__import__("pickle").HIGHEST_PROTOCOL),
@@ -1308,7 +1308,7 @@ class TestZstdCompression:
 
 
 class TestScheduledBackup:
-    """The background scheduler thread + the one-shot pass it drives."""
+    """后台调度器线程 + 它所驱动的一次性扫描。"""
 
     def test_run_scheduled_backup_creates_scheduled_snapshot(self):
         before = snap_stub.list_snapshots(reason=snap_stub.REASON_SCHEDULED)
@@ -1333,7 +1333,7 @@ class TestScheduledBackup:
         try:
             assert started["started"] is True
             assert snap_stub.scheduler_status()["running"] is True
-            # Idempotent.
+            # 幂等。
             again = snap_stub.start_scheduler()
             assert again["started"] is False
             assert again["reason"] == "already_running"
@@ -1364,7 +1364,7 @@ class TestScheduledBackup:
 
 
 class TestEmergencyDumpHandler:
-    """A5.4 ``emergency_dump`` action → force-persisted archive snapshot."""
+    """A5.4 ``emergency_dump`` 动作 → 强制持久化的归档快照。"""
 
     def test_handler_writes_force_snapshot(self):
         before = len(snap_stub.list_snapshots(reason=snap_stub.REASON_OVERLOAD))
@@ -1379,7 +1379,7 @@ class TestEmergencyDumpHandler:
     def test_handler_installed(self):
         from xijian_api.stubs import overload as ov_stub
         from xijian_api.stubs import snapshots as snap_stub_mod
-        # Re-install (conftest keeps it wired, but be explicit).
+        # 重新安装（conftest 已保持接线，但显式调用更稳妥）。
         snap_stub_mod.install_overload_handler()
         handlers = ov_stub.list_action_handlers()
         assert handlers[ov_stub.ACTION_EMERGENCY_DUMP]

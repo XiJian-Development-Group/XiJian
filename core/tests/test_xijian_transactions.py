@@ -52,7 +52,7 @@ def world_via_http(client, auth_headers):
 
 
 # ---------------------------------------------------------------------------
-# Pure helpers
+# 纯辅助函数
 # ---------------------------------------------------------------------------
 
 
@@ -99,8 +99,8 @@ class TestValidKinds:
 
 
 # ---------------------------------------------------------------------------
-# CRUD — stub-level
-# CRUD — stub-level
+# CRUD — stub 层
+# CRUD — stub 层
 # ---------------------------------------------------------------------------
 
 
@@ -209,7 +209,7 @@ class TestListSummary:
                 kind=KIND_PURCHASE,
             )
         assert len(txn_stub.list_for_world(world)) == 3
-        # Other world gets nothing.
+        # 其它世界什么也查不到。
         assert len(txn_stub.list_for_world("world_other")) == 0
 
     def test_list_for_world_kind_filter(self, world):
@@ -238,7 +238,7 @@ class TestListSummary:
             to_kind="user", to_id="u1", currency_code="mora",
             amount=5, kind=KIND_SALE,
         )
-        # u1 is sender of first + receiver of second.
+        # u1 是第一条交易的发送方 + 第二条的接收方。
         out = txn_stub.list_for_owner("user", "u1")
         assert len(out) == 2
 
@@ -299,7 +299,7 @@ class TestListSummary:
 
 class TestFIFO:
     def test_fifo_trim(self, world, monkeypatch):
-        # Lower the cap so we can exercise the trim.
+        # 调低上限以便演练裁剪逻辑。
         monkeypatch.setattr(txn_stub, "TXN_KEEP_PER_WORLD", 3)
         for i in range(5):
             txn_stub.record(
@@ -307,12 +307,12 @@ class TestFIFO:
                 to_kind="npc", to_id="n1", currency_code="mora",
                 amount=1, kind=KIND_PURCHASE,
             )
-        # Should keep only 3.
+        # 应只保留 3 条。
         assert len(txn_stub.list_for_world(world)) == 3
 
 
 # ---------------------------------------------------------------------------
-# Cascading
+# 级联
 # ---------------------------------------------------------------------------
 
 
@@ -339,9 +339,9 @@ class TestCascading:
             to_kind="user", to_id="u1", currency_code="mora",
             amount=1, kind=KIND_SALE,
         )
-        # ``delete_for_owner`` removes every txn where the owner
-        # appears in *either* from- or to-side, so n1 (npc) is in
-        # both rows → 2 deleted.
+        # ``delete_for_owner`` 会删除 owner 出现在
+        # *任一侧*（from 或 to）的所有交易，因此 n1（npc）在
+        # 两行中都出现 → 删除 2 条。
         removed = txn_stub.delete_for_owner("npc", "n1")
         assert removed == 2
         assert txn_stub.count_for_world(world) == 0
@@ -365,18 +365,18 @@ class TestCascading:
         # 过滤 — by sender-side: drop tx where from_kind=npc & from_id=n1.
         # The current ``delete_for_owner`` is by-occurrence (any side).
         removed = txn_stub.delete_for_owner("npc", "n1")
-        # Both tx rows reference n1 (one as sender, one as receiver) → 2.
+        # 两行交易都引用 n1（一个为发送方、一个为接收方）→ 2。
         assert removed == 2
 
 
 # ---------------------------------------------------------------------------
-# HTTP routes
+# HTTP 路由
 # ---------------------------------------------------------------------------
 
 
 class TestHttpList:
     def test_list_global(self, client, auth_headers, world_via_http):
-        # No body — just check the route accepts the call.
+        # 无请求体 —— 只检查路由接受该调用。
         res = client.get(
             "/v1/xijian/economy/transactions", headers=auth_headers
         )

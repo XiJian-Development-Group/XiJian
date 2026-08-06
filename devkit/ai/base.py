@@ -1,13 +1,13 @@
-"""AI abstraction layer for DevKit: errors, dataclasses, and backend base classes.
+"""DevKit 的 AI 抽象层：错误、数据类和后端基类。
 
-Copied & adapted from core/xijian_api/ai/base.py
+复制并改编自 core/xijian_api/ai/base.py
 """
 
 from __future__ import annotations
 
 
 # ---------------------------------------------------------------------------
-# Errors
+# 错误
 # ---------------------------------------------------------------------------
 
 

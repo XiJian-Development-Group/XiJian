@@ -1,40 +1,40 @@
-"""``/v1/xijian/initiated-actions/*`` routes — A7 proactive contact.
+"""``/v1/xijian/initiated-actions/*`` 路由 — A7 主动联络。
 
-Actions
+动作
 =======
 
-* ``GET    /v1/xijian/initiated-actions``             — list
+* ``GET    /v1/xijian/initiated-actions``             — 列表
                                                        (?character_id, ?kind,
                                                         ?status, ?user_response)
-* ``POST   /v1/xijian/initiated-actions``             — create (manual /
-                                                       dev / callers that
-                                                       drive the flow)
-* ``GET    /v1/xijian/initiated-actions/<action_id>`` — get
+* ``POST   /v1/xijian/initiated-actions``             — 创建（手动 /
+                                                       开发 / 驱动流程的
+                                                       调用方）
+* ``GET    /v1/xijian/initiated-actions/<action_id>`` — 获取
 * ``POST   /v1/xijian/initiated-actions/<action_id>/respond`` — {user_response:
                                                        accepted | declined |
                                                        ignored}
-* ``POST   /v1/xijian/initiated-actions/scan``        — run one trigger scan
-                                                       on demand
+* ``POST   /v1/xijian/initiated-actions/scan``        — 按需运行一次
+                                                       触发器扫描
 
-Notification permissions (AC-3)
+通知权限（AC-3）
 ===============================
 
-* ``GET    /v1/xijian/initiated-actions/notifications``            — global +
-                                                                    per-char
-* ``PATCH  /v1/xijian/initiated-actions/notifications``            — global
-                                                                    policy
-* ``GET    /v1/xijian/initiated-actions/notifications/<character_id>`` — per-char
-* ``PATCH  /v1/xijian/initiated-actions/notifications/<character_id>`` — per-char
+* ``GET    /v1/xijian/initiated-actions/notifications``            — 全局 +
+                                                                    按角色
+* ``PATCH  /v1/xijian/initiated-actions/notifications``            — 全局
+                                                                    策略
+* ``GET    /v1/xijian/initiated-actions/notifications/<character_id>`` — 按角色
+* ``PATCH  /v1/xijian/initiated-actions/notifications/<character_id>`` — 按角色
 
-WS push
+WS 推送
 =======
 
-* ``character.initiated_action``   — when an action is created (AC-1)
-* ``character.initiated_response`` — when the user responds
+* ``character.initiated_action``   — 创建动作时（AC-1）
+* ``character.initiated_response`` — 用户响应时
 
-AC-2 (拒绝 → 角色"理解"记忆回写) happens inside
-:func:`xijian_api.stubs.character_initiated_actions.respond` — this
-blueprint just forwards the user's response.
+AC-2（拒绝 → 角色“理解”记忆回写）在
+:func:`xijian_api.stubs.character_initiated_actions.respond` 内部发生 —
+此蓝图只是转发用户的响应。
 """
 
 from __future__ import annotations
@@ -53,7 +53,7 @@ _LOGGER = logging.getLogger("xijian_api.routes.xijian_initiated")
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# 辅助函数
 # ---------------------------------------------------------------------------
 
 
@@ -148,7 +148,7 @@ def respond_initiated_action(action_id: str):
 
 @bp.post("/v1/xijian/initiated-actions/scan")
 def scan_initiated_actions():
-    """Run one trigger scan on demand (also run by the tick thread)."""
+    """按需运行一次触发器扫描（tick 线程也会运行）。"""
     created = init_stub.scan_for_actions()
     return jsonify({
         "scanned": True,
@@ -158,7 +158,7 @@ def scan_initiated_actions():
 
 
 # ---------------------------------------------------------------------------
-# Notification permissions (AC-3)
+# 通知权限（AC-3）
 # ---------------------------------------------------------------------------
 
 

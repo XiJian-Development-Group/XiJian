@@ -1,7 +1,7 @@
-"""Voice clone / voice sample manager for the Developer Kit.
+"""开发者工具的声音克隆 / 声音样本管理器。
 
-Lets developers manage voice reference samples for characters.
-Samples can be recorded or imported from audio files.
+让开发者能够管理角色的声音参考样本。
+样本可以录音或从音频文件导入。
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ _VOICES_SUBDIR = "voices"
 
 _SUPPORTED_AUDIO_EXTENSIONS = {".wav", ".mp3", ".m4a", ".ogg", ".flac"}
 
-# Available TTS / voice-clone engines (display names for UI).
+# 可用的 TTS / 声音克隆引擎（UI 显示名）。
 AVAILABLE_ENGINES: tuple[str, ...] = (
     "mlx",
     "gguf",
@@ -471,7 +471,7 @@ def generate_singing(
                     code="model_not_ready",
                 )
 
-        # Create voice record
+        # 创建声音记录
         voice = save_voice(
             work_dir=work_dir,
             character_id=character_id,
@@ -480,7 +480,7 @@ def generate_singing(
             params={"singing": True, **(params or {})},
         )
 
-        # Generate singing
+        # 生成歌声
         tts_mgr = get_tts_manager()
         req = TTSRequest(
             text=text,
@@ -520,7 +520,7 @@ def generate_singing(
 def _patch_voice_record(
     work_dir: str, character_id: str, voice_id: str, patch: dict[str, Any]
 ) -> None:
-    """Persist extra fields onto an existing voice record."""
+    """将额外字段持久化到现有声音记录上。"""
     meta = _load_meta(work_dir, character_id)
     for i, v in enumerate(meta):
         if v.get("id") == voice_id:

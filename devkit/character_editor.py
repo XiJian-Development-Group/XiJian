@@ -1,10 +1,9 @@
-"""Character persona editor for the Developer Kit.
+"""开发者工具的角色人设编辑器。
 
-Lets developers create, edit, and manage character persona documents
-locally.  Output can be fed into the submission pipeline (C5) for
-packing and email delivery.
+让开发者能够在本地创建、编辑和管理角色人设文档。
+输出可以进入提交管线（C5）进行打包和邮件投递。
 
-Data is stored as JSON files under the user's working directory.
+数据以 JSON 文件形式存储在工作目录下。
 """
 
 from __future__ import annotations
@@ -21,10 +20,10 @@ from devkit import DevKitError
 from devkit.persona_parser import extract_persona_features, get_persona_templates
 _CHARACTERS_SUBDIR = "characters"
 
-# Built-in character config schema definition (C2.3).
-# Memory-related knobs live in ``memory_config`` (single source of truth,
-# consumed by core via ``state.memory_configs``); this schema only holds
-# non-memory character tuning fields.
+# 内置角色配置模式定义（C2.3）。
+# 与记忆相关的旋钮位于 ``memory_config`` 中（单一事实来源，
+# 由 core 通过 ``state.memory_configs`` 消费）；此模式只保存
+# 非记忆的角色调优字段。
 CHARACTER_CONFIG_SCHEMA: dict[str, dict[str, Any]] = {
     "speaking_speed": {"type": "number", "min": 0.5, "max": 2.0, "default": 1.0, "label": "语速倍率", "step": 0.1},
     "emotion_stability": {"type": "number", "min": 0.0, "max": 1.0, "default": 0.6, "label": "情绪稳定性", "step": 0.05},
@@ -32,11 +31,11 @@ CHARACTER_CONFIG_SCHEMA: dict[str, dict[str, Any]] = {
 
 
 def get_character_config_schema() -> dict[str, dict[str, Any]]:
-    """Return the character config schema definition (C2.3)."""
+    """返回角色配置模式定义（C2.3）。"""
     return dict(CHARACTER_CONFIG_SCHEMA)
 
 
-# Built-in persona-doc templates (C2.4).
+# 内置人设文档模板（C2.4）。
 _PERSONA_TEMPLATES: dict[str, str] = {
     "通用角色": (
         "## 基本信息\n\n"
@@ -153,10 +152,10 @@ def import_persona(work_dir: str, char_id: str, file_path: str) -> str:
 
 
 def _parse_character_config_from_fields(data: dict[str, Any]) -> dict[str, Any]:
-    """Parse character config from individual form fields.
+    """从各个表单字段解析角色配置。
 
-    The UI sends individual fields like `speaking_speed`, `emotion_stability`,
-    etc. This function extracts and validates them according to the schema.
+    UI 会发送诸如 `speaking_speed`、`emotion_stability` 等单独字段。
+    此函数根据模式提取并验证这些字段。
     """
     config: dict[str, Any] = {}
     for key, rule in CHARACTER_CONFIG_SCHEMA.items():
@@ -176,26 +175,25 @@ def _parse_character_config_from_fields(data: dict[str, Any]) -> dict[str, Any]:
                     v = bool(value)
             else:
                 continue
-            # Range check
+            # 范围检查
             if rule.get("min") is not None and v < rule["min"]:
                 v = rule["min"]
             if rule.get("max") is not None and v > rule["max"]:
                 v = rule["max"]
             config[key] = v
         except (TypeError, ValueError):
-            # Skip invalid values
+            # 跳过无效值
             continue
     return config
 
 
 def _extract_random_emotion_from_persona(persona_doc: str) -> str:
-    """Extract a random default emotion from persona document.
+    """从人设文档中提取一个随机的默认情绪。
 
-    Parses the persona document for emotional traits and returns
-    a randomly selected base emotion. If no emotional traits are found,
-    returns 'neutral'.
+    解析人设文档中的情绪特征，返回随机选取的基础情绪。
+    如果没有找到情绪特征，则返回 'neutral'。
 
-    Emotions are weighted by their prominence in the persona.
+    情绪按其在人设中的显著程度加权。
     """
     import random
     import re
@@ -203,7 +201,7 @@ def _extract_random_emotion_from_persona(persona_doc: str) -> str:
     if not persona_doc or not persona_doc.strip():
         return "neutral"
 
-    # Emotion keywords with weights (Chinese and English)
+    # 带权重的情绪关键词（中文和英文）
     emotion_keywords = {
         "happy": ["开心", "快乐", "愉快", "高兴", "欢喜", "喜悦", "欢快", "开朗", "乐观", "阳光", "happy", "joyful", "cheerful", "optimistic"],
         "sad": ["悲伤", "伤心", "难过", "忧郁", "悲观", "消沉", "痛苦", "sad", "melancholic", "depressed", "sorrowful"],
@@ -215,7 +213,7 @@ def _extract_random_emotion_from_persona(persona_doc: str) -> str:
         "shy": ["害羞", "腼腆", "内向", "羞涩", "shy", "timid"],
     }
 
-    # Count keyword occurrences for each emotion
+    # 统计每种情绪的关键词出现次数
     emotion_scores = {}
     for emotion, keywords in emotion_keywords.items():
         score = 0
@@ -227,7 +225,7 @@ def _extract_random_emotion_from_persona(persona_doc: str) -> str:
     if not emotion_scores:
         return "neutral"
 
-    # Weighted random selection
+    # 加权随机选择
     emotions = list(emotion_scores.keys())
     weights = [emotion_scores[e] for e in emotions]
     return random.choices(emotions, weights=weights, k=1)[0]
@@ -252,10 +250,10 @@ def save_character(work_dir: str, data: dict[str, Any]) -> dict[str, Any]:
         with open(persona_path, "w", encoding="utf-8") as f:
             f.write(persona_doc)
 
-    # Parse character_config from individual form fields (C2.3)
+    # 从各个表单字段解析 character_config（C2.3）
     character_config = _parse_character_config_from_fields(data)
 
-    # Determine default_emotion: if provided use it, else extract from persona
+    # 确定 default_emotion：若提供则使用，否则从人设中提取
     default_emotion = data.get("default_emotion")
     if not default_emotion or default_emotion == "neutral":
         default_emotion = _extract_random_emotion_from_persona(persona_doc)
@@ -307,21 +305,19 @@ def delete_character(work_dir: str, char_id: str) -> bool:
 
 
 
-#: Minimum number of long-term initial memory entries a character must
-#: carry before it can be saved with an assigned memory pack (function
-#: list C2.5).  Mirrors the spec's ``[TODO: 默认 10]``.
+#: 角色在分配了记忆包后、可被保存前必须携带的最少长期初始记忆条目数
+#: （功能清单 C2.5）。镜像规范中的 ``[TODO: 默认 10]``。
 _MIN_INITIAL_MEMORY = 10
 
 
 def check_initial_memory_minimum(
     work_dir: str, char_id: str, min_count: int = _MIN_INITIAL_MEMORY
 ) -> dict[str, Any]:
-    """Verify a character has enough initial memories (C2.5).
+    """验证角色是否有足够的初始记忆（C2.5）。
 
-    The function list requires a new character to carry at least
-    ``min_count`` long/short memory entries (manual) before it is
-    considered saveable.  We count the entries of the character's own
-    memory pack (the pack is keyed by ``character_id``).
+    功能清单要求新角色在被视为可保存之前，至少携带 ``min_count``
+    条（手动的）长期/短期记忆条目。我们统计该角色自己的记忆包
+    （记忆包以 ``character_id`` 为键）中的条目数。
     """
     from devkit.memory_editor import list_entries
 
@@ -344,11 +340,10 @@ def check_initial_memory_minimum(
 def enforce_initial_memory_minimum(
     work_dir: str, char_id: str, assigned_pack: str, min_count: int = _MIN_INITIAL_MEMORY
 ) -> None:
-    """Block saving a character whose assigned memory pack is too thin (C2.5).
+    """阻止保存记忆包过薄的角色（C2.5）。
 
-    Only enforced when a memory pack is actually assigned, so first-time
-    creation (no pack yet) is still allowed; the developer must populate
-    the pack before linking it to the character.
+    仅在确实分配了记忆包时强制检查，因此首次创建（尚无记忆包）
+    仍然允许；开发者必须先填充记忆包，再将其关联到角色。
     """
     if not assigned_pack:
         return
@@ -364,14 +359,14 @@ def enforce_initial_memory_minimum(
 def auto_fill_character_config(
     work_dir: str, char_id: str, *, apply: bool = True
 ) -> dict[str, Any]:
-    """Auto-fill a character's config from schema defaults (C2.3 + C4).
+    """根据模式默认值自动填充角色配置（C2.3 + C4）。
 
-    Uses the values defined in :data:`CHARACTER_CONFIG_SCHEMA` as sensible
-    starting defaults and marks them ``source='ai_suggested'`` so the 30%
-    AI-ratio audit (C4 AC-1) can account for them.  The developer is
-    expected to review and adjust every field before enabling the character.
+    使用 :data:`CHARACTER_CONFIG_SCHEMA` 中定义的值作为合理的
+    起始默认值，并将它们标记为 ``source='ai_suggested'``，以便 30%
+    AI 占比审计（C4 AC-1）能够将其计入。开发者在启用角色之前
+    应审核并调整每个字段。
 
-    Returns the (proposed or saved) config dict plus a ``source`` marker.
+    返回（提议或已保存的）配置 dict 以及 ``source`` 标记。
     """
     from devkit.ai_assistant import log_assist_event
 
@@ -407,15 +402,14 @@ def auto_fill_character_config(
 
 
 def export_character_for_submit(work_dir: str, char_id: str) -> dict[str, Any]:
-    """Export a character as a pack-compatible archive payload.
+    """以包兼容的归档负载导出一个角色。
 
     以包兼容的归档负载导出一个角色。
 
-    The returned ``files`` list uses the **resource-pack layout**
-    (``characters/<id>/character.json``, ``characters/<id>/persona.md``,
-    ``memories/<id>/entries.json``) so the produced 7Z/zip archive can be
-    installed directly by the core resource-pack engine (§B) — DevKit
-    export equals pack, one format two uses.
+    返回的 ``files`` 列表使用**资源包布局**
+    （``characters/<id>/character.json``、``characters/<id>/persona.md``、
+    ``memories/<id>/entries.json``），这样产出的 7Z/zip 归档可被核心
+    资源包引擎（§B）直接安装 —— DevKit 导出即包，一套格式两用。
 
     返回的 ``files`` 列表使用**资源包布局**（``characters/<id>/character.json``、
     ``characters/<id>/persona.md``、``memories/<id>/entries.json``），

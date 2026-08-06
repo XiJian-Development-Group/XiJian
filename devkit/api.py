@@ -239,7 +239,7 @@ _API_VERSION = "xijian.devkit.api/v1"
 
 
 # ---------------------------------------------------------------------------
-# Error → dict serialisation
+# Error → dict 序列化
 # ---------------------------------------------------------------------------
 
 
@@ -306,36 +306,34 @@ def _serialize_call(method):
 
 
 # ---------------------------------------------------------------------------
-# Public API class — bound to ``window.pywebview.api`` at runtime
+# 公共 API 类 —— 运行时绑定到 ``window.pywebview.api``
 # ---------------------------------------------------------------------------
 
 
 class DevKitApi:
     """The Python side of the DevKit UI bridge.
 
-    Thread-safety: pywebview invokes ``js_api`` methods on the GUI
-    thread.  The underlying ``submit`` performs blocking I/O (file
-    I/O + SMTP).  We accept that the UI freezes during a submission
-    because the alternative (spawning a worker thread and yielding
-    back via ``evaluate_js``) is significantly more code for a flow
-    that runs at most once per hour.
+    线程安全：pywebview 在 GUI 线程上调用 ``js_api`` 方法。
+    底层的 ``submit`` 执行阻塞 I/O（文件 I/O + SMTP）。
+    我们接受 UI 在提交期间冻结，因为替代方案（生成工作线程
+    并通过 ``evaluate_js`` 回调）会显著增加代码量，而提交
+    流程每小时最多运行一次。
 
-    Configuration knobs are read **once** at import time from
-    :mod:`devkit` module-level constants; tests can
-    monkeypatch them before constructing the API.
+    配置参数在导入时从 :mod:`devkit` 模块级常量**读取一次**；
+    测试可在构造 API 前 monkeypatch 它们。
     """
 
     def __init__(self) -> None:
-        # Session state.  Restored from disk so a restart never silently
-        # drops the login and resets the per-developer submit cooldown.
+        # 会话状态。从磁盘恢复，以便重启永远不会静默丢失登录
+        # 并重置每个开发者的提交冷却时间。
         self._lock = threading.Lock()
         self._active_developer: str | None = state.session.get("developer_id")
 
-    # --- meta ----------------------------------------------------------
+    # --- 元信息 ----------------------------------------------------------
 
     @_serialize_call
     def whoami(self) -> dict[str, Any]:
-        """Return static configuration the UI renders in the header."""
+        """返回 UI 在页头渲染的静态配置。"""
         return {
             "api_version": _API_VERSION,
             "cooldown_seconds": int(DEV_SUBMIT_COOLDOWN_SECONDS),
@@ -375,12 +373,12 @@ class DevKitApi:
             raise DevKitError(400, "work directory not set", code="missing_work_dir")
         if not isinstance(smtp_config, dict):
             raise DevKitError(400, "smtp_config must be a dict", code="invalid_smtp_config")
-        # Validate required fields
+        # 校验必填字段
         required = ["host", "port", "user", "password", "from_addr"]
         for field in required:
             if not smtp_config.get(field):
                 raise DevKitError(400, f"missing required field: {field}", code="missing_field")
-        # Load existing config and update SMTP section
+        # 加载现有配置并更新 SMTP 部分
         existing = config.load_config(work_dir)
         existing["smtp"] = smtp_config
         config.save_config(work_dir, existing)
@@ -415,7 +413,7 @@ class DevKitApi:
         config.save_config(work_dir, existing)
         return {"ok": True}
 
-    # --- auto-update (C6) ----------------------------------------------
+    # --- 自动更新 (C6) ----------------------------------------------
 
     @_serialize_call
     def get_update_settings(self) -> dict[str, Any]:
@@ -530,10 +528,10 @@ class DevKitApi:
         file_types_arg = ()
         if file_types and kind_str == "open":
             exts = [str(e) for e in file_types if e] if isinstance(file_types, list) else [str(file_types)]
-            # pywebview expects a tuple of strings in format:
-            # "Description (*.ext1;*.ext2;...)"
+            # pywebview 需要格式为以下的字符串元组：
+            # "描述 (*.ext1;*.ext2;...)"
             if exts:
-                # Ensure each extension starts with dot
+                # 确保每个扩展名以点开头
                 normalized = [e if e.startswith(".") else f".{e}" for e in exts]
                 pattern = ";".join(f"*{e}" for e in normalized)
                 file_types_arg = (f"允许的格式 ({pattern})",)
@@ -547,7 +545,7 @@ class DevKitApi:
         except Exception as exc:  # pragma: no cover — depends on GUI runtime
             raise DevKitError(500, f"打开文件对话框失败：{exc}", code="dialog_failed")
 
-        # pywebview returns a str (single) or list[str]; normalise to list.
+        # pywebview 返回 str（单个）或 list[str]；统一为 list。
         if result is None:
             paths = []
         elif isinstance(result, str):
@@ -559,8 +557,8 @@ class DevKitApi:
         return {"paths": paths}
 
     def _work_dir(self) -> str | None:
-        """Return the current work directory (if set)."""
-        # The work directory is set via api.set_work_dir() in main.py
+        """返回当前工作目录（若已设置）。"""
+        # 工作目录通过 api.set_work_dir() 在 main.py 中设置
         return getattr(self, "_work_dir_path", None)
 
     def set_work_dir(self, path: str) -> None:
@@ -587,11 +585,11 @@ class DevKitApi:
         """Liveness probe (``{"ok": True, "data": {"pong": true}}``)."""
         return {"pong": True, "active_developer": self._active_developer}
 
-    # --- core discovery (DevKit ↔ Core API mutual discovery) ----------
+    # --- 核心发现 (DevKit ↔ Core API 互相发现) ----------
 
     @_serialize_call
     def core_status(self) -> dict[str, Any]:
-        """Check if the Core API is running and discoverable."""
+        """检查 Core API 是否运行并可被发现。"""
         from devkit.discovery import core_status
         return core_status()
 
@@ -613,7 +611,7 @@ class DevKitApi:
         from devkit.discovery import reload_all
         return reload_all()
 
-    # --- session -------------------------------------------------------
+    # --- 会话 -------------------------------------------------------
 
     @_serialize_call
     def login(self, developer_id: Any) -> dict[str, Any]:
@@ -651,11 +649,11 @@ class DevKitApi:
         """Return the list of ``target_kind`` the orchestrator accepts."""
         return list(TARGET_KINDS)
 
-    # --- read-side -----------------------------------------------------
+    # --- 只读侧 -----------------------------------------------------
 
     @_serialize_call
     def cooldown_for(self, developer_id: Any) -> int:
-        """Return seconds until ``developer_id`` can submit again (≥ 0)."""
+        """返回 ``developer_id`` 距离下次可提交的剩余秒数（≥ 0）。"""
         if not isinstance(developer_id, str) or not developer_id:
             raise DevKitError(
                 400,
@@ -665,9 +663,9 @@ class DevKitApi:
         return cooldown_remaining(developer_id)
 
     def last_submit_for(self, developer_id: Any) -> dict[str, Any] | None:
-        """Return the most recent submission record for ``developer_id``.
+        """返回 ``developer_id`` 最近一次的提交记录。
 
-        Returns ``null`` if the developer has never submitted.
+        若该开发者从未提交则返回 ``null``。
         """
         if not isinstance(developer_id, str) or not developer_id:
             raise DevKitError(
@@ -684,7 +682,7 @@ class DevKitApi:
 
     @_serialize_call
     def list_submissions(self, limit: Any = 50) -> list[dict[str, Any]]:
-        """Return the most-recent submission records (newest first)."""
+        """返回最近的提交记录（新的在前）。"""
         try:
             n = int(limit) if limit is not None else 50
         except (TypeError, ValueError) as exc:
@@ -697,7 +695,7 @@ class DevKitApi:
 
     @_serialize_call
     def get_submission(self, submission_id: Any) -> dict[str, Any] | None:
-        """Return one submission record by id (or ``null``)."""
+        """按 id 返回单条提交记录（不存在则为 ``null``）。"""
         if not isinstance(submission_id, str) or not submission_id:
             raise DevKitError(
                 400,
@@ -708,7 +706,7 @@ class DevKitApi:
 
     @_serialize_call
     def delete_submission(self, submission_id: Any) -> dict[str, Any]:
-        """Delete a single submission record and its local archive."""
+        """删除单条提交记录及其本地归档。"""
         if not isinstance(submission_id, str) or not submission_id:
             raise DevKitError(
                 400,
@@ -721,14 +719,14 @@ class DevKitApi:
 
     @_serialize_call
     def clear_submissions(self) -> dict[str, Any]:
-        """Delete ALL submission records and their local archives."""
+        """删除所有提交记录及其本地归档。"""
         work_dir = self._work_dir()
         count = clear_submissions(work_dir)
         return {"deleted": count}
 
     @_serialize_call
     def delete_package(self, package_id: Any) -> dict[str, Any]:
-        """Delete a submittable package by its ``package_id`` (e.g. ``char:abc``)."""
+        """按 ``package_id``（如 ``char:abc``）删除一个可提交的包。"""
         if not isinstance(package_id, str) or not package_id:
             raise DevKitError(
                 400,
@@ -739,21 +737,19 @@ class DevKitApi:
         ok = delete_package(package_id, work_dir)
         return {"deleted": bool(ok), "package_id": package_id}
 
-    # --- pre-flight ----------------------------------------------------
+    # --- 预检 ----------------------------------------------------
 
     @_serialize_call
     def preview_size(self, file_entries: Any) -> dict[str, Any]:
-        """Compute the cumulative bytes of ``file_entries``.
+        """计算 ``file_entries`` 的累计字节数。
 
-        Used by the UI to display "选定文件 X / 1200 MB" without
-        round-tripping through the orchestrator on every selection.
+        UI 用于显示 "选定文件 X / 1200 MB"，无需在每次选择时
+        都走一遍编排器。
 
-        Note: the data-level ``ok`` flag here is *stricter* than the raw
-        :func:`check_archive_size` helper — it returns ``False`` as soon
-        as the payload reaches the cap, because the manifest + 7Z stream
-        overhead would still push the archive over the SMTP attachment
-        limit.  This is the safe behaviour the UI should surface to the
-        user.
+        注意：这里的数据级 ``ok`` 标志比底层
+        :func:`check_archive_size` 辅助函数*更严格*——一旦负载达到
+        上限即返回 ``False``，因为 manifest + 7Z 流开销仍会将
+        归档推过 SMTP 附件限制。这是 UI 应呈现给用户的安全行为。
         """
         if not isinstance(file_entries, list):
             raise DevKitError(
@@ -778,7 +774,7 @@ class DevKitApi:
             "message": message,
         }
 
-    # --- write-side ----------------------------------------------------
+    # --- 写入侧 ----------------------------------------------------
 
     @_serialize_call
     def submit(
@@ -789,23 +785,22 @@ class DevKitApi:
         payload: Any = None,
         file_entries: Any = None,
         package_ids: Any = None,
-        smtp_send: Any = None,  # noqa: ARG002 — exposed for tests only
-        archive_path: Any = None,  # noqa: ARG002 — exposed for tests only
+        smtp_send: Any = None,  # noqa: ARG002 — 仅测试暴露
+        archive_path: Any = None,  # noqa: ARG002 — 仅测试暴露
     ) -> dict[str, Any]:
-        """Run the full submission pipeline.
+        """运行完整提交管线。
 
-        ``developer_id`` defaults to the active one if omitted,
-        matching the UI's "I'm logged in as someone" flow.
+        ``developer_id`` 省略时默认为活动开发者，
+        配合 UI 的 "我已以某人身份登录" 流程。
 
-        Accepts either ``file_entries`` (legacy) or ``package_ids``
-        (new flow).  When ``package_ids`` is provided, each package
-        is resolved to its file entries via the editor export
-        functions and aggregated into a single submission.
+        接受 ``file_entries``（旧流程）或 ``package_ids``
+        （新流程）。提供 ``package_ids`` 时，每个包通过
+        编辑器导出函数解析为文件条目并聚合为单次提交。
 
-        Returns the new submission record on success, or a structured
-        error dict (see :func:`serialize_error`).
+        成功返回新提交记录，失败返回结构化错误 dict
+        （见 :func:`serialize_error`）。
         """
-        # Fall back to the active developer for convenience.
+        # 为方便起见，回退到活动开发者。
         if developer_id is None or developer_id == "":
             developer_id = self._active_developer
         if not isinstance(developer_id, str) or not developer_id:
@@ -815,7 +810,7 @@ class DevKitApi:
                 code="missing_developer_id",
             )
 
-        # --- resolve package_ids → file_entries + target_kind/target_id ---
+        # --- 解析 package_ids → file_entries + target_kind/target_id ---
         if package_ids is not None:
             if not isinstance(package_ids, list):
                 raise DevKitError(
@@ -849,13 +844,13 @@ class DevKitApi:
                     code="bad_file_entries",
                 )
 
-        # Pre-flight rate-limit; raises RateLimitedError → serialize_error.
+        # 预检限流；抛出 RateLimitedError → serialize_error。
         check_rate_limit(developer_id)
 
-        # pywebview serialises JS null/objects into Python None/dict,
-        # so pass-through works for ``payload``.  We also expose the
-        # injectable ``smtp_send`` / ``archive_path`` overrides for
-        # tests; production callers leave them None.
+        # pywebview 将 JS null/object 序列化为 Python None/dict，
+        # 因此 ``payload`` 直接透传即可。我们还暴露可注入的
+        # ``smtp_send`` / ``archive_path`` 覆盖供测试用；
+        # 生产调用者保留 None。
         result = submit(
             developer_id=developer_id,
             target_kind=target_kind,
@@ -935,7 +930,7 @@ class DevKitApi:
         work_dir = self._work_dir()
         packages: list[dict[str, Any]] = []
 
-        # Characters
+        # 角色
         for char in _ce_list(work_dir):
             char_id = char.get("id", "")
             name = char.get("display_name") or char.get("name", "?")
@@ -948,7 +943,7 @@ class DevKitApi:
                 "description": f"角色: {name}",
             })
 
-        # Memory packs (one per character that has entries)
+        # 记忆包（每个有条目的角色一个）
         for char_id in _me_chars(work_dir):
             char = _ce_get(work_dir, char_id) or {}
             name = char.get("display_name") or char.get("name", char_id)
@@ -961,7 +956,7 @@ class DevKitApi:
                 "description": f"记忆条目: {char_id}",
             })
 
-        # Worlds
+        # 世界观
         for world in _we_list(work_dir):
             world_id = world.get("id", "")
             name = world.get("name", "?")
@@ -974,7 +969,7 @@ class DevKitApi:
                 "description": f"世界观: {name}",
             })
 
-        # Plots
+        # 剧情
         for plot in _pe_list(work_dir):
             plot_id = plot.get("id", "")
             name = plot.get("name", "?")
@@ -987,7 +982,7 @@ class DevKitApi:
                 "description": f"剧情: {name}",
             })
 
-        # Models (registered 3D)
+        # 模型（已注册 3D）
         for model in _mv_list(work_dir):
             model_id = model.get("id", "")
             name = model.get("name", "?")
@@ -1000,7 +995,7 @@ class DevKitApi:
                 "description": f"3D模型: {name}",
             })
 
-        # Voices (per character)
+        # 音色（每角色）
         for char_id in _vc_chars(work_dir):
             voices = _vc_list(work_dir, char_id)
             for voice in voices:
@@ -1031,7 +1026,7 @@ class DevKitApi:
         ok = delete_local_archive(submission_id)
         return {"deleted": bool(ok), "submission_id": submission_id}
 
-    # --- work directory ------------------------------------------------
+    # --- 工作目录 ------------------------------------------------
 
     def _work_dir(self) -> str:
         import os
@@ -1040,7 +1035,7 @@ class DevKitApi:
             os.path.join(os.path.expanduser("~"), "Library", "Application Support", "XiJian", "DevKit"),
         )
 
-    # --- character editor ----------------------------------------------
+    # --- 角色编辑器 ----------------------------------------------
 
     @_serialize_call
     def list_characters(self) -> list[dict[str, Any]]:
@@ -1111,7 +1106,7 @@ class DevKitApi:
             raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
         return _ce_autofill(self._work_dir(), char_id, apply=True)
 
-    # --- memory editor -------------------------------------------------
+    # --- 记忆编辑器 -------------------------------------------------
 
     @_serialize_call
     def list_memory_entries(self, character_id: Any) -> list[dict[str, Any]]:
@@ -1148,7 +1143,7 @@ class DevKitApi:
             raise DevKitError(400, "角色 ID 不能为空", code="missing_char_id")
         return _me_export(self._work_dir(), character_id)
 
-    # --- world editor --------------------------------------------------
+    # --- 世界观编辑器 --------------------------------------------------
 
     @_serialize_call
     def list_worlds(self) -> list[dict[str, Any]]:
@@ -1179,7 +1174,7 @@ class DevKitApi:
             raise DevKitError(400, "世界观 ID 不能为空", code="missing_world_id")
         return _we_export(self._work_dir(), world_id)
 
-    # --- world structured config (C1.3) --------------------------------
+    # --- 世界观结构化配置 (C1.3) --------------------------------
 
     @_serialize_call
     def get_world_config(self, world_id: Any) -> dict[str, Any]:
@@ -1202,7 +1197,7 @@ class DevKitApi:
         ok, errors = _we_validate_config(config)
         return {"ok": ok, "errors": errors}
 
-    # --- world custom events (C1.1) -------------------------------------
+    # --- 世界观自定义事件 (C1.1) -------------------------------------
 
     @_serialize_call
     def list_world_events(self, world_id: Any) -> list[dict[str, Any]]:
@@ -1243,10 +1238,10 @@ class DevKitApi:
 
     @_serialize_call
     def get_world_doc_templates(self) -> dict[str, str]:
-        """C1.2 — return built-in world-doc markdown templates."""
+        """C1.2 — 返回内置世界观文档 Markdown 模板。"""
         return _we_templates()
 
-    # --- world doc versioning (C1.2 AC-1) ------------------------------------
+    # --- 世界观文档版本控制 (C1.2 AC-1) ------------------------------------
 
     @_serialize_call
     def list_world_doc_versions(self, world_id: Any) -> list[dict[str, Any]]:
@@ -1266,7 +1261,7 @@ class DevKitApi:
 
     @_serialize_call
     def restore_world_doc_version(self, world_id: Any, version: Any) -> dict[str, Any]:
-        """Restore a specific version of the world document."""
+        """恢复世界观文档的特定版本。"""
         if not isinstance(world_id, str) or not world_id:
             raise DevKitError(400, "世界观 ID 不能为空", code="missing_world_id")
         try:
@@ -1277,21 +1272,21 @@ class DevKitApi:
 
     @_serialize_call
     def extract_world_doc_keywords(self, world_id: Any) -> list[str]:
-        """Extract keywords from world document for A4 NPC generation."""
+        """从世界观文档提取关键词，用于 A4 NPC 生成。"""
         if not isinstance(world_id, str) or not world_id:
             raise DevKitError(400, "世界观 ID 不能为空", code="missing_world_id")
         return _we_extract_keywords(self._work_dir(), world_id)
 
-    # --- world events: DSL parser (C1.1) ----------------------------------
+    # --- 世界观事件：DSL 解析器 (C1.1) ----------------------------------
 
     @_serialize_call
     def parse_event_dsl(self, dsl_text: Any) -> dict[str, Any]:
-        """Parse event DSL text into structured trigger dict."""
+        """将事件 DSL 文本解析为结构化触发器 dict。"""
         if not isinstance(dsl_text, str) or not dsl_text.strip():
             raise DevKitError(400, "DSL 文本不能为空", code="empty_dsl")
         return _we_parse_dsl(dsl_text)
 
-    # --- world events: factory for batch instantiation (C1.1) -------------
+    # --- 世界观事件：批量实例化工厂 (C1.1) -------------
 
     @_serialize_call
     def list_event_factories(self, world_id: Any) -> list[dict[str, Any]]:

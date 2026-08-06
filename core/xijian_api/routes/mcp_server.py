@@ -1,12 +1,11 @@
-"""``POST /v1/mcp`` — MCP JSON-RPC 2.0 endpoint.
+"""``POST /v1/mcp`` — MCP JSON-RPC 2.0 端点。
 
-Single endpoint that accepts a JSON-RPC 2.0 request (single or
-batch) and dispatches it through the MCP protocol handler.  The
-handler routes ``tools/call`` through the A5.2 gate before
-executing any tool.
+单一端点，接受 JSON-RPC 2.0 请求（单个或批量），
+并通过 MCP 协议处理器分发。处理器在执行任何工具前，
+先将 ``tools/call`` 路由到 A5.2 门禁。
 
-Usage
-=====
+用法
+====
 
 .. code-block:: bash
 
@@ -23,8 +22,7 @@ Usage
       -d '{"jsonrpc":"2.0","id":3,"method":"tools/call",
            "params":{"name":"character_list","arguments":{}}}'
 
-Notifications (requests without ``id``) return ``202 Accepted``
-with an empty body, per JSON-RPC 2.0 §4.
+通知（无 ``id`` 的请求）返回 ``202 Accepted`` 与空 body，依 JSON-RPC 2.0 §4。
 """
 
 from __future__ import annotations
@@ -42,7 +40,7 @@ _LOGGER = logging.getLogger("xijian_api.routes.mcp_server")
 
 @bp.post("/v1/mcp")
 def mcp_endpoint():
-    """Handle a single or batch JSON-RPC 2.0 request."""
+    """处理单个或批量 JSON-RPC 2.0 请求。"""
     payload = request.get_json(silent=True)
     if payload is None:
         return jsonify({
@@ -54,23 +52,23 @@ def mcp_endpoint():
             },
         }), 400
 
-    # Extract caller info for audit context.
+    # 提取调用者信息，用于审计上下文。
     caller = getattr(g, "request_id", None) or request.headers.get("X-Request-Id")
 
     response = handle_batch(payload, caller=caller)
 
     if response is None:
-        # Notification — no response body per JSON-RPC 2.0 §4.
+        # 通知 — 依 JSON-RPC 2.0 §4，无响应 body。
         return "", 202
 
     if isinstance(response, list):
         return jsonify(response)
 
-    # Check if it's an error response (has "error" key) to set
-    # the HTTP status code accordingly.
+    # 检查是否为错误响应（含 "error" 键），以设置
+    # 相应的 HTTP 状态码。
     if isinstance(response, dict) and "error" in response:
         code = response["error"].get("code", -32603)
-        # Map JSON-RPC error codes to HTTP status.
+        # 将 JSON-RPC 错误码映射为 HTTP 状态。
         if code == -32700:
             http_status = 400  # parse error
         elif code == -32600:

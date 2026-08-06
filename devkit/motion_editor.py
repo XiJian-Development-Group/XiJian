@@ -150,8 +150,8 @@ def import_motion_file(work_dir: str, character_id: str, file_path: str, name: s
     dest = os.path.join(d, f"{motion_id}{ext}")
     shutil.copy2(file_path, dest)
 
-    # C2.9 AC-3 — capture the imported motion's skeleton joint names so the
-    # UI / VRM runtime can verify bone-name matching before playback.
+    # C2.9 AC-3 —— 捕获导入动效的骨骼关节名称，以便
+    # UI / VRM 运行时在播放前验证骨骼名称匹配。
     params: dict[str, Any] = {}
     if ext == ".bvh":
         joints = _extract_bvh_joints(file_path)
@@ -179,11 +179,10 @@ def import_motion_file(work_dir: str, character_id: str, file_path: str, name: s
 
 
 def _extract_bvh_joints(file_path: str) -> list[str] | None:
-    """Parse the joint names from a BVH file's HIERARCHY section.
+    """解析 BVH 文件 HIERARCHY 部分中的关节名称。
 
-    Returns the ordered list of bone names, or ``None`` if the file is not a
-    parseable BVH.  Used to surface the skeleton so the VRM runtime can check
-    bone-name compatibility (C2.9 AC-3).
+    返回有序的骨骼名称列表；如果文件不是可解析的 BVH，则返回 ``None``。
+    用于暴露骨架，使 VRM 运行时可以检查骨骼名称兼容性（C2.9 AC-3）。
     """
     try:
         with open(file_path, encoding="utf-8", errors="ignore") as f:
@@ -264,7 +263,7 @@ def _default_motion_params(name: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# C2.9: BVH→VRM conversion and keyframe editing
+# C2.9：BVH→VRM 转换与关键帧编辑
 # ---------------------------------------------------------------------------
 
 
@@ -273,14 +272,14 @@ def convert_bvh_to_vrm(
     vrm_template: str,
     output_path: str | None = None,
 ) -> str:
-    """Convert BVH motion capture data to VRM animation using bvh2vrm.
+    """使用 bvh2vrm 将 BVH 动作捕捉数据转换为 VRM 动画。
 
-    Args:
-        bvh_path: Path to the .bvh motion file
-        vrm_template: Path to a VRM model to apply the animation to
-        output_path: Output .vrm or .vrmc_animation path
+    参数：
+        bvh_path: .bvh 动作文件路径
+        vrm_template: 用于应用动画的 VRM 模型路径
+        output_path: 输出的 .vrm 或 .vrmc_animation 路径
 
-    Returns the output file path.
+    返回输出文件路径。
     """
     if not os.path.isfile(bvh_path):
         raise DevKitError(400, f"BVH 文件不存在: {bvh_path}", code="file_not_found")
@@ -290,7 +289,7 @@ def convert_bvh_to_vrm(
     if output_path is None:
         output_path = os.path.splitext(bvh_path)[0] + ".vrm"
 
-    # Use bvh2vrm (Python package) if available
+    # 如果可用，使用 bvh2vrm（Python 包）
     try:
         import bvh2vrm
         bvh2vrm.convert(bvh_path, vrm_template, output_path)
@@ -298,7 +297,7 @@ def convert_bvh_to_vrm(
     except ImportError:
         pass
 
-    # Fallback: call CLI if available
+    # 回退：如果 CLI 可用则调用
     bvh2vrm_cli = os.environ.get("BVH2VRM_CLI", "bvh2vrm")
     cmd = [bvh2vrm_cli, bvh_path, vrm_template, output_path]
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
@@ -315,19 +314,19 @@ def validate_motion_skeleton(
     motion_path: str,
     vrm_model_path: str,
 ) -> dict[str, Any]:
-    """Validate that a motion's skeleton matches a VRM model (C2.9 AC-3).
+    """验证动效骨架是否与 VRM 模型匹配（C2.9 AC-3）。
 
-    Args:
-        motion_path: Path to .bvh / .fbx / .glb motion file
-        vrm_model_path: Path to the VRM model to check against
+    参数：
+        motion_path: .bvh / .fbx / .glb 动效文件路径
+        vrm_model_path: 要检查的 VRM 模型路径
 
-    Returns a dict with:
-        - ok: bool — whether the skeleton matches
-        - motion_joints: list[str] — bone names from motion
-        - vrm_joints: list[str] — bone names from VRM
-        - missing_in_vrm: list[str] — bones in motion but not VRM
-        - extra_in_vrm: list[str] — bones in VRM but not motion
-        - errors: list[str] — validation errors
+    返回包含以下键的 dict：
+        - ok: bool —— 骨架是否匹配
+        - motion_joints: list[str] —— 动效中的骨骼名称
+        - vrm_joints: list[str] —— VRM 中的骨骼名称
+        - missing_in_vrm: list[str] —— 动效中有但 VRM 没有的骨骼
+        - extra_in_vrm: list[str] —— VRM 中有但动效没有的骨骼
+        - errors: list[str] —— 验证错误
     """
     import re
 
@@ -340,14 +339,14 @@ def validate_motion_skeleton(
         "errors": [],
     }
 
-    # Extract joints from motion file
+    # 从动效文件提取关节
     ext = os.path.splitext(motion_path)[1].lower()
     motion_joints = []
 
     if ext == ".bvh":
         motion_joints = _extract_bvh_joints(motion_path) or []
     elif ext in (".fbx", ".glb", ".gltf"):
-        # For FBX/GLB, try to extract from glTF JSON
+        # 对于 FBX/GLB，尝试从 glTF JSON 中提取
         try:
             if ext in (".glb", ".gltf"):
                 gltf = _read_gltf_json(motion_path)
@@ -362,7 +361,7 @@ def validate_motion_skeleton(
 
     result["motion_joints"] = motion_joints
 
-    # Extract joints from VRM model
+    # 从 VRM 模型提取关节
     try:
         gltf = _read_gltf_json(vrm_model_path)
         if gltf:
@@ -373,7 +372,7 @@ def validate_motion_skeleton(
         result["errors"].append(f"无法读取 VRM 模型: {e}")
         return result
 
-    # Compare
+    # 比较
     motion_set = set(motion_joints)
     vrm_set = set(result["vrm_joints"])
 
@@ -394,27 +393,27 @@ def validate_motion_skeleton(
 
 
 def _validate_keyframes(keyframes: list[dict[str, Any]]) -> tuple[bool, list[str]]:
-    """Validate keyframe data structure.
+    """验证关键帧数据结构。
 
-    Returns (ok, errors).
+    返回 (ok, errors)。
     """
     errors: list[str] = []
     if not isinstance(keyframes, list):
         return False, ["keyframes 必须是列表"]
 
-    seen_frames: dict[str, set[int]] = {}  # bone -> set of frames
+    seen_frames: dict[str, set[int]] = {}  # 骨骼 -> 帧集合
 
     for i, kf in enumerate(keyframes):
         if not isinstance(kf, dict):
             errors.append(f"关键帧 #{i}: 必须是对象")
             continue
 
-        # Required: frame (int >= 0)
+        # 必需：frame（int >= 0）
         frame = kf.get("frame")
         if not isinstance(frame, int) or frame < 0:
             errors.append(f"关键帧 #{i}: frame 必须是非负整数")
         else:
-            # Check for duplicate frame on same bone
+            # 检查同一骨骼上的重复帧
             bone = kf.get("bone")
             if bone:
                 if bone not in seen_frames:
@@ -423,30 +422,30 @@ def _validate_keyframes(keyframes: list[dict[str, Any]]) -> tuple[bool, list[str
                     errors.append(f"关键帧 #{i}: 骨骼 {bone} 在帧 {frame} 有重复关键帧")
                 seen_frames[bone].add(frame)
 
-        # Required: bone (non-empty string)
+        # 必需：bone（非空字符串）
         bone = kf.get("bone")
         if not isinstance(bone, str) or not bone.strip():
             errors.append(f"关键帧 #{i}: bone 必须是非空字符串")
 
-        # Optional: position [x, y, z] (list of 3 floats)
+        # 可选：position [x, y, z]（3 个浮点数的列表）
         pos = kf.get("position")
         if pos is not None:
             if not (isinstance(pos, list) and len(pos) == 3 and all(isinstance(v, (int, float)) for v in pos)):
                 errors.append(f"关键帧 #{i}: position 必须是 [x, y, z] 格式的三个数字")
 
-        # Optional: rotation [x, y, z, w] (quaternion, list of 4 floats)
+        # 可选：rotation [x, y, z, w]（四元数，4 个浮点数的列表）
         rot = kf.get("rotation")
         if rot is not None:
             if not (isinstance(rot, list) and len(rot) == 4 and all(isinstance(v, (int, float)) for v in rot)):
                 errors.append(f"关键帧 #{i}: rotation 必须是 [x, y, z, w] 格式的四元数")
             else:
-                # Check quaternion is normalized (approximately)
+                # 检查四元数是否（近似）归一化
                 import math
                 norm = math.sqrt(sum(v * v for v in rot))
                 if abs(norm - 1.0) > 0.01:
                     errors.append(f"关键帧 #{i}: rotation 四元数未归一化 (模长={norm:.4f})")
 
-        # Optional: scale [x, y, z] (list of 3 floats)
+        # 可选：scale [x, y, z]（3 个浮点数的列表）
         scale = kf.get("scale")
         if scale is not None:
             if not (isinstance(scale, list) and len(scale) == 3 and all(isinstance(v, (int, float)) for v in scale)):
@@ -461,22 +460,22 @@ def edit_motion_keyframes(
     character_id: str,
     keyframes: list[dict[str, Any]],
 ) -> dict[str, Any] | None:
-    """Edit keyframe parameters for a motion (C2.9 AC-1).
+    """编辑动效的关键帧参数（C2.9 AC-1）。
 
-    Args:
-        motion_id: ID of the motion to edit
-        work_dir: Work directory
-        character_id: Character ID
-        keyframes: List of keyframe dicts, each with:
-            - frame: int — frame number (>= 0)
-            - bone: str — bone name
-            - position: [x, y, z] — optional
-            - rotation: [x, y, z, w] — optional (quaternion)
-            - scale: [x, y, z] — optional
+    参数：
+        motion_id: 要编辑的动效 ID
+        work_dir: 工作目录
+        character_id: 角色 ID
+        keyframes: 关键帧 dict 列表，每个包含：
+            - frame: int —— 帧号（>= 0）
+            - bone: str —— 骨骼名称
+            - position: [x, y, z] —— 可选
+            - rotation: [x, y, z, w] —— 可选（四元数）
+            - scale: [x, y, z] —— 可选
 
-    Returns the updated motion record.
+    返回更新后的动效记录。
     """
-    # Validate keyframes
+    # 验证关键帧
     ok, errors = _validate_keyframes(keyframes)
     if not ok:
         raise DevKitError(400, "；".join(errors), code="bad_keyframes")
@@ -496,7 +495,7 @@ def get_motion_keyframes(
     character_id: str,
     motion_id: str,
 ) -> list[dict[str, Any]]:
-    """Get keyframes for a motion (for playback in UI)."""
+    """获取动效的关键帧（供 UI 播放使用）。"""
     motions = _load_motions(work_dir, character_id)
     for m in motions:
         if m.get("id") == motion_id:
@@ -511,21 +510,21 @@ def apply_keyframes_to_vrm(
     vrm_model_id: str,
     output_path: str | None = None,
 ) -> str:
-    """Apply keyframes to a VRM model, generating a VRM with animation (VRMC_vrm_animation).
+    """将关键帧应用到 VRM 模型，生成带动画的 VRM（VRMC_vrm_animation）。
 
-    This creates a new VRM file with the keyframe animation baked in as a
-    VRMC_vrm_animation extension, which can be played back in three.js/VRM viewers.
+    这会创建一个新的 VRM 文件，将关键帧动画烘焙为
+    VRMC_vrm_animation 扩展，可在 three.js/VRM 查看器中播放。
 
-    Args:
-        work_dir: Work directory
-        character_id: Character ID
-        motion_id: Motion ID with keyframes
-        vrm_model_id: Target VRM model ID (must be registered)
-        output_path: Output path (optional, auto-generated if not provided)
+    参数：
+        work_dir: 工作目录
+        character_id: 角色 ID
+        motion_id: 带关键帧的动效 ID
+        vrm_model_id: 目标 VRM 模型 ID（必须已注册）
+        output_path: 输出路径（可选，未提供时自动生成）
 
-    Returns the path to the generated VRM file.
+    返回生成的 VRM 文件路径。
     """
-    # Load motion with keyframes
+    # 加载带关键帧的动效
     motions = _load_motions(work_dir, character_id)
     motion = next((m for m in motions if m.get("id") == motion_id), None)
     if not motion:
@@ -535,7 +534,7 @@ def apply_keyframes_to_vrm(
     if not keyframes:
         raise DevKitError(400, "该动效没有关键帧数据", code="no_keyframes")
 
-    # Load VRM model
+    # 加载 VRM 模型
     from devkit.model_viewer import get_model_info as _mv_get, _read_gltf_json
     vrm_model = _mv_get(work_dir, vrm_model_id)
     if not vrm_model:
@@ -549,19 +548,19 @@ def apply_keyframes_to_vrm(
     if ext == ".fbx":
         raise DevKitError(400, "目标模型为 FBX，需先转换为 VRM", code="bad_format")
 
-    # Read VRM as glTF JSON
+    # 将 VRM 读取为 glTF JSON
     gltf = _read_gltf_json(vrm_path)
     if gltf is None:
         raise DevKitError(400, "无法解析 VRM 文件", code="parse_failed")
 
-    # Ensure extensions structure
+    # 确保 extensions 结构存在
     if "extensions" not in gltf:
         gltf["extensions"] = {}
     if "extensionsUsed" not in gltf:
         gltf["extensionsUsed"] = []
 
-    # Build VRMC_vrm_animation from keyframes
-    # Group keyframes by bone
+    # 从关键帧构建 VRMC_vrm_animation
+    # 按骨骼对关键帧分组
     from collections import defaultdict
     bone_tracks: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for kf in keyframes:
@@ -573,13 +572,13 @@ def apply_keyframes_to_vrm(
             "scale": kf.get("scale"),
         })
 
-    # Sort each bone's tracks by frame
+    # 按帧号对每块骨骼的轨道排序
     for bone in bone_tracks:
         bone_tracks[bone].sort(key=lambda t: t["frame"])
 
-    # Create animation clips for VRMC_vrm_animation
-    # This is a simplified version - real implementation would create proper
-    # glTF animation samplers/channels and reference them in VRMC_vrm_animation
+    # 为 VRMC_vrm_animation 创建动画片段
+    # 这是简化版本——实际实现会创建正确的
+    # glTF 动画采样器/通道，并在 VRMC_vrm_animation 中引用它们
     animation = {
         "name": motion.get("name", "custom_animation"),
         "tracks": [
@@ -589,7 +588,7 @@ def apply_keyframes_to_vrm(
             }
             for bone, tracks in bone_tracks.items()
         ],
-        "frame_rate": 30,  # default
+        "frame_rate": 30,  # 默认
         "duration": max((kf.get("frame", 0) for kf in keyframes), default=0) / 30.0,
     }
 
@@ -599,7 +598,7 @@ def apply_keyframes_to_vrm(
     if "VRMC_vrm_animation" not in gltf["extensionsUsed"]:
         gltf["extensionsUsed"].append("VRMC_vrm_animation")
 
-    # Write output VRM
+    # 写入输出 VRM
     if output_path is None:
         import tempfile
         output_path = os.path.join(
@@ -607,20 +606,20 @@ def apply_keyframes_to_vrm(
             f"xijian_motion_{motion_id}_{os.path.basename(vrm_path)}"
         )
 
-    # For GLB/VRM binary, we need to rebuild the binary. This is complex.
-    # For now, write as .gltf (JSON) which can be loaded by three.js.
-    # A full implementation would use pygltflib or similar to write GLB.
+    # 对于 GLB/VRM 二进制，我们需要重建二进制。这很复杂。
+    # 目前先写成 .gltf（JSON），three.js 可以加载。
+    # 完整实现会使用 pygltflib 或类似工具写入 GLB。
     out_ext = os.path.splitext(output_path)[1].lower()
     if out_ext == ".gltf":
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(gltf, f, ensure_ascii=False, separators=(",", ":"))
     else:
-        # Write as JSON for now (user can convert to GLB externally)
+        # 暂时写成 JSON（用户可以在外部转换为 GLB）
         json_path = os.path.splitext(output_path)[0] + ".gltf"
         with open(json_path, "w", encoding="utf-8") as f:
             json.dump(gltf, f, ensure_ascii=False, separators=(",", ":"))
-        # Also save the original binary path for reference
-        # In a full implementation, we'd embed the binary buffer here
+        # 同时保存原始二进制路径作为参考
+        # 在完整实现中，我们会在这里嵌入二进制缓冲区
 
     return output_path if out_ext == ".gltf" else json_path
 
@@ -631,7 +630,7 @@ def convert_bvh_to_vrm_public(
     vrm_template: str,
     output_path: str | None = None,
 ) -> str:
-    """Public wrapper for BVH→VRM conversion."""
+    """BVH→VRM 转换的公共包装器。"""
     return convert_bvh_to_vrm(bvh_path, vrm_template, output_path)
 
 
@@ -640,14 +639,14 @@ def validate_motion_skeleton_public(
     motion_id: str,
     vrm_model_id: str,
 ) -> dict[str, Any]:
-    """Validate motion skeleton against a VRM model."""
-    # Load motion
+    """对照 VRM 模型验证动效骨架。"""
+    # 加载动效
     motions = _load_motions(work_dir, "")
     motion = next((m for m in motions if m.get("id") == motion_id), None)
     if not motion:
         raise DevKitError(404, f"动效不存在: {motion_id}", code="not_found")
 
-    # Load VRM model
+    # 加载 VRM 模型
     from devkit.model_viewer import get_model_info as _mv_get
     vrm_model = _mv_get(work_dir, vrm_model_id)
     if not vrm_model:
@@ -667,7 +666,7 @@ def edit_motion_keyframes_public(
     motion_id: str,
     keyframes: list[dict[str, Any]],
 ) -> dict[str, Any] | None:
-    """Public wrapper for keyframe editing."""
+    """关键帧编辑的公共包装器。"""
     return edit_motion_keyframes(motion_id, work_dir, character_id, keyframes)
 
 

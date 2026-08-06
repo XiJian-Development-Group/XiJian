@@ -46,12 +46,11 @@ def log_assist_event(
     accepted: bool = True,
     source: str = "ai_suggested",
 ) -> dict[str, Any]:
-    """Record an AI-assist event.
+    """记录一条 AI 辅助事件。
 
-    Mirrors the function-list ``dev_ai_assist_log`` table (C4): records
-    what the AI produced, for which module, and whether the developer
-    accepted it.  ``accepted`` (and the implied ``source``) feed the
-    30% AI-ratio audit at submit time.
+    镜像功能清单中的 ``dev_ai_assist_log`` 表（C4）：记录 AI 生成了什么、
+    针对哪个模块、开发者是否采纳。``accepted``（以及隐含的 ``source``）
+    会喂入提交时的 30% AI 占比审计。
     """
     now = __import__("devkit._vendor", fromlist=["iso_now"]).iso_now()
     event = {
@@ -96,13 +95,12 @@ def get_assist_stats(work_dir: str) -> dict[str, Any]:
 
 
 def calculate_ai_ratio(work_dir: str) -> float:
-    """Compute the share of AI-suggested assist events.
+    """计算 AI 建议辅助事件所占的比例。
 
-    The function list defines ``ai_ratio`` as the fraction of fields an
-    AI produced at *submit* time.  The DevKit has no single content blob
-    to walk at record time, so we approximate with the share of assist
-    events that carry ``source='ai_suggested'`` and were accepted — a
-    faithful proxy for "how much of this developer's output came from AI".
+    功能清单将 ``ai_ratio`` 定义为在*提交*时由 AI 生成的字段占比。
+    DevKit 在记录时没有可遍历的单一内容块，因此我们用携带
+    ``source='ai_suggested'`` 且被采纳的辅助事件占比来近似——
+    这是“开发者的输出中有多少来自 AI”的忠实代理。
     """
     log = _load_log(work_dir)
     if not log:
@@ -129,21 +127,20 @@ def check_ai_threshold(work_dir: str, threshold: float | None = None) -> dict[st
     }
 
 
-#: Sentinel returned when no AI backend produced a usable answer (real
-#: backends missing/unusable and the deterministic mock failed too).
-#: An honest "not available" message — never a fake template suggestion.
+#: 当没有 AI 后端能产出可用答案时返回的哨兵消息（真实后端缺失/不可用，
+#: 且确定性 mock 也失败）。这是一条诚实的“不可用”消息——
+#: 绝不是伪造的模板建议。
 AI_UNAVAILABLE_MESSAGE = "当前功能暂不开放，请耐心等待，谢谢"
 
 
 def auto_suggest(work_dir: str, context: str) -> dict[str, Any]:
-    """Return an AI suggestion for ``context`` and log the assist event.
+    """返回 ``context`` 的 AI 建议并记录辅助事件。
 
-    Uses the real AI backend registry (:mod:`devkit.ai.registry`): a local
-    MLX/GGUF backend answers when available; in stub environments the
-    deterministic mock backend derives a suggestion from the input context
-    (persona / world-doc features) instead of a fixed string.  The assist
-    event is logged with ``source='ai_suggested'`` so the 30% AI-ratio
-    audit (C4 AC-1) accounts for it.
+    使用真实 AI 后端注册表（:mod:`devkit.ai.registry`）：本地 MLX/GGUF
+    后端可用时由它回答；在 stub 环境中，确定性 mock 后端会根据输入
+    上下文（人设 / 世界文档特征）推导建议，而非固定字符串。辅助事件
+    以 ``source='ai_suggested'`` 记录，使 30% AI 占比审计（C4 AC-1）
+    将其计入。
     """
     ctx = (context or "").lower()
     suggestion, backend = _generate_suggestion(context)
@@ -165,11 +162,11 @@ def auto_suggest(work_dir: str, context: str) -> dict[str, Any]:
 
 
 def _chat_answer(backend, context: str) -> str:
-    """Run a blocking chat completion and join the delta content.
+    """运行一次阻塞式聊天补全并拼接 delta 内容。
 
-    Mirrors the :class:`devkit.ai.types.ChatBackend` contract: ``chat()``
-    returns an iterable of :class:`ChatChunk`, each carrying the
-    assistant text in ``choices[0].delta['content']``.
+    镜像 :class:`devkit.ai.types.ChatBackend` 契约：``chat()`` 返回
+    :class:`ChatChunk` 的可迭代对象，每个 chunk 在
+    ``choices[0].delta['content']`` 中携带助手文本。
     """
     from devkit.ai.types import ChatMessage, GenerationParams
 
@@ -202,14 +199,12 @@ def _chat_answer(backend, context: str) -> str:
 
 
 def _generate_suggestion(context: str) -> tuple[str, str]:
-    """Generate a design suggestion through the real AI backend registry.
+    """通过真实 AI 后端注册表生成设计建议。
 
-    Tries the configured local backends (MLX/GGUF) first; when none is
-    usable, falls back to the deterministic mock backend, which derives
-    its answer from the input context (persona / world-doc features)
-    instead of a fixed template.  Returns ``(text, backend_name)``;
-    ``backend_name`` is ``"unavailable"`` only when no backend produced
-    a usable answer.
+    先尝试配置的本地后端（MLX/GGUF）；当没有可用时，回退到确定性 mock
+    后端，它会根据输入上下文（人设 / 世界文档特征）推导答案，而非固定
+    模板。返回 ``(text, backend_name)``；仅当没有后端能产出可用答案时，
+    ``backend_name`` 才为 ``"unavailable"``。
     """
     try:
         from devkit.ai.registry import get_chat_backend
@@ -219,9 +214,8 @@ def _generate_suggestion(context: str) -> tuple[str, str]:
         if answer and answer.strip():
             return answer.strip(), getattr(backend, "name", "mock")
     except Exception:
-        # Real backend missing or unusable (e.g. mlx installed but no
-        # model loaded) — the deterministic mock backend is always
-        # available, so try it explicitly before giving up.
+        # 真实后端缺失或不可用（例如已安装 mlx 但未加载模型）——
+        # 确定性 mock 后端始终可用，因此在放弃前先显式尝试它。
         pass
     try:
         from devkit.ai.registry import get_chat_backend as _get_chat_backend
@@ -236,15 +230,13 @@ def _generate_suggestion(context: str) -> tuple[str, str]:
 
 
 def suggest_with_questions(work_dir: str, context: str) -> dict[str, Any]:
-    """C4 AC-2 — propose clarifying questions before producing a design.
+    """C4 AC-2 —— 在生成设计之前先提出澄清性问题。
 
-    The function list requires the AI assistant to *ask the user first* on
-    key decision points rather than deciding preferences unilaterally.  This
-    returns a structured ``questions`` list derived from the context so the
-    UI can present them and the developer answers before the assistant fills
-    in fields.  A real suggestion from the AI backend registry (mock in
-    stub environments) is also returned as a starting point, and the assist
-    event is logged with ``source='ai_suggested'`` for the 30% audit.
+    功能清单要求 AI 助手在关键决策点上*先询问用户*，而不是单方面
+    决定偏好。本函数返回从上下文推导的结构化 ``questions`` 列表，
+    供 UI 展示，开发者在助手填写字段之前回答。同时返回 AI 后端注册表
+    的真实建议（stub 环境中为 mock），并将辅助事件以
+    ``source='ai_suggested'`` 记录，供 30% 审计使用。
     """
     ctx = (context or "").lower()
     module = _detect_module(ctx)
@@ -269,7 +261,7 @@ def suggest_with_questions(work_dir: str, context: str) -> dict[str, Any]:
 
 
 def _build_questions(module: str, context: str) -> list[dict[str, Any]]:
-    """Return clarifying questions for a module (C4 AC-2)."""
+    """返回某个模块的澄清性问题（C4 AC-2）。"""
     common = [
         {"key": "name", "question": "这个条目的名称/标题是什么？", "required": True},
         {"key": "tone", "question": "希望的整体基调是？（轻松 / 严肃 / 悲壮 / 治愈）", "required": False},

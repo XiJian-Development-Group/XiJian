@@ -1,58 +1,56 @@
-"""``/v1/xijian/desktop/*`` + ``/v1/xijian/mcp/pending*`` routes — A8.
+"""``/v1/xijian/desktop/*`` + ``/v1/xijian/mcp/pending*`` 路由 — A8。
 
-Desktop pets (US-A8-01 / US-A8-02)
+桌面宠物（US-A8-01 / US-A8-02）
 ==================================
 
-* ``GET    /v1/xijian/desktop/pets``                     — list (?character_id, ?is_active)
-* ``POST   /v1/xijian/desktop/pets``                     — create
-* ``GET    /v1/xijian/desktop/pets/<pet_id>``            — get
-* ``PATCH  /v1/xijian/desktop/pets/<pet_id>``            — patch
-* ``DELETE /v1/xijian/desktop/pets/<pet_id>``            — delete
-* ``POST   /v1/xijian/desktop/pets/<pet_id>/activate``   — show on desktop
-* ``POST   /v1/xijian/desktop/pets/<pet_id>/deactivate`` — hide
+* ``GET    /v1/xijian/desktop/pets``                     — 列表 (?character_id, ?is_active)
+* ``POST   /v1/xijian/desktop/pets``                     — 创建
+* ``GET    /v1/xijian/desktop/pets/<pet_id>``            — 获取
+* ``PATCH  /v1/xijian/desktop/pets/<pet_id>``            — 修改
+* ``DELETE /v1/xijian/desktop/pets/<pet_id>``            — 删除
+* ``POST   /v1/xijian/desktop/pets/<pet_id>/activate``   — 显示在桌面
+* ``POST   /v1/xijian/desktop/pets/<pet_id>/deactivate`` — 隐藏
 
-Dynamic wallpapers (US-A8-03 / US-A8-04)
+动态壁纸（US-A8-03 / US-A8-04）
 ========================================
 
-* ``GET    /v1/xijian/desktop/wallpapers``               — list (?character_id, ?is_active)
-* ``POST   /v1/xijian/desktop/wallpapers``               — create
-* ``GET    /v1/xijian/desktop/wallpapers/<wp_id>``       — get
-* ``PATCH  /v1/xijian/desktop/wallpapers/<wp_id>``       — patch
-* ``DELETE /v1/xijian/desktop/wallpapers/<wp_id>``       — delete
-* ``POST   /v1/xijian/desktop/wallpapers/<wp_id>/activate``   — activating a
-                                                                wallpaper
-                                                                deactivates
-                                                                the character's
-                                                                pets (AC-4)
+* ``GET    /v1/xijian/desktop/wallpapers``               — 列表 (?character_id, ?is_active)
+* ``POST   /v1/xijian/desktop/wallpapers``               — 创建
+* ``GET    /v1/xijian/desktop/wallpapers/<wp_id>``       — 获取
+* ``PATCH  /v1/xijian/desktop/wallpapers/<wp_id>``       — 修改
+* ``DELETE /v1/xijian/desktop/wallpapers/<wp_id>``       — 删除
+* ``POST   /v1/xijian/desktop/wallpapers/<wp_id>/activate``   — 激活壁纸会使
+                                                               角色的宠物
+                                                               停用 (AC-4)
 * ``POST   /v1/xijian/desktop/wallpapers/<wp_id>/deactivate``
 
-Audit log (AC-2)
+审计日志（AC-2）
 ================
 
-* ``GET  /v1/xijian/desktop/actions``                    — global pet-action log
-* ``GET  /v1/xijian/desktop/pets/<pet_id>/actions``      — per-pet log
-* ``POST /v1/xijian/desktop/pets/<pet_id>/actions``      — dispatch/record one
-                                                          pet action
+* ``GET  /v1/xijian/desktop/actions``                    — 全局宠物动作日志
+* ``GET  /v1/xijian/desktop/pets/<pet_id>/actions``      — 单宠物日志
+* ``POST /v1/xijian/desktop/pets/<pet_id>/actions``      — 派发/记录一个
+                                                         宠物动作
 
-Desktop-client execution loop (the A5.2-flagged gap)
+桌面客户端执行循环（A5.2 标记的缺口）
 ====================================================
 
-* ``GET  /v1/xijian/mcp/pending``                        — poll pending actions
+* ``GET  /v1/xijian/mcp/pending``                        — 轮询待办操作
                                                           (?status, ?limit,
-                                                          ?claim=1 to claim)
-* ``GET  /v1/xijian/mcp/pending/<action_id>``            — get one
-* ``POST /v1/xijian/mcp/pending/<action_id>/claim``      — claim for execution
-* ``POST /v1/xijian/mcp/pending/<action_id>/result``     — write back
+                                                          ?claim=1 认领)
+* ``GET  /v1/xijian/mcp/pending/<action_id>``            — 获取单个
+* ``POST /v1/xijian/mcp/pending/<action_id>/claim``      — 认领执行
+* ``POST /v1/xijian/mcp/pending/<action_id>/result``     — 回写
                                                           {status:
                                                            executed|failed,
                                                            result: {...},
                                                            pet_id?: ...}
 
-WS push
+WS 推送
 =======
 
 * ``desktop_pet.event`` / ``wallpaper.event`` / ``desktop_pet.action`` /
-  ``desktop_pet.pending`` — best-effort broadcasts from the stub layer.
+  ``desktop_pet.pending`` — 来自存根层的尽力而为广播。
 """
 
 from __future__ import annotations
@@ -72,7 +70,7 @@ _LOGGER = logging.getLogger("xijian_api.routes.xijian_desktop")
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# 辅助函数
 # ---------------------------------------------------------------------------
 
 
@@ -115,7 +113,7 @@ def _wallpaper_or_404(wallpaper_id: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Desktop pets — CRUD
+# 桌面宠物 — CRUD
 # ---------------------------------------------------------------------------
 
 
@@ -192,7 +190,7 @@ def deactivate_pet(pet_id: str):
 
 
 # ---------------------------------------------------------------------------
-# Dynamic wallpapers — CRUD
+# 动态壁纸 — CRUD
 # ---------------------------------------------------------------------------
 
 
@@ -267,7 +265,7 @@ def deactivate_wallpaper(wallpaper_id: str):
 
 
 # ---------------------------------------------------------------------------
-# Audit log (AC-2)
+# 审计日志（AC-2）
 # ---------------------------------------------------------------------------
 
 
@@ -303,7 +301,7 @@ def list_pet_actions(pet_id: str):
 
 @bp.post("/v1/xijian/desktop/pets/<pet_id>/actions")
 def dispatch_pet_action(pet_id: str):
-    """Dispatch / record one pet action (AC-2 audit entry)."""
+    """派发 / 记录一个宠物动作（AC-2 审计条目）。"""
     _pet_or_404(pet_id)
     body = _require_json()
     action_kind = body.get("action_kind")
@@ -322,7 +320,7 @@ def dispatch_pet_action(pet_id: str):
 
 
 # ---------------------------------------------------------------------------
-# Desktop-client execution loop — /v1/xijian/mcp/pending*
+# 桌面客户端执行循环 — /v1/xijian/mcp/pending*
 # ---------------------------------------------------------------------------
 
 

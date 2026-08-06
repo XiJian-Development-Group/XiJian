@@ -1,8 +1,7 @@
-"""World view editor for the Developer Kit.
+"""开发者工具的世界观编辑器。
 
-Lets developers create and edit world-view documents and world
-configurations.  Data is stored as JSON + Markdown under the
-working directory.
+让开发者能够创建和编辑世界观文档与世界配置。
+数据以 JSON + Markdown 形式存储在工作目录下。
 """
 
 from __future__ import annotations
@@ -20,9 +19,9 @@ from devkit._vendor import iso_now
 _WORLDS_SUBDIR = "worlds"
 
 
-# DSL Parser exceptions
+# DSL 解析器异常
 class DSLParseError(ValueError):
-    """Raised when DSL parsing fails."""
+    """DSL 解析失败时抛出。"""
     pass
 
 
@@ -51,7 +50,7 @@ def _world_doc_version_path(work_dir: str, world_id: str, version: int) -> str:
 
 
 def _list_world_doc_versions(work_dir: str, world_id: str) -> list[dict[str, Any]]:
-    """List all versions of a world document."""
+    """列出世界文档的所有版本。"""
     versions_dir = _world_doc_versions_dir(work_dir, world_id)
     if not os.path.isdir(versions_dir):
         return []
@@ -59,12 +58,12 @@ def _list_world_doc_versions(work_dir: str, world_id: str) -> list[dict[str, Any
     for fname in sorted(os.listdir(versions_dir)):
         if fname.startswith("world_doc_v") and fname.endswith(".md"):
             try:
-                version = int(fname[11:-3])  # Extract version number from "world_doc_v{N}.md"
+                version = int(fname[11:-3])  # 从 "world_doc_v{N}.md" 提取版本号
                 fpath = os.path.join(versions_dir, fname)
                 stat = os.stat(fpath)
                 with open(fpath, encoding="utf-8") as f:
                     content = f.read()
-                # Extract first heading as title
+                # 提取第一个标题作为标题
                 title = ""
                 for line in content.splitlines():
                     if line.startswith("#"):
@@ -83,12 +82,12 @@ def _list_world_doc_versions(work_dir: str, world_id: str) -> list[dict[str, Any
 
 
 def _save_world_doc_version(work_dir: str, world_id: str, content: str, version: int | None = None) -> int:
-    """Save a version of the world document. Returns the version number."""
+    """保存世界文档的一个版本。返回版本号。"""
     versions_dir = _world_doc_versions_dir(work_dir, world_id)
     os.makedirs(versions_dir, exist_ok=True)
 
     if version is None:
-        # Auto-increment version
+        # 自动递增版本号
         existing = _list_world_doc_versions(work_dir, world_id)
         version = (existing[0]["version"] + 1) if existing else 1
 
@@ -99,7 +98,7 @@ def _save_world_doc_version(work_dir: str, world_id: str, content: str, version:
 
 
 def _get_world_doc_version(work_dir: str, world_id: str, version: int) -> str | None:
-    """Get a specific version of the world document."""
+    """获取世界文档的特定版本。"""
     fpath = _world_doc_version_path(work_dir, world_id, version)
     if not os.path.isfile(fpath):
         return None
@@ -108,19 +107,19 @@ def _get_world_doc_version(work_dir: str, world_id: str, version: int) -> str | 
 
 
 def _extract_world_doc_keywords(doc: str) -> list[str]:
-    """Extract keywords from world document for A4 NPC generation.
+    """从世界文档中提取关键词，用于 A4 NPC 生成。
 
-    Extracts:
-    - Headings (markdown # headings)
-    - Proper nouns (capitalized words in Chinese/English)
-    - Key terms from required sections (时间线, 地理, 主要势力)
+    提取：
+    - 标题（markdown # 标题）
+    - 专有名词（中英文的大写词）
+    - 必需章节中的关键术语（时间线、地理、主要势力）
     """
     if not doc or not doc.strip():
         return []
 
     keywords = set()
 
-    # Extract headings
+    # 提取标题
     for line in doc.splitlines():
         line = line.strip()
         if line.startswith("#"):
@@ -128,21 +127,21 @@ def _extract_world_doc_keywords(doc: str) -> list[str]:
             if heading:
                 keywords.add(heading)
 
-    # Extract Chinese proper nouns (2+ chars, capitalized or known patterns)
-    # Simple heuristic: words that appear in the required sections
+    # 提取中文专有名词（2 字以上、大写或已知模式）
+    # 简单启发式：出现在必需章节中的词
     import re
     chinese_words = re.findall(r'[\u4e00-\u9fff]{2,}', doc)
     for w in chinese_words:
         if len(w) >= 2 and len(w) <= 10:
             keywords.add(w)
 
-    # Extract English capitalized words
+    # 提取英文大写词
     english_words = re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b', doc)
     for w in english_words:
         if len(w) >= 2:
             keywords.add(w)
 
-    # Limit to top 50 most relevant
+    # 限制为最相关的 50 个
     return list(keywords)[:50]
 
 
@@ -188,7 +187,7 @@ def save_world(work_dir: str, data: dict[str, Any]) -> dict[str, Any]:
     existing_id = data.get("id", "")
     if existing_id:
         world_id = existing_id
-        # Save new version of world_doc if provided
+        # 如果提供了 world_doc，则保存新版本
         world_doc = data.get("world_doc", "")
         if world_doc:
             _save_world_doc_version(work_dir, world_id, world_doc)
@@ -201,7 +200,7 @@ def save_world(work_dir: str, data: dict[str, Any]) -> dict[str, Any]:
         doc_path = _world_doc_path(work_dir, world_id)
         with open(doc_path, "w", encoding="utf-8") as f:
             f.write(world_doc)
-    # Get all versions for the record
+    # 获取记录的所有版本
     versions = _list_world_doc_versions(work_dir, world_id)
     record = {
         "id": world_id,
@@ -228,14 +227,13 @@ def delete_world(work_dir: str, world_id: str) -> bool:
 
 
 def export_world_for_submit(work_dir: str, world_id: str) -> dict[str, Any]:
-    """Export a world as a pack-compatible archive payload.
+    """以包兼容的归档负载导出一个世界。
 
     以包兼容的归档负载导出一个世界。
 
-    Uses the **resource-pack layout** (``worlds/<id>/world.json``,
-    ``worlds/<id>/world_doc.md``, ``worlds/<id>/world_config.json``)
-    so the produced archive installs directly via the core resource-pack
-    engine (§B).
+    使用**资源包布局**（``worlds/<id>/world.json``、
+    ``worlds/<id>/world_doc.md``、``worlds/<id>/world_config.json``），
+    产出的归档可被核心资源包引擎（§B）直接安装。
 
     使用**资源包布局**（``worlds/<id>/world.json``、``worlds/<id>/world_doc.md``、
     ``worlds/<id>/world_config.json``），产出的归档可被核心资源包引擎（§B）直接安装。
@@ -267,16 +265,16 @@ def export_world_for_submit(work_dir: str, world_id: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# C1.3 — structured world configuration (time / scene / weather)
+# C1.3 —— 结构化世界配置（时间 / 场景 / 天气）
 # ---------------------------------------------------------------------------
 
-#: Default structured configuration a new world starts with.  Every
-#: field is range-checked by :func:`validate_world_config` before save.
+#: 新世界启动时的默认结构化配置。每个字段在保存前都会由
+#: :func:`validate_world_config` 做范围检查。
 WORLD_CONFIG_DEFAULT: dict[str, Any] = {
-    "time_flow_multiplier": 30.0,   # 1 real minute = N virtual minutes
-    "day_length_minutes": 1440,     # virtual minutes per full day
-    "night_ratio": 0.4,             # fraction of the day that is "night"
-    "weather_probabilities": {      # per-slot weather distribution (0..1)
+    "time_flow_multiplier": 30.0,   # 1 现实分钟 = N 虚拟分钟
+    "day_length_minutes": 1440,     # 每个完整天的虚拟分钟数
+    "night_ratio": 0.4,             # 一天中属于“夜晚”的比例
+    "weather_probabilities": {      # 按时段划分的天气分布（0..1）
         "morning": {"sunny": 0.6, "rain": 0.2, "snow": 0.05, "cloudy": 0.15},
         "noon": {"sunny": 0.7, "rain": 0.15, "snow": 0.03, "cloudy": 0.12},
         "evening": {"sunny": 0.4, "rain": 0.3, "snow": 0.05, "cloudy": 0.25},
@@ -305,10 +303,10 @@ def get_world_config(work_dir: str, world_id: str) -> dict[str, Any]:
         return dict(WORLD_CONFIG_DEFAULT)
 
 
-#: Key sections a world-view document should contain (C1.2 AC-2).
+#: 世界观文档应包含的关键章节（C1.2 AC-2）。
 _WORLD_DOC_REQUIRED_SECTIONS = ("时间线", "地理", "主要势力")
 
-#: Built-in world-doc templates (C1.2 AC-1).
+#: 内置世界观文档模板（C1.2 AC-1）。
 _WORLD_DOC_TEMPLATES: dict[str, str] = {
     "异世界": (
         "## 时间线\n\n"
@@ -393,16 +391,15 @@ _WORLD_DOC_TEMPLATES: dict[str, str] = {
 
 
 def lint_world_doc(doc: str) -> dict[str, Any]:
-    """Lightweight world-doc linter (C1.2 AC-2).
+    """轻量级世界观文档检查器（C1.2 AC-2）。
 
-    Flags missing key sections (时间线 / 地理 / 主要势力) by scanning
-    Markdown headings.  Returns ``ok`` only when every required section
-    is present.
+    通过扫描 Markdown 标题标记缺失的关键章节（时间线 / 地理 / 主要势力）。
+    仅当每个必需章节都存在时返回 ``ok``。
     """
     if not isinstance(doc, str) or not doc.strip():
         return {"ok": False, "missing": list(_WORLD_DOC_REQUIRED_SECTIONS), "warnings": ["文档为空"]}
     text = doc
-    # Normalise heading markers that may carry leading '#' whitespace.
+    # 规范化可能带前导 '#' 空白的标题标记。
     headings = [ln.lstrip("#").strip() for ln in text.splitlines() if ln.lstrip().startswith("#")]
     missing = [s for s in _WORLD_DOC_REQUIRED_SECTIONS if not any(s in h for h in headings)]
     warnings = []
@@ -412,7 +409,7 @@ def lint_world_doc(doc: str) -> dict[str, Any]:
 
 
 def get_world_doc_templates() -> dict[str, str]:
-    """Return built-in world-doc markdown templates (C1.2 AC-1)."""
+    """返回内置的世界观文档 markdown 模板（C1.2 AC-1）。"""
     return dict(_WORLD_DOC_TEMPLATES)
 
 
@@ -430,7 +427,7 @@ def save_world_config(work_dir: str, world_id: str, config: dict[str, Any]) -> d
 
 
 def validate_world_config(config: dict[str, Any]) -> tuple[bool, list[str]]:
-    """Range-check a structured world config (C1.3 AC-1)."""
+    """对结构化世界配置做范围检查（C1.3 AC-1）。"""
     errors: list[str] = []
     if not isinstance(config, dict):
         return False, ["配置必须是对象"]
@@ -470,36 +467,36 @@ def validate_world_config(config: dict[str, Any]) -> tuple[bool, list[str]]:
 
 
 # ---------------------------------------------------------------------------
-# C1.1 — custom event DSL store
+# C1.1 —— 自定义事件 DSL 存储
 # ---------------------------------------------------------------------------
 
-#: Recognised trigger operators for the event DSL (see C1.1).
+#: 事件 DSL 可识别的触发器操作符（参见 C1.1）。
 _EVENT_TRIGGER_KINDS = ("time", "state", "probability", "composite")
 
-#: Single-world event cap (function list C1.1 AC-2, ``[TODO: 默认 200]``).
+#: 单世界事件上限（功能清单 C1.1 AC-2，``[TODO: 默认 200]``）。
 MAX_EVENTS_PER_WORLD: int = 200
 
-#: Event factory store path
+#: 事件工厂存储路径
 def _event_factories_path(work_dir: str, world_id: str) -> str:
     return os.path.join(_world_dir(work_dir, world_id), "event_factories.json")
 
 
 # ---------------------------------------------------------------------------
-# DSL Parser (C1.1 AC-1)
+# DSL 解析器（C1.1 AC-1）
 # ---------------------------------------------------------------------------
 
 
 class DSLParseError(DevKitError):
-    """Raised when DSL parsing fails."""
+    """DSL 解析失败时抛出。"""
 
     def __init__(self, message: str):
         super().__init__(400, message, code="dsl_parse_error")
 
 
 def parse_event_dsl(dsl_text: str) -> dict[str, Any]:
-    """Parse the event DSL text into a structured event definition.
+    """将事件 DSL 文本解析为结构化的事件定义。
 
-    DSL grammar (simplified):
+    DSL 语法（简化）：
         event "name" {
             trigger: <trigger_expr>
             priority: <int>
@@ -510,26 +507,26 @@ def parse_event_dsl(dsl_text: str) -> dict[str, Any]:
             is_enabled: <bool>
         }
 
-    Trigger expressions support:
+    触发器表达式支持：
         - time: "weekday in [1,4] AND hour == 10"
-        - state: "field op value" (e.g., "mood < 20")
+        - state: "field op value"（例如 "mood < 20"）
         - probability: "chance 0.1"
-        - composite: "AND/OR" with sub-rules
+        - composite: 带子规则的 "AND/OR"
 
-    Returns a dict with keys: name, trigger, priority, scene, effects, kind, description, is_enabled
+    返回包含以下键的 dict：name、trigger、priority、scene、effects、kind、description、is_enabled
     """
     if not dsl_text or not dsl_text.strip():
         raise DSLParseError("DSL 文本为空")
 
     text = dsl_text.strip()
 
-    # Extract event name
+    # 提取事件名称
     name_match = re.match(r'event\s+"([^"]+)"\s*\{', text)
     if not name_match:
         raise DSLParseError('DSL 必须以 event "名称" { 开头')
     name = name_match.group(1)
 
-    # Find the matching closing brace
+    # 找到匹配的右花括号
     brace_start = name_match.end() - 1
     brace_count = 0
     brace_end = -1
@@ -546,7 +543,7 @@ def parse_event_dsl(dsl_text: str) -> dict[str, Any]:
 
     body = text[brace_start + 1 : brace_end].strip()
 
-    # Parse key-value pairs in the body
+    # 解析主体中的键值对
     result = {
         "name": name,
         "kind": "custom",
@@ -557,7 +554,7 @@ def parse_event_dsl(dsl_text: str) -> dict[str, Any]:
         "is_enabled": True,
     }
 
-    # Split by top-level commas (not inside braces/brackets)
+    # 按顶层逗号分割（不在花括号/方括号内）
     pairs = _split_top_level(body, ",")
     for pair in pairs:
         pair = pair.strip()
@@ -590,7 +587,7 @@ def parse_event_dsl(dsl_text: str) -> dict[str, Any]:
         elif key == "is_enabled":
             result["is_enabled"] = value.lower() in ("true", "1", "yes")
 
-    # Validate the parsed trigger
+    # 验证解析后的触发器
     ok, errors = validate_event_trigger(result["trigger"])
     if not ok:
         raise DSLParseError("；".join(errors))
@@ -599,12 +596,12 @@ def parse_event_dsl(dsl_text: str) -> dict[str, Any]:
 
 
 def _split_top_level(text: str, delimiter: str) -> list[str]:
-    """Split text by delimiter at top level (not inside {}, [], ()).
+    """在顶层（不在 {}、[]、() 内）按分隔符分割文本。
 
-    Also treats newlines as delimiters when delimiter is ','.
+    当分隔符为 ',' 时，也将换行视为分隔符。
     """
     if delimiter == ",":
-        # For DSL body, split by both commas and newlines at top level
+        # 对于 DSL 主体，在顶层同时按逗号和换行分割
         parts = []
         current = []
         depth_brace = 0
@@ -650,7 +647,7 @@ def _split_top_level(text: str, delimiter: str) -> list[str]:
             parts.append("".join(current))
         return parts
     else:
-        # Original logic for other delimiters
+        # 其他分隔符的原始逻辑
         parts = []
         current = []
         depth_brace = 0
@@ -698,17 +695,17 @@ def _split_top_level(text: str, delimiter: str) -> list[str]:
 
 
 def _parse_trigger_dsl(trigger_text: str) -> dict[str, Any]:
-    """Parse trigger DSL expression into structured trigger dict.
+    """将触发器 DSL 表达式解析为结构化的触发器 dict。
 
-    Supports:
+    支持：
       - time: "weekday in [1,4] AND hour == 10"
       - state: "mood < 20"
       - probability: "chance 0.1"
-      - composite: "AND: rule1, rule2" or "OR: rule1, rule2"
+      - composite: "AND: rule1, rule2" 或 "OR: rule1, rule2"
     """
     trigger_text = trigger_text.strip()
 
-    # Check for probability
+    # 检查是否为概率触发器
     if trigger_text.lower().startswith("chance"):
         try:
             chance = float(trigger_text.split()[1])
@@ -716,7 +713,7 @@ def _parse_trigger_dsl(trigger_text: str) -> dict[str, Any]:
         except (IndexError, ValueError):
             raise DSLParseError(f"概率触发器格式错误: {trigger_text}")
 
-    # Check for composite (AND/OR with rules)
+    # 检查是否为复合触发器（AND/OR 带规则）
     if trigger_text.upper().startswith("AND:") or trigger_text.upper().startswith("OR:"):
         op = "AND" if trigger_text.upper().startswith("AND:") else "OR"
         rules_text = trigger_text[4:].strip()
@@ -728,13 +725,13 @@ def _parse_trigger_dsl(trigger_text: str) -> dict[str, Any]:
                 parsed_rules.append(_parse_trigger_dsl(rule))
         return {"kind": "composite", "op": op, "rules": parsed_rules}
 
-    # Check for time trigger (weekday/hour expressions)
+    # 检查是否为时间触发器（weekday/hour 表达式）
     time_keywords = ("weekday", "hour", "minute")
     if any(kw in trigger_text.lower() for kw in time_keywords):
-        # Simple parsing: "weekday in [1,4] AND hour == 10"
-        # We'll store the raw expression and also try to extract structured parts
+        # 简单解析："weekday in [1,4] AND hour == 10"
+        # 我们存储原始表达式，同时尝试提取结构化部分
         trigger = {"kind": "time", "expression": trigger_text}
-        # Try to extract weekday
+        # 尝试提取 weekday
         wd_match = re.search(r"weekday\s+in\s+\[([^\]]+)\]", trigger_text, re.IGNORECASE)
         if wd_match:
             try:
@@ -742,25 +739,25 @@ def _parse_trigger_dsl(trigger_text: str) -> dict[str, Any]:
                 trigger["weekday"] = days
             except ValueError:
                 pass
-        # Try to extract hour
+        # 尝试提取 hour
         hr_match = re.search(r"hour\s*==\s*(\d+)", trigger_text, re.IGNORECASE)
         if hr_match:
             trigger["hour"] = int(hr_match.group(1))
-        # Try to extract minute
+        # 尝试提取 minute
         mn_match = re.search(r"minute\s*==\s*(\d+)", trigger_text, re.IGNORECASE)
         if mn_match:
             trigger["minute"] = int(mn_match.group(1))
-        # Default frequency
+        # 默认频率
         trigger["frequency"] = "daily"
         return trigger
 
-    # Default: state trigger (field op value)
-    # Format: "field op value" e.g., "mood < 20"
+    # 默认：状态触发器（field op value）
+    # 格式："field op value"，例如 "mood < 20"
     state_match = re.match(r"(\w+)\s*(>|>=|<|<=|==|!=)\s*(.+)", trigger_text)
     if state_match:
         field, op, value_str = state_match.groups()
         value_str = value_str.strip()
-        # Try to parse value
+        # 尝试解析值
         try:
             if "." in value_str:
                 value: Any = float(value_str)
@@ -774,12 +771,12 @@ def _parse_trigger_dsl(trigger_text: str) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Event Factory (C1.1 US-C1.1-02) — define a "class" of events for batch instantiation
+# 事件工厂（C1.1 US-C1.1-02）—— 定义一类事件以便批量实例化
 # ---------------------------------------------------------------------------
 
 
 def list_event_factories(work_dir: str, world_id: str) -> list[dict[str, Any]]:
-    """List all event factories for a world."""
+    """列出某个世界的所有事件工厂。"""
     fpath = _event_factories_path(work_dir, world_id)
     if not os.path.isfile(fpath):
         return []
@@ -791,9 +788,9 @@ def list_event_factories(work_dir: str, world_id: str) -> list[dict[str, Any]]:
 
 
 def save_event_factory(work_dir: str, world_id: str, data: dict[str, Any]) -> dict[str, Any]:
-    """Create or update an event factory (template for batch instantiation).
+    """创建或更新一个事件工厂（用于批量实例化的模板）。
 
-    Factory schema:
+    工厂模式：
     {
         "id": "factory_xxx",
         "name": "随机暴雨事件",
@@ -815,7 +812,7 @@ def save_event_factory(work_dir: str, world_id: str, data: dict[str, Any]) -> di
     factory_id = data.get("id") or f"factory_{secrets.token_hex(8)}"
     is_new = factory_id not in {f.get("id") for f in factories}
 
-    # Validate base_trigger if present
+    # 如果提供了 base_trigger 则验证
     base_trigger = data.get("base_trigger", data.get("trigger", {}))
     if base_trigger:
         ok, errors = validate_event_trigger(base_trigger)
@@ -867,9 +864,9 @@ def delete_event_factory(work_dir: str, world_id: str, factory_id: str) -> bool:
 def instantiate_event_factory(
     work_dir: str, world_id: str, factory_id: str, count: int = 1
 ) -> list[dict[str, Any]]:
-    """Instantiate events from a factory (batch creation).
+    """从工厂实例化事件（批量创建）。
 
-    Returns list of created event records.
+    返回创建的事件记录列表。
     """
     factories = list_event_factories(work_dir, world_id)
     factory = next((f for f in factories if f.get("id") == factory_id), None)
@@ -879,7 +876,7 @@ def instantiate_event_factory(
     events = list_world_events(work_dir, world_id)
     base_count = len(events)
 
-    # Check capacity
+    # 检查容量
     if base_count + count > MAX_EVENTS_PER_WORLD:
         raise DevKitError(
             400,
@@ -908,7 +905,7 @@ def instantiate_event_factory(
         }
         event = save_world_event(work_dir, world_id, event_data)
         created.append(event)
-        events.append(event)  # update local list for next iteration
+        events.append(event)  # 更新本地列表以供下一次迭代
 
     return created
 
@@ -943,7 +940,7 @@ def save_world_event(work_dir: str, world_id: str, data: dict[str, Any]) -> dict
     event_id = data.get("id") or f"evt_{secrets.token_hex(8)}"
     is_new = event_id not in {e.get("id") for e in events}
 
-    # C1.1 AC-2 — single-world event cap.
+    # C1.1 AC-2 —— 单世界事件上限。
     if is_new and len(events) >= MAX_EVENTS_PER_WORLD:
         raise DevKitError(
             400,
@@ -951,8 +948,8 @@ def save_world_event(work_dir: str, world_id: str, data: dict[str, Any]) -> dict
             code="event_cap_exceeded",
         )
 
-    # C1.1 boundary — reject a new event whose name + trigger duplicate an
-    # existing one (conflicting definition).
+    # C1.1 边界 —— 拒绝保存名称与触发条件都与现有事件重复的新事件
+    #（定义冲突）。
     if is_new:
         trigger_json = json.dumps(trigger, sort_keys=True, ensure_ascii=False)
         for existing in events:
@@ -1005,14 +1002,14 @@ def delete_world_event(work_dir: str, world_id: str, event_id: str) -> bool:
 
 
 def validate_event_trigger(trigger: dict[str, Any]) -> tuple[bool, list[str]]:
-    """Validate an event trigger definition (C1.1 AC-1).
+    """验证事件触发器定义（C1.1 AC-1）。
 
-    A trigger is one of::
+    触发器是以下之一::
 
-        {"kind": "time", "at": "MON 10:00"}            # scheduled (legacy)
-        {"kind": "time", "weekday": [1,4], "hour": 10}  # structured (from DSL)
+        {"kind": "time", "at": "MON 10:00"}            # 定时（旧式）
+        {"kind": "time", "weekday": [1,4], "hour": 10}  # 结构化（来自 DSL）
         {"kind": "state", "field": "mood", "op": "<", "value": 20}
-        {"kind": "probability", "chance": 0.1}         # random daily
+        {"kind": "probability", "chance": 0.1}         # 每日随机
         {"kind": "composite", "op": "AND", "rules": [...]}
     """
     errors: list[str] = []
@@ -1022,7 +1019,7 @@ def validate_event_trigger(trigger: dict[str, Any]) -> tuple[bool, list[str]]:
     if kind not in _EVENT_TRIGGER_KINDS:
         return False, [f"trigger.kind 必须是 {_EVENT_TRIGGER_KINDS} 之一"]
     if kind == "time":
-        # Accept both legacy 'at' format and new structured format
+        # 同时接受旧式 'at' 格式和新式结构化格式
         has_at = trigger.get("at")
         has_structured = trigger.get("weekday") is not None or trigger.get("hour") is not None
         if not has_at and not has_structured:
@@ -1054,38 +1051,38 @@ def validate_event_trigger(trigger: dict[str, Any]) -> tuple[bool, list[str]]:
 
 
 # ---------------------------------------------------------------------------
-# World Document Version Management (C1.2 AC-1)
+# 世界文档版本管理（C1.2 AC-1）
 # ---------------------------------------------------------------------------
 
 
 def list_world_doc_versions(work_dir: str, world_id: str) -> list[dict[str, Any]]:
-    """List all versions of a world document."""
+    """列出世界文档的所有版本。"""
     return _list_world_doc_versions(work_dir, world_id)
 
 
 def get_world_doc_version(work_dir: str, world_id: str, version: int) -> str | None:
-    """Get a specific version of the world document."""
+    """获取世界文档的特定版本。"""
     return _get_world_doc_version(work_dir, world_id, version)
 
 
 def restore_world_doc_version(work_dir: str, world_id: str, version: int) -> dict[str, Any]:
-    """Restore a world document to a specific version.
+    """将世界文档恢复到特定版本。
 
-    Saves the restored content as a new version (not overwriting the old one).
+    将恢复的内容保存为新版本（不覆盖旧版本）。
     """
     content = _get_world_doc_version(work_dir, world_id, version)
     if content is None:
         raise DevKitError(404, f"版本 {version} 不存在", code="version_not_found")
 
-    # Save as new version
+    # 保存为新版本
     new_version = _save_world_doc_version(work_dir, world_id, content)
 
-    # Update the main world_doc
+    # 更新主 world_doc
     doc_path = _world_doc_path(work_dir, world_id)
     with open(doc_path, "w", encoding="utf-8") as f:
         f.write(content)
 
-    # Update world.json record
+    # 更新 world.json 记录
     world = get_world(work_dir, world_id)
     if world:
         world["world_doc"] = content
@@ -1099,12 +1096,12 @@ def restore_world_doc_version(work_dir: str, world_id: str, version: int) -> dic
 
 
 # ---------------------------------------------------------------------------
-# World Document Keywords Extraction (for A4 NPC generation)
+# 世界文档关键词提取（用于 A4 NPC 生成）
 # ---------------------------------------------------------------------------
 
 
 def extract_world_doc_keywords(work_dir: str, world_id: str) -> list[str]:
-    """Extract keywords from world document for A4 NPC generation."""
+    """从世界文档中提取关键词，用于 A4 NPC 生成。"""
     world = get_world(work_dir, world_id)
     if not world:
         raise DevKitError(404, f"世界观 {world_id} 不存在", code="not_found")
@@ -1113,5 +1110,5 @@ def extract_world_doc_keywords(work_dir: str, world_id: str) -> list[str]:
     return _extract_world_doc_keywords(doc)
 
 
-# For backward compatibility - expose internal function
+# 向后兼容 —— 暴露内部函数
 extract_world_doc_keywords_from_text = _extract_world_doc_keywords

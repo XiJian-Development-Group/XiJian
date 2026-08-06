@@ -75,6 +75,7 @@ def _extract_frames_ffmpeg(
         pass
 
     # Collect extracted frames, honor max_frames
+    # 收集提取的帧，遵守 max_frames
     all_frames = sorted(
         [os.path.join(tmp_dir, f) for f in os.listdir(tmp_dir)
          if f.startswith("frame_") and f.endswith(".jpg")]
@@ -82,6 +83,7 @@ def _extract_frames_ffmpeg(
 
     if not all_frames:
         # Fallback: extract one frame at key intervals
+        # 回退：按关键间隔提取一帧
         try:
             result = subprocess.run(
                 ["ffprobe", "-v", "error",
@@ -185,6 +187,7 @@ class OpenAIVideoUnderstandingBackend(VideoUnderstandingBackend):
             abort_signal.raise_if_aborted()
 
         # Resolve video to local path
+        # 将视频解析为本地路径
         video_path = self._resolve_video(video)
         if video_path is None:
             raise BackendError(
@@ -193,6 +196,7 @@ class OpenAIVideoUnderstandingBackend(VideoUnderstandingBackend):
             )
 
         # Extract frames
+        # 提取帧
         frames = _extract_frames_ffmpeg(
             video_path,
             max_frames=max_frames,
@@ -205,6 +209,7 @@ class OpenAIVideoUnderstandingBackend(VideoUnderstandingBackend):
             )
 
         # Build multimodal messages with frames
+        # 使用帧构建多模态消息
         system_prompt = (
             "You are a video understanding assistant. Analyze the provided video frames "
             "and answer the user's question about the video content. "
@@ -293,7 +298,7 @@ class OpenAIVideoUnderstandingBackend(VideoUnderstandingBackend):
         return None
 
     def _resolve_data_uri(self, data_uri: str) -> str | None:
-        """Decode a data URI to a temp file and return its path."""
+        """将 data URI 解码到临时文件并返回其路径。"""
         try:
             import base64
             header, b64 = data_uri.split(",", 1)
@@ -315,7 +320,7 @@ class OpenAIVideoUnderstandingBackend(VideoUnderstandingBackend):
             return None
 
     def _download_video(self, url: str) -> str | None:
-        """Download video from URL to a temp file and return its path."""
+        """从 URL 下载视频到临时文件并返回其路径。"""
         try:
             import httpx
             path_part = url.split("?")[0]

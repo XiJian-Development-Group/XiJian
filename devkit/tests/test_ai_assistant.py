@@ -1,21 +1,18 @@
-"""Tests for the DevKit AI design assistant (C4).
+"""DevKit AI 设计助手测试 (C4)。
 
-Covers:
+覆盖：
 
-* **Real backend registry** — :func:`auto_suggest` / :func:`_generate_suggestion`
-  call the AI backend registry (:mod:`devkit.ai.registry`) and fall back to
-  the deterministic mock backend in stub environments, producing suggestions
-  derived from the input context (persona / world-doc features) rather than
-  fixed strings.
-* **Determinism & diversity** — the same input always yields the same
-  suggestion; different inputs yield different suggestions.
-* **Clarifying questions** — :func:`suggest_with_questions` returns the
-  module-scoped question set (C4 AC-2).
-* **ai_ratio & 30% threshold** — :func:`calculate_ai_ratio` /
-  :func:`check_ai_threshold` and the assist log are preserved.
+* **真实后端注册表** — :func:`auto_suggest` / :func:`_generate_suggestion`
+  调用 AI 后端注册表 (:mod:`devkit.ai.registry`) 并在存根环境中回退到
+  确定性模拟后端，根据输入上下文（人设/世界文档特征）生成建议，
+  而非固定字符串。
+* **确定性与多样性** — 相同输入始终产生相同建议；不同输入产生不同建议。
+* **澄清问题** — :func:`suggest_with_questions` 返回模块级问题集 (C4 AC-2)。
+* **ai_ratio 与 30% 阈值** — :func:`calculate_ai_ratio` /
+  :func:`check_ai_threshold` 与辅助日志均被保留。
 
-Each test uses a fresh temporary work dir so the assist log
-(``<work_dir>/ai_assist/assist_log.json``) never leaks between tests.
+每个测试使用独立的临时工作目录，确保辅助日志
+(``<work_dir>/ai_assist/assist_log.json``) 在测试间不泄露。
 """
 
 from __future__ import annotations
@@ -41,28 +38,27 @@ from devkit.ai_assistant import (
 
 @pytest.fixture(autouse=True)
 def _force_mock_backend(monkeypatch):
-    """Force the deterministic mock chat backend for every test.
+    """强制所有测试使用确定性模拟聊天后端。
 
-    The mock backend is always ``is_available()`` and never touches the
-    filesystem, so tests are deterministic regardless of whether MLX / GGUF
-    is installed on the host.
+    模拟后端始终 ``is_available()`` 且不接触文件系统，因此无论宿主
+    是否安装 MLX / GGUF，测试均为确定性。
     """
     monkeypatch.setenv("XIJIAN_AI_BACKEND_CHAT", "mock")
 
 
 @pytest.fixture
 def work_dir(tmp_path) -> str:
-    """A fresh temporary work directory per test."""
+    """每个测试一个全新的临时工作目录。"""
     return str(tmp_path)
 
 
 # ---------------------------------------------------------------------------
-# _generate_suggestion — real backend registry
+# _generate_suggestion — 真实后端注册表
 # ---------------------------------------------------------------------------
 
 
 def test_generate_suggestion_uses_mock_backend(work_dir):
-    """Stub env → the registry resolves to the deterministic mock backend."""
+    """存根环境 → 注册表解析到确定性模拟后端。"""
     suggestion, backend = _generate_suggestion("角色 林晚，性格温柔，来自修仙世界")
     assert backend == "mock"
     assert suggestion
@@ -70,30 +66,29 @@ def test_generate_suggestion_uses_mock_backend(work_dir):
 
 
 def test_generate_suggestion_context_derived(work_dir):
-    """The suggestion references features extracted from the input context,
-    not a fixed template string."""
+    """建议引用从输入上下文提取的特征，而非固定模板字符串。"""
     suggestion, backend = _generate_suggestion("世界观 废土科幻，人类灭绝后的地下城")
     assert backend == "mock"
-    # Extracted features from the context should appear in the suggestion.
+    # 从上下文提取的特征应出现在建议中。
     assert "废土" in suggestion or "地下城" in suggestion or "科幻" in suggestion
 
 
 def test_generate_suggestion_deterministic(work_dir):
-    """Same input → same output (no random source)."""
+    """相同输入 → 相同输出（无随机源）。"""
     a1, b1 = _generate_suggestion("角色 林晚，性格温柔")
     a2, b2 = _generate_suggestion("角色 林晚，性格温柔")
     assert (a1, b1) == (a2, b2)
 
 
 def test_generate_suggestion_diverse(work_dir):
-    """Different inputs → different suggestions."""
+    """不同输入 → 不同建议。"""
     a1, _ = _generate_suggestion("角色 林晚，性格温柔")
     a2, _ = _generate_suggestion("世界观 废土科幻")
     assert a1 != a2
 
 
 # ---------------------------------------------------------------------------
-# auto_suggest — end-to-end + assist log
+# auto_suggest — 端到端 + 辅助日志
 # ---------------------------------------------------------------------------
 
 
@@ -116,10 +111,10 @@ def test_auto_suggest_logs_assist_event(work_dir):
 
 
 def test_auto_suggest_feeds_ai_ratio(work_dir):
-    """AI-suggested events count toward ai_ratio and the 30% threshold."""
+    """AI 建议事件计入 ai_ratio 与 30% 阈值。"""
     auto_suggest(work_dir, "角色 甲")
     auto_suggest(work_dir, "角色 乙")
-    # One manual (non-AI) event.
+    # 一个手动（非 AI）事件。
     log_assist_event(
         work_dir,
         event_type="manual_edit",
@@ -136,7 +131,7 @@ def test_auto_suggest_feeds_ai_ratio(work_dir):
 
 
 def test_ai_ratio_below_threshold(work_dir):
-    """Under 30% AI share → no review required."""
+    """AI 占比低于 30% → 无需复核。"""
     log_assist_event(
         work_dir, event_type="manual_edit", target_module="world",
         description="手写设定", accepted=True, source="manual",
@@ -149,8 +144,7 @@ def test_ai_ratio_below_threshold(work_dir):
     ratio = calculate_ai_ratio(work_dir)
     assert ratio == pytest.approx(1 / 3, abs=0.01)
     assert check_ai_threshold(work_dir)["requires_review"] is True  # 33% > 30%
-    # Two manual events + one AI event at 25% would be under — verify via
-    # a second manual event.
+    # 两个手动 + 一个 AI 为 25% 时应低于阈值 —— 通过第二个手动事件验证。
     log_assist_event(
         work_dir, event_type="manual_edit", target_module="world",
         description="手写设定", accepted=True, source="manual",
@@ -182,7 +176,7 @@ def test_suggest_with_questions_world(work_dir):
 
 
 def test_suggest_with_questions_logs(work_dir):
-    suggest_with_questions(work_dir, "角色 林晚")
+    suggest_with_questions(work_dir, "角色 枫晚")
     log = list_assist_log(work_dir)
     assert len(log) == 1
     assert log[0]["source"] == "ai_suggested"
@@ -190,13 +184,13 @@ def test_suggest_with_questions_logs(work_dir):
 
 
 # ---------------------------------------------------------------------------
-# Threshold boundary (30%)
+# 阈值边界 (30%)
 # ---------------------------------------------------------------------------
 
 
 def test_threshold_boundary(work_dir):
-    """3 manual + 7 AI = 70% → review; 7 manual + 3 AI = 30% → exactly at
-    threshold (not over → no review, per ``>`` semantics)."""
+    """3 手动 + 7 AI = 70% → 复核; 7 手动 + 3 AI = 30% → 恰好在
+    阈值 (不超过 → 无需复核, 按 ``>`` 语义)。"""
     for _ in range(7):
         auto_suggest(work_dir, "角色 测试")
     for _ in range(3):

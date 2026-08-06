@@ -1,4 +1,4 @@
-"""MLX text-to-speech backend for DevKit — adapted from core/xijian_api/ai/backends/mlx/tts.py."""
+"""DevKit 的 MLX 语音合成后端 —— 改编自 core/xijian_api/ai/backends/mlx/tts.py。"""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ from devkit.ai.types import TTSBackend
 
 
 def _probe() -> tuple[bool, Any]:
-    """Return ``(available, generate_fn)`` for the optional ``mlx_audio`` lib."""
+    """返回可选 ``mlx_audio`` 库的 ``(available, generate_fn)``。"""
     try:
         from mlx_audio import generate as mlx_audio_generate
     except Exception:
@@ -49,7 +49,7 @@ class MLXTTSBackend:
                 f"model path does not exist: {path}",
                 code="model_not_found",
             )
-        # ``mlx_audio`` typically lazy-loads the model inside ``generate``.
+        # ``mlx_audio`` 通常在 ``generate`` 内部懒加载模型。
         self._model = str(path)
         self._model_path = path
 
@@ -101,7 +101,7 @@ class MLXTTSBackend:
 
 
 def _extract_audio_bytes(result, *, response_format: str) -> bytes:
-    """Coerce whatever ``mlx_audio.generate`` returns into raw ``bytes``."""
+    """将 ``mlx_audio.generate`` 返回的任何结果强制转换为原始 ``bytes``。"""
     if isinstance(result, (bytes, bytearray)):
         return bytes(result)
     if isinstance(result, dict):

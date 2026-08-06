@@ -1,11 +1,9 @@
-"""``/v1/xijian/overload/*`` routes — A5.4 system overload protection.
+"""``/v1/xijian/overload/*`` 路由 — A5.4 系统过载保护。
 
-The overload guard is **not user-disablable**; the only knob exposed
-over HTTP is the tier (``strict`` / ``medium``).  Every other
-operation is read-only: status, metrics, event log, recovery window.
-The two recovery confirmations are POST endpoints but they only
-succeed after the mandatory 20 s wait has elapsed (the value is
-fixed by AC-2 and intentionally not configurable).
+过载防护**不允许用户禁用**；通过 HTTP 暴露的唯一旋钮是 tier
+（``strict`` / ``medium``）。其他所有操作均为只读：状态、指标、
+事件日志、恢复窗口。两个恢复确认是 POST 端点，但只有在强制
+20 秒等待结束后才会成功（该值由 AC-2 固定，故意不可配置）。
 """
 
 from __future__ import annotations
@@ -20,19 +18,19 @@ bp = Blueprint("xijian_overload", __name__)
 
 
 # ---------------------------------------------------------------------------
-# Status / config (the only user-facing knobs)
+# 状态 / 配置（唯一面向用户的旋钮）
 # ---------------------------------------------------------------------------
 
 
 @bp.get("/v1/xijian/overload/status")
 def overload_status():
-    """Return the current monitor state, tier, recovery handshake, and last samples."""
+    """返回当前监控状态、tier、恢复握手和最近样本。"""
     return jsonify(ov_stub.status())
 
 
 @bp.patch("/v1/xijian/overload/tier")
 def overload_tier_patch():
-    """Switch the active tier.  ``disabled`` / ``off`` are deliberately rejected."""
+    """切换活动 tier。故意拒绝 ``disabled`` / ``off``。"""
     payload = request.get_json(silent=True) or {}
     tier = payload.get("tier")
     if tier is None:
@@ -58,7 +56,7 @@ def overload_tier_patch():
 
 @bp.get("/v1/xijian/overload/tier")
 def overload_tier_get():
-    """Return the active tier + host-recommended tier."""
+    """返回活动 tier + 主机推荐的 tier。"""
     return jsonify(
         {
             "tier": ov_stub.current_tier(),
@@ -69,13 +67,13 @@ def overload_tier_get():
 
 
 # ---------------------------------------------------------------------------
-# Metrics + events
+# 指标 + 事件
 # ---------------------------------------------------------------------------
 
 
 @bp.get("/v1/xijian/overload/metrics")
 def overload_metrics():
-    """Return the last ``limit`` sliding-window samples (default 60)."""
+    """返回最近 ``limit`` 个滑动窗口样本（默认 60）。"""
     payload = request.args or {}
     try:
         limit = int(payload.get("limit", 60))
@@ -92,7 +90,7 @@ def overload_metrics():
 
 @bp.get("/v1/xijian/overload/events")
 def overload_events():
-    """Return recent trigger events, newest first."""
+    """返回最近的触发事件，新的在前。"""
     payload = request.args or {}
     try:
         limit = int(payload.get("limit", 50))
@@ -108,13 +106,13 @@ def overload_events():
 
 
 # ---------------------------------------------------------------------------
-# Recovery handshake
+# 恢复握手
 # ---------------------------------------------------------------------------
 
 
 @bp.get("/v1/xijian/overload/recovery")
 def overload_recovery_state():
-    """Return the in-flight recovery handshake state (or 404 if none)."""
+    """返回进行中的恢复握手状态（无则返回 404）。"""
     window = ov_stub.recovery_window()
     if not window.get("active"):
         return jsonify({"active": False})
@@ -124,15 +122,15 @@ def overload_recovery_state():
 
 @bp.post("/v1/xijian/overload/recovery/first-confirm")
 def overload_recovery_first_confirm():
-    """First step of the double confirmation."""
+    """双重确认的第一步。"""
     result = ov_stub.first_confirm()
     if not result.get("ok"):
         if result.get("error") == "no_active_recovery":
             raise ApiError(
                 404, "no active recovery", "not_found_error", code="no_active_recovery"
             )
-        # ``too_early`` falls through as 425 (Too Early) — the UI
-        # should respect the remaining-seconds hint.
+        # ``too_early`` 以 425（Too Early）返回 — UI
+        # 应遵循剩余秒数提示。
         raise ApiError(
             425,
             f"recovery wait not elapsed: {result.get('remaining_seconds')}s remaining",
@@ -144,7 +142,7 @@ def overload_recovery_first_confirm():
 
 @bp.post("/v1/xijian/overload/recovery/finalize")
 def overload_recovery_finalize():
-    """Second step — closes the recovery and resumes normal operation."""
+    """第二步 — 关闭恢复并恢复正常运行。"""
     result = ov_stub.finalize_recovery()
     if not result.get("ok"):
         if result.get("error") == "no_active_recovery":
@@ -169,15 +167,14 @@ def overload_recovery_finalize():
 
 @bp.post("/v1/xijian/overload/recovery/cancel")
 def overload_recovery_cancel():
-    """Force-clear an in-flight recovery (used by tests + admin tooling)."""
+    """强制清除进行中的恢复（供测试与管理员工具使用）。"""
     payload = request.get_json(silent=True) or {}
     return jsonify(ov_stub.cancel_recovery(reason=payload.get("reason")))
 
 
 # ---------------------------------------------------------------------------
-# Dev / test helper — push synthetic samples without waiting for the
-# real sliding window.  Guarded by ``XIJIAN_DEV=1`` like the other
-# dev-only endpoints, so it never ships in production.
+# 开发 / 测试辅助 — 无需等待真实滑动窗口即可推送合成样本。
+# 与其他仅限开发的端点一样由 ``XIJIAN_DEV=1`` 保护，绝不会进入生产。
 # ---------------------------------------------------------------------------
 
 

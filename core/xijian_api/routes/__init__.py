@@ -77,7 +77,7 @@ _OPTIONAL_ROUTE_MODULES: tuple[str, ...] = (
     "xijian_api.routes.xijian_devkit",
     "xijian_api.routes.xijian_plot",
     "xijian_api.routes.multimodal",
-    # A6 / A7 / A8 modules (added 2026-08-01).
+    # A6 / A7 / A8 模块（2026-08-01 新增）。
     "xijian_api.routes.xijian_voice_calls",
     "xijian_api.routes.xijian_initiated",
     "xijian_api.routes.xijian_desktop",

@@ -30,7 +30,7 @@ def character():
 
 @pytest.fixture()
 def global_off(character):
-    """Disable the global switch so later tests are deterministic."""
+    """关闭全局开关，使后续测试具有确定性。"""
     cia_stub.set_global_settings({"enabled": False})
     yield
 
@@ -80,7 +80,7 @@ class TestCRUD:
 
 
 # ---------------------------------------------------------------------------
-# Notification policy (AC-3)
+# 通知策略（AC-3）
 # ---------------------------------------------------------------------------
 
 
@@ -142,16 +142,16 @@ class TestEligibility:
     def test_cooldown_blocks(self, character):
         cia_stub.set_character_config(character, {"cooldown_seconds": 100})
         cfg = cia_stub.get_character_config(character)
-        cfg["last_triggered_at"] = 950.0  # 50s ago < 100s cooldown
+        cfg["last_triggered_at"] = 950.0  # 50 秒前 < 100 秒冷却时间
         ok, reason = cia_stub._character_eligible(character, cfg, now=1000.0)
         assert ok is False
         assert reason == "cooldown"
-        cfg["last_triggered_at"] = 800.0  # 200s ago > 100s cooldown
+        cfg["last_triggered_at"] = 800.0  # 200 秒前 > 100 秒冷却时间
         ok, reason = cia_stub._character_eligible(character, cfg, now=1000.0)
         assert ok is True
 
     def test_rate_limit_blocks(self, character):
-        # Cooldown must not shadow the rate-limit check, so set it tiny.
+        # 冷却时间不得遮蔽限频检查，因此将其设得很小。
         cia_stub.set_character_config(
             character, {"max_per_hour": 1, "cooldown_seconds": 1}
         )
@@ -189,10 +189,10 @@ class TestScan:
 
     def test_scan_respects_cooldown(self, character):
         cia_stub.create_action(character_id=character, now=1000.0)
-        # Cooldown (3600s) not yet elapsed.
+        # 冷却时间（3600 秒）尚未过去。
         created = cia_stub.scan_for_actions(now=1000.0 + 10)
         assert all(a["character_id"] != character for a in created)
-        # After the cooldown elapses the character becomes eligible again.
+        # 冷却时间过后，角色再次具备触发资格。
         created = cia_stub.scan_for_actions(now=1000.0 + 3601)
         assert any(a["character_id"] == character for a in created)
 
@@ -250,14 +250,14 @@ class TestRespond:
 
 
 # ---------------------------------------------------------------------------
-# Tick thread
+# Tick 线程
 # ---------------------------------------------------------------------------
 
 
 class TestTickThread:
     def test_env_disabled_by_default(self):
-        # conftest sets XIJIAN_INITIATED_TICK=0 — the same posture as
-        # the other background threads (character_state / npcs).
+        # conftest 设置了 XIJIAN_INITIATED_TICK=0 —— 与
+        # 其它后台线程（character_state / npcs）姿态相同。
         status = cia_stub.tick_status()
         assert status["env_disabled"] is True
         assert cia_stub.start_tick()["reason"] == "disabled_by_env"
@@ -265,7 +265,7 @@ class TestTickThread:
 
 
 # ---------------------------------------------------------------------------
-# Routes
+# 路由
 # ---------------------------------------------------------------------------
 
 

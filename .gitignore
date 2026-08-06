@@ -417,3 +417,4 @@ devkit/.pytest_cache/
 # deps/ contains large third-party projects (Applio, GPT-SoVITS) with
 # pretrained model weights (>5 GB).  Exclude from git; manage separately.
 deps/
+/build.zip

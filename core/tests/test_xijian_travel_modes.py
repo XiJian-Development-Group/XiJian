@@ -53,7 +53,7 @@ def walk_mode(client, auth_headers, world):
 
 
 # ---------------------------------------------------------------------------
-# Pure helpers
+# 纯辅助函数
 # ---------------------------------------------------------------------------
 
 
@@ -68,7 +68,7 @@ class TestPureHelpers:
         with pytest.raises(tm_stub.TravelModeError):
             tm_stub._validate_speed_factor("fast")
         with pytest.raises(tm_stub.TravelModeError):
-            tm_stub._validate_speed_factor(True)  # bool is rejected
+            tm_stub._validate_speed_factor(True)  # bool 会被拒绝
 
     def test_stamina_cost_must_be_non_negative(self):
         with pytest.raises(tm_stub.TravelModeError):
@@ -87,7 +87,7 @@ class TestPureHelpers:
     def test_estimate_trip_speed_factor_doubles_time(self):
         mode = {"speed_factor": 0.5, "stamina_cost": 1, "event_chance": 0.0}
         out = tm_stub.estimate_trip(mode)
-        # base 60 / 0.5 = 120
+        # 基准 60 / 0.5 = 120
         assert out["duration_seconds"] == 120.0
         assert out["stamina_cost"] == 1
         assert out["event_chance"] == 0.0
@@ -294,7 +294,7 @@ class TestRoutes:
         assert res.status_code == 200
         body = res.get_json()
         assert body["mode_id"] == walk_mode["id"]
-        # 0.05 < 0.1 (event_chance) → event fires
+        # 0.05 < 0.1（event_chance）→ 事件触发
         assert body["preview"]["event_triggered"] is True
 
     def test_estimate_endpoint_404(self, client, auth_headers):
@@ -307,13 +307,13 @@ class TestRoutes:
 
 
 # ---------------------------------------------------------------------------
-# A4.3 AC-3 — execute_trip (real stamina deduction)
+# A4.3 AC-3 — execute_trip（真实体力扣除）
 # ---------------------------------------------------------------------------
 
 
 class TestExecuteTrip:
-    """``execute_trip`` actually mutates the character's stamina and
-    writes an audit row — unlike the pure ``estimate_trip`` preview."""
+    """``execute_trip`` 会真正修改角色的体力并
+    写入审计行 —— 不同于纯预览的 ``estimate_trip``。"""
 
     def test_execute_deducts_stamina(self, world, walk_mode):
         from xijian_api.stubs import character_state as cs_stub
@@ -324,7 +324,7 @@ class TestExecuteTrip:
         assert out["stamina_remaining"] == 100.0 - walk_mode["stamina_cost"]
         record = cs_stub.get_state("char_a")
         assert record["stamina"] == out["stamina_remaining"]
-        # Reason recorded in the state log.
+        # 原因记录在状态日志中。
         reasons = [e["reason"] for e in cs_stub.list_log("char_a")]
         assert "travel" in reasons
 
@@ -363,10 +363,10 @@ class TestExecuteTrip:
         assert len(instances) == 1
 
     def test_execute_requires_character_id(self, world, walk_mode):
-        # ``character_id`` is a required keyword argument.
+        # ``character_id`` 是必需的关键字参数。
         with pytest.raises(TypeError):
             tm_stub.execute_trip(walk_mode["id"])
-        # And a None character id is rejected with a clear error.
+        # 传入 None 的 character id 会被拒绝并给出明确错误。
         with pytest.raises(tm_stub.TravelModeError, match="character_id"):
             tm_stub.execute_trip(walk_mode["id"], character_id=None)
 
@@ -376,7 +376,7 @@ class TestExecuteTrip:
 
 
 class TestExecuteTripRoute:
-    """POST /v1/xijian/scenes/travel-modes/<id>/execute."""
+    """POST /v1/xijian/scenes/travel-modes/<id>/execute。"""
 
     def test_execute_endpoint_deducts_stamina(self, client, auth_headers, world, walk_mode):
         res = client.post(

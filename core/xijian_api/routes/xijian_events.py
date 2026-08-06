@@ -1,45 +1,43 @@
-"""``/v1/xijian/events/*`` and ``/v1/xijian/worlds/<wid>/event*`` routes.
+"""``/v1/xijian/events/*`` 与 ``/v1/xijian/worlds/<wid>/event*`` 路由。
 
-A4.1 world-event CRUD + scheduling.  The legacy per-world event
-endpoints (``POST /v1/xijian/worlds/<wid>/event`` in
-:xijian_api.routes.xijian_worlds) are kept for backward compatibility
-— they append a free-form event blob to the world's ``events`` list.
-The A4.1 endpoints below model events as first-class resources with
-typed trigger configs, cooldown tracking and per-world category
-toggles.
+A4.1 世界事件 CRUD + 调度。旧的按世界事件端点
+（:xijian_api.routes.xijian_worlds 中的 ``POST /v1/xijian/worlds/<wid>/event``）
+保留以向后兼容 — 它们将自由格式的事件 blob 追加到世界的 ``events`` 列表。
+下面的 A4.1 端点将事件建模为一级资源，带有类型化触发器配置、
+冷却跟踪和按世界的类别开关。
 
-Endpoints
+端点
 =========
 
-Event definition CRUD (cross-world)::
+事件定义 CRUD（跨世界）::
 
-    GET    /v1/xijian/events                    — list (filters: world_id, kind, enabled_only)
-    POST   /v1/xijian/events                    — create
-    GET    /v1/xijian/events/<event_id>         — read
-    PATCH  /v1/xijian/events/<event_id>         — update mutable fields
-    DELETE /v1/xijian/events/<event_id>         — delete
+    GET    /v1/xijian/events                    — 列表 (过滤: world_id, kind, enabled_only)
+    POST   /v1/xijian/events                    — 创建
+    GET    /v1/xijian/events/<event_id>         — 读取
+    PATCH  /v1/xijian/events/<event_id>         — 更新可变字段
+    DELETE /v1/xijian/events/<event_id>         — 删除
 
-Fired instance access::
+已触发实例访问::
 
-    GET    /v1/xijian/events/instances          — list (filters: world_id, event_id, limit)
-    GET    /v1/xijian/events/instances/<id>     — read
-    POST   /v1/xijian/events/instances/<id>/resolve  — mark resolved
+    GET    /v1/xijian/events/instances          — 列表 (过滤: world_id, event_id, limit)
+    GET    /v1/xijian/events/instances/<id>     — 读取
+    POST   /v1/xijian/events/instances/<id>/resolve  — 标记为已解决
 
-Category toggles (per world)::
+类别开关（按世界）::
 
-    GET    /v1/xijian/worlds/<wid>/event-categories          — list disabled
-    PUT    /v1/xijian/worlds/<wid>/event-categories/<kind>   — toggle disabled
+    GET    /v1/xijian/worlds/<wid>/event-categories          — 列出已禁用
+    PUT    /v1/xijian/worlds/<wid>/event-categories/<kind>   — 切换禁用
 
-Scheduler control::
+调度器控制::
 
-    GET    /v1/xijian/events/scheduler         — status
-    POST   /v1/xijian/events/scheduler/start   — start background tick
-    POST   /v1/xijian/events/scheduler/stop    — stop background tick
-    POST   /v1/xijian/events/scheduler/tick    — manual single tick (dev only)
+    GET    /v1/xijian/events/scheduler         — 状态
+    POST   /v1/xijian/events/scheduler/start   — 启动后台 tick
+    POST   /v1/xijian/events/scheduler/stop    — 停止后台 tick
+    POST   /v1/xijian/events/scheduler/tick    — 手动单次 tick（仅限开发）
 
-Summary::
+摘要::
 
-    GET    /v1/xijian/worlds/<wid>/events/summary  — aggregate snapshot
+    GET    /v1/xijian/worlds/<wid>/events/summary  — 聚合快照
 """
 
 from __future__ import annotations
@@ -58,7 +56,7 @@ bp = Blueprint("xijian_events", __name__)
 
 
 # ---------------------------------------------------------------------------
-# Event definition CRUD
+# 事件定义 CRUD
 # ---------------------------------------------------------------------------
 
 
@@ -148,7 +146,7 @@ def delete_event(event_id: str):
 
 
 # ---------------------------------------------------------------------------
-# Fired instance access
+# 已触发实例访问
 # ---------------------------------------------------------------------------
 
 
@@ -202,7 +200,7 @@ def resolve_instance(instance_id: str):
 
 
 # ---------------------------------------------------------------------------
-# Per-world category toggles (US-A4.1-02)
+# 按世界类别开关（US-A4.1-02）
 # ---------------------------------------------------------------------------
 
 
@@ -247,7 +245,7 @@ def set_category_disabled(world_id: str, category: str):
 
 
 # ---------------------------------------------------------------------------
-# Scheduler control
+# 调度器控制
 # ---------------------------------------------------------------------------
 
 
@@ -268,11 +266,10 @@ def scheduler_stop():
 
 @bp.post("/v1/xijian/events/scheduler/tick")
 def scheduler_tick():
-    """Run a single scheduler pass; dev-only (``XIJIAN_DEV=1``).
+    """运行单次调度器遍历；仅限开发（``XIJIAN_DEV=1``）。
 
-    Production deployments rely on the background thread started by
-    :func:`xijian_api.stubs.events.seed_default`; exposing a manual
-    tick in prod would let clients amplify scheduling work.
+    生产部署依赖 :func:`xijian_api.stubs.events.seed_default` 启动的
+    后台线程；在生产暴露手动 tick 会让客户端放大调度工作量。
     """
     if os.environ.get("XIJIAN_DEV") != "1":
         raise ApiError(404, "not found", "not_found_error", code="route_not_found")
@@ -288,7 +285,7 @@ def scheduler_tick():
 
 
 # ---------------------------------------------------------------------------
-# Summary
+# 摘要
 # ---------------------------------------------------------------------------
 
 

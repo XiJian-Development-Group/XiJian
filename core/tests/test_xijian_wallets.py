@@ -63,7 +63,7 @@ def funded_user_wallet(client, auth_headers, world, currency):
 
 
 # ---------------------------------------------------------------------------
-# Pure helpers
+# 纯辅助函数
 # ---------------------------------------------------------------------------
 
 
@@ -180,7 +180,7 @@ class TestGetListDelete:
         assert record is not None
 
     def test_list_for_owner(self, world, currency, client, auth_headers):
-        # Add a second currency in the same world.
+        # 在同一世界中添加第二种货币。
         client.post(
             "/v1/xijian/currencies",
             json={"world_id": world, "code": "mora2", "name": "Mora2"},
@@ -227,7 +227,7 @@ class TestGetListDelete:
 
 
 # ---------------------------------------------------------------------------
-# Mutations
+# 变更操作
 # ---------------------------------------------------------------------------
 
 
@@ -324,7 +324,7 @@ class TestTransfer:
 
 
 # ---------------------------------------------------------------------------
-# HTTP routes
+# HTTP 路由
 # ---------------------------------------------------------------------------
 
 
@@ -386,7 +386,7 @@ class TestHttpEnsureGetDelete:
             headers=auth_headers,
         )
         assert res.status_code == 200
-        # Already exists with 1000, the second ensure is a no-op.
+        # 已存在且余额为 1000，第二次 ensure 是空操作。
         assert res.get_json()["balance"] == 1000.0
 
     def test_get(self, client, auth_headers, world, currency, funded_user_wallet):

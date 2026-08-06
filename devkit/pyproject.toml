@@ -1,21 +1,20 @@
-# devkit/pyproject.toml — tooling config for the standalone Developer Kit.
+# devkit/pyproject.toml —— 独立开发者工具包的工具链配置。
 #
-# The DevKit is NOT distributed as a wheel — it ships as a PyInstaller
-# binary (see xijian-devkit.spec + build-devkit.sh).  This file therefore
-# carries no [build-system] / [project] packaging metadata; it exists so
-# `pytest` (run from this directory) can locate the sibling top-level
-# `devkit` package that lives at the repo root.
+# DevKit 不以 wheel 形式分发 —— 它以 PyInstaller 二进制包形式发布
+# （参见 xijian-devkit.spec + build-devkit.sh）。因此本文件不包含
+# [build-system] / [project] 打包元数据；它的存在是为了让 `pytest`
+# （在此目录下运行时）能够定位到位于仓库根目录的兄弟顶层包 `devkit`。
 #
-# Runtime deps:  ../devkit/requirements.txt   (pywebview, py7zr)
-# Optional ML deps (install via extras):
+# 运行时依赖:  ../devkit/requirements.txt   (pywebview, py7zr)
+# 可选 ML 依赖（通过 extras 安装）:
 #   pip install -e .[devkit-mlx]     # Apple Silicon MLX TTS (mlx-audio)
 #   pip install -e .[devkit-gguf]    # GGUF / llama.cpp TTS (llama-cpp-python)
-# Build tool:    pyinstaller                  (installed by build-devkit.sh)
+# 构建工具:    pyinstaller                  （由 build-devkit.sh 安装）
 
 [tool.pytest.ini_options]
-# rootdir is this directory (devkit/).  Add the repo root (..) to the
-# import path so `import devkit` resolves to the sibling package rather
-# than requiring an editable install.
+# rootdir 是本目录（devkit/）。将仓库根目录（..）加入
+# 导入路径，使 `import devkit` 解析到兄弟包，而不是
+# 要求进行可编辑安装。
 pythonpath = [".."]
 testpaths = ["tests"]
 addopts = "-ra"

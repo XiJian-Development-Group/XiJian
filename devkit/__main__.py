@@ -1,4 +1,4 @@
-"""``python -m devkit`` entry point."""
+"""``python -m devkit`` 入口点。"""
 
 from __future__ import annotations
 

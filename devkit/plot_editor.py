@@ -141,7 +141,7 @@ def save_plot_node(work_dir: str, plot_id: str, node: dict[str, Any]) -> dict[st
 
 
 def delete_plot_node(work_dir: str, node_id: str, *, plot_id: str | None = None) -> bool:
-    # The UI only sends the node id, so locate the owning plot first.
+    # UI 只发送节点 ID，因此先定位所属剧情。
     if plot_id is None:
         plot_id = _find_plot_with_node(work_dir, node_id)
     if plot_id is None:
@@ -187,7 +187,7 @@ def save_plot_edge(work_dir: str, plot_id: str, edge: dict[str, Any]) -> dict[st
 
 
 def delete_plot_edge(work_dir: str, edge_id: str, *, plot_id: str | None = None) -> bool:
-    # The UI only sends the edge id, so locate the owning plot first.
+    # UI 只发送边 ID，因此先定位所属剧情。
     if plot_id is None:
         plot_id = _find_plot_with_edge(work_dir, edge_id)
     if plot_id is None:
@@ -210,14 +210,12 @@ def _find_plot_with_edge(work_dir: str, edge_id: str) -> str | None:
 
 
 def validate_plot_bindings(work_dir: str, plot_id: str) -> dict[str, Any]:
-    """Validate node/edge bindings against real characters & worlds (C3 AC-2).
+    """对照真实的角色与世界验证节点/连线绑定（C3 AC-2）。
 
-    Nodes and edges may carry ``bind_character_id`` / ``bind_world_id`` /
-    ``bind_event_id``.  A binding is *broken* when it points at a
-    character/world that does not exist in the developer's workspace.  The
-    check is advisory (it reports problems) and never deletes anything — the
-    UI surfaces the warnings so the developer can fix dangling references
-    before submitting.
+    节点和连线可能携带 ``bind_character_id`` / ``bind_world_id`` /
+    ``bind_event_id``。当绑定指向开发者工作区中不存在的角色/世界时，
+    该绑定即为*断裂*。此检查仅为建议性（只报告问题），绝不删除任何
+    内容——UI 会展示警告，让开发者在提交前修复悬空引用。
     """
     from devkit.character_editor import get_character
     from devkit.world_editor import get_world, list_world_events

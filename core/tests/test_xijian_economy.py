@@ -75,7 +75,7 @@ def npc(world_with_currency):
 
 @pytest.fixture()
 def funded_economy(world_with_currency, npc):
-    """User has 1000 mora, NPC has 500 mora.  Both ready for trades."""
+    """用户有 1000 mora，NPC 有 500 mora。双方均可进行交易。"""
     user_w = wallet_stub.create(
         wallet_stub.OWNER_USER, wallet_stub.LOCAL_USER_ID,
         world_with_currency, "mora", initial_balance=1000,
@@ -88,7 +88,7 @@ def funded_economy(world_with_currency, npc):
 
 
 # ---------------------------------------------------------------------------
-# world_economy_state — pure helpers + state CRUD
+# world_economy_state — 纯辅助函数 + 状态 CRUD
 # ---------------------------------------------------------------------------
 
 
@@ -171,11 +171,11 @@ class TestGetUpdate:
         assert eco_stub.update("world_phantom", {"inflation_rate": 0.1}) is None
 
     def test_delete(self, world):
-        # Touch the record first so the lazy materialiser writes it
-        # to ``state`` — otherwise the delete is a no-op.
+        # 先触碰记录，让惰性物化器把它写入
+        # ``state`` —— 否则 delete 是空操作。
         eco_stub.get(world)
         assert eco_stub.delete(world) is True
-        # Re-materialises on next get.
+        # 下次 get 时重新物化。
         record = eco_stub.get(world)
         assert record is not None
         assert record["inflation_rate"] == DEFAULT_INFLATION_RATE
@@ -204,7 +204,7 @@ class TestTick:
     def test_liquidity_mean_reverts(self, world):
         eco_stub.update(world, {"liquidity_index": 2.0})
         eco_stub.tick(world)
-        # After one tick, liquidity should be closer to 1.0.
+        # 一个 tick 之后，流动性应更接近 1.0。
         after = eco_stub.get(world)["liquidity_index"]
         assert after < 2.0
 
@@ -241,7 +241,7 @@ class TestReadOnlyAccessors:
 
 
 # ---------------------------------------------------------------------------
-# Economy orchestrator — trade
+# 经济编排器 — 交易
 # ---------------------------------------------------------------------------
 
 
@@ -344,7 +344,7 @@ class TestSale:
 
 class TestReward:
     def test_reward_user(self, world_with_currency):
-        # No prior wallet.
+        # 没有先前的钱包。
         record = economy_stub.reward(
             world_id=world_with_currency,
             to_kind=wallet_stub.OWNER_USER,
@@ -353,7 +353,7 @@ class TestReward:
             amount=200,
         )
         assert record["kind"] == "reward"
-        # Wallet created and credited.
+        # 钱包被创建并充值。
         w = wallet_stub.get(
             wallet_stub.OWNER_USER, wallet_stub.LOCAL_USER_ID,
             world_with_currency, "mora",
@@ -393,10 +393,10 @@ class TestTransferUserToUser:
             amount=100,
         )
         assert record["kind"] == "transfer"
-        # Local model: the only "user" is LOCAL_USER_ID, so the
-        # balance shouldn't change (we withdraw + deposit the same
-        # wallet).  This is by design — multi-user support is
-        # forward-compat.
+        # 本地模型：唯一的 "user" 是 LOCAL_USER_ID，因此
+        # 余额不应变化（我们同一钱包取出又存入）。
+        # 这是有意设计 —— 多用户支持属于
+        # 前向兼容。
         w = wallet_stub.get(
             wallet_stub.OWNER_USER, wallet_stub.LOCAL_USER_ID,
             world_with_currency, "mora",
@@ -405,7 +405,7 @@ class TestTransferUserToUser:
 
 
 # ---------------------------------------------------------------------------
-# Economy orchestrator — crime
+# 经济编排器 — 犯罪
 # ---------------------------------------------------------------------------
 
 
@@ -426,7 +426,7 @@ class TestAttemptTheft:
         from xijian_api.stubs import state as stubs_state
         from xijian_api.stubs import overload as ov_stub
         eco_stub.update(funded_economy["world"], {"allow_illegal": True})
-        # Simulate overload recovery.
+        # 模拟过载恢复。
         stubs_state.overload["recovery"] = {
             "event_id": "x", "triggered_at": 0,
             "earliest_confirm_at": 0, "first_confirmed_at": None,
@@ -446,7 +446,7 @@ class TestAttemptTheft:
 
     def test_cooldown_blocks_second_attempt(self, funded_economy, monkeypatch):
         eco_stub.update(funded_economy["world"], {"allow_illegal": True})
-        # Force the first call to consume the cooldown.
+        # 强制第一次调用消耗冷却时间。
         result1 = economy_stub.attempt_theft(
             world_id=funded_economy["world"],
             npc_id=funded_economy["npc_id"],
@@ -459,23 +459,23 @@ class TestAttemptTheft:
             currency_code="mora",
             amount=50,
         )
-        # Second call should be blocked by cooldown (regardless of
-        # first call's success — the cooldown is always consumed
-        # before the roll).
+        # 第二次调用应被冷却时间阻止（无论
+        # 第一次调用是否成功 —— 冷却时间总是在
+        # 掷骰之前被消耗）。
         assert result2["blocked"] == "cooldown"
-        # Suppress the unused-variable warning.
+        # 抑制未使用变量的警告。
         _ = result1
 
     def test_user_empty(self, funded_economy, monkeypatch):
         eco_stub.update(funded_economy["world"], {"allow_illegal": True})
-        # Force the NPC's crime skill to 0 so the roll deterministically
-        # fails — we want the ``user_empty`` branch to be the *first*
-        # blocking reason, not the random roll.
+        # 将 NPC 的犯罪技能强制设为 0，使掷骰确定性地
+        # 失败 —— 我们希望 ``user_empty`` 分支是 *第一个*
+        # 阻止原因，而非随机掷骰。
         npc = npcs_stub.get(funded_economy["npc_id"])
         npcs_stub.update(
             npc["id"], {"state_json": {"crime_theft_skill": 0.0}}
         )
-        # Drain the user wallet.
+        # 清空用户钱包。
         wallet_stub.withdraw(
             wallet_stub.OWNER_USER, wallet_stub.LOCAL_USER_ID,
             funded_economy["world"], "mora", 1000,
@@ -487,10 +487,10 @@ class TestAttemptTheft:
             amount=50,
         )
         assert result["success"] is False
-        # With skill=0 the roll fails first; that's the more
-        # common path in production.  We verify either the roll
-        # failed OR the user was empty (both are "no money moved"
-        # from the user's perspective).
+        # skill=0 时掷骰首先失败；这是生产环境
+        # 更常见的路径。我们验证要么掷骰
+        # 失败，要么用户为空（对用户而言两者都是
+        # "钱没动"）。
         assert result["blocked"] in ("failed_roll", "user_empty")
 
     def test_no_user_wallet(self, world_with_currency, npc):
@@ -505,7 +505,7 @@ class TestAttemptTheft:
         assert result["blocked"] == "no_user_wallet"
 
     def test_force_success(self, funded_economy, monkeypatch):
-        # Force the probability to 1.0 to verify the success path.
+        # 将概率强制设为 1.0 以验证成功路径。
         eco_stub.update(funded_economy["world"], {"allow_illegal": True})
         npc = npcs_stub.get(funded_economy["npc_id"])
         npcs_stub.update(
@@ -546,15 +546,15 @@ class TestAttemptTheft:
         )
         assert result["success"] is False
         assert result["blocked"] == "failed_roll"
-        # No wallet change.
+        # 钱包无变化。
         assert wallet_stub.get(
             wallet_stub.OWNER_USER, wallet_stub.LOCAL_USER_ID,
             funded_economy["world"], "mora",
         )["balance"] == 1000.0
 
     def test_caps_at_user_balance(self, funded_economy, monkeypatch):
-        # NPC tries to steal 9999, but user only has 1000 → cap to 1000.
-        # NPC — tries to steal 9999, but user only has 1000 → cap to 1000.
+        # NPC 试图偷 9999，但用户只有 1000 → 上限为 1000。
+        # NPC —— 试图偷 9999，但用户只有 1000 → 上限为 1000。
         eco_stub.update(funded_economy["world"], {"allow_illegal": True})
         npc = npcs_stub.get(funded_economy["npc_id"])
         npcs_stub.update(
@@ -651,7 +651,7 @@ class TestProbabilityHelpers:
         assert economy_stub._probability_hit("npc1", "w1", 1.0) is True
 
     def test_probability_hit_middle(self):
-        # Just check it returns a bool, not a specific outcome.
+        # 只检查它返回 bool，而非特定结果。
         result = economy_stub._probability_hit("npc1", "w1", 0.5)
         assert isinstance(result, bool)
 
@@ -678,7 +678,7 @@ class TestEnsure:
 
 class TestSummary:
     def test_summary(self, funded_economy):
-        # Drive a couple of transactions so the summary has content.
+        # 驱动几笔交易，让摘要包含内容。
         economy_stub.purchase(
             world_id=funded_economy["world"],
             npc_id=funded_economy["npc_id"],
@@ -693,7 +693,7 @@ class TestSummary:
 
 
 # ---------------------------------------------------------------------------
-# HTTP routes — purchase / sale / reward / transfer / crime
+# HTTP 路由 — purchase / sale / reward / transfer / crime
 # ---------------------------------------------------------------------------
 
 
@@ -849,7 +849,7 @@ class TestHttpCrime:
 
 
 # ---------------------------------------------------------------------------
-# HTTP routes — economy state
+# HTTP 路由 — 经济状态
 # ---------------------------------------------------------------------------
 
 
@@ -890,7 +890,7 @@ class TestHttpEconomyState:
         assert res.status_code == 400
 
     def test_tick_blocked_without_dev(self, client, auth_headers, world_via_http):
-        # ``XIJIAN_DEV`` is unset in the conftest → block.
+        # conftest 中未设置 ``XIJIAN_DEV`` → 拦截。
         assert os.environ.get("XIJIAN_DEV") != "1"
         res = client.post(
             f"/v1/xijian/economy/state/{world_via_http}/tick",

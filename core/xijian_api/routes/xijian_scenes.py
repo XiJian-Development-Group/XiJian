@@ -1,51 +1,48 @@
-"""``/v1/xijian/scenes/*`` routes — A4.3.
+"""``/v1/xijian/scenes/*`` 路由 — A4.3。
 
-Three logical groups share the ``/v1/xijian/scenes`` namespace so the
-URL surface stays easy to scan:
+三个逻辑组共享 ``/v1/xijian/scenes`` 命名空间，使 URL 表面易于浏览：
 
-* **POI** (``/v1/xijian/scenes/pois/*``) — three-level map / region /
-  POI tree.
-* **Travel** (``/v1/xijian/scenes/travel-modes/*``) — per-world
-  transport options.
-* **Scene interactions** (``/v1/xijian/scenes/interactions/*``) —
-  operator-curated "this action is possible at this POI against this
-  target" definitions, with a ``POST .../trigger`` endpoint that
-  honours the per-character cooldown.
+* **POI**（``/v1/xijian/scenes/pois/*``）— 三级地图 / 区域 / POI 树。
+* **旅行**（``/v1/xijian/scenes/travel-modes/*``）— 按世界的
+  交通选项。
+* **场景互动**（``/v1/xijian/scenes/interactions/*``）—
+  操作员策划的“此动作可在该 POI 对该目标执行”定义，
+  带遵守按角色冷却的 ``POST .../trigger`` 端点。
 
-POI endpoints
+POI 端点
 =============
 
-* ``GET    /v1/xijian/scenes/pois``                 — list (optional ?world_id)
-* ``POST   /v1/xijian/scenes/pois``                 — create
-* ``GET    /v1/xijian/scenes/pois/<poi_id>``        — get
-* ``PATCH  /v1/xijian/scenes/pois/<poi_id>``        — patch
-* ``DELETE /v1/xijian/scenes/pois/<poi_id>``        — delete (no orphans)
-* ``GET    /v1/xijian/scenes/pois/tree``            — nested tree (?world_id)
-* ``GET    /v1/xijian/scenes/pois/<poi_id>/chain``  — ancestor chain
-* ``GET    /v1/xijian/scenes/pois/<poi_id>/children``  — direct children
-* ``GET    /v1/xijian/scenes/pois/<poi_id>/descendants`` — flat DFS
+* ``GET    /v1/xijian/scenes/pois``                 — 列表 (可选 ?world_id)
+* ``POST   /v1/xijian/scenes/pois``                 — 创建
+* ``GET    /v1/xijian/scenes/pois/<poi_id>``        — 获取
+* ``PATCH  /v1/xijian/scenes/pois/<poi_id>``        — 修改
+* ``DELETE /v1/xijian/scenes/pois/<poi_id>``        — 删除（不留孤儿）
+* ``GET    /v1/xijian/scenes/pois/tree``            — 嵌套树 (?world_id)
+* ``GET    /v1/xijian/scenes/pois/<poi_id>/chain``  — 祖先链
+* ``GET    /v1/xijian/scenes/pois/<poi_id>/children``  — 直接子节点
+* ``GET    /v1/xijian/scenes/pois/<poi_id>/descendants`` — 扁平 DFS
 
-Travel endpoints
+旅行端点
 ================
 
-* ``GET    /v1/xijian/scenes/travel-modes``         — list (?world_id)
-* ``POST   /v1/xijian/scenes/travel-modes``         — create
-* ``GET    /v1/xijian/scenes/travel-modes/<id>``    — get
-* ``PATCH  /v1/xijian/scenes/travel-modes/<id>``    — patch
-* ``DELETE /v1/xijian/scenes/travel-modes/<id>``    — delete
-* ``POST   /v1/xijian/scenes/travel-modes/<id>/estimate`` — cost preview
-* ``POST   /v1/xijian/scenes/travel-modes/<id>/execute`` — real trip
-  (AC-3: stamina actually deducted from the acting character)
+* ``GET    /v1/xijian/scenes/travel-modes``         — 列表 (?world_id)
+* ``POST   /v1/xijian/scenes/travel-modes``         — 创建
+* ``GET    /v1/xijian/scenes/travel-modes/<id>``    — 获取
+* ``PATCH  /v1/xijian/scenes/travel-modes/<id>``    — 修改
+* ``DELETE /v1/xijian/scenes/travel-modes/<id>``    — 删除
+* ``POST   /v1/xijian/scenes/travel-modes/<id>/estimate`` — 成本预览
+* ``POST   /v1/xijian/scenes/travel-modes/<id>/execute`` — 真实行程
+  (AC-3: 实际从行动角色的体力中扣除)
 
-Scene-interaction endpoints
+场景互动端点
 ===========================
 
-* ``GET    /v1/xijian/scenes/interactions``         — list (?world_id / ?poi_id)
-* ``POST   /v1/xijian/scenes/interactions``         — create
-* ``GET    /v1/xijian/scenes/interactions/<id>``    — get
-* ``PATCH  /v1/xijian/scenes/interactions/<id>``    — patch
-* ``DELETE /v1/xijian/scenes/interactions/<id>``    — delete
-* ``POST   /v1/xijian/scenes/interactions/<id>/trigger`` — fire (cooldown-aware)
+* ``GET    /v1/xijian/scenes/interactions``         — 列表 (?world_id / ?poi_id)
+* ``POST   /v1/xijian/scenes/interactions``         — 创建
+* ``GET    /v1/xijian/scenes/interactions/<id>``    — 获取
+* ``PATCH  /v1/xijian/scenes/interactions/<id>``    — 修改
+* ``DELETE /v1/xijian/scenes/interactions/<id>``    — 删除
+* ``POST   /v1/xijian/scenes/interactions/<id>/trigger`` — 触发（感知冷却）
 """
 
 from __future__ import annotations
@@ -68,7 +65,7 @@ _LOGGER = logging.getLogger("xijian_api.routes.xijian_scenes")
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# 辅助函数
 # ---------------------------------------------------------------------------
 
 
@@ -85,11 +82,10 @@ def _require_json(*, optional: bool = False) -> dict:
 
 
 def _err_from_stub(exc: Exception, *, default_code: str) -> "ApiError":
-    """Map a stub exception to a 4xx ApiError.
+    """将存根异常映射为 4xx ApiError。
 
-    Stub exceptions are :class:`ValueError`-based with a string
-    message; we don't introspect the message (it might contain user
-    input) but we always preserve it on the wire.
+    存根异常基于 :class:`ValueError` 并带字符串消息；我们不检查
+    消息内容（可能包含用户输入），但始终在响应中原样保留。
     """
     return ApiError(
         400, str(exc), "invalid_request_error", code=default_code,
@@ -204,7 +200,7 @@ def poi_descendants(poi_id: str):
 
 
 # ===========================================================================
-# Travel modes
+# 旅行模式
 # ===========================================================================
 
 
@@ -283,13 +279,13 @@ def estimate_travel_mode(mode_id: str):
 
 @bp.post("/v1/xijian/scenes/travel-modes/<mode_id>/execute")
 def execute_travel_mode(mode_id: str):
-    """Execute a trip with this travel mode — A4.3 AC-3 real deduction.
+    """使用此旅行模式执行行程 — A4.3 AC-3 真实扣减。
 
     Body: ``{"character_id": ..., "from_poi_id"?, "to_poi_id"?,
-    "base_seconds"?, "random_roll"?, "fire_event_id"?}``.  The
-    character's stamina is actually deducted (reason ``travel``) and
-    a ``travel.execute`` audit row is written; the response carries
-    the post-deduction ``stamina_remaining``.
+    "base_seconds"?, "random_roll"?, "fire_event_id"?}``。角色
+    的体力会被实际扣除（reason ``travel``）并写入一条
+    ``travel.execute`` 审计记录；响应携带扣减后的
+    ``stamina_remaining``。
     """
     body = _require_json(optional=True)
     if tm_stub.get(mode_id) is None:
@@ -311,7 +307,7 @@ def execute_travel_mode(mode_id: str):
 
 
 # ===========================================================================
-# Scene interactions
+# 场景互动
 # ===========================================================================
 
 
@@ -385,7 +381,7 @@ def trigger_scene_interaction(interaction_id: str):
     )
     if not result.get("accepted"):
         reason = result.get("reason")
-        # Differentiate "not found" (404) from semantic rejects (409).
+        # 区分“未找到”(404) 与语义拒绝 (409)。
         if reason == "interaction_not_found":
             raise ApiError(404, "scene interaction not found",
                            "not_found_error", code="scene_interaction_not_found")
@@ -395,13 +391,13 @@ def trigger_scene_interaction(interaction_id: str):
 
 
 # ---------------------------------------------------------------------------
-# Seed hook
+# 种子钩子
 # ---------------------------------------------------------------------------
 
 
 def seed_default() -> None:
-    """Empty seed.  Real worlds are operator-curated.
+    """空种子。真实世界由操作员策划。
 
-    The hook exists so ``xijian_api.stubs.seed_all`` has a stable
-    call-site for the A4.3 buckets.
+    该钩子存在是为了让 ``xijian_api.stubs.seed_all`` 对 A4.3 的桶
+    有一个稳定的调用点。
     """

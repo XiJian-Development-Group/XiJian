@@ -14,11 +14,11 @@ The CLI entry point :func:`main` is intentionally resilient: every
 startup stage is wrapped in best-effort recovery so the server keeps
 running in a degraded but stable state whenever a non-fatal error
 occurs (missing config file, missing token, missing storage dirs,
-…).  Every recovery is logged — recovery never silences an error.
+…).  Every recovery is logged, recovery never silences an error.
 
 CLI 入口点 :func:`main` 被设计为具有弹性：每个启动阶段都包裹在尽力恢复中，
 以便在发生非致命错误（缺少配置文件、缺少令牌、缺少存储目录等）时，
-服务器能以降级但稳定的状态继续运行。每次恢复都会被记录——恢复不会静默错误。
+服务器能以降级但稳定的状态继续运行。每次恢复都会被记录，恢复不会静默错误。
 """
 
 from __future__ import annotations

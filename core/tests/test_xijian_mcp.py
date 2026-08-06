@@ -105,7 +105,7 @@ def world(client, auth_headers):
 
 
 # ---------------------------------------------------------------------------
-# Pure helpers
+# 纯辅助函数
 # ---------------------------------------------------------------------------
 
 
@@ -135,8 +135,8 @@ class TestFlattenPayload:
         assert "k=v" in out
 
     def test_depth_limit(self):
-        # A 6-deep nested dict should be truncated at the
-        # 4-deep boundary.
+        # 6 层深的嵌套字典应在
+        # 4 层边界处被截断。
         deep = {"a": {"b": {"c": {"d": {"e": "leaf"}}}}}
         out = mcp_stub._flatten_payload(deep)
         assert "truncated" in out or "leaf" not in out
@@ -227,7 +227,7 @@ class TestWorldPolicy:
         mcp_stub.set_world_policy("world_x", default=POLICY_DEFAULT_ALLOW)
         removed = mcp_stub.reset_world_policy("world_x")
         assert removed == 1
-        # After reset, default returns to deny.
+        # 重置后，默认值回到 deny。
         assert mcp_stub.get_world_policy("world_x")["default"] == POLICY_DEFAULT_DENY
 
     def test_reset_missing(self):
@@ -250,8 +250,8 @@ class TestLockoutDetection:
         assert mcp_stub._is_world_locked_out("world_x") is True
 
     def test_auto_clear_when_expired(self):
-        mcp_stub.set_world_policy("world_x", lockout_until=1.0)  # long past
-        # Should auto-clear (and not return locked out).
+        mcp_stub.set_world_policy("world_x", lockout_until=1.0)  # 早已过去
+        # 应自动清除（且不返回锁定状态）。
         assert mcp_stub._is_world_locked_out("world_x") is False
         assert mcp_stub.get_world_policy("world_x")["lockout_until"] is None
 
@@ -262,7 +262,7 @@ def now_plus(seconds: float) -> float:
 
 
 # ---------------------------------------------------------------------------
-# Audit
+# 审计
 # ---------------------------------------------------------------------------
 
 
@@ -304,10 +304,10 @@ class TestAudit:
         )
         out = mcp_stub.list_audit()
         assert out[0]["args_summary"] in ("a", "b")
-        # The second record is newer; the first is the older one.
-        # We can't predict exact order because both share the
-        # same second — but the sequence counter is the
-        # tiebreaker so the second call is first.
+        # 第二条记录更新；第一条更旧。
+        # 无法预测确切顺序，因为两者共享
+        # 同一秒 —— 但序列计数器是
+        # 决胜因素，因此第二次调用排在最前。
         assert out[0]["args_summary"] == "b"
 
     def test_list_audit_filter_by_kind(self):
@@ -382,7 +382,7 @@ class TestAudit:
 
 
 # ---------------------------------------------------------------------------
-# Gate — the hot path
+# 闸门 — 热路径
 # ---------------------------------------------------------------------------
 
 
@@ -581,11 +581,11 @@ class TestSafetyStop:
             mcp_stub.safety_stop(world_id="world_x")
 
     def test_lockout_after_3_stops(self):
-        # Three safety_stops in 60s (cancelling between so the
-        # pending-freeze gate doesn't block subsequent stops)
-        # flip the world to lockout and refuse further ones.
-        # The third stop's record itself goes into ``lockout``
-        # state (not ``frozen``), so we don't cancel it.
+        # 60 秒内三次 safety_stop（之间取消，使
+        # 待处理冻结闸门不会阻塞后续 stop）
+        # 将世界翻转为锁定并拒绝更多请求。
+        # 第三次 stop 的记录本身进入 ``lockout``
+        # 状态（而非 ``frozen``），因此我们不取消它。
         for i in range(DEFAULT_LOCKOUT_THRESHOLD - 1):
             record = mcp_stub.safety_stop(world_id="world_x")
             mcp_stub.cancel_safety_stop(record["id"])
@@ -618,7 +618,7 @@ class TestSafetyStop:
             record = mcp_stub.safety_stop(world_id="world_x")
             mcp_stub.cancel_safety_stop(record["id"])
         mcp_stub.safety_stop(world_id="world_x")
-        # A different world can still safety_stop.
+        # 另一个世界仍可执行 safety_stop。
         record = mcp_stub.safety_stop(world_id="world_y")
         assert record["status"] == FREEZE_FROZEN
 
@@ -640,7 +640,7 @@ class TestListFreezes:
         a = mcp_stub.safety_stop(world_id="world_x", reason="a")
         b = mcp_stub.safety_stop(world_id="world_y", reason="b")
         out = mcp_stub.list_freezes()
-        # The b record was inserted last and has a higher seq.
+        # b 记录最后插入，序列号更高。
         assert out[0]["id"] == b["id"]
         assert out[1]["id"] == a["id"]
 
@@ -679,7 +679,7 @@ class TestConfirmSafetyStop:
         # 设置 — up some state that the snapshot will cover.
         stubs_state.worlds["world_demo"] = {"id": "world_demo", "name": "demo"}
         stubs_state.characters["char_demo"] = {"id": "char_demo", "name": "Demo"}
-        # A forbidden word in the state so we can verify sanitize.
+        # 在状态中放一个禁用词，以便验证净化。
         safety_rules_stub.create(
             rule_kind=KIND_FORBIDDEN_WORD, pattern="leakme",
             severity=3, is_active=True,
@@ -697,8 +697,8 @@ class TestConfirmSafetyStop:
         # 净化 — ran: the "leakme" substring is gone.
         snap = mcp_stub.get_snapshot(confirmed["snapshot_id"])
         assert snap["sanitized"] is True
-        # The in-memory state was restored (overwritten back
-        # to what the snapshot captured before sanitize).
+        # 内存状态已恢复（覆盖回
+        # 净化前快照所捕获的内容）。
         char = stubs_state.characters["char_demo"]
         # Sanitize is a defence-in-depth: the live state at
         # 净化 — is a defence-in-depth: the live state at
@@ -714,10 +714,10 @@ class TestConfirmSafetyStop:
     def test_confirm_writes_audit(self):
         record = mcp_stub.safety_stop(world_id="world_x")
         mcp_stub.confirm_safety_stop(record["id"])
-        # The confirm flow itself doesn't write a check() audit,
-        # but the safety-stop's internal lockout-trigger check
-        # if any would.  We just verify no exception was raised.
-        # (The restore_summary is the assertion.)
+        # confirm 流程本身不写 check() 审计，
+        # 但 safety-stop 内部若有锁定时触发检查
+        # 则会写。我们只验证没有抛出异常。
+        # （restore_summary 即断言。）
         out = mcp_stub.list_freezes(world_id="world_x")
         assert len(out) == 1
         assert out[0]["status"] == FREEZE_RESTORED
@@ -744,13 +744,13 @@ class TestConfirmSafetyStop:
         record = mcp_stub.safety_stop(world_id="world_x", reason="test")
         confirmed = mcp_stub.confirm_safety_stop(record["id"])
         assert confirmed["status"] == FREEZE_RESTORED
-        # The A5.3 archive bucket gained exactly one safety_stop entry.
+        # A5.3 归档桶恰好新增一条 safety_stop 条目。
         after = snapshots_stub.list_snapshots(reason="safety_stop")
         assert len(after) == before + 1
         archive = after[0]
         assert archive["ref_id"] == record["id"]
         assert archive["compressed"] is True
-        # The freeze record carries the archive id for operator lookup.
+        # 冻结记录携带归档 id 供运维查询。
         assert confirmed.get("a53_archive_id") == archive["id"]
 
 
@@ -787,7 +787,7 @@ class TestCancelSafetyStop:
 
 
 # ---------------------------------------------------------------------------
-# Snapshots
+# 快照
 # ---------------------------------------------------------------------------
 
 
@@ -830,8 +830,8 @@ class TestDumpSnapshot:
     def test_payload_is_deep_copy(self):
         stubs_state.worlds["world_x"] = {"id": "world_x", "name": "X"}
         record = mcp_stub.dump_snapshot(world_id="world_x")
-        # Mutating the snapshot payload should not affect the
-        # live state.
+        # 修改快照载荷不应影响
+        # 实时状态。
         record["payload"]["worlds"]["world_x"]["name"] = "mutated"
         assert stubs_state.worlds["world_x"]["name"] == "X"
 
@@ -897,7 +897,7 @@ class TestSanitizeSnapshot:
             "description": "this contains leakme content",
         }
         record = mcp_stub.dump_snapshot(world_id="world_x")
-        # Before sanitize, the leak is present.
+        # 净化之前，泄漏内容存在。
         assert "leakme" in record["payload"]["worlds"]["world_x"]["description"]
         sanitized = mcp_stub.sanitize_snapshot(record["id"])
         assert sanitized["sanitized"] is True
@@ -916,7 +916,7 @@ class TestSanitizeSnapshot:
         stubs_state.worlds["world_x"] = {"id": "world_x", "note": "leakme"}
         record = mcp_stub.dump_snapshot(world_id="world_x")
         mcp_stub.sanitize_snapshot(record["id"])
-        # Calling again is a no-op.
+        # 再次调用是空操作。
         second = mcp_stub.sanitize_snapshot(record["id"])
         assert second["sanitized_at"] == mcp_stub.get_snapshot(record["id"])["sanitized_at"]
 
@@ -928,7 +928,7 @@ class TestSanitizeSnapshot:
         stubs_state.worlds["world_x"] = {"id": "world_x", "note": "leakme"}
         record = mcp_stub.dump_snapshot(world_id="world_x")
         sanitized = mcp_stub.sanitize_snapshot(record["id"])
-        # Inactive rule → no scrubbing happened.
+        # 规则未激活 → 未发生擦除。
         assert "leakme" in sanitized["payload"]["worlds"]["world_x"]["note"]
 
     def test_sanitize_skips_meta(self):
@@ -937,9 +937,9 @@ class TestSanitizeSnapshot:
             severity=3, is_active=True,
         )
         record = mcp_stub.dump_snapshot(world_id="world_x")
-        # The __meta block carries structural fields; even
-        # though the scrubber walks the whole dict, it should
-        # skip __meta.
+        # __meta 块携带结构性字段；即使
+        # 擦除器遍历整个字典，它也应
+        # 跳过 __meta。
         sanitized = mcp_stub.sanitize_snapshot(record["id"])
         meta = sanitized["payload"]["__meta"]
         assert meta["snapshot_id"] == record["id"]
@@ -954,12 +954,12 @@ class TestRestoreSnapshot:
     def test_restores_live_state(self):
         stubs_state.worlds["world_x"] = {"id": "world_x", "name": "before"}
         record = mcp_stub.dump_snapshot(world_id="world_x")
-        # Mutate the live state after the snapshot.
+        # 在快照之后修改实时状态。
         stubs_state.worlds["world_x"]["name"] = "after"
         mcp_stub.sanitize_snapshot(record["id"])
         summary = mcp_stub.restore_snapshot(record["id"])
         assert "worlds" in summary["restored_buckets"]
-        # Live state is back to the snapshot's value.
+        # 实时状态已恢复到快照的值。
         assert stubs_state.worlds["world_x"]["name"] == "before"
 
     def test_auto_sanitizes_if_skipped(self):
@@ -969,20 +969,20 @@ class TestRestoreSnapshot:
         )
         stubs_state.worlds["world_x"] = {"id": "world_x", "note": "leakme"}
         record = mcp_stub.dump_snapshot(world_id="world_x")
-        # Skip the explicit sanitize — restore should still
-        # produce a sanitized payload.
+        # 跳过显式净化 —— 恢复仍应
+        # 产生净化的载荷。
         summary = mcp_stub.restore_snapshot(record["id"])
         assert summary["sanitized"] is True
-        # Live state was overwritten with sanitized value.
+        # 实时状态已被净化的值覆盖。
         assert "leakme" not in str(stubs_state.worlds["world_x"])
 
     def test_skipped_buckets_reported(self):
-        # Force a snapshot with fewer buckets than PROTECTED_BUCKETS.
+        # 强制生成桶数少于 PROTECTED_BUCKETS 的快照。
         record = mcp_stub.dump_snapshot(
             world_id="world_x", extra_buckets=(),
         )
-        # A snapshot always covers the protected set, so we
-        # just verify the buckets list is well-formed.
+        # 快照总是覆盖受保护集合，因此我们
+        # 只验证桶列表格式良好。
         assert set(record["payload"].keys()) >= {
             "__meta", "worlds", "characters", "memory", "sessions",
         }
@@ -993,7 +993,7 @@ class TestRestoreSnapshot:
 
 
 # ---------------------------------------------------------------------------
-# Lifecycle
+# 生命周期
 # ---------------------------------------------------------------------------
 
 
@@ -1021,7 +1021,7 @@ class TestLifecycle:
 
 
 # ---------------------------------------------------------------------------
-# HTTP — gate
+# HTTP — 闸门
 # ---------------------------------------------------------------------------
 
 
@@ -1034,7 +1034,7 @@ class TestHTTPCheck:
         )
         assert res.status_code == 200
         body = res.get_json()
-        # default=deny + no rule → denied
+        # default=deny + 无规则 → 拒绝
         assert body["verdict"] == VERDICT_DENIED
 
     def test_check_with_world(self, client, auth_headers, world):
@@ -1080,7 +1080,7 @@ class TestHTTPCheck:
 
 
 # ---------------------------------------------------------------------------
-# HTTP — audit
+# HTTP — 审计
 # ---------------------------------------------------------------------------
 
 
@@ -1132,7 +1132,7 @@ class TestHTTPAudit:
 
 
 # ---------------------------------------------------------------------------
-# HTTP — world policy
+# HTTP — 世界策略
 # ---------------------------------------------------------------------------
 
 
@@ -1185,7 +1185,7 @@ class TestHTTPPolicy:
 
 
 # ---------------------------------------------------------------------------
-# HTTP — safety-stop
+# HTTP — 安全停机
 # ---------------------------------------------------------------------------
 
 
@@ -1297,7 +1297,7 @@ class TestHTTPSafetyStop:
 
 
 # ---------------------------------------------------------------------------
-# HTTP — snapshots
+# HTTP — 快照
 # ---------------------------------------------------------------------------
 
 
@@ -1311,7 +1311,7 @@ class TestHTTPSnapshots:
         assert res.status_code == 201
         body = res.get_json()
         assert body["id"].startswith("mcpsnap_")
-        assert "payload" not in body  # route strips payload
+        assert "payload" not in body  # 路由剥离载荷
 
     def test_dump_invalid_reason(self, client, auth_headers):
         res = client.post(
@@ -1338,7 +1338,7 @@ class TestHTTPSnapshots:
             headers=auth_headers,
         )
         assert res.status_code == 200
-        assert "payload" in res.get_json()  # raw get returns payload
+        assert "payload" in res.get_json()  # 原始获取返回载荷
 
     def test_get_missing(self, client, auth_headers):
         res = client.get(
@@ -1383,7 +1383,7 @@ class TestHTTPSnapshots:
 
 
 # ---------------------------------------------------------------------------
-# HTTP — dev crash
+# HTTP — dev 崩溃
 # ---------------------------------------------------------------------------
 
 
@@ -1397,7 +1397,7 @@ class TestHTTPDevCrash:
         assert body["blocked"] == "check_crashed"
 
     def test_dev_crash_without_dev_env(self, client, auth_headers):
-        # XIJIAN_DEV should be popped by conftest.
+        # XIJIAN_DEV 应被 conftest 弹出。
         res = client.post("/v1/xijian/mcp/dev/crash", headers=auth_headers)
         assert res.status_code == 403
 

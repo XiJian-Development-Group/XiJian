@@ -56,7 +56,7 @@ def currency(client, auth_headers, world):
 
 
 # ---------------------------------------------------------------------------
-# Pure helpers
+# 纯辅助函数
 # ---------------------------------------------------------------------------
 
 
@@ -120,8 +120,8 @@ class TestValidateDecimals:
 
 
 # ---------------------------------------------------------------------------
-# CRUD — stub-level
-# CRUD — stub-level
+# CRUD — stub 层
+# CRUD — stub 层
 # ---------------------------------------------------------------------------
 
 
@@ -171,7 +171,7 @@ class TestCreateStub:
         wb = worlds_stub.create(name="B")
         try:
             currency_stub.create(world_id=wa["id"], code="mora", name="Mora A")
-            # Same code in a different world is fine.
+            # 相同代码在不同世界中是允许的。
             record = currency_stub.create(world_id=wb["id"], code="mora", name="Mora B")
             assert record["name"] == "Mora B"
         finally:
@@ -347,7 +347,7 @@ class TestEnsureCurrency:
 
 
 # ---------------------------------------------------------------------------
-# HTTP routes
+# HTTP 路由
 # ---------------------------------------------------------------------------
 
 

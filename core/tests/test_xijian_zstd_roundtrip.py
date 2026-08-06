@@ -38,7 +38,7 @@ from xijian_api.stubs.snapshots import (
 #: A payload comfortably above 10 MB after pickle serialisation.
 #: 序列化后轻松超过 10 MB 的负载。
 def _big_payload(mb: int = 12) -> dict:
-    """Build a JSON-shaped payload of roughly ``mb`` MiB."""
+    """构建一个约 ``mb`` MiB 大小的 JSON 形状载荷。"""
     return {
         "world": "w1",
         "chars": "x" * (mb * 1024 * 1024),
@@ -47,7 +47,7 @@ def _big_payload(mb: int = 12) -> dict:
 
 
 class TestCompressionBackendSelection:
-    """Policy ``compression_backend`` drives the compressor."""
+    """策略中的 ``compression_backend`` 决定压缩器的选择。"""
 
     def test_default_policy_is_auto(self):
         policy = snap_stub.get_policy()
@@ -76,7 +76,7 @@ class TestCompressionBackendSelection:
 
 
 class TestRoundTripConsistency:
-    """≥10 MB payload survives compress → decompress unchanged."""
+    """≥10 MB 的载荷经压缩 → 解压后保持不变。"""
 
     def test_big_payload_round_trip(self):
         payload = _big_payload()
@@ -113,13 +113,13 @@ class TestRoundTripConsistency:
 
 
 class TestConfigurableSingleSnapshotCap:
-    """``max_single_snapshot_bytes`` replaces the module default."""
+    """``max_single_snapshot_bytes`` 覆盖模块默认值。"""
 
     def test_policy_cap_overrides_module_constant(self):
         snap_stub.set_policy(max_single_snapshot_bytes=1024)
         policy = snap_stub.get_policy()
         assert policy["max_single_snapshot_bytes"] == 1024
-        # A payload that fits the module default but not the new cap.
+        # 一个符合模块默认值但超过新上限的载荷。
         payload = {"big": os.urandom(4096)}
         with pytest.raises(SnapshotError, match="too large"):
             snap_stub.create_snapshot(
@@ -129,7 +129,7 @@ class TestConfigurableSingleSnapshotCap:
     def test_module_constant_still_default_when_unset(self):
         policy = snap_stub.get_policy()
         assert policy["max_single_snapshot_bytes"] is None
-        # Sanity: the module default itself is a positive value.
+        # 校验：模块默认值本身是一个正数。
         assert MAX_SINGLE_SNAPSHOT_BYTES > 0
 
     def test_invalid_cap_rejected(self):
@@ -140,7 +140,7 @@ class TestConfigurableSingleSnapshotCap:
 
 
 class TestSnapshotsConfigParsing:
-    """``[snapshots]`` config section parses into SnapshotsConfig."""
+    """``[snapshots]`` 配置段可解析为 SnapshotsConfig。"""
 
     def test_defaults(self):
         from xijian_api.config import Config
@@ -165,8 +165,8 @@ class TestSnapshotsConfigParsing:
             Config.from_dict({"snapshots": {"compression_backend": "brotli"}})
 
     def test_config_toml_has_snapshots_section(self):
-        # The shipped config.toml must carry the [snapshots] section
-        # so production picks up the AC-3 zstd default.
+        # 随附的 config.toml 必须携带 [snapshots] 配置段，
+        # 以便生产环境采用 AC-3 zstd 默认值。
         repo_core = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         toml_path = os.path.join(repo_core, "config.toml")
         assert os.path.exists(toml_path)
@@ -177,8 +177,8 @@ class TestSnapshotsConfigParsing:
 
 
 class TestCorruptPayloadErrors:
-    """R2/R3 — corrupt payloads raise SnapshotError, never a raw
-    zlib/zstandard/pickle exception."""
+    """R2/R3 —— 损坏的载荷应抛出 SnapshotError，绝不抛出原始的
+    zlib/zstandard/pickle 异常。"""
 
     def test_corrupt_zstd_payload_raises_snapshot_error(self):
         with pytest.raises(SnapshotError, match="decompression failed"):
@@ -205,8 +205,8 @@ class TestCorruptPayloadErrors:
 
 
 class TestApplyConfig:
-    """R5 — the ``[snapshots]`` config section wires into the stub
-    policy at startup (non-default values only)."""
+    """R5 —— ``[snapshots]`` 配置段在启动时接入 stub 策略
+    （仅非默认值）。"""
 
     def test_defaults_leave_policy_untouched(self):
         from xijian_api.config import Config

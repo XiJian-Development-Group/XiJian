@@ -1,4 +1,4 @@
-"""``/v1/xijian/resources/*`` routes."""
+"""``/v1/xijian/resources/*`` 路由。"""
 
 from __future__ import annotations
 

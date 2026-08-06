@@ -1,4 +1,4 @@
-"""``/v1/xijian/memory/*`` routes."""
+"""``/v1/xijian/memory/*`` 路由。"""
 
 from __future__ import annotations
 
@@ -98,7 +98,7 @@ def forget():
     return jsonify(result)
 
 
-# --- per-character config (A1.2 §character_memory_config) --------------------
+# --- 按角色记忆配置（A1.2 §character_memory_config） --------------------
 
 
 @bp.get("/v1/xijian/memory/config/<character_id>")
@@ -116,8 +116,8 @@ def upsert_config(character_id: str):
 @bp.delete("/v1/xijian/memory/config/<character_id>")
 def delete_config(character_id: str):
     if not memory_config_stub.delete(character_id):
-        # Idempotent — deleting a config that doesn't exist returns
-        # the default in :func:`get`, so we mirror that here too.
+        # 幂等 — 删除不存在的配置时 :func:`get` 返回默认值，
+        # 这里也保持一致。
         return jsonify(memory_config_stub.get(character_id))
     return ("", 204)
 

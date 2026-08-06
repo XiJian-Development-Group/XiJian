@@ -46,21 +46,21 @@ from xijian_api.stubs import state as stubs_state
 
 
 # ---------------------------------------------------------------------------
-# Clock + action-handler fixtures
+# 时钟 + 动作处理器夹具
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture()
 def frozen_clock(monkeypatch):
-    """Return a controllable clock + advance() helper.
+    """返回可控时钟 + advance() 辅助函数。
 
-    The overload stub calls :func:`time.time` in several places
-    (recovery window accounting, start_recovery's default timestamp).
-    Tests that want to verify ``too_early`` / ``can_finalize`` without
-    sleeping patch the clock directly.
+    过载 stub 在多个地方调用 :func:`time.time`
+    （恢复窗口记账、start_recovery 的默认时间戳）。
+    想在不睡眠的情况下验证 ``too_early`` / ``can_finalize`` 的测试
+    直接打补丁时钟。
 
-    Returns a small object with ``now()`` and ``advance(seconds)``
-    helpers that monkeypatch ``ov_stub.time.time``.
+    返回一个带 ``now()`` 和 ``advance(seconds)`` 辅助方法的小对象，
+    它们对 ``ov_stub.time.time`` 进行 monkeypatch。
     """
     current = {"t": 1_000_000.0}
 
@@ -81,16 +81,16 @@ def frozen_clock(monkeypatch):
 
 @pytest.fixture()
 def action_handler_recorder():
-    """Capture every (action, event) pair a handler receives.
+    """捕获处理器收到的每个 (action, event) 对。
 
-    Convenience API:
+    便捷 API：
 
-    * ``recorder.on(action)`` — register a built-in capturing handler,
-      returns the underlying handler.  Calls land on ``recorder.calls``.
-    * ``recorder.register_with(action, fn)`` — register a custom handler.
+    * ``recorder.on(action)`` — 注册内置捕获处理器，
+      返回底层处理器。调用记录在 ``recorder.calls``。
+    * ``recorder.register_with(action, fn)`` — 注册自定义处理器。
 
-    Cleanup is handled by the autouse ``_reset_state`` fixture between
-    tests so leaking handlers isn't an issue across the suite.
+    清理由测试间的 autouse ``_reset_state`` 夹具负责，
+    因此套件中不存在泄漏处理器的问题。
     """
 
     class Recorder:
@@ -120,7 +120,7 @@ def action_handler_recorder():
 
 
 # ---------------------------------------------------------------------------
-# Pure helpers — no I/O, no state
+# 纯辅助函数 — 无 I/O、无状态
 # ---------------------------------------------------------------------------
 
 
@@ -132,7 +132,7 @@ class TestSelectMostSevereAction:
         assert ov_stub.select_most_severe_action([ACTION_DEGRADE_TTS]) == ACTION_DEGRADE_TTS
 
     def test_worst_action_wins(self):
-        # emergency_dump beats every other action
+        # emergency_dump 优先级高于其它所有动作
         actions = [ACTION_SUSPEND_IDLE_NPCS, ACTION_DEGRADE_TTS, ACTION_EMERGENCY_DUMP]
         assert ov_stub.select_most_severe_action(actions) == ACTION_EMERGENCY_DUMP
 
@@ -157,7 +157,7 @@ class TestEvaluateMetrics:
         assert result["per_metric"] == {}
 
     def test_instantaneous_metric_trips_immediately(self):
-        # mem and soc are *instantaneous* — a single crossing is enough.
+        # mem 和 soc 是 *瞬时* 指标 —— 单次越界即可触发。
         now = time.time()
         sample = Sample(ts=now, cpu_pct=10.0, mem_pct=95.0, soc_celsius=None, gpu_ane_pct=10.0)
         result = ov_stub.evaluate_metrics([sample], "strict", now=now)
@@ -167,7 +167,7 @@ class TestEvaluateMetrics:
         assert result["action"] == ACTION_COMPRESS_MEMORY
 
     def test_windowed_metric_does_not_trip_on_single_sample(self):
-        # CPU needs 60 s sustained in strict tier — one sample is not enough.
+        # CPU 在严格档需要持续 60 秒 —— 单次采样不足以触发。
         now = time.time()
         sample = Sample(ts=now, cpu_pct=99.0, mem_pct=10.0, soc_celsius=None, gpu_ane_pct=10.0)
         result = ov_stub.evaluate_metrics([sample], "strict", now=now)
@@ -175,7 +175,7 @@ class TestEvaluateMetrics:
         assert result["action"] is None
 
     def test_windowed_metric_trips_after_sustained_over_threshold(self):
-        # Fill the strict-tier CPU window (60 s) with samples over 93%.
+        # 用超过 93% 的采样填满严格档 CPU 窗口（60 秒）。
         now = time.time()
         samples = [
             Sample(
@@ -192,7 +192,7 @@ class TestEvaluateMetrics:
         assert result["action"] == ACTION_SUSPEND_IDLE_NPCS
 
     def test_worst_action_wins_when_multiple_metrics_trip(self):
-        # Force CPU, MEM, and GPU/ANE to all be over threshold at once.
+        # 让 CPU、MEM 和 GPU/ANE 同时超过阈值。
         now = time.time()
         cpu_window = TIER_THRESHOLDS["strict"]["cpu_window_s"]
         gpu_window = TIER_THRESHOLDS["strict"]["gpu_ane_window_s"]
@@ -200,16 +200,16 @@ class TestEvaluateMetrics:
         samples = [
             Sample(
                 ts=now - (span - i * SAMPLE_INTERVAL_SECONDS),
-                cpu_pct=95.0,  # over 93%
-                mem_pct=95.0,  # over 90%
+                cpu_pct=95.0,  # 超过 93%
+                mem_pct=95.0,  # 超过 90%
                 soc_celsius=None,
-                gpu_ane_pct=80.0,  # over 75%
+                gpu_ane_pct=80.0,  # 超过 75%
             )
             for i in range(int(span) + 2)
         ]
         result = ov_stub.evaluate_metrics(samples, "strict", now=now)
         assert {METRIC_CPU, METRIC_MEM, METRIC_GPU}.issubset(set(result["triggered"]))
-        # mem → compress_memory (sev 30); the highest severity of these is COMPRESS_MEMORY.
+        # mem → compress_memory（严重度 30）；其中最高严重度是 COMPRESS_MEMORY。
         assert result["action"] == ACTION_COMPRESS_MEMORY
 
     def test_soc_temp_trips_action_emergency_dump(self):
@@ -220,9 +220,9 @@ class TestEvaluateMetrics:
         assert result["action"] == ACTION_EMERGENCY_DUMP
 
     def test_medium_tier_is_more_lenient_on_cpu(self):
-        # 95% sustained for 60 s → trips strict at 93%, but not medium (which needs 95% over 100 s).
+        # 95% 持续 60 秒 → 触发严格档的 93%，但不触发中档（中档需要 95% 持续 100 秒）。
         now = time.time()
-        cpu_window_60 = int(TIER_THRESHOLDS["medium"]["cpu_window_s"]) - 40  # well below medium's 100 s
+        cpu_window_60 = int(TIER_THRESHOLDS["medium"]["cpu_window_s"]) - 40  # 远低于中档的 100 秒
         samples = [
             Sample(
                 ts=now - (cpu_window_60 - i * SAMPLE_INTERVAL_SECONDS),
@@ -239,7 +239,7 @@ class TestEvaluateMetrics:
         assert METRIC_CPU not in medium["triggered"]
 
     def test_function_is_pure(self):
-        # No module state mutation: same input → same output.
+        # 无模块状态变更：相同输入 → 相同输出。
         now = time.time()
         samples = [
             Sample(ts=now - 30 * SAMPLE_INTERVAL_SECONDS + i * SAMPLE_INTERVAL_SECONDS,
@@ -247,19 +247,19 @@ class TestEvaluateMetrics:
             for i in range(31)
         ]
         baseline = ov_stub.evaluate_metrics(samples, "strict", now=now)
-        # Call it again — must be identical.
+        # 再次调用 —— 必须完全相同。
         repeat = ov_stub.evaluate_metrics(samples, "strict", now=now)
         assert baseline == repeat
 
 
 # ---------------------------------------------------------------------------
-# Tier management
+# 档位管理
 # ---------------------------------------------------------------------------
 
 
 class TestTier:
     def test_default_tier_is_medium(self):
-        # Conftest resets to "medium" before each test.
+        # Conftest 在每个测试前重置为 "medium"。
         assert ov_stub.current_tier() == "medium"
 
     def test_valid_tiers(self):
@@ -276,8 +276,8 @@ class TestTier:
         assert ov_stub.current_tier() == "medium"
 
     def test_set_tier_rejects_unknown_values(self):
-        # Per AC-4: the user cannot disable the guard.  Disabled/off/etc.
-        # must all be rejected.
+        # 按 AC-4：用户不能禁用守卫。Disabled/off/等
+        # 值都必须被拒绝。
         for bad in ("off", "disabled", "low", "ghost", "", "loose", "lenient"):
             with pytest.raises(ValueError, match="invalid tier"):
                 ov_stub.set_tier(bad)
@@ -287,7 +287,7 @@ class TestTier:
         assert rec in VALID_TIERS
 
     def test_no_off_or_disabled_constant_in_thresholds(self):
-        # Defensive: the doc explicitly says only "strict / medium" exist.
+        # 防御性检查：文档明确说明只有 "strict / medium" 存在。
         assert set(TIER_THRESHOLDS.keys()) == {"strict", "medium"}
 
 
@@ -316,7 +316,7 @@ class TestRecoveryHandshake:
         window = ov_stub.recovery_window()
         assert window["active"] is True
         assert window["can_finalize"] is False
-        # We started at t = frozen_clock.now(), so 20 s remain.
+        # 我们从 t = frozen_clock.now() 开始，因此还剩 20 秒。
         assert window["remaining_seconds"] == RECOVERY_WAIT_SECONDS
 
     def test_first_confirm_too_early(self, frozen_clock):
@@ -348,19 +348,19 @@ class TestRecoveryHandshake:
         ov_stub.start_recovery(event)
         frozen_clock.advance(RECOVERY_WAIT_SECONDS + 1)
         assert ov_stub.first_confirm()["status"] == "first_confirmed"
-        # finalize after the same instant must succeed.
+        # 同一时刻之后 finalize 必须成功。
         result = ov_stub.finalize_recovery()
         assert result["ok"] is True
         assert result["status"] == "finalized"
         assert result["event_id"] == "ovl_full"
-        # recovery record should have been cleared.
+        # 恢复记录应已被清除。
         assert ov_stub.recovery_window()["active"] is False
 
     def test_finalize_too_early(self, frozen_clock):
         event = {"id": "ovl_finalize_early", "triggered_at": frozen_clock.now()}
         ov_stub.start_recovery(event)
         frozen_clock.advance(RECOVERY_WAIT_SECONDS - 1)
-        # first_confirm is gated by 20 s too
+        # first_confirm 同样受 20 秒门控
         result = ov_stub.finalize_recovery()
         assert result["ok"] is False
         assert result["error"] == "first_confirm_required"
@@ -371,9 +371,9 @@ class TestRecoveryHandshake:
         ov_stub.start_recovery(event_v1)
         frozen_clock.advance(10)
         assert ov_stub.recovery_window()["remaining_seconds"] == 10
-        frozen_clock.advance(5)  # now 15 s have elapsed of the original 20
+        frozen_clock.advance(5)  # 现在原始 20 秒已过去 15 秒
         assert ov_stub.recovery_window()["remaining_seconds"] == 5
-        # A second trigger mid-recovery must reset to 20 again.
+        # 恢复中途的第二次触发必须重置回 20 秒。
         event_v2 = {"id": "ovl_v2", "triggered_at": frozen_clock.now()}
         ov_stub.start_recovery(event_v2)
         assert ov_stub.recovery_window()["remaining_seconds"] == RECOVERY_WAIT_SECONDS
@@ -390,8 +390,8 @@ class TestRecoveryHandshake:
         assert ov_stub.recovery_window()["active"] is False
 
     def test_first_confirm_with_no_active_recovery(self):
-        # Recording the error code helps the route layer differentiate
-        # 404 (no recovery) from 425 (still waiting).
+        # 记录错误码有助于路由层区分
+        # 404（无恢复）与 425（仍在等待）。
         result = ov_stub.first_confirm()
         assert result == {"ok": False, "error": "no_active_recovery"}
 
@@ -404,15 +404,15 @@ class TestRecoveryHandshake:
         frozen_clock.advance(RECOVERY_WAIT_SECONDS + 1)
         ov_stub.first_confirm()
         ov_stub.finalize_recovery()
-        # ``_append_audit`` writes to ``state.audits`` (the append-only
-        # global audit log), not to ``state.safety_state``.  Pull the
-        # match from there.
+        # ``_append_audit`` 写入 ``state.audits``（仅追加的
+        # 全局审计日志），而非 ``state.safety_state``。从
+        # 那里取出匹配项。
         match = [a for a in stubs_state.audits if a.get("kind") == "overload_recovery_finalized"]
         assert match, "expected an overload_recovery_finalized audit entry"
 
 
 # ---------------------------------------------------------------------------
-# Action handler registry
+# 动作处理器注册表
 # ---------------------------------------------------------------------------
 
 
@@ -421,12 +421,12 @@ class TestActionHandlers:
         recorder = action_handler_recorder
         recorder.on(ACTION_DEGRADE_TTS)
         ov_stub.simulate_overload(METRIC_GPU)
-        # simulate_overload drives the GPU window to tripped → DEGRADE_TTS
+        # simulate_overload 将 GPU 窗口驱动到触发 → DEGRADE_TTS
         actions = [a for a, _ in recorder.calls]
         assert ACTION_DEGRADE_TTS in actions
 
     def test_multiple_handlers_each_invoked(self, frozen_clock, action_handler_recorder):
-        # Two handlers on the same action both fire.
+        # 同一动作上的两个处理器都会触发。
         events = []
 
         def make_handler(label):
@@ -461,7 +461,7 @@ class TestActionHandlers:
 
         handlers = ov_stub.list_action_handlers()
         assert handlers[ACTION_COMPRESS_MEMORY], "registry should expose the handler"
-        # All four actions must show up in the registry, even when empty.
+        # 即使为空，全部四个动作也必须出现在注册表中。
         assert set(handlers.keys()) == {
             ACTION_SUSPEND_IDLE_NPCS,
             ACTION_DEGRADE_TTS,
@@ -476,10 +476,10 @@ class TestActionHandlers:
             calls.append(event["id"])
 
         ov_stub.register_action_handler(ACTION_DEGRADE_TTS, h)
-        # First trigger fires it.
+        # 第一次触发即调用它。
         ov_stub.simulate_overload(METRIC_GPU)
         assert len(calls) == 1
-        # Unregister, then trip again.
+        # 注销后再次触发。
         result = ov_stub.unregister_action_handler(ACTION_DEGRADE_TTS, h)
         assert result == {"action": ACTION_DEGRADE_TTS, "removed": True}
         ov_stub.simulate_overload(METRIC_GPU)
@@ -499,7 +499,7 @@ class TestActionHandlers:
         snap = ov_stub.status()
         assert "action_handlers" in snap
         assert isinstance(snap["action_handlers"], dict)
-        # All four actions show up.
+        # 四个动作都会出现。
         assert set(snap["action_handlers"].keys()) == {
             ACTION_SUSPEND_IDLE_NPCS,
             ACTION_DEGRADE_TTS,
@@ -509,7 +509,7 @@ class TestActionHandlers:
 
 
 # ---------------------------------------------------------------------------
-# Sample injection + monitor lifecycle
+# 采样注入 + 监控器生命周期
 # ---------------------------------------------------------------------------
 
 
@@ -552,21 +552,21 @@ class TestSimulateOverload:
 
     def test_simulate_starts_recovery_handshake(self, frozen_clock):
         ov_stub.simulate_overload(METRIC_MEM)
-        # The recovery record is in place immediately — countdown has begun.
+        # 恢复记录立即可用 —— 倒计时已开始。
         window = ov_stub.recovery_window()
         assert window["active"] is True
         assert window["remaining_seconds"] == RECOVERY_WAIT_SECONDS
 
     def test_simulate_drops_snapshot(self):
-        # Stub calls protection.snapshot() to keep the recovery flow
-        # uniformly audited; verify the snapshot surfaces in the
-        # safety snapshot store.
+        # Stub 调用 protection.snapshot() 使恢复流程
+        # 统一被审计；验证快照出现在
+        # 安全快照存储中。
         before = len(stubs_state.snapshots)
         ov_stub.simulate_overload(METRIC_MEM)
         after = len(stubs_state.snapshots)
         assert after == before + 1
-        # The newest snapshot must be scoped to "overload" so the UI
-        # knows it ties back to the safety guard.
+        # 最新快照必须限定为 "overload"，以便 UI
+        # 知道它与安全守卫相关。
         latest = list(stubs_state.snapshots.values())[-1]
         assert latest["scope"] == "overload"
 
@@ -575,9 +575,9 @@ class TestSimulateOverload:
             ov_stub.simulate_overload("battery_level")
 
     def test_simulate_uses_soc_threshold_not_mem(self):
-        # Regression guard: the *SoC* trip must use the SoC threshold,
-        # not the (lower) memory threshold — otherwise the simulator
-        # would still pass but produce wrong numbers in production.
+        # 回归守卫：*SoC* 触发必须使用 SoC 阈值，
+        # 而非（更低的）内存阈值 —— 否则模拟器
+        # 仍会通过，但在生产中产生错误的数值。
         result = ov_stub.simulate_overload(METRIC_SOC)
         per = result["per_metric"][METRIC_SOC]
         assert per["threshold_celsius"] == TIER_THRESHOLDS["strict" if ov_stub.current_tier() == "strict" else "medium"]["soc_celsius"]
@@ -585,8 +585,8 @@ class TestSimulateOverload:
 
 class TestMonitorLifecycle:
     def test_start_monitor_launches_thread(self, monkeypatch):
-        # Conftest disables the monitor by default; opt back in for
-        # this class.
+        # Conftest 默认禁用监控器；为这个类
+        # 重新开启。
         monkeypatch.setenv("XIJIAN_OVERLOAD_MONITOR", "1")
         result = ov_stub.start_monitor()
         try:
@@ -607,12 +607,12 @@ class TestMonitorLifecycle:
             ov_stub.stop_monitor()
 
     def test_env_zero_disables_monitor(self):
-        # Conftest already set XIJIAN_OVERLOAD_MONITOR=0 — confirm
-        # the flag is honoured.
+        # Conftest 已设置 XIJIAN_OVERLOAD_MONITOR=0 —— 确认
+        # 该标志被遵守。
         assert os.environ.get("XIJIAN_OVERLOAD_MONITOR") == "0"
         result = ov_stub.start_monitor()
         assert result == {"started": False, "reason": "disabled_by_env"}
-        # Also confirm seed_default respects the flag.
+        # 同时确认 seed_default 遵守该标志。
         ov_stub.seed_default()
         assert ov_stub.status()["monitor_running"] is False
 
@@ -628,17 +628,17 @@ class TestMonitorLifecycle:
         assert ov_stub.status()["monitor_running"] is False
 
     def test_event_log_is_capped(self, frozen_clock):
-        # Drive 205 synthetic triggers back-to-back; the log must stay
-        # bounded at 200.
+        # 连续驱动 205 次合成触发；日志必须
+        # 保持上限 200。
         for _ in range(210):
-            ov_stub.cancel_recovery()  # ensure no live recovery between runs
+            ov_stub.cancel_recovery()  # 确保两次运行之间没有活跃的恢复
             ov_stub.simulate_overload(METRIC_MEM)
         events_list = stubs_state.overload.get("events", [])
         assert len(events_list) <= 200
 
 
 # ---------------------------------------------------------------------------
-# HTTP routes — /v1/xijian/overload/*
+# HTTP 路由 — /v1/xijian/overload/*
 # ---------------------------------------------------------------------------
 
 
@@ -679,10 +679,10 @@ class TestRoutesTier:
         )
         assert response.status_code == 200
         assert response.get_json()["tier"] == "strict"
-        # The state must reflect the new tier.
+        # 状态必须反映新档位。
         assert ov_stub.current_tier() == "strict"
 
-        # Reset back for downstream tests.
+        # 为下游测试重置回去。
         client.patch(
             "/v1/xijian/overload/tier",
             headers=auth_headers,
@@ -690,7 +690,7 @@ class TestRoutesTier:
         )
 
     def test_patch_tier_off_is_rejected(self, client, auth_headers):
-        # AC-4: the user cannot disable the guard.
+        # AC-4：用户不能禁用守卫。
         response = client.patch(
             "/v1/xijian/overload/tier",
             headers=auth_headers,
@@ -735,10 +735,10 @@ class TestRoutesMetrics:
             assert response.status_code == 400, f"expected 400 for limit={bad}"
 
     def test_metrics_contains_real_samples_after_monitor_run(self, monkeypatch):
-        # Push three samples via inject_sample; the exact thread loop
-        # is exercised by test_start_monitor_launches_thread.  This
-        # test confirms the HTTP surface returns samples in the
-        # JSON shape the UI expects.
+        # 通过 inject_sample 推送三个采样；确切的线程循环
+        # 由 test_start_monitor_launches_thread 演练。本
+        # 测试确认 HTTP 接口以 UI 期望的
+        # JSON 形状返回采样。
         monkeypatch.setenv("XIJIAN_OVERLOAD_MONITOR", "1")
         for _ in range(3):
             ov_stub.inject_sample(
@@ -769,9 +769,9 @@ class TestRoutesEvents:
         ov_stub.simulate_overload(METRIC_MEM)
         response = client.get("/v1/xijian/overload/events", headers=auth_headers)
         events = response.get_json()["events"]
-        # Conftest reset wipes state between tests, so two events are expected.
+        # Conftest 重置会在测试间清除状态，因此预期有两个事件。
         assert len(events) >= 1
-        # Newest first.
+        # 最新的在前。
         timestamps = [e["ts"] for e in events]
         assert timestamps == sorted(timestamps, reverse=True)
 
@@ -816,7 +816,7 @@ class TestRoutesRecovery:
 
     def test_first_confirm_after_wait_succeeds(self, client, auth_headers, monkeypatch):
         ov_stub.simulate_overload(METRIC_MEM)
-        # Push the clock forward 21 s without sleeping.
+        # 不睡眠，直接将时钟向前推 21 秒。
         original = ov_stub.time.time
 
         def shifted_time():
@@ -840,7 +840,7 @@ class TestRoutesRecovery:
             return original() + 25
 
         monkeypatch.setattr(ov_stub.time, "time", shifted_time)
-        # First-confirm never called.
+        # first-confirm 从未被调用。
         response = client.post(
             "/v1/xijian/overload/recovery/finalize",
             headers=auth_headers,
@@ -879,7 +879,7 @@ class TestRoutesRecovery:
 
 class TestRoutesSimulate:
     def test_simulate_requires_dev_mode(self, client, auth_headers):
-        # XIJIAN_DEV is unset by conftest — must 404.
+        # XIJIAN_DEV 被 conftest 取消设置 — 必须 404。
         response = client.post(
             "/v1/xijian/_test/overload/simulate",
             headers=auth_headers,
@@ -921,15 +921,15 @@ class TestRoutesSimulate:
 
 class TestAuthWiring:
     def test_status_without_auth_is_rejected(self, client):
-        # The /v1/xijian/overload namespace should be gated by the
-        # same middleware as the rest of /v1/xijian/*.  Some overload
-        # endpoints must also be idempotent under Bearer; in either
-        # case an unauthenticated probe must not return 200.
+        # /v1/xijian/overload 命名空间应与其余 /v1/xijian/*
+        # 受同一中间件门控。某些 overload 端点
+        # 在 Bearer 下还必须幂等；无论哪种情况，
+        # 未认证的探测都不能返回 200。
         response = client.get("/v1/xijian/overload/status")
-        # Either 401 or 200-with-anonymous-shape — but at minimum the
-        # server must not 500.  We accept 200 only if auth is optional
-        # for this endpoint; the test below with a bad token confirms
-        # the wiring is exercised.
+        # 要么 401，要么 200-匿名形状 —— 但至少
+        # 服务器不能 500。仅当该端点认证可选时
+        # 才接受 200；下面用坏 token 的测试确认
+        # 接线确实被演练。
         assert response.status_code in (200, 401)
 
     def test_patch_tier_without_auth_is_rejected(self, client):
@@ -937,23 +937,23 @@ class TestAuthWiring:
             "/v1/xijian/overload/tier",
             json={"tier": "strict"},
         )
-        # We don't assert a specific code because the project's auth
-        # policy may evolve; we only assert non-200 so a regression
-        # that strands the endpoint behind no auth gets caught.
+        # 我们不断言具体错误码，因为项目的认证
+        # 策略可能演变；只断言非 200，以便
+        # 把端点置于无认证后方的回归能被发现。
         assert response.status_code != 200 or response.get_json().get("tier") is None
 
 
 # ---------------------------------------------------------------------------
-# Cross-system: trigger → snapshot → audit → WS broadcast
+# 跨系统：触发 → 快照 → 审计 → WS 广播
 # ---------------------------------------------------------------------------
 
 
 class TestCrossSystemTrigger:
     def test_trigger_emits_ws_event(self, monkeypatch):
-        """The overload trigger publishes a WS event so the UI can prompt.
+        """过载触发发布 WS 事件，供 UI 提示。
 
-        We mock :func:`publish_event` and assert it is called with the
-        right shape on simulate_overload.
+        我们 mock :func:`publish_event` 并断言它在
+        simulate_overload 时以正确的形状被调用。
         """
         from xijian_api.routes import ws_routes
 
@@ -974,9 +974,9 @@ class TestCrossSystemTrigger:
         # 过载 — audit entries land via _record_trigger; check we
         # at least have a recently appended record.
         kinds = [a.get("kind") for a in audit]
-        # The stub does not write a fresh audit entry on every
-        # trigger (only on finalize); so we don't insist on a match,
-        # we just ensure the audit surface is in working order.
+        # Stub 不会在每次触发时都写入新的审计条目
+        # （仅在 finalize 时）；因此我们不要求匹配，
+        # 只确保审计接口工作正常。
         assert isinstance(kinds, list)
 
     def test_snapshot_is_written_for_recovery(self):
@@ -996,7 +996,7 @@ class TestCrossSystemTrigger:
         follow-up) writes both buckets on key events.
         """
         from xijian_api.stubs.snapshots import list_snapshots as _list
-        # Empty before the trigger.
+        # 触发之前为空。
         assert _list(reason="overload") == []
         ov_stub.simulate_overload(METRIC_MEM)
         archive = _list(reason="overload")
@@ -1004,8 +1004,8 @@ class TestCrossSystemTrigger:
         record = archive[0]
         assert record["scope"] == "mixed"
         assert record["reason"] == "overload"
-        # The payload is the same shape as the
-        # protection.snapshot entry.
+        # 载荷与
+        # protection.snapshot 条目形状相同。
         payload = record["payload"]
         assert "tier" in payload
         assert "triggered_metrics" in payload
@@ -1013,14 +1013,13 @@ class TestCrossSystemTrigger:
 
 
 # ---------------------------------------------------------------------------
-# A5.4 — all four action handlers wired to real consumers
+# A5.4 — 全部四个动作处理器已接线到真实消费者
 # ---------------------------------------------------------------------------
 
 
 class TestAllActionConsumers:
-    """Every one of the 4 subsystem actions must have a registered
-    consumer that does something real (previously only
-    ``suspend_idle_npcs`` was subscribed)."""
+    """4 个子系统动作中的每一个都必须有已注册的
+    真实消费者（此前只有 ``suspend_idle_npcs`` 被订阅）。"""
 
     def test_all_four_actions_have_handlers(self):
         handlers = ov_stub.list_action_handlers()
@@ -1058,8 +1057,8 @@ class TestAllActionConsumers:
         before = len(_list(reason="overload"))
         ov_stub.simulate_overload(METRIC_SOC)  # → ACTION_EMERGENCY_DUMP
         after = len(_list(reason="overload"))
-        # 2 = the per-trigger archive write + the emergency_dump handler's
-        # force-persisted write.
+        # 2 = 每次触发的归档写入 + emergency_dump 处理器的
+        # 2 = 每次触发的归档写入 + emergency_dump 处理器的
         assert after >= before + 1
 
     def test_suspend_idle_npcs_still_wired(self):

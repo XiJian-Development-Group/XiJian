@@ -1,67 +1,60 @@
-"""``/v1/xijian/mcp/*`` routes — A5.2.
+"""``/v1/xijian/mcp/*`` 路由 — A5.2。
 
-Gate (the hot path)
+门禁（热路径）
 ===================
 
-* ``POST   /v1/xijian/mcp/check``              — pre-flight a
-                                                  tool call
-                                                  before the
-                                                  desktop client
-                                                  runs it
+* ``POST   /v1/xijian/mcp/check``              — 在桌面客户端执行
+                                                 工具调用前进行
+                                                 预检
 
-Rules CRUD
+规则 CRUD
 ==========
 
-* ``GET    /v1/xijian/mcp/rules``              — list (?active, ?action_kind, ?mode)
-* ``POST   /v1/xijian/mcp/rules``              — create
-* ``GET    /v1/xijian/mcp/rules/<rule_id>``   — get
-* ``PATCH  /v1/xijian/mcp/rules/<rule_id>``   — patch
-* ``DELETE /v1/xijian/mcp/rules/<rule_id>``   — delete
+* ``GET    /v1/xijian/mcp/rules``              — 列表 (?active, ?action_kind, ?mode)
+* ``POST   /v1/xijian/mcp/rules``              — 创建
+* ``GET    /v1/xijian/mcp/rules/<rule_id>``   — 获取
+* ``PATCH  /v1/xijian/mcp/rules/<rule_id>``   — 修改
+* ``DELETE /v1/xijian/mcp/rules/<rule_id>``   — 删除
 
-Audit query
+审计查询
 ===========
 
-* ``GET    /v1/xijian/mcp/audit``             — list (?action_kind, ?world_id, ?verdict, ?limit)
-* ``GET    /v1/xijian/mcp/audit/count``       — count (same filter args)
+* ``GET    /v1/xijian/mcp/audit``             — 列表 (?action_kind, ?world_id, ?verdict, ?limit)
+* ``GET    /v1/xijian/mcp/audit/count``       — 计数（相同过滤参数）
 
-World policy
+世界策略
 ============
 
-* ``GET    /v1/xijian/mcp/policy/<wid>``      — read
-* ``PUT    /v1/xijian/mcp/policy/<wid>``      — set default / clear lockout
-* ``DELETE /v1/xijian/mcp/policy/<wid>``      — reset to defaults
+* ``GET    /v1/xijian/mcp/policy/<wid>``      — 读取
+* ``PUT    /v1/xijian/mcp/policy/<wid>``      — 设置默认 / 清除锁定
+* ``DELETE /v1/xijian/mcp/policy/<wid>``      — 重置为默认值
 
-Safety-stop (the freeze state machine)
+安全停止（冻结状态机）
 =======================================
 
-* ``POST   /v1/xijian/mcp/safety_stop``               — initiate (the hotkey path)
-* ``GET    /v1/xijian/mcp/safety_stop``               — list
-* ``GET    /v1/xijian/mcp/safety_stop/<freeze_id>``   — get
-* ``POST   /v1/xijian/mcp/safety_stop/<freeze_id>/confirm`` — user said "清理并恢复"
-* ``POST   /v1/xijian/mcp/safety_stop/<freeze_id>/cancel``  — user said "保持冻结"
+* ``POST   /v1/xijian/mcp/safety_stop``               — 发起（快捷键路径）
+* ``GET    /v1/xijian/mcp/safety_stop``               — 列表
+* ``GET    /v1/xijian/mcp/safety_stop/<freeze_id>``   — 获取
+* ``POST   /v1/xijian/mcp/safety_stop/<freeze_id>/confirm`` — 用户选择“清理并恢复”
+* ``POST   /v1/xijian/mcp/safety_stop/<freeze_id>/cancel``  — 用户选择“保持冻结”
 
-Snapshots (the "专用备份文件夹" half of the spec)
+快照（规范中“专用备份文件夹”的一半）
 ==================================================
 
-* ``GET    /v1/xijian/mcp/snapshots``                — list summaries
-* ``GET    /v1/xijian/mcp/snapshots/<snap_id>``     — get
-* ``POST   /v1/xijian/mcp/snapshots``                — explicit dump
-* ``POST   /v1/xijian/mcp/snapshots/<snap_id>/sanitize`` — explicit sanitize
-* ``POST   /v1/xijian/mcp/snapshots/<snap_id>/restore``  — explicit restore
+* ``GET    /v1/xijian/mcp/snapshots``                — 列出摘要
+* ``GET    /v1/xijian/mcp/snapshots/<snap_id>``     — 获取
+* ``POST   /v1/xijian/mcp/snapshots``                — 显式转储
+* ``POST   /v1/xijian/mcp/snapshots/<snap_id>/sanitize`` — 显式脱敏
+* ``POST   /v1/xijian/mcp/snapshots/<snap_id>/restore``  — 显式恢复
 
-Dev-only
+仅限开发
 ========
 
-* ``POST   /v1/xijian/mcp/dev/crash``         — force a
-                                                 rulebook
-                                                 crash so tests
-                                                 can exercise
-                                                 the spec's
-                                                 "审查模块自身
-                                                 崩溃 → 降级为
-                                                 最严格档"
-                                                 branch.
-                                                 ``XIJIAN_DEV=1``.
+* ``POST   /v1/xijian/mcp/dev/crash``         — 强制规则手册崩溃，
+                                                 使测试可以演练规范中的
+                                                 “审查模块自身崩溃 →
+                                                 降级为最严格档”分支。
+                                                 ``XIJIAN_DEV=1``。
 """
 
 from __future__ import annotations
@@ -82,7 +75,7 @@ _LOGGER = logging.getLogger("xijian_api.routes.xijian_mcp")
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# 辅助函数
 # ---------------------------------------------------------------------------
 
 
@@ -106,7 +99,7 @@ def _dev_only() -> None:
 
 
 # ---------------------------------------------------------------------------
-# Gate — the hot path
+# 门禁 — 热路径
 # ---------------------------------------------------------------------------
 
 
@@ -132,7 +125,7 @@ def check_route():
 
 
 # ---------------------------------------------------------------------------
-# Rules CRUD
+# 规则 CRUD
 # ---------------------------------------------------------------------------
 
 
@@ -214,7 +207,7 @@ def delete_rule(rule_id: str):
 
 
 # ---------------------------------------------------------------------------
-# Audit query
+# 审计查询
 # ---------------------------------------------------------------------------
 
 
@@ -246,7 +239,7 @@ def count_audit():
 
 
 # ---------------------------------------------------------------------------
-# World policy
+# 世界策略
 # ---------------------------------------------------------------------------
 
 
@@ -282,7 +275,7 @@ def reset_policy(world_id: str):
 
 
 # ---------------------------------------------------------------------------
-# Safety-stop
+# 安全停止
 # ---------------------------------------------------------------------------
 
 
@@ -361,7 +354,7 @@ def cancel_safety_stop(freeze_id: str):
 
 
 # ---------------------------------------------------------------------------
-# Snapshots
+# 快照
 # ---------------------------------------------------------------------------
 
 
@@ -428,17 +421,16 @@ def restore_snapshot(snapshot_id: str):
 
 
 # ---------------------------------------------------------------------------
-# Dev-only — exercise the self-crash fallback path
+# 仅限开发 — 演练自崩溃回退路径
 # ---------------------------------------------------------------------------
 
 
 @bp.post("/v1/xijian/mcp/dev/crash")
 def dev_crash():
     _dev_only()
-    # Patch the rulebook's :func:`match_action_rules` to raise
-    # so the gate can demonstrate the spec's "审查模块自身崩
-    # 溃 → 降级为最严格档" branch.  We restore the original
-    # after the call.
+    # 修补规则手册的 :func:`match_action_rules` 使其抛出异常，
+    # 让门禁能演示规范中“审查模块自身崩溃 → 降级为最严格档”
+    # 的分支。调用后恢复原函数。
     original = rules_stub.match_action_rules
 
     def boom(action_kind, payload):

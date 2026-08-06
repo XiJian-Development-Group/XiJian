@@ -1,19 +1,19 @@
-"""Tests for ``stubs.desktop_pets`` (A8) + ``/v1/xijian/desktop/*`` +
-``/v1/xijian/mcp/pending*``.
+"""针对 ``stubs.desktop_pets``（A8）+ ``/v1/xijian/desktop/*`` +
+``/v1/xijian/mcp/pending*`` 的测试。
 
-Covers:
+覆盖范围：
 
-* **Pets CRUD** — create / list / get / patch / delete, activate.
-* **Wallpapers CRUD** — create / list / activate; **exclusivity**
-  (one active wallpaper per character; activating a wallpaper
-  deactivates that character's pets).
-* **AC-4** — ``write_ops_allowed`` is False while a wallpaper is
-  active; pending write actions get blocked on result write-back.
-* **AC-2 audit log** — pet action log append + query.
-* **Execution loop (the A5.2-flagged gap)** — enqueue → poll
-  (``list_pending``) → claim → result write-back (executed/failed),
-  plus the pet-log write on executed actions.
-* **Routes** — pets / wallpapers / actions / mcp-pending HTTP tests.
+* **宠物 CRUD** — 创建 / 列表 / 查询 / 修改 / 删除、激活。
+* **壁纸 CRUD** — 创建 / 列表 / 激活；**排他性**
+  （每个角色只能有一张激活的壁纸；激活壁纸会
+  停用该角色的宠物）。
+* **AC-4** — 壁纸激活期间 ``write_ops_allowed`` 为 False；
+  待处理的写操作在结果写回时被阻止。
+* **AC-2 审计日志** — 宠物动作日志的追加与查询。
+* **执行循环（A5.2 标记的缺口）** — 入队 → 轮询
+  （``list_pending``）→ 领取 → 结果写回（executed/failed），
+  以及执行成功动作时的宠物日志写入。
+* **路由** — 宠物 / 壁纸 / 动作 / mcp-pending 的 HTTP 测试。
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ def pet(character):
 
 
 # ---------------------------------------------------------------------------
-# Pets CRUD
+# 宠物 CRUD
 # ---------------------------------------------------------------------------
 
 
@@ -87,7 +87,7 @@ class TestPets:
 
 
 # ---------------------------------------------------------------------------
-# Wallpapers + AC-4
+# 壁纸 + AC-4
 # ---------------------------------------------------------------------------
 
 
@@ -135,7 +135,7 @@ class TestWallpapers:
 
 
 # ---------------------------------------------------------------------------
-# Pet action log (AC-2)
+# 宠物动作日志（AC-2）
 # ---------------------------------------------------------------------------
 
 
@@ -159,7 +159,7 @@ class TestPetActionLog:
         pets_stub.log_pet_action(pet, pets_stub.ACTION_KEY_INPUT, {"text": "b"})
         entries = pets_stub.list_pet_actions(pet, action_kind=pets_stub.ACTION_KEY_INPUT)
         assert len(entries) == 2
-        # newest first
+        # 最新的在前
         assert entries[0]["payload"]["text"] == "b"
 
     def test_log_records_character_id(self, pet, character):
@@ -168,13 +168,13 @@ class TestPetActionLog:
 
 
 # ---------------------------------------------------------------------------
-# Execution loop — pending queue (the A5.2-flagged gap)
+# 执行循环 — 待处理队列（A5.2 标记的缺口）
 # ---------------------------------------------------------------------------
 
 
 class TestPendingQueue:
     def test_enqueue_via_mcp_tool_and_list(self, character):
-        # The MCP desktop tool enqueues into state.mcp_pending_actions.
+        # MCP 桌面工具将动作入队到 state.mcp_pending_actions。
         result = desktop_tools._app_launch_handler(
             {"app_name": "Safari"}, {"world_id": "w1"}
         )
@@ -234,7 +234,7 @@ class TestPendingQueue:
         desktop_tools._enqueue("app_launch", {"app_name": "Notes"})
         items = pets_stub.list_pending(status=pets_stub.PENDING_STATUS_PENDING)
         assert items
-        # Claim the first one.
+        # 领取第一个动作。
         action_id = items[0]["id"]
         pets_stub.claim_action(action_id)
         pending = pets_stub.list_pending(status=pets_stub.PENDING_STATUS_PENDING)
@@ -242,7 +242,7 @@ class TestPendingQueue:
 
 
 # ---------------------------------------------------------------------------
-# Routes
+# 路由
 # ---------------------------------------------------------------------------
 
 
@@ -301,7 +301,7 @@ class TestDesktopRoutes:
         assert log[0]["action_kind"] == pets_stub.ACTION_MOUSE_CLICK
 
     def test_mcp_pending_poll_and_result_over_http(self, client, auth_headers, character):
-        # Enqueue through the MCP tool layer (as a chat pipeline would).
+        # 通过 MCP 工具层入队（如同聊天管道所做）。
         desktop_tools._enqueue("browser_open", {"url": "https://example.com"})
         poll = client.get("/v1/xijian/mcp/pending", headers=auth_headers)
         assert poll.status_code == 200

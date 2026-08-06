@@ -70,11 +70,11 @@ from xijian_api.stubs.events import (
 
 @pytest.fixture()
 def world():
-    """Return a fabricated world record id and register it on ``state``.
+    """返回一个伪造的世界记录 id 并在 ``state`` 上注册。
 
-    Worlds are operator-created.  The stub has no public ``create`` —
-    tests poke the bucket directly.  Each call gets its own world id so
-    state doesn't leak between tests.
+    世界由操作员创建。stub 没有公开的 ``create`` ——
+    测试直接操作桶。每次调用获得自己的世界 id，
+    以免状态在测试间泄漏。
     """
     wid = f"world_test_{id(object())}"
     stubs_state.worlds[wid] = {
@@ -92,7 +92,7 @@ def world():
 
 @pytest.fixture()
 def frozen_clock(monkeypatch):
-    """Controllable clock injected into the events scheduler helpers."""
+    """注入到事件调度器辅助函数中的可控时钟。"""
     current = {"t": 1_700_000_000.0}
 
     def fake_time() -> float:
@@ -112,7 +112,7 @@ def frozen_clock(monkeypatch):
 
 @pytest.fixture()
 def fired_recorder(monkeypatch):
-    """Capture ``event.fired`` WebSocket broadcasts issued by the stub."""
+    """捕获 stub 发出的 ``event.fired`` WebSocket 广播。"""
     from xijian_api.routes import ws_routes
 
     seen: list[tuple[str, dict[str, Any]]] = []
@@ -125,12 +125,12 @@ def fired_recorder(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# Pure helpers — trigger validation
+# 纯辅助函数 — 触发器校验
 # ---------------------------------------------------------------------------
 
 
 class TestValidateTrigger:
-    """``_validate_trigger`` rejects malformed trigger configs."""
+    """``_validate_trigger`` 拒绝格式错误的触发器配置。"""
 
     def test_non_dict_raises(self):
         with pytest.raises(EventError, match="must be a JSON object"):
@@ -152,7 +152,7 @@ class TestValidateTrigger:
         ],
     )
     def test_valid_triggers_pass(self, trigger):
-        _validate_trigger(trigger)  # should not raise
+        _validate_trigger(trigger)  # 不应抛出异常
 
     def test_unknown_type(self):
         with pytest.raises(EventError, match="must be one of"):
@@ -202,7 +202,7 @@ class TestValidateTrigger:
 
 
 # ---------------------------------------------------------------------------
-# Pure helpers — trigger evaluation
+# 纯辅助函数 — 触发器评估
 # ---------------------------------------------------------------------------
 
 
@@ -246,7 +246,7 @@ class TestEvaluateTimeTrigger:
 class TestEvaluateIntervalTrigger:
 
     def test_first_eligible_always_fires(self):
-        # No last-fire record → fires on first eligible tick.
+        # 无最后触发记录 → 首个合格 tick 即触发。
         trigger = {"type": "interval", "seconds": 60}
         assert _evaluate_interval_trigger(trigger, "evt_x", 1_000_000.0) is True
 
@@ -279,25 +279,25 @@ class TestEvaluateProbabilityTrigger:
         assert _evaluate_probability_trigger(trigger, 1_700_000_000.0) is True
 
     def test_deterministic_within_same_bucket(self):
-        # Same second → same outcome (deterministic hash).
+        # 同一秒 → 相同结果（确定性哈希）。
         trigger = {"type": "probability", "per_tick": 0.5}
         a = _evaluate_probability_trigger(trigger, 1_700_000_000.0)
         b = _evaluate_probability_trigger(trigger, 1_700_000_000.0)
         assert a == b
 
     def test_sweep_can_find_both_true_and_false(self):
-        # Sweep through enough seconds to see both outcomes.  With
-        # the default 60 s scheduler interval, 50 consecutive
-        # seconds collapse to a single bucket, so we sample one
-        # second per 60-second bucket across a 2-hour window.
+        # 扫过足够多的秒数以看到两种结果。默认
+        # 60 秒调度间隔下，50 个连续
+        # 秒会坍缩进同一个桶，因此我们在 2 小时窗口内
+        # 每 60 秒桶采样一秒。
         trigger = {"type": "probability", "per_tick": 0.5}
         outcomes = {
             _evaluate_probability_trigger(trigger, float(s))
             for s in range(1_700_000_000, 1_700_000_000 + 3600 * 2, 60)
         }
-        # With 120 distinct buckets and 50/50 odds, we *should* see
-        # both.  If this ever flakes, the deterministic hash
-        # distribution has degraded and we should investigate.
+        # 120 个不同桶、50/50 概率，*应该* 能看到
+        # 两者。如果这偶尔抖动，说明确定性哈希
+        # 分布退化，需要调查。
         assert {True, False}.issubset(outcomes)
 
 
@@ -373,7 +373,7 @@ class TestEvaluateConditionTrigger:
         assert _evaluate_trigger(trigger, "evt_x", 0.0, self._world()) is False
 
     def test_type_mismatch_in_compare_returns_false(self):
-        # "sunny" > 5 returns False (no exception), per _safe_compare.
+        # "sunny" > 5 返回 False（不抛异常），符合 _safe_compare。
         trigger = {"type": "condition", "field": "weather", "op": "gt", "value": 5}
         assert _evaluate_trigger(trigger, "evt_x", 0.0, self._world(weather="sunny")) is False
 
@@ -384,8 +384,8 @@ class TestSafeCompare:
         assert _safe_compare(5, 3, lambda a, b: a > b) is True
 
     def test_swallows_type_error(self):
-        # Comparing incompatible types should NOT raise — it should
-        # return False.
+        # 比较不兼容类型不应抛出 —— 而应
+        # 返回 False。
         result = _safe_compare("abc", 3, lambda a, b: a > b)
         assert result is False
 
@@ -408,7 +408,7 @@ class TestEvaluateTriggerDispatch:
 
 
 # ---------------------------------------------------------------------------
-# Pure helpers — cooldowns + storm throttle + categories + payload
+# 纯辅助函数 — 冷却时间 + 风暴节流 + 类别 + 载荷
 # ---------------------------------------------------------------------------
 
 
@@ -512,8 +512,8 @@ class TestPickFirePayload:
 
 
 # ---------------------------------------------------------------------------
-# CRUD — event definitions
-# CRUD — event definitions
+# CRUD — 事件定义
+# CRUD — 事件定义
 # ---------------------------------------------------------------------------
 
 
@@ -531,7 +531,7 @@ class TestEventCRUD:
         assert rec["world_id"] == world
         assert rec["kind"] == KIND_COMMON
         assert rec["is_enabled"] is True
-        # Stored under world_events bucket by id.
+        # 按 id 存储在 world_events 桶中。
         assert stubs_state.world_events[rec["id"]] == rec
 
     def test_create_invalid_kind_raises(self, world):
@@ -570,16 +570,16 @@ class TestEventCRUD:
             priority=10,
             is_enabled=False,
         )
-        # world filter
+        # 世界过滤
         only = ev_stub.list_events(world_id=world)
         assert {a["id"], b["id"]}.issubset({e["id"] for e in only})
-        # kind filter
+        # 种类过滤
         kind_only = ev_stub.list_events(world_id=world, kind=KIND_COMMON)
         assert {e["id"] for e in kind_only} == {a["id"]}
-        # enabled_only filter
+        # enabled_only 过滤
         enabled = ev_stub.list_events(world_id=world, enabled_only=True)
         assert {e["id"] for e in enabled} == {a["id"]}
-        # priority desc, created_at asc within same priority
+        # priority 降序，同优先级内 created_at 升序
         ev_stub.create_event(
             world_id=world,
             kind=KIND_COMMON,
@@ -588,7 +588,7 @@ class TestEventCRUD:
             priority=10,
         )
         ordered = ev_stub.list_events(world_id=world, kind=KIND_COMMON)
-        # a (prio 0) should come after C (prio 10) because of sort by -priority.
+        # a（prio 0）应排在 C（prio 10）之后，因为按 -priority 排序。
         assert ordered[0]["name"] == "C"
 
     def test_update_patches_mutable_fields(self, world):
@@ -663,13 +663,13 @@ class TestEventCRUD:
         )
         assert ev_stub.delete_event(rec["id"]) is True
         assert stubs_state.world_events.get(rec["id"]) is None
-        # Second call: idempotent False
+        # 第二次调用：幂等返回 False
         assert ev_stub.delete_event(rec["id"]) is False
 
 
 # ---------------------------------------------------------------------------
-# CRUD — fired instances
-# CRUD — fired instances
+# CRUD — 已触发实例
+# CRUD — 已触发实例
 # ---------------------------------------------------------------------------
 
 
@@ -737,7 +737,7 @@ class TestInstanceCRUD:
         ev_stub.fire_event(e1["id"], now=1002.0)
         by_world = ev_stub.list_instances(world_id=world)
         assert len(by_world) == 3
-        # Newest first
+        # 最新的在前
         assert by_world[0]["fired_at"] >= by_world[-1]["fired_at"]
         # Filter by event
         # 过滤 — by event
@@ -754,7 +754,7 @@ class TestInstanceCRUD:
         for i in range(5):
             ev_stub.fire_event(e["id"], now=1000.0 + i)
         assert len(ev_stub.list_instances(limit=3)) == 3
-        assert len(ev_stub.list_instances(limit=0)) == 1  # floor at 1
+        assert len(ev_stub.list_instances(limit=0)) == 1  # 下限为 1
 
     def test_resolve_marks_timestamp(self, world):
         e = ev_stub.create_event(
@@ -772,7 +772,7 @@ class TestInstanceCRUD:
         assert ev_stub.resolve_instance("inst_phantom") is None
 
     def test_trim_caps_total(self, world, monkeypatch):
-        # Save and override the cap to a small value for the test.
+        # 保存上限并将其覆盖为小值用于测试。
         from xijian_api.stubs import events as ev_module
 
         original_cap = ev_module.INSTANCE_KEEP_TOTAL
@@ -789,7 +789,7 @@ class TestInstanceCRUD:
             assert (
                 len(stubs_state.world_event_instances) == 3
             )
-            # The 3 newest should remain (fired_at 1007, 1008, 1009).
+            # 最新的 3 条应保留（fired_at 1007、1008、1009）。
             timestamps = sorted(
                 i["fired_at"]
                 for i in stubs_state.world_event_instances.values()
@@ -820,8 +820,8 @@ class TestCategoryToggles:
         ev_stub.set_category_disabled(world, "social", True)
         ev_stub.set_category_disabled(world, "battle", True)
         ev_stub.set_category_disabled(world, "daily", True)
-        # No category named "weather" is part of the schema; we use the
-        # kind-based toggles.  Sort order is alphabetical (str).
+        # 架构中没有名为 "weather" 的类别；我们使用
+        # 基于 kind 的开关。排序按字母序（str）。
         result = ev_stub.list_disabled_categories(world)
         assert result == sorted(result)
         assert set(result) == {"social", "battle", "daily"}
@@ -886,24 +886,24 @@ class TestTickWorld:
         self, world, frozen_clock
     ):
         first = self._create_event(world, priority=10)
-        # First fire should succeed
+        # 首次触发应成功
         ev_stub.tick_world(world, now=frozen_clock.now())
-        # Immediate retick is throttled (storm 60s)
+        # 立即重新 tick 会被节流（风暴 60 秒）
         second_pass = ev_stub.tick_world(world, now=frozen_clock.now())
-        assert len(second_pass) == 0  # or "lost_priority_race"
+        assert len(second_pass) == 0  # 或 "lost_priority_race"
 
     def test_priority_race_winner_fires(self, world, frozen_clock):
         low = self._create_event(world, name="low", priority=0)
         high = self._create_event(world, name="high", priority=10)
         fired = ev_stub.tick_world(world, now=frozen_clock.now())
-        # Only one event fires per tick due to storm throttle.
+        # 由于风暴节流，每次 tick 只触发一个事件。
         assert len(fired) == 1
         assert fired[0]["event_id"] == high["id"]
 
     def test_trigger_evaluation_failure_logged_and_continues(
         self, world, frozen_clock, monkeypatch
     ):
-        """A bad trigger shouldn't crash the whole tick."""
+        """一个坏触发器不应使整个 tick 崩溃。"""
         good = self._create_event(world, name="good")
         # Patch only the good record's trigger to a corrupt dict via update.
         # 补丁 — only the good record's trigger to a corrupt dict via update.
@@ -915,16 +915,16 @@ class TestTickWorld:
             raise RuntimeError("simulated")
 
         monkeypatch.setattr(ev_stub, "_evaluate_trigger", boom)
-        # Stub returns empty candidates for all events → zero fires, no crash.
+        # Stub 对所有事件返回空候选 → 零触发、无崩溃。
         result = ev_stub.tick_world(world, now=frozen_clock.now())
         assert result == []
         assert called, "_evaluate_trigger should have been called"
 
     def test_overload_active_drops_everything(self, world):
-        # Seed two valid candidates.
+        # 播种两个有效候选。
         self._create_event(world, name="a", priority=0)
         self._create_event(world, name="b", priority=10)
-        # Pretend overload is in a recovery window.
+        # 假装过载处于恢复窗口。
         stubs_state.overload.clear()
         stubs_state.overload["recovery"] = {
             "status": "waiting",
@@ -933,9 +933,9 @@ class TestTickWorld:
         try:
             fired = ev_stub.tick_world(world)
             assert fired == []
-            # Skipped list (debug log) is *not* exposed via the API, but
-            # we can check it didn't accidentally instantiate cooldown
-            # state.
+            # 跳过列表（调试日志）*不* 通过 API 暴露，但
+            # 我们可以检查它没有意外实例化冷却
+            # 状态。
             assert (
                 ev_stub._world_cooldowns.get(world) is None
             ), "overload-shortcut must not consume cooldown slot"
@@ -943,7 +943,7 @@ class TestTickWorld:
             stubs_state.overload.clear()
 
     def test_overload_recovery_finalised_unblocks(self, world):
-        # Two candidates.
+        # 两个候选。
         self._create_event(world, name="a")
         # Set overload to finalized-then-cleared; recovery is None now.
         # 设置 — overload to finalized-then-cleared; recovery is None now.
@@ -951,10 +951,10 @@ class TestTickWorld:
             "status": "finalized",
             "earliest_confirm_at": 0.0,
         }
-        # 'finalized' is not in {'waiting', 'first_confirmed'} so we
-        # shouldn't drop.  But the storm throttle + first-pass also
-        # needs to allow one fire.  Use a custom global cooldown that
-        # already elapsed.
+        # 'finalized' 不在 {'waiting', 'first_confirmed'} 中，因此
+        # 不应丢弃。但风暴节流 + 首轮
+        # 也需要允许一次触发。使用一个已经过去的
+        # 自定义全局冷却时间。
         try:
             fired = ev_stub.tick_world(world)
             assert len(fired) == 1
@@ -1000,17 +1000,17 @@ class TestTickAll:
 class TestSchedulerLifecycle:
 
     def test_start_stop(self, monkeypatch):
-        # Conftest sets XIJIAN_EVENT_SCHEDULER=0; opt in for this test.
+        # Conftest 设置了 XIJIAN_EVENT_SCHEDULER=0；本测试选择启用。
         monkeypatch.setenv("XIJIAN_EVENT_SCHEDULER", "1")
         # Ensure clean.
         # 确保 — clean.
         ev_stub.stop_scheduler()
         result = ev_stub.start_scheduler()
         assert result["started"] is True
-        # Idempotent: second start should refuse.
+        # 幂等：第二次启动应拒绝。
         again = ev_stub.start_scheduler()
         assert again["started"] is False
-        # Stop.
+        # 停止。
         stopped = ev_stub.stop_scheduler()
         assert stopped["stopped"] is True
 
@@ -1056,14 +1056,14 @@ class TestSchedulerLifecycle:
             name="x",
             trigger_config={"type": "interval", "seconds": 60},
         )
-        # Conftest sets the scheduler env to "0"; opt in.
+        # Conftest 将调度器环境变量设为 "0"；选择启用。
         monkeypatch.setenv("XIJIAN_EVENT_SCHEDULER", "1")
-        # We want a TINY interval so the test doesn't take 60s.
+        # 我们需要一个极小的间隔，避免测试耗时 60 秒。
         monkeypatch.setenv("XIJIAN_EVENT_SCHEDULER_SECONDS", "1")
         result = ev_stub.start_scheduler()
         assert result["started"] is True
         try:
-            # Give the thread time to fire at least one pass.
+            # 给线程时间以至少触发一轮。
             time.sleep(2.5)
             status = ev_stub.scheduler_status()
             assert status["running"] is True
@@ -1136,7 +1136,7 @@ class TestBroadcastOnFire:
         assert payload["scene_ref_id"] == "scene_x"
 
     def test_no_event_when_publish_fails(self, world, monkeypatch):
-        # Failure of WS publish must not break the firing.
+        # WS 发布失败不能破坏触发。
         from xijian_api.routes import ws_routes
 
         def boom(*a, **kw):
@@ -1149,7 +1149,7 @@ class TestBroadcastOnFire:
             name="x",
             trigger_config={"type": "interval", "seconds": 60},
         )
-        # Must not raise.
+        # 不得抛出异常。
         inst = ev_stub.fire_event(rec["id"])
         assert inst is not None
 
@@ -1163,7 +1163,7 @@ class TestBroadcastOnFire:
 class TestRoutesEventCRUD:
 
     def test_create_requires_world(self, client, auth_headers):
-        # 404 world_not_found when the world doesn't exist.
+        # 世界不存在时返回 404 world_not_found。
         resp = client.post(
             "/v1/xijian/events",
             json={
@@ -1193,7 +1193,7 @@ class TestRoutesEventCRUD:
         assert create_resp.status_code == 201
         event_id = create_resp.get_json()["id"]
 
-        # Read.
+        # 读取。
         get_resp = client.get(
             f"/v1/xijian/events/{event_id}", headers=auth_headers
         )
@@ -1452,7 +1452,7 @@ class TestRoutesScheduler:
         assert resp.status_code == 200
         body = resp.get_json()
         assert body["world_id"] == world
-        # Should fire the high-priority interval event on first tick.
+        # 首次 tick 应触发高优先级间隔事件。
         assert "fired" in body
 
     def test_dev_tick_all_worlds(self, client, auth_headers, monkeypatch):
@@ -1525,16 +1525,16 @@ class TestRoutesAuth:
 
 
 # ---------------------------------------------------------------------------
-# A4.1 scene generation (AC-1/AC-2) + event effects
+# A4.1 场景生成（AC-1/AC-2）+ 事件效果
 # ---------------------------------------------------------------------------
 
 
 class TestSceneGeneration:
-    """A4.1 US-A4.1-03 / AC-1 / AC-2 — events that need a scene get one,
-    and a failing / missing backend degrades to a placeholder."""
+    """A4.1 US-A4.1-03 / AC-1 / AC-2 — 需要场景的事件会获得场景，
+    失败 / 缺失的后端降级为占位符。"""
 
     def test_fire_attaches_placeholder_scene_when_backend_disabled(self, world):
-        # conftest sets XIJIAN_SCENE_GENERATION=0 → placeholder path.
+        # conftest 设置了 XIJIAN_SCENE_GENERATION=0 → 占位路径。
         rec = ev_stub.create_event(
             world_id=world, kind=KIND_COMMON, name="festival",
             trigger_config={"type": "interval", "seconds": 60},
@@ -1575,7 +1575,7 @@ class TestSceneGeneration:
             trigger_config={"type": "interval", "seconds": 60},
             scene_ref_id="scene_x",
         )
-        # Simulate a backend that exists but raises — must degrade.
+        # 模拟一个存在但会抛出的后端 —— 必须降级。
         class _BoomBackend:
             name = "boom"
             def generate(self, *a, **k):
@@ -1598,7 +1598,7 @@ class TestSceneGeneration:
         scene = ev_stub.ensure_scene_for_instance(inst["id"])
         assert scene is not None
         assert scene["status"] == "placeholder"
-        # Unknown instance → None.
+        # 未知实例 → None。
         assert ev_stub.ensure_scene_for_instance("inst_nope") is None
 
     def test_get_instance_scene(self, world):
@@ -1613,7 +1613,7 @@ class TestSceneGeneration:
 
 
 class TestEventEffects:
-    """A4.1 effects → NPC / character / world state."""
+    """A4.1 效果 → NPC / 角色 / 世界状态。"""
 
     def _npc(self, world):
         from xijian_api.stubs import npcs as npcs_stub
@@ -1654,8 +1654,8 @@ class TestEventEffects:
             },
         )
         record = cs_stub.get_state("char_yuki")
-        assert record["mood"] == 75  # 70 default + 5
-        assert record["stamina"] == 90  # 100 default − 10
+        assert record["mood"] == 75  # 默认 70 + 5
+        assert record["stamina"] == 90  # 默认 100 − 10
 
     def test_character_effect_without_target_is_skipped(self, world, caplog):
         rec = ev_stub.create_event(
@@ -1686,7 +1686,7 @@ class TestEventEffects:
             world_id=world, kind=KIND_COMMON, name="x",
             trigger_config={"type": "interval", "seconds": 60},
         )
-        # Must not raise.
+        # 不得抛出异常。
         inst = ev_stub.fire_event(
             rec["id"],
             payload={"effects": {"totally_unknown_effect": 99}},
@@ -1698,7 +1698,7 @@ class TestEventEffects:
             world_id=world, kind=KIND_COMMON, name="x",
             trigger_config={"type": "interval", "seconds": 60},
         )
-        # affected_npcs references a nonexistent NPC — fire must not raise.
+        # affected_npcs 引用了不存在的 NPC —— fire 不得抛出。
         inst = ev_stub.fire_event(
             rec["id"],
             payload={"effects": {"npc_mood": 10}},
@@ -1708,7 +1708,7 @@ class TestEventEffects:
 
 
 class TestSceneGenerationRoutes:
-    """/v1/xijian/generation/scene/* — read / regenerate instance scenes."""
+    """/v1/xijian/generation/scene/* — 读取 / 重新生成实例场景。"""
 
     def test_get_scene_returns_placeholder(self, client, auth_headers, world):
         rec = ev_stub.create_event(

@@ -33,9 +33,9 @@ from xijian_api.stubs import devkit as devkit_stub
 
 @pytest.fixture(autouse=True)
 def _reset_state():
-    """Clear devkit stubs state and clean core state between tests."""
+    """在测试之间清除 devkit stub 状态并清理核心状态。"""
     devkit_stub._clear_env_override()
-    # Clean up any devkit-loaded records from the previous test.
+    # 清理上一个测试中由 devkit 加载的任何记录。
     devkit_stub.state.characters.clear()
     devkit_stub.state.worlds.clear()
     devkit_stub.state.memory_configs.clear()
@@ -48,9 +48,9 @@ def _reset_state():
 
 @pytest.fixture
 def mock_devkit_dir() -> Generator[str, None, None]:
-    """Create a temporary directory with a mock DevKit layout.
+    """创建一个带有 mock DevKit 布局的临时目录。
 
-    Produces:
+    结构如下：
         devkit/
             characters/
                 char_test001/character.json, persona.md
@@ -63,7 +63,7 @@ def mock_devkit_dir() -> Generator[str, None, None]:
         dk = Path(tmp) / "DevKit"
         dk.mkdir()
 
-        # --- Characters ---
+        # --- 角色 ---
         chars_dir = dk / "characters"
         chars_dir.mkdir()
 
@@ -115,7 +115,7 @@ def mock_devkit_dir() -> Generator[str, None, None]:
         with open(char_dir / "persona.md", "w", encoding="utf-8") as f:
             f.write("# 测试角色人格\n\n我是一个活泼可爱的测试角色。")
 
-        # --- Memories ---
+        # --- 记忆 ---
         mem_dir = dk / "memories" / "char_test001"
         mem_dir.mkdir(parents=True)
         mem_entries = [
@@ -143,7 +143,7 @@ def mock_devkit_dir() -> Generator[str, None, None]:
         with open(mem_dir / "entries.json", "w", encoding="utf-8") as f:
             json.dump(mem_entries, f, ensure_ascii=False, indent=2)
 
-        # --- Worlds ---
+        # --- 世界 ---
         worlds_dir = dk / "worlds"
         worlds_dir.mkdir()
 
@@ -181,17 +181,17 @@ def mock_devkit_dir() -> Generator[str, None, None]:
 
 @pytest.fixture
 def mock_empty_devkit_dir() -> Generator[str, None, None]:
-    """Create an empty (or missing) devkit directory for edge-case tests."""
+    """为边界情况测试创建一个空（或缺失）的 devkit 目录。"""
     with tempfile.TemporaryDirectory() as tmp:
         dk = Path(tmp) / "DevKit"
-        dk.mkdir()  # exists but empty
+        dk.mkdir()  # 目录存在但为空
         devkit_stub._set_devkit_dir_for_test(str(dk))
         yield str(dk)
         devkit_stub._clear_env_override()
 
 
 # ---------------------------------------------------------------------------
-# Test: is_available
+# 测试：is_available
 # ---------------------------------------------------------------------------
 
 
@@ -210,7 +210,7 @@ def test_is_available_with_nonexistent_dir():
 
 
 # ---------------------------------------------------------------------------
-# Test: scan_characters
+# 测试：scan_characters
 # ---------------------------------------------------------------------------
 
 
@@ -227,7 +227,7 @@ def test_scan_characters_empty_dir(mock_empty_devkit_dir):
 
 
 # ---------------------------------------------------------------------------
-# Test: scan_worlds
+# 测试：scan_worlds
 # ---------------------------------------------------------------------------
 
 
@@ -244,7 +244,7 @@ def test_scan_worlds_empty_dir(mock_empty_devkit_dir):
 
 
 # ---------------------------------------------------------------------------
-# Test: load_character
+# 测试：load_character
 # ---------------------------------------------------------------------------
 
 
@@ -258,21 +258,21 @@ def test_load_character_basic(mock_devkit_dir):
     assert record.get("_devkit_source") is True
     assert record.get("devkit_original_id") == "char_test001"
 
-    # persona_doc from file should take precedence over JSON field
+    # 文件中的 persona_doc 应优先于 JSON 字段
     assert "活泼可爱" in record.get("persona_doc", "")
 
-    # memory_config should have been populated
+    # memory_config 应已被填充
     assert record["id"] in devkit_stub.state.memory_configs
     mc = devkit_stub.state.memory_configs[record["id"]]
     assert mc["max_long_term"] == 100
     assert mc["force_recall_on_history"] is True
 
-    # character_state_config should be populated from character_config
+    # character_state_config 应由 character_config 填充
     assert record["id"] in devkit_stub.state.character_state_configs
     sc = devkit_stub.state.character_state_configs[record["id"]]
     assert sc["hunger_decay_per_hour"] == 2.0
 
-    # memory entries should be loaded
+    # 记忆条目应已被加载
     mem_count = sum(
         1 for e in devkit_stub.state.memory.values()
         if e.get("character_id") == record["id"]
@@ -286,7 +286,7 @@ def test_load_character_nonexistent(mock_devkit_dir):
 
 
 def test_load_character_twice_replaces(mock_devkit_dir):
-    """Loading the same character twice should replace, not duplicate."""
+    """两次加载同一角色应替换而非重复。"""
     r1 = devkit_stub.load_character("char_test001")
     assert r1 is not None
     first_id = r1["id"]
@@ -295,9 +295,9 @@ def test_load_character_twice_replaces(mock_devkit_dir):
     assert r2 is not None
     second_id = r2["id"]
 
-    # Should be the same id but might have been updated
+    # 应是同一个 id，但可能已被更新
     assert first_id == second_id
-    # Only one entry in state.characters with this devkit_original_id
+    # state.characters 中只有一个该 devkit_original_id 的条目
     matches = [
         c for c in devkit_stub.state.characters.values()
         if c.get("devkit_original_id") == "char_test001"
@@ -306,10 +306,10 @@ def test_load_character_twice_replaces(mock_devkit_dir):
 
 
 def test_load_character_updates_memory_config(mock_devkit_dir):
-    """Memory config should be updated on reload."""
+    """重新加载时 memory config 应被更新。"""
     devkit_stub.load_character("char_test001")
 
-    # Mutate memory config in the devkit save
+    # 在 devkit 保存中修改 memory config
     dk = devkit_stub.get_devkit_dir()
     char_path = os.path.join(dk, "characters", "char_test001", "character.json")
     with open(char_path, encoding="utf-8") as f:
@@ -325,7 +325,7 @@ def test_load_character_updates_memory_config(mock_devkit_dir):
 
 
 # ---------------------------------------------------------------------------
-# Test: load_world
+# 测试：load_world
 # ---------------------------------------------------------------------------
 
 
@@ -336,13 +336,13 @@ def test_load_world_basic(mock_devkit_dir):
     assert record.get("_devkit_source") is True
     assert record.get("devkit_original_id") == "world_test001"
 
-    # world_environment should be init'd
+    # world_environment 应已被初始化
     assert record["id"] in devkit_stub.state.world_environment
     env = devkit_stub.state.world_environment[record["id"]]
     assert "weather" in env
     assert "time_of_day" in env
 
-    # world_compute_config should be init'd
+    # world_compute_config 应已被初始化
     assert record["id"] in devkit_stub.state.world_compute_config
     wcc = devkit_stub.state.world_compute_config[record["id"]]
     assert wcc["total_token_budget"] == 50_000
@@ -355,7 +355,7 @@ def test_load_world_nonexistent(mock_devkit_dir):
 
 
 # ---------------------------------------------------------------------------
-# Test: unload
+# 测试：unload
 # ---------------------------------------------------------------------------
 
 
@@ -364,7 +364,7 @@ def test_unload_character(mock_devkit_dir):
     ok = devkit_stub.unload("character", "char_test001")
     assert ok is True
 
-    # Should no longer be in state
+    # 不应再存在于 state 中
     matches = [
         c for c in devkit_stub.state.characters.values()
         if c.get("devkit_original_id") == "char_test001"
@@ -395,7 +395,7 @@ def test_unload_world(mock_devkit_dir):
 
 
 # ---------------------------------------------------------------------------
-# Test: preview
+# 测试：preview
 # ---------------------------------------------------------------------------
 
 
@@ -407,9 +407,9 @@ def test_get_character_preview(mock_devkit_dir):
     assert "_preview" in preview
     assert preview["_preview"]["persona_exists"] is True
     assert preview["_preview"]["memories_count"] == 2
-    assert preview["_preview"]["is_loaded"] is False  # not loaded yet
+    assert preview["_preview"]["is_loaded"] is False  # 尚未加载
 
-    # After loading
+    # 加载之后
     devkit_stub.load_character("char_test001")
     preview2 = devkit_stub.get_character_preview("char_test001")
     assert preview2["_preview"]["is_loaded"] is True
@@ -430,7 +430,7 @@ def test_get_world_preview(mock_devkit_dir):
 
 
 # ---------------------------------------------------------------------------
-# Test: list_loaded
+# 测试：list_loaded
 # ---------------------------------------------------------------------------
 
 
@@ -451,13 +451,13 @@ def test_list_loaded(mock_devkit_dir):
 
 
 # ---------------------------------------------------------------------------
-# Test: reload
+# 测试：reload
 # ---------------------------------------------------------------------------
 
 
 def test_reload_characters(mock_devkit_dir):
     devkit_stub.load_character("char_test001")
-    # Mutate devkit save
+    # 修改 devkit 保存
     dk = devkit_stub.get_devkit_dir()
     char_path = os.path.join(dk, "characters", "char_test001", "character.json")
     with open(char_path, encoding="utf-8") as f:
@@ -470,14 +470,14 @@ def test_reload_characters(mock_devkit_dir):
     assert len(result) == 1
     assert result[0]["name"] == "修改后的角色名"
 
-    # Verify runtime is updated
+    # 验证运行时已更新
     record = devkit_stub.state.characters["char_test001"]
     assert record["name"] == "修改后的角色名"
 
 
 def test_reload_worlds(mock_devkit_dir):
     devkit_stub.load_world("world_test001")
-    # Mutate
+    # 修改
     dk = devkit_stub.get_devkit_dir()
     wpath = os.path.join(dk, "worlds", "world_test001", "world.json")
     with open(wpath, encoding="utf-8") as f:
@@ -493,12 +493,12 @@ def test_reload_worlds(mock_devkit_dir):
 
 
 # ---------------------------------------------------------------------------
-# Test: edge cases
+# 测试：边界情况
 # ---------------------------------------------------------------------------
 
 
 def test_corrupted_json_skipped():
-    """A corrupted .json file should be silently skipped during scan."""
+    """扫描期间损坏的 .json 文件应被静默跳过。"""
     with tempfile.TemporaryDirectory() as tmp:
         dk = Path(tmp) / "DevKit"
         chars_dir = dk / "characters"
@@ -515,7 +515,7 @@ def test_corrupted_json_skipped():
 
 
 def test_load_without_persona_file():
-    """Character without persona.md should fall back to persona_doc in JSON."""
+    """没有 persona.md 的角色应回退到 JSON 中的 persona_doc。"""
     with tempfile.TemporaryDirectory() as tmp:
         dk = Path(tmp) / "DevKit"
         chars_dir = dk / "characters"
@@ -538,13 +538,13 @@ def test_load_without_persona_file():
 
 
 # ---------------------------------------------------------------------------
-# Test: HTTP routes (via Flask test client)
+# 测试：HTTP 路由（通过 Flask 测试客户端）
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture
 def client(mock_devkit_dir):
-    """A Flask test client with the devkit routes and error handlers registered."""
+    """注册了 devkit 路由和错误处理器的 Flask 测试客户端。"""
     from flask import Flask
     from xijian_api.routes.xijian_devkit import bp
     from xijian_api.errors import register_error_handlers
@@ -560,7 +560,7 @@ def client(mock_devkit_dir):
 class TestRoutes:
 
     def test_status_nonexistent(self):
-        """Status should report not available when devkit dir is missing."""
+        """devkit 目录缺失时，状态应报告不可用。"""
         from flask import Flask
         from xijian_api.routes.xijian_devkit import bp
         devkit_stub._set_devkit_dir_for_test("/nonexistent/devkit_test_path")
@@ -608,7 +608,7 @@ class TestRoutes:
         assert data["data"]["name"] == "测试角色"
 
     def test_character_load_twice(self, client):
-        """Loading twice should still succeed (replace)."""
+        """两次加载仍应成功（替换）。"""
         resp1 = client.post("/v1/xijian/devkit/characters/char_test001/load")
         assert resp1.status_code == 200
         resp2 = client.post("/v1/xijian/devkit/characters/char_test001/load")
@@ -622,7 +622,7 @@ class TestRoutes:
         assert data["ok"] is True
 
     def test_character_unload_post(self, client):
-        """POST /unload should work the same as DELETE."""
+        """POST /unload 应与 DELETE 行为一致。"""
         client.post("/v1/xijian/devkit/characters/char_test001/load")
         resp = client.post("/v1/xijian/devkit/characters/char_test001/unload")
         assert resp.status_code == 200

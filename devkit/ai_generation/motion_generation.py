@@ -37,7 +37,7 @@ class MotionGenerationStatus(str, Enum):
 class MotionGenerationJob:
     """动作生成任务记录"""
     id: str
-    source_type: str  # "persona" | "video" | "video_frames"
+    source_type: str  # "persona" | "video" | "video_frames"  # persona=人设文本, video=视频路径, video_frames=帧目录
     source_data: str  # 人设描述文本 / 视频路径 / 帧目录
     character_name: str
     status: MotionGenerationStatus = MotionGenerationStatus.PENDING
@@ -519,7 +519,7 @@ _BVH_JOINT_NAMES = [
 
 # 每个关节的通道数（Hips=6，其他=3）
 _BVH_CHANNEL_COUNTS = [6] + [3] * (len(_BVH_JOINT_NAMES) - 1)
-_TOTAL_CHANNELS = sum(_BVH_CHANNEL_COUNTS)  # 6 + 3*21 = 69
+_TOTAL_CHANNELS = sum(_BVH_CHANNEL_COUNTS)  # 6 + 3*21 = 69  # 总通道数：臀部6 + 21个关节各3
 
 
 def _analyze_persona(persona_text: str) -> dict[str, Any]:
@@ -631,7 +631,7 @@ def _generate_idle_motion(
         t = f / fps
         frame_data = [0.0] * _TOTAL_CHANNELS
 
-        # Hips (6 channels: Xpos, Ypos, Zpos, Zrot, Xrot, Yrot)
+        # 臀部：6通道（X位置、Y位置、Z位置、Z旋转、X旋转、Y旋转）
         hip_idx = 0
 
         # 呼吸运动（Y 位置轻微上下）
@@ -644,9 +644,9 @@ def _generate_idle_motion(
         frame_data[hip_idx + 2] = sway_amp * math.cos(t * 2 * math.pi * 0.3)
 
         # 臀部微旋转
-        frame_data[hip_idx + 3] = 0.02 * math.sin(t * 2 * math.pi * 0.2)  # Zrot
-        frame_data[hip_idx + 4] = 0.01 * math.sin(t * 2 * math.pi * 0.15)  # Xrot
-        frame_data[hip_idx + 5] = 0.01 * math.cos(t * 2 * math.pi * 0.15)  # Yrot
+        frame_data[hip_idx + 3] = 0.02 * math.sin(t * 2 * math.pi * 0.2)  # Zrot  # 臀部Z轴旋转
+        frame_data[hip_idx + 4] = 0.01 * math.sin(t * 2 * math.pi * 0.15)  # Xrot  # 臀部X轴旋转
+        frame_data[hip_idx + 5] = 0.01 * math.cos(t * 2 * math.pi * 0.15)  # Yrot  # 臀部Y轴旋转
 
         # 脊柱链（Spine, Spine1, Spine2）- 跟随呼吸
         spine_base = 6  # Spine 开始索引
@@ -654,9 +654,9 @@ def _generate_idle_motion(
             idx = spine_base + i * 3
             amp = 0.05 * (0.8 ** i) * prefs["gesture_amplitude"]
             phase = t * 2 * math.pi * 0.5 + i * 0.3
-            frame_data[idx + 0] = amp * math.sin(phase)         # Zrot
-            frame_data[idx + 1] = amp * 0.5 * math.sin(phase)   # Xrot
-            frame_data[idx + 2] = amp * 0.3 * math.cos(phase)   # Yrot
+            frame_data[idx + 0] = amp * math.sin(phase)         # Zrot  # 脊柱Z轴旋转
+            frame_data[idx + 1] = amp * 0.5 * math.sin(phase)   # Xrot  # 脊柱X轴旋转
+            frame_data[idx + 2] = amp * 0.3 * math.cos(phase)   # Yrot  # 脊柱Y轴旋转
 
         # 颈部和头部
         neck_idx = spine_base + 9
@@ -664,13 +664,13 @@ def _generate_idle_motion(
 
         # 头部微动（根据 expressiveness 和 confidence）
         head_amp = 0.1 * prefs["head_movement"] * (0.5 + traits["expressiveness"] * 0.5)
-        frame_data[neck_idx + 0] = head_amp * 0.5 * math.sin(t * 2 * math.pi * 0.4)  # Neck Z
-        frame_data[neck_idx + 1] = head_amp * 0.3 * math.sin(t * 2 * math.pi * 0.3)  # Neck X
-        frame_data[neck_idx + 2] = head_amp * 0.4 * math.cos(t * 2 * math.pi * 0.3)  # Neck Y
+        frame_data[neck_idx + 0] = head_amp * 0.5 * math.sin(t * 2 * math.pi * 0.4)  # Neck Z  # 颈部Z轴
+        frame_data[neck_idx + 1] = head_amp * 0.3 * math.sin(t * 2 * math.pi * 0.3)  # Neck X  # 颈部X轴
+        frame_data[neck_idx + 2] = head_amp * 0.4 * math.cos(t * 2 * math.pi * 0.3)  # Neck Y  # 颈部Y轴
 
-        frame_data[head_idx + 0] = head_amp * 0.3 * math.sin(t * 2 * math.pi * 0.5)  # Head Z
-        frame_data[head_idx + 1] = head_amp * 0.2 * math.sin(t * 2 * math.pi * 0.4)  # Head X
-        frame_data[head_idx + 2] = head_amp * 0.3 * math.cos(t * 2 * math.pi * 0.4)  # Head Y
+        frame_data[head_idx + 0] = head_amp * 0.3 * math.sin(t * 2 * math.pi * 0.5)  # Head Z  # 头部Z轴
+        frame_data[head_idx + 1] = head_amp * 0.2 * math.sin(t * 2 * math.pi * 0.4)  # Head X  # 头部X轴
+        frame_data[head_idx + 2] = head_amp * 0.3 * math.cos(t * 2 * math.pi * 0.4)  # Head Y  # 头部Y轴
 
         # 手臂（根据性格决定自然下垂 vs 活跃手势）
         left_shoulder = head_idx + 3
@@ -726,7 +726,7 @@ def _generate_idle_motion(
 
         # 腿部（站立姿态，微小重心移动）
         leg_base = right_hand + 3
-        for side in [0, 1]:  # 0=Left, 1=Right
+        for side in [0, 1]:  # 0=左腿, 1=右腿
             up_leg = leg_base + side * 12
             leg = up_leg + 3
             foot = leg + 3
@@ -769,7 +769,7 @@ def _generate_walk_motion(
 
     for f in range(frame_count):
         t = f / fps
-        cycle_t = (t % cycle_duration) / cycle_duration  # 0-1
+        cycle_t = (t % cycle_duration) / cycle_duration  # 当前步态周期内的归一化时间
         phase = cycle_t * 2 * math.pi
         frame_data = [0.0] * _TOTAL_CHANNELS
 
@@ -780,17 +780,17 @@ def _generate_walk_motion(
         frame_data[hip_idx + 1] = 0.05 * math.sin(phase * 2)  # Y 上下
         frame_data[hip_idx + 2] = 0.02 * math.sin(phase)  # Z 侧向摆动
         frame_data[hip_idx + 3] = 0.1 * math.sin(phase)  # Zrot 骨盆扭转
-        frame_data[hip_idx + 4] = 0.05 * math.sin(phase * 2)  # Xrot
-        frame_data[hip_idx + 5] = 0.03 * math.sin(phase)  # Yrot
+        frame_data[hip_idx + 4] = 0.05 * math.sin(phase * 2)  # 臀部X轴旋转（上下点头）
+        frame_data[hip_idx + 5] = 0.03 * math.sin(phase)  # 臀部Y轴旋转（左右扭动）
 
         # 脊柱跟随
         spine_base = 6
         for i in range(3):
             idx = spine_base + i * 3
             amp = 0.15 * (0.7 ** i)
-            frame_data[idx + 0] = amp * math.sin(phase + i * 0.2)  # Zrot
-            frame_data[idx + 1] = amp * 0.5 * math.sin(phase * 2)  # Xrot
-            frame_data[idx + 2] = amp * 0.3 * math.cos(phase)      # Yrot
+            frame_data[idx + 0] = amp * math.sin(phase + i * 0.2)  # 脊柱Z轴
+            frame_data[idx + 1] = amp * 0.5 * math.sin(phase * 2)  # 脊柱X轴
+            frame_data[idx + 2] = amp * 0.3 * math.cos(phase)      # 脊柱Y轴
 
         # 颈部头部稳定（头部反向稳定视线）
         neck_idx = spine_base + 9
@@ -849,7 +849,7 @@ def _generate_walk_motion(
 
         # 腿部行走
         leg_base = right_hand + 3
-        for side in [0, 1]:  # 0=Left, 1=Right
+        for side in [0, 1]:  # 0=左腿, 1=右腿
             up_leg = leg_base + side * 12
             leg = up_leg + 3
             foot = leg + 3

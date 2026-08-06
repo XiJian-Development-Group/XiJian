@@ -124,15 +124,15 @@ class TestDecayAmount:
         assert cs_stub.decay_amount(2.0, -10) == 0.0
 
     def test_one_hour_decay(self):
-        # 2 / hour × 1 hour = 2.0
+        # 2 / 小时 × 1 小时 = 2.0
         assert cs_stub.decay_amount(2.0, 3600) == 2.0
 
     def test_proportional_to_dt(self):
-        # 30 min → 1.0
+        # 30 分钟 → 1.0
         assert cs_stub.decay_amount(2.0, 1800) == 1.0
 
     def test_modifiers_multiply(self):
-        # 2 / hour × 1 hour × 0.5 × 1.2 = 1.2
+        # 2 / 小时 × 1 小时 × 0.5 × 1.2 = 1.2
         assert cs_stub.decay_amount(
             2.0, 3600, time_modifier=0.5, activity_modifier=1.0, world_modifier=1.2
         ) == pytest.approx(1.2)
@@ -215,7 +215,7 @@ class TestComputeTargetStatus:
         # (Sick 不可自动恢复；规格说明需要"触发恢复事件"。)
         record = cs_stub._default_state_record("c1", now=frozen_clock.now())
         record["status"] = STATUS_SICK
-        record["health"] = 80.0  # climbed back above 30
+        record["health"] = 80.0  # 已回升到 30 以上
         record["status_changed_at"] = frozen_clock.now()
         cfg = cs_stub._default_config("c1")
         frozen_clock.advance(60 * 60)
@@ -373,7 +373,7 @@ class TestApplyPatch:
 
     def test_max_field_clamps_value(self):
         cs_stub.apply_patch("c1", {"max_hunger": 50.0, "hunger": 80.0})
-        # 80 > 50 → clamp to 50.
+        # 80 > 50 → 钳制为 50。
         record = cs_stub.get_state("c1")
         assert record["max_hunger"] == 50.0
         assert record["hunger"] == 50.0
@@ -398,7 +398,7 @@ class TestTickCharacter:
         assert cs_stub.get_state("c1")["hunger"] == before
 
     def test_decay_after_one_hour(self, frozen_clock):
-        # hunger decay 2 / hour, dt = 1h → 2.0
+        # hunger 衰减 2 / 小时，dt = 1h → 2.0
         cs_stub.apply_field_change("c1", "hunger", 80.0, now=frozen_clock.now())
         frozen_clock.advance(3600)
         result = cs_stub.tick_character("c1", now=frozen_clock.now())
@@ -414,7 +414,7 @@ class TestTickCharacter:
         assert "tick" in reasons
 
     def test_modifier_zero_floors_decay(self, frozen_clock):
-        # world_modifier = 0 → no decay.
+        # world_modifier = 0 → 无衰减。
         cs_stub.apply_field_change("c1", "hunger", 50.0, now=frozen_clock.now())
         cs_stub.set_modifier("c1", {"world_modifier": 0.0})
         # 0.0 is clamped to 0.01 inside set_modifier to keep the
@@ -434,7 +434,7 @@ class TestTickCharacter:
         cs_stub.set_modifier("c1", {"activity_modifier": 2.0})
         frozen_clock.advance(3600)
         cs_stub.tick_character("c1", now=frozen_clock.now())
-        # 2 / hour × 2.0 modifier × 1 hour = 4.0
+        # 2 / 小时 × 2.0 倍率 × 1 小时 = 4.0
         assert cs_stub.get_state("c1")["hunger"] == 76.0
 
     def test_tick_transitions_to_hungry_via_decay(self, frozen_clock):
@@ -617,7 +617,7 @@ class TestStatusHandlers:
         cs_stub.apply_field_change("c1", "hunger", 20.0, now=frozen_clock.now())
         assert len(captured) == 1
         assert captured[0]["new_value"] == STATUS_HUNGRY
-        # Cleanup
+        # 清理
         handlers = cs_stub._STATUS_HANDLERS[STATUS_HUNGRY]
         cs_stub._STATUS_HANDLERS[STATUS_HUNGRY] = []
 
@@ -635,7 +635,7 @@ class TestStatusHandlers:
             raise RuntimeError("boom")
 
         cs_stub.register_status_handler(STATUS_HUNGRY, bad)
-        # Must not raise.
+        # 不得抛出异常。
         record = cs_stub.apply_field_change("c1", "hunger", 20.0, now=frozen_clock.now())
         assert record["status"] == STATUS_HUNGRY
         cs_stub._STATUS_HANDLERS[STATUS_HUNGRY] = []
@@ -684,7 +684,7 @@ class TestTickLifecycle:
     def test_interval_env_override(self, monkeypatch):
         monkeypatch.setenv("XIJIAN_STATE_TICK_SECONDS", "5")
         assert cs_stub._current_interval() == 5.0
-        # Floor of 1 s.
+        # 下限为 1 秒。
         monkeypatch.setenv("XIJIAN_STATE_TICK_SECONDS", "0.1")
         assert cs_stub._current_interval() == 1.0
 
@@ -697,16 +697,16 @@ class TestTickLifecycle:
             cs_stub.stop_tick()
 
     def test_reset_bumps_generation(self, monkeypatch):
-        # ``reset_for_testing`` must bump the generation so a stale
-        # tick thread from a previous lifecycle exits immediately.
+        # ``reset_for_testing`` 必须递增代数，使上一生命周期
+        # 的陈旧 tick 线程立即退出。
         monkeypatch.setenv("XIJIAN_STATE_TICK", "1")
         cs_stub.start_tick()
         try:
             before = cs_stub._TICK_GENERATION
             cs_stub.reset_for_testing()
             assert cs_stub._TICK_GENERATION > before
-            # ``start_tick`` again so the rest of the suite (which
-            # runs with ``XIJIAN_STATE_TICK=0``) keeps clean state.
+            # 再次 ``start_tick``，以便套件其余部分（以
+            # ``XIJIAN_STATE_TICK=0`` 运行）保持干净状态。
             monkeypatch.setenv("XIJIAN_STATE_TICK", "0")
         finally:
             cs_stub.stop_tick()
@@ -743,15 +743,15 @@ class TestTickStateMachineE2E:
         frozen_clock.advance(5 * 60 + 1)
         record = cs_stub.tick_character("c1", now=frozen_clock.now())
         assert record["status"] == STATUS_HEALTHY
-        # Log captured the whole story.
+        # 日志记录了整个过程。
         log = cs_stub.list_log("c1", limit=50)
         reasons = {e["reason"] for e in log}
-        # Manual changes used "manual" reason; ticks used "tick".
+        # 手动修改使用 "manual" 原因；tick 使用 "tick"。
         assert "manual" in reasons
         assert "tick" in reasons
 
     def test_critical_blocks_dialogue_and_only_recover_lifts(self, frozen_clock):
-        # Drive to Critical via health=0.
+        # 通过 health=0 驱动到 Critical。
         cs_stub.apply_field_change("c1", "health", 0.0, now=frozen_clock.now())
         assert cs_stub.get_state("c1")["status"] == STATUS_CRITICAL
         assert cs_stub.can_dialogue("c1") is False
@@ -759,14 +759,14 @@ class TestTickStateMachineE2E:
         # (常规滴答不应解除 Critical（无自动恢复）。)
         record = cs_stub.tick_character("c1", now=frozen_clock.now())
         assert record["status"] == STATUS_CRITICAL
-        # Only ``force_recover`` lifts it.
+        # 只有 ``force_recover`` 才能解除该状态。
         cs_stub.force_recover("c1", reason="admin")
         assert cs_stub.get_state("c1")["status"] == STATUS_HEALTHY
         assert cs_stub.can_dialogue("c1") is True
 
     def test_modifier_quadruples_decay(self, frozen_clock):
-        # Default decay = 2.0/h.  With activity_modifier=4.0 and a
-        # 1-hour tick, hunger should drop by 8.
+        # 默认衰减 = 2.0/h。activity_modifier=4.0 且
+        # tick 1 小时时，hunger 应下降 8。
         cs_stub.apply_field_change("c1", "hunger", 80.0, now=frozen_clock.now())
         cs_stub.set_modifier("c1", {"activity_modifier": 4.0})
         frozen_clock.advance(3600)
@@ -774,10 +774,10 @@ class TestTickStateMachineE2E:
         assert cs_stub.get_state("c1")["hunger"] == pytest.approx(72.0)
 
     def test_zero_modifier_floors_decay_to_zero(self, frozen_clock):
-        # ``set_modifier`` clamps negatives to 0.01, but ``tick_all``
-        # through the public API path — verify that even a 0.01
-        # modifier keeps hunger ticking down (the floor is meant to
-        # *prevent* decay from going negative, not to freeze it).
+        # ``set_modifier`` 将负数钳制为 0.01，但 ``tick_all``
+        # 走公开 API 路径 —— 验证即使 0.01 的
+        # 倍率也能让 hunger 持续下降（下限意在
+        # *防止* 衰减变为负值，而非冻结它）。
         cs_stub.apply_field_change("c1", "hunger", 50.0, now=frozen_clock.now())
         cs_stub.set_modifier("c1", {"activity_modifier": 0.01})
         frozen_clock.advance(3600)
@@ -794,13 +794,13 @@ class TestTickStateMachineE2E:
 
 class TestTickRouteE2E:
     def test_tick_route_drives_status_via_decay(self, client, auth_headers, monkeypatch):
-        # Reduce hunger close to threshold, then use the dev tick
-        # endpoint to advance the clock.  We mock ``time.time`` so
-        # ``tick_character`` sees a real ``dt`` even when the test
-        # runs in microseconds.
+        # 将 hunger 降到接近阈值，然后用 dev tick
+        # 端点推进时钟。我们 mock ``time.time``，使
+        # ``tick_character`` 即使在测试
+        # 微秒级运行时也能看到真实的 ``dt``。
         monkeypatch.setenv("XIJIAN_DEV", "1")
-        # Freeze time at T0, POST to seed hunger at 31 (just above
-        # the 30 low-threshold) and stamp ``last_updated = T0``.
+        # 将时间冻结在 T0，POST 将 hunger 播种为 31（略高于
+        # 30 低阈值），并盖上 ``last_updated = T0``。
         now_holder = {"t": 10_000_000.0}
         monkeypatch.setattr(cs_stub.time, "time", lambda: now_holder["t"])
         client.post(
@@ -808,9 +808,9 @@ class TestTickRouteE2E:
             headers=auth_headers,
             json={"hunger": 31.0, "health": 100.0, "mood_value": 70.0, "thirst": 80.0},
         )
-        # Advance the clock by an hour so the tick sees dt=3600.
-        # Default hunger decay is 2.0/h → drops 31 → 29 → crosses
-        # the 30 threshold → enters Hungry.
+        # 将时钟推进一小时，使 tick 看到 dt=3600。
+        # 默认 hunger 衰减为 2.0/h → 从 31 降到 29 → 越过
+        # 30 阈值 → 进入 Hungry。
         now_holder["t"] += 3600
         response = client.post(
             "/v1/xijian/characters/char_yuki/state/tick",
@@ -820,7 +820,7 @@ class TestTickRouteE2E:
         body = response.get_json()
         assert body["tick"]["status"] == STATUS_HUNGRY
 
-        # GET /state surfaces the new status.
+        # GET /state 呈现新状态。
         response = client.get(
             "/v1/xijian/characters/char_yuki/state", headers=auth_headers
         )
@@ -892,9 +892,9 @@ class TestRoutes:
         # (旧版字段仍然存在。)
         assert "affection" in body
         assert "mood" in body
-        # A3.2 fields merged in (state was never touched, so a
-        # summary won't exist and we fall back to v1 shape).
-        # Touch the state and re-fetch.
+        # A3.2 字段合并进来（状态从未被触碰，因此
+        # 不存在 summary，回退到 v1 形状）。
+        # 触碰状态并重新获取。
         client.post(
             "/v1/xijian/characters/char_yuki/state",
             headers=auth_headers,
@@ -1159,7 +1159,7 @@ class TestEndToEnd:
     """
 
     def test_health_drop_under_30_enters_sick(self, client, auth_headers):
-        # Update health to 20.
+        # 将 health 更新为 20。
         response = client.post(
             "/v1/xijian/characters/char_yuki/state",
             headers=auth_headers,
@@ -1181,7 +1181,7 @@ class TestEndToEnd:
 
 
 # ---------------------------------------------------------------------------
-# Extra value fields (stamina) — A4.3 travel / interaction deductions
+# 额外数值字段（体力）— A4.3 旅行 / 交互扣除
 # ---------------------------------------------------------------------------
 
 
@@ -1199,13 +1199,13 @@ class TestExtraValueFields:
             "c1", "stamina", 85.0, reason="travel", ref_id="tmode_1",
         )
         assert record["stamina"] == 85.0
-        # Clamp below zero.
+        # 低于零时钳制。
         cs_stub.apply_extra_field_change("c1", "stamina", -50.0, reason="travel")
         assert cs_stub.get_state("c1")["stamina"] == 0.0
-        # Clamp above max.
+        # 高于上限时钳制。
         cs_stub.apply_extra_field_change("c1", "stamina", 500.0, reason="travel")
         assert cs_stub.get_state("c1")["stamina"] == 100.0
-        # Log written with the reason.
+        # 日志附带原因写入。
         reasons = [e["reason"] for e in cs_stub.list_log("c1")]
         assert "travel" in reasons
 
@@ -1226,7 +1226,7 @@ class TestExtraValueFields:
         assert s["max"]["stamina"] == 100.0
 
     def test_extra_fields_excluded_from_decay(self, frozen_clock):
-        # A decay tick must not lower stamina (no decay rate for it).
+        # 衰减 tick 不得降低体力（它没有衰减率）。
         cs_stub.apply_extra_field_change("c1", "stamina", 90.0, now=frozen_clock.now())
         frozen_clock.advance(3600.0)
         cs_stub.tick_character("c1", now=frozen_clock.now())

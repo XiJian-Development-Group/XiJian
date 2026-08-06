@@ -1,7 +1,7 @@
-"""Memory entry editor for the Developer Kit.
+"""开发者工具的记忆条目编辑器。
 
-Lets developers write and manage memory entries (long-term / short-term)
-for characters.  Entries are stored as JSON under the work directory.
+让开发者能够为角色编写和管理记忆条目（长期 / 短期）。
+条目以 JSON 形式存储在工作目录下。
 """
 
 from __future__ import annotations
@@ -141,7 +141,7 @@ def export_entries_for_submit(work_dir: str, character_id: str) -> dict[str, Any
             "notes": f"记忆条目导出: {character_id} ({len(entries)} 条)",
             "files": [export_path],
         },
-        # Resource-pack layout (§B): memories live under ``memories/<id>/``.
+        # 资源包布局（§B）：记忆位于 ``memories/<id>/`` 下。
         # 资源包布局（§B）：记忆位于 ``memories/<id>/`` 下。
         "files": [{"path": export_path, "arcname": f"memories/{character_id}/entries.json"}],
     }

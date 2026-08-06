@@ -1,22 +1,21 @@
-"""``/v1/xijian/characters/*`` routes.
+"""``/v1/xijian/characters/*`` 路由。
 
-A3.2 state endpoints layered on top of the existing character CRUD.
-The legacy ``GET/POST /<id>/state`` endpoints are kept for
-backward compatibility — they expose the v1 fields (``affection`` /
-``mood`` / ``recent_memory_summary``) and now also surface the A3.2
-numeric fields (``hunger`` / ``thirst`` / ``health`` / ``mood`` /
-``status`` / ``can_dialogue`` / ``active_behavior``).
+在现有角色 CRUD 之上叠加的 A3.2 状态端点。
+保留旧的 ``GET/POST /<id>/state`` 端点以向后兼容 —
+它们暴露 v1 字段（``affection`` / ``mood`` / ``recent_memory_summary``），
+现在也呈现 A3.2 数字字段（``hunger`` / ``thirst`` / ``health`` / ``mood`` /
+``status`` / ``can_dialogue`` / ``active_behavior``）。
 
-New A3.2 endpoints:
+新增 A3.2 端点：
 
-* ``GET  /<id>/state/config``        — read decay / threshold / binding config
-* ``PATCH /<id>/state/config``       — update decay rates, thresholds, bindings
-* ``GET  /<id>/state/log``           — read the append-only change log
-* ``POST /<id>/state/tick``          — manually trigger a tick (dev only)
-* ``POST /<id>/state/recover``       — admin force-recover from Critical
-* ``POST /<id>/state/recovering``    — event-driven Sick → Recovering
-* ``PUT  /<id>/state/modifier``      — set runtime time / activity / world modifier
-* ``DELETE /<id>/state/modifier``    — clear a runtime modifier
+* ``GET  /<id>/state/config``        — 读取衰减 / 阈值 / 绑定配置
+* ``PATCH /<id>/state/config``       — 更新衰减速率、阈值、绑定
+* ``GET  /<id>/state/log``           — 读取只追加的变更日志
+* ``POST /<id>/state/tick``          — 手动触发一次 tick（仅限开发）
+* ``POST /<id>/state/recover``       — 管理员强制从 Critical 恢复
+* ``POST /<id>/state/recovering``    — 事件驱动的 Sick → Recovering
+* ``PUT  /<id>/state/modifier``      — 设置运行时时间 / 活动 / 世界修正器
+* ``DELETE /<id>/state/modifier``    — 清除运行时修正器
 """
 
 from __future__ import annotations
@@ -128,7 +127,7 @@ def update_character_state(character_id: str):
 
 
 # ---------------------------------------------------------------------------
-# A3.2 — state config
+# A3.2 — 状态配置
 # ---------------------------------------------------------------------------
 
 
@@ -148,15 +147,15 @@ def patch_character_state_config(character_id: str):
         raise ApiError(403, "protection system is disabled", "protection_error", code="protection_disabled")
     payload = request.get_json(silent=True) or {}
     cfg = cs_stub.get_or_init_config(character_id)
-    # Whitelist the keys we accept.  ``behavior_bindings`` is a
-    # nested dict that we replace wholesale — partial deep-merge
-    # would hide a typo and silently miss a binding update.
+    # 白名单我们接受的键。``behavior_bindings`` 是
+    # 整体替换的嵌套字典 — 部分深层合并会隐藏拼写错误，
+    # 并静默漏掉某次绑定更新。
     for key in ("decay_per_hour", "thresholds", "recovery_thresholds", "transition_dwell_seconds"):
         if key in payload and isinstance(payload[key], dict):
             cfg[key] = dict(payload[key])
     if "behavior_bindings" in payload and isinstance(payload["behavior_bindings"], dict):
-        # Merge per binding name so callers can update one binding
-        # without re-sending the whole table.
+        # 按绑定名合并，使调用方可只更新一个绑定
+        # 而无需重发整张表。
         merged = dict(cfg.get("behavior_bindings") or {})
         for name, value in payload["behavior_bindings"].items():
             if isinstance(value, dict):
@@ -166,7 +165,7 @@ def patch_character_state_config(character_id: str):
 
 
 # ---------------------------------------------------------------------------
-# A3.2 — log
+# A3.2 — 日志
 # ---------------------------------------------------------------------------
 
 
@@ -184,7 +183,7 @@ def get_character_state_log(character_id: str):
 
 
 # ---------------------------------------------------------------------------
-# A3.2 — tick + recover + modifiers
+# A3.2 — tick + 恢复 + 修正器
 # ---------------------------------------------------------------------------
 
 
@@ -196,8 +195,8 @@ def tick_character_state(character_id: str):
         raise ApiError(404, "character not found", "not_found_error", code="character_not_found")
     payload = request.get_json(silent=True) or {}
     if "field" in payload and "value" in payload:
-        # Dev hook: apply a single field change so it's easy to seed
-        # specific values for manual UI tests.
+        # 开发钩子：应用单个字段变更，便于为
+        # 手工 UI 测试播种特定值。
         try:
             value = float(payload["value"])
             if value != value or value in (float("inf"), float("-inf")):
@@ -257,7 +256,7 @@ def delete_character_state_modifier(character_id: str):
 
 
 # ---------------------------------------------------------------------------
-# A3.2 — active behaviour (used by the UI to pick motion / lines)
+# A3.2 — 活跃行为（供 UI 挑选动作 / 台词使用）
 # ---------------------------------------------------------------------------
 
 

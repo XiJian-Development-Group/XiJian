@@ -43,7 +43,7 @@ from xijian_api.stubs import state as stubs_state
 
 
 def _chat_body(**overrides):
-    """A valid chat completion payload (overridable)."""
+    """一个有效的聊天补全载荷（可覆盖）。"""
     body = {
         "model": "qwen2.5-7b-mlx-4bit",
         "messages": [{"role": "user", "content": "hi"}],
@@ -63,7 +63,7 @@ def _new_world(client, auth_headers, **overrides):
 
 
 def _assert_never_500(response):
-    """A 4xx/2xx is acceptable; a 500 is a regression."""
+    """4xx/2xx 可接受；500 属于回归。"""
     assert response.status_code < 500, (
         f"server crashed with 500 on {response.request.method} "
         f"{response.request.path}: {response.get_data(as_text=True)[:300]}"
@@ -115,8 +115,8 @@ class TestCategory1HappyPath:
 
     def test_embeddings_smoke(self, client, auth_headers):
         res = client.post("/v1/embeddings", json={"input": "hello"}, headers=auth_headers)
-        # 503 backend_unavailable is the documented clean response when no
-        # embedding backend is registered in the test config (environmental).
+        # 503 backend_unavailable 是测试配置中未注册
+        # embedding 后端时的文档化干净响应（环境因素）。
         assert res.status_code in (200, 503)
 
     def test_completions_smoke(self, client, auth_headers):
@@ -153,13 +153,13 @@ class TestCategory2EquivalentClasses:
             assert res.status_code == 201, res.get_data(as_text=True)[:200]
 
     def test_world_different_valid_names(self, client, auth_headers):
-        # MAX_WORLDS=3 and the seeded default world consumes one slot,
-        # so stay within the remaining budget.
+        # MAX_WORLDS=3 且种子默认世界占用一个名额，
+        # 因此保持在剩余预算之内。
         for name in ("W", "中文世界"):
             res = _new_world(client, auth_headers, name=name)
             assert res.status_code == 201, res.get_data(as_text=True)[:200]
-        # Long-name equivalence class — exercised on a character instead
-        # where there is no world-count cap.
+        # 长名称等价类 —— 改在角色上演练，
+        # 因为那里没有世界数量上限。
         res = _new_character(client, auth_headers, name="x" * 200)
         assert res.status_code == 201
 
@@ -208,7 +208,7 @@ class TestCategory3Decimals:
             "/v1/xijian/economy/transactions?limit=0.7",
             headers=auth_headers,
         )
-        # int("0.7") raises → route falls back to default 50.
+        # int("0.7") 抛出 → 路由回退到默认值 50。
         assert res.status_code == 200
 
 
@@ -231,7 +231,7 @@ class TestCategory4Negatives:
             headers=auth_headers,
         )
         assert res.status_code == 400
-        # No dirty data: the wallet must not exist / balance unchanged.
+        # 无脏数据：钱包不得存在 / 余额不变。
         got = client.get(
             "/v1/xijian/wallets/user/user_local/{}/mora".format(world),
             headers=auth_headers,
@@ -267,7 +267,7 @@ class TestCategory4Negatives:
         assert res.status_code == 400
 
     def test_chat_negative_temperature_safe(self, client, auth_headers):
-        # float(-1) is valid — must not crash.
+        # float(-1) 合法 —— 不得崩溃。
         res = client.post(
             "/v1/chat/completions",
             json=_chat_body(temperature=-1),
@@ -377,7 +377,7 @@ class TestCategory7TypeConfusion:
         assert res.get_json()["error"]["type"] == "invalid_request_error"
 
     def test_chat_temperature_numeric_string_ok(self, client, auth_headers):
-        # "0.7" is safely convertible — must not 500.
+        # "0.7" 可安全转换 —— 不得 500。
         res = client.post(
             "/v1/chat/completions",
             json=_chat_body(temperature="0.7"),
@@ -410,8 +410,8 @@ class TestCategory7TypeConfusion:
         assert res.status_code == 400
 
     def test_chat_bool_as_number_rejected(self, client, auth_headers):
-        # bool is a subclass of int in Python — must be rejected, not
-        # silently treated as 1.0 / 1.
+        # bool 是 Python 中 int 的子类 —— 必须被拒绝，而非
+        # 静默当作 1.0 / 1 处理。
         for field in ("temperature", "top_p", "max_tokens", "n"):
             res = client.post(
                 "/v1/chat/completions",
@@ -421,8 +421,8 @@ class TestCategory7TypeConfusion:
             assert res.status_code == 400, f"{field}=True -> {res.status_code}"
 
     def test_chat_bool_as_stream_string(self, client, auth_headers):
-        # "false" string is truthy in Python — pre-existing lenient
-        # behaviour; must not crash.
+        # "false" 字符串在 Python 中为真 —— 既有的宽松
+        # 行为；不得崩溃。
         res = client.post(
             "/v1/chat/completions",
             json=_chat_body(stream="false"),
@@ -459,13 +459,13 @@ class TestCategory7TypeConfusion:
         assert res.status_code == 400
 
     def test_embeddings_input_number(self, client, auth_headers):
-        # input=123 — type confusion; must be a clean 4xx/503, not 500.
-        # 503 = backend_unavailable (no embedding backend in test config).
+        # input=123 — 类型混淆；必须是干净的 4xx/503，而非 500。
+        # 503 = backend_unavailable（测试配置中无 embedding 后端）。
         res = client.post("/v1/embeddings", json={"input": 123}, headers=auth_headers)
         assert res.status_code in (400, 503), res.get_data(as_text=True)[:200]
 
     def test_chat_messages_dict_rejected(self, client, auth_headers):
-        # messages must be a list — a dict is type confusion.
+        # messages 必须是列表 —— 字典属于类型混淆。
         res = client.post(
             "/v1/chat/completions",
             json={"model": "m", "messages": {"role": "user", "content": "hi"}},
@@ -633,7 +633,7 @@ class TestCategory10SessionsAndIdempotency:
         deleted = client.delete(f"/v1/xijian/sessions/{sid}", headers=auth_headers)
         assert deleted.status_code == 204
 
-        # Reuse after delete → clean 404, not a crash.
+        # 删除后复用 → 干净的 404，而非崩溃。
         gone = client.get(f"/v1/xijian/sessions/{sid}/messages", headers=auth_headers)
         assert gone.status_code == 404
 
@@ -688,12 +688,12 @@ class TestCategory11StateMachineAbuse:
         assert first.status_code == 204
         second = client.delete(f"/v1/xijian/characters/{cid}", headers=auth_headers)
         assert second.status_code == 404
-        # get after delete
+        # 删除后再 get
         gone = client.get(f"/v1/xijian/characters/{cid}", headers=auth_headers)
         assert gone.status_code == 404
 
     def test_load_unloaded_character(self, client, auth_headers):
-        # load/unload on a non-existent character → 404, not crash.
+        # 对不存在的角色 load/unload → 404，而非崩溃。
         res = client.post("/v1/xijian/characters/char_nope/load", headers=auth_headers)
         assert res.status_code == 404
 
@@ -937,8 +937,8 @@ class TestCategory14HugePayloads:
             json={"input": ["x" * 100_000, 1, None, True, [1, 2]]},
             headers=auth_headers,
         )
-        # 503 backend_unavailable is acceptable when no embedding backend
-        # is registered (environmental); a 500 is not.
+        # 未注册 embedding 后端时 503 backend_unavailable 可接受
+        # （环境因素）；500 不可接受。
         assert res.status_code in (200, 400, 503)
 
 
@@ -978,7 +978,7 @@ class TestCategory15Destructive:
             headers=auth_headers,
         )
         assert confirm.status_code == 200
-        # World still readable afterwards.
+        # 之后世界仍可读取。
         got = client.get(f"/v1/xijian/worlds/{wid}", headers=auth_headers)
         assert got.status_code == 200
 
@@ -993,7 +993,7 @@ class TestCategory15Destructive:
             f"/v1/xijian/worlds/{wid}/reset/cancel", json={}, headers=auth_headers
         )
         assert cancelled.status_code == 200
-        # After cancel, confirm must fail (no pending reset).
+        # 取消后，confirm 必须失败（无待处理的重置）。
         confirm = client.post(
             f"/v1/xijian/worlds/{wid}/reset/confirm",
             json={"reset_token": "x"},
@@ -1104,15 +1104,15 @@ class TestCategory17Concurrency:
         assert len(created_ids) == 12
         assert len(set(created_ids)) == 12
 
-        # Data intact and readable afterwards.
+        # 之后数据完整且可读取。
         res = app.test_client().get(
             "/v1/xijian/characters", headers=auth_headers
         )
         assert res.status_code == 200
 
     def test_concurrent_world_creates(self, app, token):
-        # MAX_WORLDS=3 and the seeded default world consumes a slot, so
-        # 2 concurrent creates must all succeed and nothing may crash.
+        # MAX_WORLDS=3 且种子默认世界占用一个名额，因此
+        # 2 个并发创建都必须成功且不得崩溃。
         errors = []
         lock = threading.Lock()
 
@@ -1171,7 +1171,7 @@ class TestCategory17Concurrency:
 
         assert errors == [], f"concurrent deposits failed: {errors[:5]}"
         assert ok_count[0] == 10
-        # Balance is exactly the sum (no lost updates).
+        # 余额恰好是总和（无丢失更新）。
         got = app.test_client().get(
             f"/v1/xijian/wallets/user/user_local/{world}/mora",
             headers=auth_headers,
@@ -1202,7 +1202,7 @@ class TestCategory18Injection:
                 f"/v1/xijian/characters/{payload}", headers=auth_headers
             )
             assert res.status_code == 404, f"{payload!r} -> {res.status_code}"
-        # Table still intact.
+        # 表仍然完好。
         assert "char_yuki" in stubs_state.characters or len(stubs_state.characters) >= 0
 
     def test_world_id_sql_injection(self, client, auth_headers):
@@ -1243,12 +1243,12 @@ class TestCategory18Injection:
             assert res.status_code in (404, 400, 405), f"{path} -> {res.status_code}"
 
     def test_store_tables_survive(self, client, auth_headers):
-        # The characters bucket must still be queryable end-to-end.
+        # characters 桶必须仍可端到端查询。
         res = client.get("/v1/xijian/characters", headers=auth_headers)
         assert res.status_code == 200
         res = client.get("/v1/xijian/characters/char_yuki", headers=auth_headers)
         assert res.status_code in (200, 404)
-        # Direct store access still works.
+        # 直接访问存储仍可用。
         assert store.bucket("characters") is not None
         assert store.bucket("worlds") is not None
 
@@ -1260,7 +1260,7 @@ class TestCategory18Injection:
 
 class TestCategory19PostAbuseRegression:
     def test_after_abuse_healthz(self, client, auth_headers):
-        # Run a battery of abuse, then confirm the server still works.
+        # 跑一轮滥用攻击，然后确认服务器仍正常工作。
         self._abuse_battery(client, auth_headers)
         res = client.get("/healthz")
         assert res.status_code == 200
@@ -1284,16 +1284,16 @@ class TestCategory19PostAbuseRegression:
 
     def test_after_abuse_data_not_corrupted(self, client, auth_headers):
         self._abuse_battery(client, auth_headers)
-        # Default seeded character still intact.
+        # 默认种子角色仍然完好。
         res = client.get("/v1/xijian/characters/char_yuki", headers=auth_headers)
         assert res.status_code in (200, 404)
-        # Buckets still enumerable.
+        # 桶仍可枚举。
         assert len(store.bucket("characters")) >= 0
         assert len(store.bucket("worlds")) >= 0
 
     def _abuse_battery(self, client, auth_headers):
-        """A compact mix of every abusive input family."""
-        # Type confusion + garbage.
+        """每一类恶意输入家族的紧凑混合。"""
+        # 类型混淆 + 垃圾数据。
         client.post(
             "/v1/chat/completions",
             json=_chat_body(temperature="abc", top_p="xyz", n="nope", max_tokens="bad"),
@@ -1315,7 +1315,7 @@ class TestCategory19PostAbuseRegression:
             json=_chat_body(messages=[{"role": "user", "content": "\u0000\uFFFF"}]),
             headers=auth_headers,
         )
-        # Empty / missing.
+        # 空 / 缺失。
         client.post("/v1/chat/completions", json={}, headers=auth_headers)
         client.post(
             "/v1/chat/completions",
@@ -1323,19 +1323,19 @@ class TestCategory19PostAbuseRegression:
             content_type="application/json",
             headers=auth_headers,
         )
-        # Injection IDs.
+        # 注入式 ID。
         client.get(
             "/v1/xijian/characters/x'; DROP TABLE store_characters;--",
             headers=auth_headers,
         )
-        # State-machine abuse.
+        # 状态机滥用。
         client.delete("/v1/xijian/sessions/sess_nope", headers=auth_headers)
         client.post(
             "/v1/xijian/worlds/w_nope/reset/confirm",
             json={"reset_token": "x"},
             headers=auth_headers,
         )
-        # Negative / huge amounts.
+        # 负数 / 巨大数额。
         world = None
         try:
             world = _new_world(client, auth_headers).get_json()["id"]

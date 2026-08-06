@@ -1,4 +1,4 @@
-"""``/v1/xijian/settings`` + ``/permissions`` routes."""
+"""``/v1/xijian/settings`` + ``/permissions`` 路由。"""
 
 from __future__ import annotations
 

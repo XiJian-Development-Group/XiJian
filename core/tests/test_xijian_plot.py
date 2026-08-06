@@ -1,4 +1,4 @@
-"""Tests for plot_runtime stub module."""
+"""针对 plot_runtime stub 模块的测试。"""
 
 from __future__ import annotations
 
@@ -15,13 +15,13 @@ from xijian_api.stubs import state
 
 
 # ---------------------------------------------------------------------------
-# Fixtures
+# 夹具
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture(autouse=True)
 def _reset_state():
-    """Reset state before each test."""
+    """每个测试之前重置状态。"""
     state.reset_for_testing()
     yield
     state.reset_for_testing()
@@ -29,13 +29,13 @@ def _reset_state():
 
 @pytest.fixture
 def temp_work_dir():
-    """Create a temporary devkit work directory with sample plot data."""
+    """创建一个带有示例剧情数据的临时 devkit 工作目录。"""
     with tempfile.TemporaryDirectory() as tmp:
         work_dir = Path(tmp)
         plots_dir = work_dir / "plots"
         plots_dir.mkdir(parents=True)
 
-        # Create a sample plot
+        # 创建一个示例剧情
         plot_id = "plot_test_001"
         plot_dir = plots_dir / plot_id
         plot_dir.mkdir()
@@ -163,14 +163,14 @@ def temp_work_dir():
         with open(plot_dir / "edges.json", "w", encoding="utf-8") as f:
             json.dump(edges, f, ensure_ascii=False)
 
-        # Create a world via the real worlds stub API.
+        # 通过真实的 worlds stub API 创建一个世界。
         worlds_stub.create(world_id="world_test", name="测试世界")
 
         yield str(work_dir)
 
 
 # ---------------------------------------------------------------------------
-# Test: list_available_plots
+# 测试：list_available_plots
 # ---------------------------------------------------------------------------
 
 
@@ -187,7 +187,7 @@ def test_list_available_plots_empty_dir(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Test: get_plot_design
+# 测试：get_plot_design
 # ---------------------------------------------------------------------------
 
 
@@ -197,12 +197,12 @@ def test_get_plot_design(temp_work_dir):
     assert design["id"] == "plot_test_001"
     assert design["name"] == "测试剧情"
 
-    # Not found
+    # 未找到
     assert plot_stub.get_plot_design(temp_work_dir, "nonexistent") is None
 
 
 # ---------------------------------------------------------------------------
-# Test: get_plot_design_nodes / edges
+# 测试：get_plot_design_nodes / edges
 # ---------------------------------------------------------------------------
 
 
@@ -212,7 +212,7 @@ def test_get_plot_design_nodes(temp_work_dir):
     assert nodes[0]["id"] == "node_start"
     assert nodes[0]["type"] == "start"
 
-    # Not found
+    # 未找到
     assert plot_stub.get_plot_design_nodes(temp_work_dir, "nonexistent") == []
 
 
@@ -222,12 +222,12 @@ def test_get_plot_design_edges(temp_work_dir):
     assert edges[0]["source"] == "node_start"
     assert edges[0]["target"] == "node_event_1"
 
-    # Not found
+    # 未找到
     assert plot_stub.get_plot_design_edges(temp_work_dir, "nonexistent") == []
 
 
 # ---------------------------------------------------------------------------
-# Test: create_plot_runtime
+# 测试：create_plot_runtime
 # ---------------------------------------------------------------------------
 
 
@@ -276,7 +276,7 @@ def test_create_plot_runtime_with_initial_variables(temp_work_dir):
 
 
 # ---------------------------------------------------------------------------
-# Test: get_plot_runtime / list_plot_runtimes
+# 测试：get_plot_runtime / list_plot_runtimes
 # ---------------------------------------------------------------------------
 
 
@@ -291,7 +291,7 @@ def test_get_plot_runtime(temp_work_dir):
     assert fetched["id"] == rt["id"]
     assert fetched["plot_id"] == "plot_test_001"
 
-    # Not found
+    # 未找到
     assert plot_stub.get_plot_runtime("nonexistent") is None
 
 
@@ -310,17 +310,17 @@ def test_list_plot_runtimes(temp_work_dir):
     all_rts = plot_stub.list_plot_runtimes()
     assert len(all_rts) == 2
 
-    # Filter by world_id
+    # 按 world_id 过滤
     filtered = plot_stub.list_plot_runtimes(world_id="world_test")
     assert len(filtered) == 2
 
-    # Filter by status
+    # 按状态过滤
     filtered = plot_stub.list_plot_runtimes(status=plot_stub.PLOT_RUNTIME_STATUS_RUNNING)
     assert len(filtered) == 2
 
 
 # ---------------------------------------------------------------------------
-# Test: advance_plot_runtime (linear progression)
+# 测试：advance_plot_runtime（线性推进）
 # ---------------------------------------------------------------------------
 
 
@@ -331,20 +331,20 @@ def test_advance_plot_runtime_linear(temp_work_dir):
         work_dir=temp_work_dir,
     )
 
-    # Start node -> event node
+    # 起始节点 → 事件节点
     result = plot_stub.advance_plot_runtime(rt["id"])
     assert result["current_node_id"] == "node_event_1"
     assert result["next_node_id"] == "node_event_1"
     assert "node_start" in result["completed_nodes"]
-    assert len(result["executed_rewards"]) == 0  # start node has no rewards
+    assert len(result["executed_rewards"]) == 0  # 起始节点没有奖励
 
-    # Event node -> choice node (has rewards and effects)
+    # 事件节点 → 选择节点（有奖励和效果）
     result = plot_stub.advance_plot_runtime(rt["id"])
     assert result["current_node_id"] == "node_choice"
     assert "node_event_1" in result["completed_nodes"]
-    # Check rewards executed
+    # 检查奖励已执行
     assert len(result["executed_rewards"]) > 0
-    # Check effects executed (plot_variable)
+    # 检查效果已执行（plot_variable）
     assert any(e["type"] == "plot_variable" for e in result["executed_effects"])
 
 
@@ -356,15 +356,15 @@ def test_advance_plot_runtime_choice_node(temp_work_dir):
         initial_variables={"player_choice": "accept"},
     )
 
-    # Advance to choice node
+    # 推进到选择节点
     plot_stub.advance_plot_runtime(rt["id"])  # start -> event
     result = plot_stub.advance_plot_runtime(rt["id"])  # event -> choice
 
-    # At choice node, need to specify edge
+    # 在选择节点处，需要指定边
     with pytest.raises(plot_stub.PlotError, match="choice 节点必须指定 choose_edge_id"):
         plot_stub.advance_plot_runtime(rt["id"])
 
-    # Choose edge_3a (accept)
+    # 选择 edge_3a（接受）
     result = plot_stub.advance_plot_runtime(rt["id"], choose_edge_id="edge_3a")
     assert result["current_node_id"] == "node_end"
     assert result["status"] == plot_stub.PLOT_RUNTIME_STATUS_COMPLETED
@@ -381,11 +381,11 @@ def test_advance_plot_runtime_choice_wrong_condition(temp_work_dir):
     plot_stub.advance_plot_runtime(rt["id"])  # start -> event
     plot_stub.advance_plot_runtime(rt["id"])  # event -> choice
 
-    # Try to choose edge_3a with wrong condition
+    # 尝试在条件不满足时选择 edge_3a
     with pytest.raises(plot_stub.PlotError, match="边条件不满足"):
         plot_stub.advance_plot_runtime(rt["id"], choose_edge_id="edge_3a")
 
-    # Choose edge_3b (reject) - should work
+    # 选择 edge_3b（拒绝）—— 应成功
     result = plot_stub.advance_plot_runtime(rt["id"], choose_edge_id="edge_3b")
     assert result["current_node_id"] == "node_end"
 
@@ -402,18 +402,18 @@ def test_advance_plot_runtime_not_running(temp_work_dir):
         work_dir=temp_work_dir,
         initial_variables={"player_choice": "accept"},
     )
-    # Complete the plot
+    # 完成剧情
     plot_stub.advance_plot_runtime(rt["id"])  # start -> event
     plot_stub.advance_plot_runtime(rt["id"])  # event -> choice
     plot_stub.advance_plot_runtime(rt["id"], choose_edge_id="edge_3a")  # choice -> end
 
-    # Try to advance completed plot
+    # 尝试推进已完成的剧情
     with pytest.raises(plot_stub.PlotError, match="不可推进"):
         plot_stub.advance_plot_runtime(rt["id"])
 
 
 # ---------------------------------------------------------------------------
-# Test: pause / resume
+# 测试：暂停 / 恢复
 # ---------------------------------------------------------------------------
 
 
@@ -424,19 +424,19 @@ def test_pause_resume_plot_runtime(temp_work_dir):
         work_dir=temp_work_dir,
     )
 
-    # Pause
+    # 暂停
     paused = plot_stub.pause_plot_runtime(rt["id"])
     assert paused["status"] == plot_stub.PLOT_RUNTIME_STATUS_PAUSED
 
-    # Try to advance paused plot
+    # 尝试推进已暂停的剧情
     with pytest.raises(plot_stub.PlotError, match="不可推进"):
         plot_stub.advance_plot_runtime(rt["id"])
 
-    # Resume
+    # 恢复
     resumed = plot_stub.resume_plot_runtime(rt["id"])
     assert resumed["status"] == plot_stub.PLOT_RUNTIME_STATUS_RUNNING
 
-    # Should be able to advance now
+    # 现在应可推进
     result = plot_stub.advance_plot_runtime(rt["id"])
     assert result["current_node_id"] == "node_event_1"
 
@@ -449,13 +449,13 @@ def test_pause_non_running(temp_work_dir):
     )
     plot_stub.pause_plot_runtime(rt["id"])
 
-    # Try to pause again
+    # 尝试再次暂停
     with pytest.raises(plot_stub.PlotError, match="只能暂停运行中的剧情"):
         plot_stub.pause_plot_runtime(rt["id"])
 
 
 # ---------------------------------------------------------------------------
-# Test: delete_plot_runtime
+# 测试：delete_plot_runtime
 # ---------------------------------------------------------------------------
 
 
@@ -467,11 +467,11 @@ def test_delete_plot_runtime(temp_work_dir):
     )
     assert plot_stub.delete_plot_runtime(rt["id"]) is True
     assert plot_stub.get_plot_runtime(rt["id"]) is None
-    assert plot_stub.delete_plot_runtime(rt["id"]) is False  # already deleted
+    assert plot_stub.delete_plot_runtime(rt["id"]) is False  # 已删除
 
 
 # ---------------------------------------------------------------------------
-# Test: get_plot_node / get_plot_edges
+# 测试：get_plot_node / get_plot_edges
 # ---------------------------------------------------------------------------
 
 
@@ -493,7 +493,7 @@ def test_get_plot_node(temp_work_dir):
     assert node["is_current"] is False
     assert node["is_unlocked"] is False
 
-    # Not found
+    # 未找到
     assert plot_stub.get_plot_node(rt["id"], "nonexistent") is None
     assert plot_stub.get_plot_node("nonexistent", "node_start") is None
 
@@ -517,29 +517,29 @@ def test_get_plot_edges(temp_work_dir):
 
 
 # ---------------------------------------------------------------------------
-# Test: evaluate_plot_triggers
+# 测试：evaluate_plot_triggers
 # ---------------------------------------------------------------------------
 
 
 def test_evaluate_plot_triggers_condition(temp_work_dir):
-    """Test trigger evaluation with condition trigger."""
+    """测试带条件触发器的触发器评估。"""
     rt = plot_stub.create_plot_runtime(
         plot_id="plot_test_001",
         world_id="world_test",
         work_dir=temp_work_dir,
-        initial_variables={"quest_stage": 1},  # Condition: quest_stage == 1
+        initial_variables={"quest_stage": 1},  # 条件：quest_stage == 1
     )
 
-    # Current node is start (no trigger), advance to event node which has condition trigger
+    # 当前节点是 start（无触发器），推进到带条件触发器的事件节点
     plot_stub.advance_plot_runtime(rt["id"])  # start -> event
 
-    # Now current node is node_event_1 with condition trigger
-    # Manually set variables so trigger matches
+    # 现在当前节点是带条件触发器的 node_event_1
+    # 手动设置变量使触发器匹配
     bucket = plot_stub._get_bucket()
     rt_state = bucket[rt["id"]]
     rt_state["variables"]["quest_stage"] = 1
 
-    # Evaluate triggers
+    # 评估触发器
     activated = plot_stub.evaluate_plot_triggers("world_test")
     assert len(activated) == 1
     assert activated[0]["runtime_id"] == rt["id"]
@@ -548,12 +548,12 @@ def test_evaluate_plot_triggers_condition(temp_work_dir):
 
 
 def test_evaluate_plot_triggers_no_match(temp_work_dir):
-    """Test trigger evaluation when condition doesn't match."""
+    """测试条件不匹配时的触发器评估。"""
     rt = plot_stub.create_plot_runtime(
         plot_id="plot_test_001",
         world_id="world_test",
         work_dir=temp_work_dir,
-        initial_variables={"quest_stage": 99},  # Condition: quest_stage == 1 (won't match)
+        initial_variables={"quest_stage": 99},  # 条件：quest_stage == 1（不会匹配）
     )
 
     plot_stub.advance_plot_runtime(rt["id"])  # start -> event
@@ -563,7 +563,7 @@ def test_evaluate_plot_triggers_no_match(temp_work_dir):
 
 
 def test_evaluate_plot_triggers_only_running(temp_work_dir):
-    """Test that only running runtimes are evaluated."""
+    """测试只有运行中的 runtime 才会被评估。"""
     rt = plot_stub.create_plot_runtime(
         plot_id="plot_test_001",
         world_id="world_test",
@@ -572,7 +572,7 @@ def test_evaluate_plot_triggers_only_running(temp_work_dir):
     )
     plot_stub.advance_plot_runtime(rt["id"])  # start -> event
 
-    # Pause it
+    # 暂停它
     plot_stub.pause_plot_runtime(rt["id"])
 
     activated = plot_stub.evaluate_plot_triggers("world_test")
@@ -580,16 +580,16 @@ def test_evaluate_plot_triggers_only_running(temp_work_dir):
 
 
 # ---------------------------------------------------------------------------
-# Test: Rewards execution (currency, item, experience, relationship)
+# 测试：奖励执行（货币、物品、经验、关系）
 # ---------------------------------------------------------------------------
 
 
 def test_rewards_currency(temp_work_dir):
-    """Test currency reward execution."""
+    """测试货币奖励的执行。"""
     from xijian_api.stubs import world_currencies as wc_stub
     from xijian_api.stubs import wallets as wallets_stub
 
-    # Setup currency and wallet using the real world_currencies/wallets APIs.
+    # 使用真实的 world_currencies/wallets API 设置货币和钱包。
     wc_stub.create(
         world_id="world_test",
         code="currency_gold",
@@ -611,17 +611,17 @@ def test_rewards_currency(temp_work_dir):
         work_dir=temp_work_dir,
     )
 
-    # Advance to event node which has currency reward
+    # 推进到带货币奖励的事件节点
     plot_stub.advance_plot_runtime(rt["id"])  # start -> event
-    result = plot_stub.advance_plot_runtime(rt["id"])  # event -> choice (executes rewards)
+    result = plot_stub.advance_plot_runtime(rt["id"])  # event -> choice（执行奖励）
 
-    # Check reward executed
+    # 检查奖励已执行
     currency_rewards = [r for r in result["executed_rewards"] if r["type"] == "currency"]
     assert len(currency_rewards) == 1
     assert currency_rewards[0]["ok"] is True
     assert currency_rewards[0]["amount"] == 100
 
-    # Check wallet balance (rewards default to the local user wallet)
+    # 检查钱包余额（奖励默认进入本地用户钱包）
     wallet = wallets_stub.get(
         wallets_stub.OWNER_USER,
         wallets_stub.LOCAL_USER_ID,
@@ -632,8 +632,8 @@ def test_rewards_currency(temp_work_dir):
 
 
 def test_rewards_item(temp_work_dir):
-    """Test item reward execution (stored in plot variables)."""
-    # Create a plot with item reward
+    """测试物品奖励执行（存储在剧情变量中）。"""
+    # 创建一个带物品奖励的剧情
     with tempfile.TemporaryDirectory() as tmp:
         work_dir = Path(tmp)
         plots_dir = work_dir / "plots"
@@ -731,22 +731,22 @@ def test_rewards_item(temp_work_dir):
         assert item_rewards[0]["item_id"] == "item_sword"
         assert item_rewards[0]["quantity"] == 1
 
-        # Check plot variable
+        # 检查剧情变量
         bucket = plot_stub._get_bucket()
         rt_state = bucket[rt["id"]]
         assert rt_state["variables"].get("inventory_item_sword") == 1
 
 
 # ---------------------------------------------------------------------------
-# Test: Effects execution (npc_mood, npc_status, world_state, plot_variable)
+# 测试：效果执行（npc_mood、npc_status、world_state、plot_variable）
 # ---------------------------------------------------------------------------
 
 
 def test_effects_npc_mood(temp_work_dir):
-    """Test NPC mood effect execution."""
+    """测试 NPC 心情效果的执行。"""
     from xijian_api.stubs import npcs as npcs_stub
 
-    # Create an NPC using the real npcs stub API.
+    # 使用真实的 npcs stub API 创建一个 NPC。
     npcs_stub.create(
         world_id="world_test",
         name="测试NPC",
@@ -755,7 +755,7 @@ def test_effects_npc_mood(temp_work_dir):
         npc_id="npc_1",
     )
 
-    # Create plot with npc_mood effect
+    # 创建带 npc_mood 效果的剧情
     with tempfile.TemporaryDirectory() as tmp:
         work_dir = Path(tmp)
         plots_dir = work_dir / "plots"
@@ -852,23 +852,23 @@ def test_effects_npc_mood(temp_work_dir):
         assert mood_effects[0]["ok"] is True
         assert mood_effects[0]["new_mood"] == 70
 
-        # Verify NPC mood changed
+        # 验证 NPC 心情已改变
         npc = npcs_stub.get("npc_1")
         assert npc["state_json"]["mood"] == 70
 
 
 # ---------------------------------------------------------------------------
-# Test: PlotError exception
+# 测试：PlotError 异常
 # ---------------------------------------------------------------------------
 
 
 def test_plot_error_inheritance():
-    """PlotError should be a ValueError subclass."""
+    """PlotError 应为 ValueError 的子类。"""
     assert issubclass(plot_stub.PlotError, ValueError)
     try:
         raise plot_stub.PlotError("test error")
     except ValueError:
-        pass  # Expected
+        pass  # 符合预期
     except Exception:
         pytest.fail("PlotError not caught as ValueError")
 

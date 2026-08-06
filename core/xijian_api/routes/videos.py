@@ -1,4 +1,4 @@
-"""Video routes — async generations, status, list, remix, delete."""
+"""视频路由 — 异步生成、状态、列表、混剪、删除。"""
 
 from __future__ import annotations
 

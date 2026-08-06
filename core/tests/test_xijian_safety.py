@@ -61,7 +61,7 @@ def world(client, auth_headers):
 
 
 # ---------------------------------------------------------------------------
-# Pure helpers
+# 纯辅助函数
 # ---------------------------------------------------------------------------
 
 
@@ -91,8 +91,8 @@ class TestWorstMatch:
     def test_returns_first(self):
         a = {"severity": 1, "id": "a"}
         b = {"severity": 5, "id": "b"}
-        # Caller is expected to sort first, so we return the
-        # first element as-is.
+        # 调用方应先排序，因此我们按原样返回
+        # 第一个元素。
         assert safety_stub._worst_match([b, a]) == b
 
 
@@ -140,12 +140,12 @@ class TestEventIsDangerous:
         assert safety_stub._event_is_dangerous(["DANGEROUS"]) is True
 
     def test_invalid_entries(self):
-        # Non-string entries are skipped (the test harness wraps).
+        # 非字符串条目被跳过（测试框架会包装）。
         assert safety_stub._event_is_dangerous([None, 1, "dangerous"]) is True
 
 
 # ---------------------------------------------------------------------------
-# Audit
+# 审计
 # ---------------------------------------------------------------------------
 
 
@@ -220,7 +220,7 @@ class TestListLog:
         for i in range(5):
             safety_stub.scan_input(text=f"x{i}", world_id="w1")
         assert len(safety_stub.list_log(limit=3)) == 3
-        # limit < 1 clamps to 1.
+        # limit < 1 时钳制为 1。
         assert len(safety_stub.list_log(limit=0)) == 1
 
     def test_newest_first(self):
@@ -251,7 +251,7 @@ class TestCountFor:
 
 
 # ---------------------------------------------------------------------------
-# Scan — input
+# 扫描 — 输入
 # ---------------------------------------------------------------------------
 
 
@@ -296,8 +296,8 @@ class TestScanInputInjection:
         result = safety_stub.scan_input(
             text="this is a jailbreak", world_id="w1"
         )
-        # Injection always blocks, and severity 5 → hard_block
-        # (threshold + 2 rule).
+        # 注入总是拦截，且严重级别 5 → hard_block
+        # （阈值 + 2 规则）。
         assert result["verdict"] in (VERDICT_BLOCK, VERDICT_HARD_BLOCK)
 
     def test_injection_does_not_fall_through_to_pass(self):
@@ -315,7 +315,7 @@ class TestScanInputInjection:
             rule_kind=KIND_INJECTION_PATTERN, pattern="bad", severity=3
         )
         result = safety_stub.scan_input(text="bad", world_id="w1")
-        # Both kinds match, but injection always blocks.
+        # 两种类型都匹配，但注入总是拦截。
         assert result["blocked"] == "injection_pattern"
 
 
@@ -351,15 +351,15 @@ class TestScanInputOverload:
             assert result["blocked"] == "overload_active"
         finally:
             ov_stub.cancel_recovery()
-            # cancel_recovery clears the recovery but the action
-            # handler may have suspended NPCs.  Cancel the
-            # overload's residual state.
+            # cancel_recovery 清除恢复状态，但动作
+            # 处理器可能已挂起 NPC。取消
+            # 过载的残余状态。
             from xijian_api.stubs import state as ss
             ss.overload["recovery"] = None
 
 
 # ---------------------------------------------------------------------------
-# Scan — output
+# 扫描 — 输出
 # ---------------------------------------------------------------------------
 
 
@@ -393,7 +393,7 @@ class TestScanOutputOOC:
         rules_stub.create(
             rule_kind=KIND_OOC_PATTERN, pattern=r"as an AI", severity=4
         )
-        # Mark the world dangerous.
+        # 将世界标记为危险。
         safety_stub.set_world_dangerous("w1", True)
         try:
             result = safety_stub.scan_output(
@@ -403,7 +403,7 @@ class TestScanOutputOOC:
             )
             assert result["verdict"] == VERDICT_ALLOW_WITH_EXCEPTION
             assert result["blocked"] is None
-            # AC-2: reason is recorded.
+            # AC-2：原因被记录。
             out = safety_stub.list_log(world_id="w1")
             assert any(
                 e["verdict"] == VERDICT_ALLOW_WITH_EXCEPTION
@@ -414,8 +414,8 @@ class TestScanOutputOOC:
             safety_stub.set_world_dangerous("w1", False)
 
     def test_ooc_blocks_in_dangerous_world_without_tag(self):
-        # Even when world.is_dangerous=True, missing event tag
-        # still blocks (default-deny).
+        # 即使 world.is_dangerous=True，缺少事件标签
+        # 仍会被拦截（默认拒绝）。
         rules_stub.create(
             rule_kind=KIND_OOC_PATTERN, pattern=r"as an AI", severity=4
         )
@@ -424,14 +424,14 @@ class TestScanOutputOOC:
             result = safety_stub.scan_output(
                 text="Speaking as an AI",
                 character_id="c1", world_id="w1",
-                event_tags=["happy"],  # not in the dangerous set
+                event_tags=["happy"],  # 不在危险集合中
             )
             assert result["verdict"] in (VERDICT_BLOCK, VERDICT_HARD_BLOCK)
         finally:
             safety_stub.set_world_dangerous("w1", False)
 
     def test_ooc_blocks_when_world_dangerous_tag_present_but_world_not_dangerous(self):
-        # The exception requires BOTH signals.
+        # 例外需要两个信号同时成立。
         rules_stub.create(
             rule_kind=KIND_OOC_PATTERN, pattern=r"as an AI", severity=4
         )
@@ -485,7 +485,7 @@ class TestSelfCrash:
         result = safety_stub.scan_input(text="hello", world_id="w1")
         assert result["verdict"] == VERDICT_HARD_BLOCK
         assert result["blocked"] == "scan_crashed"
-        # The exception is recorded in the audit log.
+        # 例外被记录在审计日志中。
         out = safety_stub.list_log(world_id="w1")
         assert any(
             "scan_crashed" in (e.get("reason") or "")
@@ -530,7 +530,7 @@ class TestWorldPolicy:
             safety_stub.set_safety_threshold("w1", "4")
 
     def test_set_threshold_falls_back_to_default(self):
-        # No world-specific threshold → default.
+        # 无世界专属阈值 → 使用默认值。
         assert safety_stub.get_safety_threshold("w_other") == DEFAULT_SAFETY_THRESHOLD
 
     def test_threshold_min_max(self):
@@ -547,12 +547,12 @@ class TestWorldPolicy:
         assert safety_stub.get_safety_threshold("w1") == DEFAULT_SAFETY_THRESHOLD
 
     def test_reset_world_policy_empty(self):
-        # No policy entries to remove.
+        # 没有要移除的策略条目。
         assert safety_stub.reset_world_policy("w1") == 0
 
 
 # ---------------------------------------------------------------------------
-# HTTP routes
+# HTTP 路由
 # ---------------------------------------------------------------------------
 
 
@@ -678,7 +678,7 @@ class TestHttpPolicy:
 
 class TestHttpDevCrash:
     def test_dev_crash_blocked_without_dev_flag(self, client, auth_headers):
-        # conftest pops ``XIJIAN_DEV``, so this should 403.
+        # conftest 弹出了 ``XIJIAN_DEV``，因此应返回 403。
         res = client.post(
             "/v1/xijian/safety/dev/crash",
             json={},
@@ -696,13 +696,13 @@ class TestHttpDevCrash:
         )
         assert res.status_code == 200
         data = res.get_json()
-        # Both input + output scans crashed → hard_block.
+        # 输入 + 输出扫描都崩溃 → hard_block。
         assert data["input"]["verdict"] == VERDICT_HARD_BLOCK
         assert data["output"]["verdict"] == VERDICT_HARD_BLOCK
 
 
 # ---------------------------------------------------------------------------
-# Protection gate (enable / disable two-step challenge / status)
+# 保护闸门（启用 / 禁用两步挑战 / 状态）
 # ---------------------------------------------------------------------------
 
 
@@ -728,7 +728,7 @@ class TestHttpGate:
         assert res.get_json()["enabled"] is True
 
     def test_disable_two_step_flow(self, client, auth_headers):
-        # Step 1 — start the challenge.
+        # 步骤 1 — 开始挑战。
         start = client.post(
             "/v1/xijian/safety/gate/disable",
             headers=auth_headers,
@@ -740,7 +740,7 @@ class TestHttpGate:
         assert "expires_at" in start_body
         assert start_body["challenge_phrase"] == "关闭保护 Yuki"
 
-        # Wrong phrase → phrase_mismatch, still enabled.
+        # 错误短语 → phrase_mismatch，仍保持启用。
         challenge_id = start_body["challenge_id"]
         wrong = client.post(
             "/v1/xijian/safety/gate/disable",
@@ -751,7 +751,7 @@ class TestHttpGate:
         assert wrong.get_json()["enabled"] is True
         assert wrong.get_json()["error"] == "phrase_mismatch"
 
-        # A fresh challenge (the wrong one consumed the first).
+        # 新的挑战（错误的那次消耗了第一个）。
         start2 = client.post(
             "/v1/xijian/safety/gate/disable",
             headers=auth_headers,
@@ -767,20 +767,20 @@ class TestHttpGate:
         assert ok.get_json()["enabled"] is False
         assert "disabled_at" in ok.get_json()
 
-        # status reflects the change.
+        # 状态反映了该变化。
         status_res = client.get(
             "/v1/xijian/safety/gate/status", headers=auth_headers
         )
         assert status_res.get_json()["enabled"] is False
 
-        # Re-enable.
+        # 重新启用。
         client.post("/v1/xijian/safety/gate/enable", headers=auth_headers)
         assert client.get(
             "/v1/xijian/safety/gate/status", headers=auth_headers
         ).get_json()["enabled"] is True
 
     def test_disable_step2_expired_challenge(self, client, auth_headers):
-        # An unknown challenge_id → challenge_expired.
+        # 未知的 challenge_id → challenge_expired。
         res = client.post(
             "/v1/xijian/safety/gate/disable",
             headers=auth_headers,
@@ -791,13 +791,13 @@ class TestHttpGate:
 
 
 # ---------------------------------------------------------------------------
-# Audit export
+# 审计导出
 # ---------------------------------------------------------------------------
 
 
 class TestHttpAuditExport:
     def test_export_returns_file_id(self, client, auth_headers):
-        # Produce at least one audit entry first.
+        # 先生成至少一条审计条目。
         safety_stub.scan_input(text="hello", world_id="w1")
         res = client.post(
             "/v1/xijian/safety/audit/export", headers=auth_headers

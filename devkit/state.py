@@ -1,21 +1,21 @@
-"""Disk-backed state for the Developer-Kit (Pywebview app).
+"""开发者工具（Pywebview 应用）的磁盘持久化状态。
 
-The DevKit is **deliberately standalone** — it does not share state with
-the main Flask API server.  This module owns its own three buckets,
-unrelated to the main API's ``xijian_api.stubs.state``:
+DevKit **刻意保持独立** —— 它与主 Flask API 服务器不共享状态。
+本模块拥有自己的三个存储桶，与主 API 的 ``xijian_api.stubs.state``
+无关：
 
 =========== ============================================================
-Key         Shape
+键          形状
 =========== ============================================================
-submissions     ``{submission_id: dict}`` — full record per submission
-last_submit_at  ``{developer_id: iso8601_string}`` — for the 1h cooldown
-local_archives  ``{submission_id: archive_path}`` — for later cleanup
-session         ``{"developer_id": str|None}`` — last logged-in developer
+submissions     ``{submission_id: dict}`` —— 每次提交的完整记录
+last_submit_at  ``{developer_id: iso8601_string}`` —— 用于 1 小时冷却
+local_archives  ``{submission_id: archive_path}`` —— 供后续清理使用
+session         ``{"developer_id": str|None}`` —— 最后登录的开发者
 =========== ============================================================
 
-All three buckets are persisted to a JSON file in the work directory
-so submission history survives a DevKit restart (C5-03).  The file is
-loaded once at module import and saved after every mutation.
+三个存储桶都持久化到工作目录下的一个 JSON 文件中，
+以便提交历史在 DevKit 重启后仍然保留（C5-03）。
+该文件在模块导入时加载一次，并在每次变更后保存。
 """
 
 from __future__ import annotations
@@ -24,26 +24,23 @@ import json
 import os
 
 
-#: ``{submission_id: dict}`` — each record carries developer_id,
-#: target_kind, target_id, archive_path, archive_size, archive_format,
-#: content_sha256, ai_ratio, smtp_status, smtp_code, smtp_response,
-#: submitted_at, email_subject, notes.
+#: ``{submission_id: dict}`` —— 每条记录携带 developer_id、
+#: target_kind、target_id、archive_path、archive_size、archive_format、
+#: content_sha256、ai_ratio、smtp_status、smtp_code、smtp_response、
+#: submitted_at、email_subject、notes。
 submissions: dict = {}
 
-#: ``{developer_id: iso8601 string}`` — the most recent submission
-#: timestamp per developer; used by the 1-hour rate limiter.
+#: ``{developer_id: iso8601 string}`` —— 每个开发者最近一次的提交
+#: 时间戳；由 1 小时限流器使用。
 last_submit_at: dict = {}
 
-#: ``{submission_id: archive_path}`` — filesystem path of the 7Z/zip
-#: archive produced for each submission, so the cleanup job (and
-#: tests) can find it again.
+#: ``{submission_id: archive_path}`` —— 每次提交生成的 7Z/zip
+#: 归档的文件系统路径，以便清理任务（和测试）能再次找到它。
 local_archives: dict = {}
 
-#: ``{"developer_id": str | None}`` — the developer who was logged in
-#: when the DevKit last shut down.  Persisted so that a restart does
-#: **not** silently drop the session and reset the per-developer
-#: cooldown display (C5 anti-abuse: a restart must never let a
-#: developer bypass the 1-hour submit cooldown).
+#: ``{"developer_id": str | None}`` —— DevKit 上次关闭时登录的开发者。
+#: 持久化保存，以便重启时**不会**静默丢失会话并重置每个开发者的
+#: 冷却显示（C5 反滥用：重启绝不能允许开发者绕过 1 小时提交冷却）。
 session: dict = {"developer_id": None}
 
 
@@ -52,8 +49,8 @@ def _state_path(work_dir: str) -> str:
 
 
 def load(work_dir: str) -> None:
-    """Load DevKit state from a JSON file in ``work_dir``, replacing all
-    in-memory buckets.  Safe to call multiple times — resets first."""
+    """从 ``work_dir`` 中的 JSON 文件加载 DevKit 状态，替换所有
+    内存存储桶。可多次安全调用——会先重置。"""
     reset_for_testing()
     fpath = _state_path(work_dir)
     if not os.path.isfile(fpath):
@@ -70,7 +67,7 @@ def load(work_dir: str) -> None:
 
 
 def save(work_dir: str) -> None:
-    """Persist the in-memory buckets to a JSON file in ``work_dir``."""
+    """将内存存储桶持久化到 ``work_dir`` 中的 JSON 文件。"""
     os.makedirs(work_dir, exist_ok=True)
     data = {
         "submissions": dict(submissions),
@@ -83,7 +80,7 @@ def save(work_dir: str) -> None:
 
 
 def reset_for_testing() -> None:
-    """Wipe every DevKit bucket.  Test-only — never call from app code."""
+    """清空每个 DevKit 存储桶。仅供测试使用——切勿在应用代码中调用。"""
     submissions.clear()
     last_submit_at.clear()
     local_archives.clear()

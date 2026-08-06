@@ -54,7 +54,7 @@ os.environ.setdefault("XIJIAN_SCENE_GENERATION", "0")
 # (A7 主动发起扫描线程 —— 与其他后台线程同姿态，默认关闭。)
 os.environ.setdefault("XIJIAN_INITIATED_TICK", "0")
 
-from xijian_api import auth  # noqa: E402  (import after env setup)
+from xijian_api import auth  # noqa: E402  (在环境变量设置之后导入)
 from xijian_api.app import create_app  # noqa: E402
 from xijian_api.config import API_VERSION  # noqa: E402
 from xijian_api.middleware import reset_idempotency_cache_for_testing  # noqa: E402

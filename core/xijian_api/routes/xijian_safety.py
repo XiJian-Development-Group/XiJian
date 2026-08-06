@@ -1,58 +1,57 @@
-"""``/v1/xijian/safety/*`` routes — A5.1.
+"""``/v1/xijian/safety/*`` 路由 — A5.1。
 
-Scan endpoints
+扫描端点
 ==============
 
-* ``POST   /v1/xijian/safety/scan/input``     — pre-screen user input
-* ``POST   /v1/xijian/safety/scan/output``    — post-screen assistant output
+* ``POST   /v1/xijian/safety/scan/input``     — 预筛用户输入
+* ``POST   /v1/xijian/safety/scan/output``    — 后筛助手输出
 
-Rules CRUD
+规则 CRUD
 ==========
 
-* ``GET    /v1/xijian/safety/rules``          — list (?active, ?rule_kind)
-* ``POST   /v1/xijian/safety/rules``          — create
-* ``GET    /v1/xijian/safety/rules/<rule_id>`` — get
-* ``PATCH  /v1/xijian/safety/rules/<rule_id>`` — patch
-* ``DELETE /v1/xijian/safety/rules/<rule_id>`` — delete
+* ``GET    /v1/xijian/safety/rules``          — 列表 (?active, ?rule_kind)
+* ``POST   /v1/xijian/safety/rules``          — 创建
+* ``GET    /v1/xijian/safety/rules/<rule_id>`` — 获取
+* ``PATCH  /v1/xijian/safety/rules/<rule_id>`` — 修改
+* ``DELETE /v1/xijian/safety/rules/<rule_id>`` — 删除
 
-Audit query
+审计查询
 ===========
 
-* ``GET    /v1/xijian/safety/audit``          — list (?world_id, ?character_id, ?stage, ?verdict, ?limit)
-* ``GET    /v1/xijian/safety/audit/count``    — count (same filter args)
-* ``POST   /v1/xijian/safety/audit/export``   — export legacy + unified
-                                                audit logs as JSONL
-                                                (returns ``file_id``)
+* ``GET    /v1/xijian/safety/audit``          — 列表 (?world_id, ?character_id, ?stage, ?verdict, ?limit)
+* ``GET    /v1/xijian/safety/audit/count``    — 计数（相同过滤参数）
+* ``POST   /v1/xijian/safety/audit/export``   — 将旧版 + 统一的审计日志
+                                               导出为 JSONL
+                                               （返回 ``file_id``）
 
-Protection gate
+保护门禁
 ================
 
-* ``GET    /v1/xijian/safety/gate/status``    — read enabled / guard_level
-* ``POST   /v1/xijian/safety/gate/enable``   — re-enable the gate
-* ``POST   /v1/xijian/safety/gate/disable``  — two-step challenge flow:
-                                                step 1 ``{confirmation}`` →
+* ``GET    /v1/xijian/safety/gate/status``    — 读取 enabled / guard_level
+* ``POST   /v1/xijian/safety/gate/enable``   — 重新启用门禁
+* ``POST   /v1/xijian/safety/gate/disable``  — 两步挑战流程：
+                                                第一步 ``{confirmation}`` →
                                                 ``{challenge_id, expires_at,
-                                                challenge_phrase}``;
-                                                step 2 ``{challenge_id,
+                                                challenge_phrase}``；
+                                                第二步 ``{challenge_id,
                                                 phrase}`` → ``{enabled: false,
-                                                disabled_at}``.
+                                                disabled_at}``。
 
-World policy
+世界策略
 ============
 
-* ``GET    /v1/xijian/safety/policy/<wid>``   — read (threshold + is_dangerous)
-* ``PUT    /v1/xijian/safety/policy/<wid>``   — set is_dangerous / threshold
-* ``DELETE /v1/xijian/safety/policy/<wid>``   — reset to defaults
+* ``GET    /v1/xijian/safety/policy/<wid>``   — 读取（threshold + is_dangerous）
+* ``PUT    /v1/xijian/safety/policy/<wid>``   — 设置 is_dangerous / threshold
+* ``DELETE /v1/xijian/safety/policy/<wid>``   — 重置为默认值
 
-Dev-only
+仅限开发
 ========
 
-* ``POST   /v1/xijian/safety/dev/crash``      — force a scan-self-crash
-                                                (XIJIAN_DEV=1) so tests
-                                                can exercise the
-                                                spec's "审查模块
-                                                自身崩溃 → 降级为
-                                                最严格档" path.
+* ``POST   /v1/xijian/safety/dev/crash``      — 强制扫描自崩溃
+                                               （XIJIAN_DEV=1），使测试
+                                               可以演练规范中“审查模块
+                                               自身崩溃 → 降级为最严格档”
+                                               的路径。
 """
 
 from __future__ import annotations
@@ -75,7 +74,7 @@ _LOGGER = logging.getLogger("xijian_api.routes.xijian_safety")
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# 辅助函数
 # ---------------------------------------------------------------------------
 
 
@@ -110,7 +109,7 @@ def _require_world(world_id: Any) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Scan
+# 扫描
 # ---------------------------------------------------------------------------
 
 
@@ -149,7 +148,7 @@ def scan_output_route():
 
 
 # ---------------------------------------------------------------------------
-# Rules CRUD
+# 规则 CRUD
 # ---------------------------------------------------------------------------
 
 
@@ -220,7 +219,7 @@ def delete_rule(rule_id: str):
 
 
 # ---------------------------------------------------------------------------
-# Audit query
+# 审计查询
 # ---------------------------------------------------------------------------
 
 
@@ -254,19 +253,18 @@ def count_audit():
 
 @bp.post("/v1/xijian/safety/audit/export")
 def export_audit():
-    """Export the legacy + unified audit logs as a JSONL file.
+    """将旧版 + 统一的审计日志导出为 JSONL 文件。
 
-    Writes both ``state.audits`` (legacy list) and
-    ``state.safety_audit_log`` (unified dict) into a single JSONL
-    file so operators get a complete audit trail.  Returns the
-    ``file_id`` that :mod:`xijian_api.stubs.files` registers — the
-    caller can fetch the content via ``GET /v1/files/{file_id}``.
+    将 ``state.audits``（旧版列表）和 ``state.safety_audit_log``（统一字典）
+    写入单个 JSONL 文件，使操作员获得完整的审计轨迹。返回
+    :mod:`xijian_api.stubs.files` 注册的 ``file_id`` — 调用方可通过
+    ``GET /v1/files/{file_id}`` 获取内容。
     """
     return jsonify(safety_stub.export_audit())
 
 
 # ---------------------------------------------------------------------------
-# World policy
+# 世界策略
 # ---------------------------------------------------------------------------
 
 
@@ -308,31 +306,31 @@ def reset_policy(world_id: str):
 
 
 # ---------------------------------------------------------------------------
-# Protection gate — enable/disable with two-step challenge
+# 保护门禁 — 两步挑战启用/禁用
 # ---------------------------------------------------------------------------
 
 
 @bp.get("/v1/xijian/safety/gate/status")
 def gate_status():
-    """Return the protection-gate snapshot."""
+    """返回保护门禁快照。"""
     return jsonify(safety_stub.status())
 
 
 @bp.post("/v1/xijian/safety/gate/enable")
 def gate_enable():
-    """Re-enable the protection gate (idempotent, default on)."""
+    """重新启用保护门禁（幂等，默认开启）。"""
     return jsonify(safety_stub.enable())
 
 
 @bp.post("/v1/xijian/safety/gate/disable")
 def gate_disable():
-    """Two-step disable flow.
+    """两步禁用流程。
 
-    Step 1 (no ``challenge_id`` in body): starts a challenge,
-    returns ``{challenge_id, expires_at, challenge_phrase}``.
+    第一步（body 中无 ``challenge_id``）：发起挑战，
+    返回 ``{challenge_id, expires_at, challenge_phrase}``。
 
-    Step 2 (``challenge_id`` + ``phrase`` in body): confirms the
-    challenge and flips ``enabled`` to False.
+    第二步（body 中有 ``challenge_id`` + ``phrase``）：确认
+    挑战并将 ``enabled`` 翻转为 False。
     """
     payload = request.get_json(silent=True) or {}
     if "challenge_id" in payload and "phrase" in payload:
@@ -341,16 +339,16 @@ def gate_disable():
 
 
 # ---------------------------------------------------------------------------
-# Dev-only — exercise the self-crash fallback path
+# 仅限开发 — 演练自崩溃回退路径
 # ---------------------------------------------------------------------------
 
 
 @bp.post("/v1/xijian/safety/dev/crash")
 def dev_crash():
     _dev_only()
-    # Patch the rulebook's :func:`match_active_rules` to raise so
-    # the scan can demonstrate the spec's "审查模块自身崩溃 → 降级
-    # 为最严格档" branch.  We restore the original after the call.
+    # 修补规则手册的 :func:`match_active_rules` 使其抛出异常，
+    # 让扫描能演示规范中“审查模块自身崩溃 → 降级为最严格档”
+    # 的分支。调用后恢复原函数。
     original = rules_stub.match_active_rules
 
     def boom(text, *, rule_kind):

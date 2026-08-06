@@ -143,6 +143,7 @@ def _convert_audio_for_gpt4o(part: dict) -> dict | None:
             if resp.status_code < 400:
                 audio_bytes = resp.content
                 # Try to infer format from URL extension
+                # 尝试从 URL 扩展名推断格式
                 path_part = url.split("?")[0]
                 ext = os.path.splitext(path_part)[1].lower().lstrip(".")
                 if ext in ("wav", "mp3", "opus", "flac", "aac", "pcm", "webm"):
@@ -215,6 +216,7 @@ def _convert_video_for_gpt4o(part: dict) -> list[dict]:
         return []
 
     # Download video to temp file
+    # 下载视频到临时文件
     video_path = resolve_part_to_path(part) or _download_to_temp(url)
     if video_path is None:
         return []
@@ -224,6 +226,7 @@ def _convert_video_for_gpt4o(part: dict) -> list[dict]:
         return [_frame_to_data_uri(f) for f in frames]
 
     # Fallback: try first frame only
+    # 回退：仅尝试第一帧
     first_frame = _extract_frames_ffmpeg(video_path, max_frames=1)
     if first_frame:
         return [_frame_to_data_uri(first_frame[0])]
@@ -280,6 +283,7 @@ def _extract_frames_ffmpeg(video_path: str, max_frames: int = 5) -> list[str]:
     tmp_dir = tempfile.mkdtemp(prefix="xijian_video_frames_")
 
     # Extract evenly-spaced frames
+    # 提取均匀间隔的帧
     try:
         result = subprocess.run(
             [
@@ -296,6 +300,7 @@ def _extract_frames_ffmpeg(video_path: str, max_frames: int = 5) -> list[str]:
 
     if duration <= 0:
         # Can't probe; extract first frame only
+        # 无法探测；仅提取第一帧
         out_path = os.path.join(tmp_dir, "frame_0001.jpg")
         try:
             subprocess.run(

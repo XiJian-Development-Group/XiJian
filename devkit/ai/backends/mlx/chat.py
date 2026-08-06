@@ -1,4 +1,4 @@
-"""MLX chat backend for DevKit — adapted from core/xijian_api/ai/backends/mlx/chat.py."""
+"""DevKit 的 MLX 聊天后端 —— 改编自 core/xijian_api/ai/backends/mlx/chat.py。"""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ from devkit.ai.types import (
 )
 
 
-# Token-budget default when ``params.max_tokens`` is ``None``.
+# 当 ``params.max_tokens`` 为 ``None`` 时的默认 token 预算。
 _DEFAULT_MAX_TOKENS = 1024
 
 
@@ -39,7 +39,7 @@ def _build_chunk(
     finish_reason: str | None = None,
     usage: ChatUsage | None = None,
 ) -> ChatChunk:
-    """Assemble a :class:`ChatChunk` from its OAI-style pieces."""
+    """根据 OAI 风格片段组装一个 :class:`ChatChunk`。"""
     choices = [
         ChatChoice(
             index=0,
@@ -58,7 +58,7 @@ def _build_chunk(
 
 
 def _resolve_max_tokens(params: GenerationParams) -> int:
-    """Return ``max_tokens`` honouring ``None`` as ``_DEFAULT_MAX_TOKENS``."""
+    """返回 ``max_tokens``，将 ``None`` 视为 ``_DEFAULT_MAX_TOKENS``。"""
     if params.max_tokens is None or params.max_tokens <= 0:
         return _DEFAULT_MAX_TOKENS
     return int(params.max_tokens)
@@ -69,7 +69,7 @@ def _build_kwargs(
     *,
     max_tokens: int,
 ) -> dict:
-    """Translate :class:`GenerationParams` into the kwargs ``mlx_lm`` accepts."""
+    """将 :class:`GenerationParams` 转换为 ``mlx_lm`` 接受的 kwargs。"""
     kwargs: dict = {
         "max_tokens": max_tokens,
         "verbose": False,
@@ -92,7 +92,7 @@ def _resolve_generate_kwargs(
     *,
     max_tokens: int,
 ) -> dict:
-    """Pick the parameter names accepted by the installed ``mlx_lm`` version."""
+    """选择已安装的 ``mlx_lm`` 版本所接受的参数名。"""
     import inspect
 
     sig = inspect.signature(mlx_generate)
@@ -100,12 +100,11 @@ def _resolve_generate_kwargs(
 
     base = _build_kwargs(params, max_tokens=max_tokens)
 
-    # Newer API: ``temperature``.  Older API: ``temp``.
+    # 新版本 API：``temperature``。旧版本 API：``temp``。
     if "temperature" in base and "temperature" not in accepts and "temp" in accepts:
         base["temp"] = base.pop("temperature")
 
-    # ``stop`` was a positional/keyword in older versions; keep it on
-    # only when present.
+    # ``stop`` 在旧版本中是位置/关键字参数；仅在存在时才保留。
     if "stop" in base and "stop" not in accepts:
         base.pop("stop")
 
@@ -113,7 +112,7 @@ def _resolve_generate_kwargs(
 
 
 def _extract_generation(response) -> str:
-    """Pull the cumulative text out of a ``mlx_lm`` generation response."""
+    """从 ``mlx_lm`` 生成响应中取出累积文本。"""
     if isinstance(response, str):
         return response
     text = getattr(response, "text", None)
@@ -126,7 +125,7 @@ def _extract_generation(response) -> str:
 
 
 def _extract_response_meta(response) -> dict:
-    """Pull optional prompt/completion token counts out of a ``mlx_lm`` response."""
+    """从 ``mlx_lm`` 响应中取出可选的 prompt/completion token 计数。"""
     meta: dict = {}
     for key in (
         "prompt_tokens",
@@ -143,7 +142,7 @@ def _extract_response_meta(response) -> dict:
 
 
 def _count_tokens(tokenizer, text: str) -> int:
-    """Best-effort token count via the tokenizer; 0 on failure."""
+    """通过分词器尽力统计 token 数；失败时返回 0。"""
     try:
         return len(tokenizer.encode(text))
     except Exception:
@@ -151,7 +150,7 @@ def _count_tokens(tokenizer, text: str) -> int:
 
 
 def _resolve_aborted(exc: BaseException) -> bool:
-    """Return ``True`` when ``exc`` is the abort signal raised internally."""
+    """当 ``exc`` 是内部抛出的中止信号时返回 ``True``。"""
     return isinstance(exc, GenerationAborted)
 
 
@@ -164,7 +163,7 @@ class MLXChatBackend:
         self._tokenizer = None
         self._model_path: Path | None = None
 
-    # -- introspection ------------------------------------------------------
+    # -- 自省 ----------------------------------------------------------
 
     def is_available(self) -> bool:
         try:
@@ -177,7 +176,7 @@ class MLXChatBackend:
     def is_loaded(self) -> bool:
         return self._model is not None and self._tokenizer is not None
 
-    # -- lifecycle ----------------------------------------------------------
+    # -- 生命周期 ----------------------------------------------------------
 
     def load(self, model_path, *, context_length: int = 0, **kwargs) -> None:
         try:
@@ -212,7 +211,7 @@ class MLXChatBackend:
         except Exception:
             pass
 
-    # -- generation ---------------------------------------------------------
+    # -- 生成 ---------------------------------------------------------
 
     def chat(
         self,
@@ -262,7 +261,7 @@ class MLXChatBackend:
             abort_signal=abort_signal,
         )
 
-    # -- internals ----------------------------------------------------------
+    # -- 内部实现 ----------------------------------------------------------
 
     def _blocking(
         self,
@@ -275,7 +274,7 @@ class MLXChatBackend:
         mlx_generate,
         abort_signal,
     ) -> Iterator[ChatChunk]:
-        """Generate one full response and yield a single :class:`ChatChunk`."""
+        """生成一个完整响应并产生单个 :class:`ChatChunk`。"""
         kwargs = _resolve_generate_kwargs(
             mlx_generate, params, max_tokens=max_tokens
         )
@@ -324,12 +323,12 @@ class MLXChatBackend:
         mlx_stream,
         abort_signal,
     ) -> Iterator[ChatChunk]:
-        """Yield incremental :class:`ChatChunk` instances as tokens arrive."""
+        """随着 token 到达逐个产生增量的 :class:`ChatChunk` 实例。"""
         kwargs = _resolve_generate_kwargs(
             mlx_stream, params, max_tokens=max_tokens
         )
 
-        # First chunk announces the role.
+        # 首个 chunk 宣告角色。
         yield _build_chunk(
             chunk_id=chunk_id,
             model=model_id,
@@ -367,7 +366,7 @@ class MLXChatBackend:
                 code="backend_error",
             ) from exc
 
-        # Final chunk carries finish_reason + usage.
+        # 最后一个 chunk 携带 finish_reason + usage。
         meta = _extract_response_meta(last_response) if last_response is not None else {}
         finish_reason = meta.get("finish_reason")
         if finish_reason not in {"stop", "length", "abort"}:

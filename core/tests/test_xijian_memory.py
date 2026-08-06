@@ -1,4 +1,4 @@
-"""Tests for ``/v1/xijian/memory/*``."""
+"""针对 ``/v1/xijian/memory/*`` 的测试。"""
 
 from __future__ import annotations
 

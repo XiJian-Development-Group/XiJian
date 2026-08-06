@@ -12,10 +12,10 @@ _DIALOG_SUBDIR = "dialogs"
 _MIN_DIALOG_COUNT = 8
 
 
-# C2.7: Dialog review status constants
+# C2.7：对话审核状态常量
 DIALOG_STATUS_DRAFT = "draft"
 DIALOG_STATUS_REVIEWED = "reviewed"
-DIALOG_STATUS_APPROVED = "approved"  # enabled for fine-tuning
+DIALOG_STATUS_APPROVED = "approved"  # 启用微调
 DIALOG_STATUS_REJECTED = "rejected"
 
 
@@ -90,7 +90,7 @@ def save_dialog(work_dir: str, character_id: str, data: dict[str, Any]) -> dict[
         "emotion": data.get("emotion", "neutral"),
         "notes": data.get("notes", ""),
         "source": data.get("source", "manual"),
-        "status": data.get("status", DIALOG_STATUS_DRAFT),  # C2.7: review status
+        "status": data.get("status", DIALOG_STATUS_DRAFT),  # C2.7：审核状态
         "created_at": data.get("created_at", now) if dialog_id else now,
         "updated_at": now,
     }
@@ -158,17 +158,17 @@ def export_dialogs_for_submit(work_dir: str, character_id: str) -> dict[str, Any
 
 
 # ---------------------------------------------------------------------------
-# C2.7: Dialog review status management + fine-tuning pipeline stub
+# C2.7：对话审核状态管理 + 微调管线占位实现
 # ---------------------------------------------------------------------------
 
 
 def set_dialog_status(
     work_dir: str, character_id: str, dialog_id: str, status: str
 ) -> dict[str, Any] | None:
-    """Set the review status of a dialog (C2.7 AC-2).
+    """设置对话的审核状态（C2.7 AC-2）。
 
-    Valid statuses: draft, reviewed, approved, rejected.
-    Only 'approved' dialogs are eligible for fine-tuning/distillation.
+    有效状态：draft、reviewed、approved、rejected。
+    只有 'approved' 状态的对话才有资格进入微调/蒸馏。
     """
     valid_statuses = {
         DIALOG_STATUS_DRAFT,
@@ -190,7 +190,7 @@ def set_dialog_status(
 
 
 def get_approved_dialogs(work_dir: str, character_id: str) -> list[dict[str, Any]]:
-    """Return only dialogs with 'approved' status for fine-tuning."""
+    """仅返回 'approved' 状态的对话，用于微调。"""
     dialogs = _load_dialogs(work_dir, character_id)
     return [d for d in dialogs if d.get("status") == DIALOG_STATUS_APPROVED]
 
@@ -198,17 +198,17 @@ def get_approved_dialogs(work_dir: str, character_id: str) -> list[dict[str, Any
 def export_approved_dialogs_for_training(
     work_dir: str, character_id: str, output_path: str | None = None
 ) -> dict[str, Any]:
-    """Export approved dialogs in a format suitable for fine-tuning (C2.7 AC-3).
+    """以适合微调的格式导出已审核通过的对话（C2.7 AC-3）。
 
-    This is a stub for the fine-tuning/distillation pipeline.
-    Actual implementation would convert to the target format (JSONL, etc.)
-    and invoke the training job.
+    这是微调/蒸馏管线的占位实现。
+    实际实现会将数据转换为目标格式（JSONL 等）
+    并调用训练任务。
     """
     approved = get_approved_dialogs(work_dir, character_id)
     if not approved:
         raise DevKitError(400, "没有已审核通过的对话样本", code="no_approved_dialogs")
 
-    # Format for training: each dialog becomes a training example
+    # 训练格式：每条对话成为一个训练样本
     training_examples = []
     for d in approved:
         example = {
@@ -249,7 +249,7 @@ def start_finetuning_job(
 
     该功能仍在制作中，暂不开放使用——直接以明确提示告知用户。
     """
-    # Verify we have approved dialogs
+    # 确认存在已审核通过的对话
     approved = get_approved_dialogs(work_dir, character_id)
     if not approved:
         raise DevKitError(400, "没有已审核通过的对话样本，无法开始微调", code="no_approved_dialogs")
@@ -262,8 +262,8 @@ def start_finetuning_job(
 
 
 def get_finetuning_job_status(work_dir: str, job_id: str) -> dict[str, Any] | None:
-    """Check status of a fine-tuning job (stub)."""
-    # In a real implementation, this would query the job queue
+    """检查微调任务的状态（占位实现）。"""
+    # 在实际实现中，这里会查询任务队列
     return {
         "job_id": job_id,
         "status": "completed",

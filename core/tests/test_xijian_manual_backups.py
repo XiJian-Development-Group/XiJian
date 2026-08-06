@@ -50,7 +50,7 @@ from xijian_api.stubs.manual_backups import (
 
 
 # ---------------------------------------------------------------------------
-# Protected modules
+# 受保护模块
 # ---------------------------------------------------------------------------
 
 
@@ -97,7 +97,7 @@ class TestCharacterProtection:
         modules = mb_stub.list_protected_modules(character_id="char_yuki")
         by_name = {m["module_name"]: m for m in modules}
         assert by_name["memory_entries"]["auto_backup"] == 0
-        # Other modules keep their default on-state.
+        # 其它模块保持默认开启状态。
         assert by_name["character_documents"]["auto_backup"] == 1
 
     def test_touch_backup_records_timestamp(self):
@@ -109,7 +109,7 @@ class TestCharacterProtection:
 
 
 # ---------------------------------------------------------------------------
-# Backup CRUD + naming + retention
+# 备份 CRUD + 命名 + 保留策略
 # ---------------------------------------------------------------------------
 
 
@@ -151,7 +151,7 @@ class TestCreateBackup:
             }
         )
         record = mb_stub.create_backup("char_yuki", scope=SCOPE_MEMORY_ONLY)
-        # The raw payload round-trips through zstd.
+        # 原始载荷经 zstd 往返无损。
         payload = mb_stub.get_backup_payload(record["id"])
         contents = [e["content"] for e in payload["memory_entries"]]
         assert "被备份的事实" in contents
@@ -163,7 +163,7 @@ class TestRetention:
             mb_stub.create_backup("char_yuki")
         backups = mb_stub.list_backups(character_id="char_yuki")
         assert len(backups) <= MAX_VERSIONS_PER_CHARACTER
-        # Newest versions survive.
+        # 最新版本被保留。
         versions = sorted(b["version"] for b in backups)
         assert versions == list(range(MAX_VERSIONS_PER_CHARACTER + 3 - MAX_VERSIONS_PER_CHARACTER + 1, MAX_VERSIONS_PER_CHARACTER + 4))
 
@@ -189,7 +189,7 @@ class TestListGetDelete:
 
 
 # ---------------------------------------------------------------------------
-# Restore (US-A1.1-03)
+# 恢复（US-A1.1-03）
 # ---------------------------------------------------------------------------
 
 
@@ -209,7 +209,7 @@ class TestRestore:
     def test_restore_memory_only_replaces_entries(self):
         self._seed_memory("备份前的记忆")
         backup = mb_stub.create_backup("char_yuki", scope=SCOPE_MEMORY_ONLY)
-        # Mutate memory after the backup.
+        # 在备份之后修改记忆。
         memory_stub.create(
             {
                 "character_id": "char_yuki",
@@ -261,7 +261,7 @@ class TestRestore:
 
 
 # ---------------------------------------------------------------------------
-# Auto-backup triggers
+# 自动备份触发条件
 # ---------------------------------------------------------------------------
 
 
@@ -271,7 +271,7 @@ class TestAutoBackupTriggers:
         record = mb_stub.notify_memory_modified("char_yuki", 1)
         assert record is not None
         assert record["created_by"] == "system"
-        # Counter resets — a second trigger needs 50 more edits.
+        # 计数器重置 —— 再次触发需要再累计 50 次编辑。
         assert mb_stub.notify_memory_modified("char_yuki", 1) is None
 
     def test_first_load_triggers_once(self):
@@ -281,7 +281,7 @@ class TestAutoBackupTriggers:
         assert mb_stub.notify_first_load("char_yuki") is None
 
     def test_safe_termination_backs_up_characters(self):
-        # Give the character an explicit auto_backup association.
+        # 为该角色显式设置 auto_backup 关联。
         mb_stub.set_auto_backup("char_yuki", "memory_entries", True)
         result = mb_stub.notify_safe_termination()
         assert result["count"] >= 1
@@ -292,7 +292,7 @@ class TestAutoBackupTriggers:
             (2026, 8, 1, mb_stub.DAILY_BACKUP_HOUR + 1, 0, 0, 5, 213, 0)
         ))
         assert mb_stub._is_daily_backup_due() is True
-        # Same day → not due again.
+        # 同一天 → 不再到期。
         assert mb_stub._is_daily_backup_due() is False
 
     def test_run_daily_backups_creates_system_backups(self):
@@ -305,7 +305,7 @@ class TestAutoBackupTriggers:
 
 
 # ---------------------------------------------------------------------------
-# Routes
+# 路由
 # ---------------------------------------------------------------------------
 
 

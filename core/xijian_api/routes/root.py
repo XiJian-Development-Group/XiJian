@@ -1,11 +1,10 @@
-"""Root routes — ``GET /`` and ``GET /v1``.
+"""根路由 — ``GET /`` 与 ``GET /v1``。
 
-Both endpoints return a small JSON envelope describing the server
-identity, API version and capabilities list (DESIGN §12).
+两个端点都返回一个小的 JSON 信封，描述服务器身份、
+API 版本和能力列表（DESIGN §12）。
 
-The capabilities list is intentionally minimal in this foundation
-deliverable; other tasks (``oai-routes``, ``xijian-routes``,
-``websocket``) extend it.
+在此基础交付件中，能力列表刻意保持最小；
+其他任务（``oai-routes``、``xijian-routes``、``websocket``）会扩展它。
 """
 
 from __future__ import annotations
@@ -23,7 +22,7 @@ SERVER_VERSION = CORE_VERSION_NORMALIZED
 
 
 def _capabilities() -> list[str]:
-    """Return the static capabilities list advertised by ``/v1``."""
+    """返回 ``/v1`` 通告的静态能力列表。"""
     return [
         "chat.completions",
         "chat.streaming",
@@ -55,13 +54,13 @@ def _capabilities() -> list[str]:
     ]
 
 
-# Single blueprint keeps ``register_routes`` simple.
+# 单一蓝图使 ``register_routes`` 保持简单。
 root_bp = Blueprint("root", __name__)
 
 
 @root_bp.get("/")
 def root_index():
-    """Return basic server identity."""
+    """返回基本服务器身份信息。"""
     return jsonify(
         {
             "name": "xijian-api",
@@ -74,7 +73,7 @@ def root_index():
 
 @root_bp.get("/v1")
 def v1_index():
-    """Return API version and capabilities (DESIGN §12)."""
+    """返回 API 版本和能力列表（DESIGN §12）。"""
     return jsonify(
         {
             "api_version": API_VERSION,

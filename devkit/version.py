@@ -1,19 +1,19 @@
-"""DevKit version + update-source resolution.
+"""DevKit 版本 + 更新源解析。
 
-The DevKit ships as a standalone PyInstaller binary, but it still needs
-to know **its own version** (to compare against the latest GitHub
-Release) and **where to look for updates** (the GitHub owner/repo).
+DevKit 以独立的 PyInstaller 二进制包发布，但仍需要知道**自身版本**
+（用于与最新的 GitHub Release 比较）以及**去哪里寻找更新**
+（GitHub owner/repo）。
 
-Both live in the project's ``Config/Config.json`` — a single source of
-truth the human maintainer edits.  We read it at runtime:
+两者都位于项目的 ``Config/Config.json`` —— 由人工维护者编辑的
+单一事实来源。我们在运行时读取它：
 
-* **Source runs** — ``Config/Config.json`` sits at the repo root, one
-  level above the ``devkit`` package.
-* **Frozen runs** — PyInstaller extracts the bundled ``Config`` folder
-  to ``sys._MEIPASS/Config`` (see the ``datas`` entry in
-  ``devkit/xijian-devkit.spec``).
+* **源码运行** —— ``Config/Config.json`` 位于仓库根目录，
+  在 ``devkit`` 包上一级。
+* **冻结运行** —— PyInstaller 将捆绑的 ``Config`` 文件夹解压到
+  ``sys._MEIPASS/Config``（参见 ``devkit/xijian-devkit.spec`` 中的
+  ``datas`` 条目）。
 
-Everything here is read-only and offline; no network is touched.
+这里的所有操作都是只读且离线的；不涉及任何网络。
 """
 
 from __future__ import annotations
@@ -24,25 +24,25 @@ import pathlib
 import sys
 from typing import Any
 
-#: Fallback used only if ``Config/Config.json`` cannot be read.  Kept in
-#: sync with ``Version.DevKit`` in that file and the ``.app`` bundle's
-#: ``CFBundleShortVersionString``.
+#: 仅在无法读取 ``Config/Config.json`` 时使用的回退版本。与
+#: 该文件中的 ``Version.DevKit`` 以及 ``.app`` 应用包的
+#: ``CFBundleShortVersionString`` 保持同步。
 FALLBACK_VERSION = "v1.6.2"
 
 
 def config_json_path() -> pathlib.Path:
-    """Return the path to the project's ``Config/Config.json``.
+    """返回项目 ``Config/Config.json`` 的路径。
 
-    Resolves for both source and PyInstaller-frozen layouts.
+    同时兼容源码布局和 PyInstaller 冻结布局。
     """
     if getattr(sys, "frozen", False):
         return pathlib.Path(sys._MEIPASS) / "Config" / "Config.json"
-    # devkit/version.py -> devkit/ -> <repo>/ -> <repo>/Config/Config.json
+    # 路径链：devkit/version.py -> devkit/ -> <仓库根>/ -> <仓库根>/Config/Config.json
     return pathlib.Path(__file__).resolve().parent.parent / "Config" / "Config.json"
 
 
 def read_project_config() -> dict[str, Any]:
-    """Load and return the parsed ``Config/Config.json`` (or ``{}``)."""
+    """加载并返回解析后的 ``Config/Config.json``（或 ``{}``）。"""
     path = config_json_path()
     try:
         with open(path, encoding="utf-8") as f:
@@ -52,7 +52,7 @@ def read_project_config() -> dict[str, Any]:
 
 
 def get_app_version() -> str:
-    """Return the DevKit's own version string (e.g. ``v1.4.3``)."""
+    """返回 DevKit 自身的版本字符串（例如 ``v1.4.3``）。"""
     cfg = read_project_config()
     version = cfg.get("Version", {}).get("DevKit")
     if isinstance(version, str) and version.strip():
@@ -61,11 +61,11 @@ def get_app_version() -> str:
 
 
 def get_update_source() -> dict[str, str]:
-    """Return the GitHub update source configuration.
+    """返回 GitHub 更新源配置。
 
-    Keys: ``owner``, ``repo``, ``tag_prefix`` (e.g. ``DevKit@``),
-    ``api_url`` (fully resolved list-releases URL, or '' when owner/repo
-    are not yet configured).
+    键：``owner``、``repo``、``tag_prefix``（例如 ``DevKit@``）、
+    ``api_url``（完全解析后的 list-releases URL，owner/repo
+    尚未配置时为空字符串）。
     """
     cfg = read_project_config()
     uc = cfg.get("UpdateConfig", {}) or {}
@@ -90,7 +90,7 @@ def get_update_source() -> dict[str, str]:
 
 
 def get_asset_patterns() -> dict[str, str]:
-    """Return the per-platform release-asset filename patterns."""
+    """返回各平台的发布资产文件名模式。"""
     cfg = read_project_config()
     uc = cfg.get("UpdateConfig", {}) or {}
     patterns = uc.get("AssetPatterns", {}) or {}

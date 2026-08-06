@@ -1,45 +1,45 @@
-"""``/v1/xijian/voice-calls/*`` routes — A6 realtime calls.
+"""``/v1/xijian/voice-calls/*`` 路由 — A6 实时通话。
 
-Call sessions
+通话会话
 =============
 
-* ``GET    /v1/xijian/voice-calls``                        — list
+* ``GET    /v1/xijian/voice-calls``                        — 列表
                                                              (?character_id,
                                                               ?status,
                                                               ?direction)
-* ``POST   /v1/xijian/voice-calls``                        — create
-* ``GET    /v1/xijian/voice-calls/<call_id>``              — get
-* ``POST   /v1/xijian/voice-calls/<call_id>/ring``         — offer the call
+* ``POST   /v1/xijian/voice-calls``                        — 创建
+* ``GET    /v1/xijian/voice-calls/<call_id>``              — 获取
+* ``POST   /v1/xijian/voice-calls/<call_id>/ring``         — 拨打
                                                              (idle → ringing)
-* ``POST   /v1/xijian/voice-calls/<call_id>/accept``       — accept (→ active)
-* ``POST   /v1/xijian/voice-calls/<call_id>/reject``       — reject (→ ended)
-* ``POST   /v1/xijian/voice-calls/<call_id>/end``          — end (→ ended)
+* ``POST   /v1/xijian/voice-calls/<call_id>/accept``       — 接听 (→ active)
+* ``POST   /v1/xijian/voice-calls/<call_id>/reject``       — 拒绝 (→ ended)
+* ``POST   /v1/xijian/voice-calls/<call_id>/end``          — 结束 (→ ended)
 
-Call events & the full-duplex loop
+通话事件与全双工循环
 ==================================
 
-* ``GET    /v1/xijian/voice-calls/<call_id>/events``       — event stream
+* ``GET    /v1/xijian/voice-calls/<call_id>/events``       — 事件流
                                                              (?kind, ?limit)
-* ``POST   /v1/xijian/voice-calls/<call_id>/speech``       — feed user audio
+* ``POST   /v1/xijian/voice-calls/<call_id>/speech``       — 送入用户音频
                                                              (STT → AI → TTS)
                                                              body: {audio_base64}
-                                                             or {text}
-* ``POST   /v1/xijian/voice-calls/<call_id>/barge-in``     — set/clear the
-                                                             AC-3 interrupt
-                                                             flag {active: bool}
+                                                             或 {text}
+* ``POST   /v1/xijian/voice-calls/<call_id>/barge-in``     — 设置/清除
+                                                             AC-3 打断
+                                                             标志 {active: bool}
 * ``POST   /v1/xijian/voice-calls/<call_id>/song``         — DiffSinger
-                                                             singing stub
+                                                             演唱存根
                                                              {lyrics,
                                                               voice_part}
 
-WS push
+WS 推送
 =======
 
-* ``call.state_changed`` — on every lifecycle transition
-* ``call.event``         — on every appended call event
+* ``call.state_changed`` — 每次生命周期转换时
+* ``call.event``         — 每次追加通话事件时
 
-The state machine (idle → ringing → active → ended), barge-in semantics
-and the DiffSinger stub all live in :mod:`xijian_api.stubs.voice_calls`.
+状态机（idle → ringing → active → ended）、barge-in 语义和
+DiffSinger 存根都在 :mod:`xijian_api.stubs.voice_calls` 中。
 """
 
 from __future__ import annotations
@@ -60,12 +60,12 @@ _LOGGER = logging.getLogger("xijian_api.routes.xijian_voice_calls")
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# 辅助函数
 # ---------------------------------------------------------------------------
 
 
 def _require_json() -> dict:
-    """Return the parsed JSON body or raise a 400."""
+    """返回解析后的 JSON body，否则抛出 400。"""
     body = request.get_json(silent=True)
     if not isinstance(body, dict):
         raise ApiError(
@@ -78,7 +78,7 @@ def _require_json() -> dict:
 
 
 def _error(exc: Exception) -> ApiError:
-    """Map a stub VoiceCallError to an ApiError."""
+    """将存根 VoiceCallError 映射为 ApiError。"""
     return ApiError(
         400, str(exc), "invalid_request_error", code="voice_call_error"
     )
@@ -136,7 +136,7 @@ def get_voice_call(call_id: str):
 
 
 # ---------------------------------------------------------------------------
-# Lifecycle
+# 生命周期
 # ---------------------------------------------------------------------------
 
 
@@ -177,7 +177,7 @@ def end_voice_call(call_id: str):
 
 
 # ---------------------------------------------------------------------------
-# Events & the call loop
+# 事件与通话循环
 # ---------------------------------------------------------------------------
 
 

@@ -29,16 +29,16 @@ from xijian_api.stubs import state as stubs_state
 from xijian_api.stubs.mcp_rules import KIND_SHELL
 
 
-#: Name of the probe tool registered for the gate tests.  Sorts first
-#: so the mock backend picks it as the single available tool.
+#: 为闸门测试注册的探针工具名称。排序在前，
+#: 以便 mock 后端将其作为唯一可用工具选中。
 PROBE_TOOL = "aaa_gate_probe"
-#: The chat model id registered in ``config.toml`` (mock backend).
+#: 在 ``config.toml`` 中注册的聊天模型 id（mock 后端）。
 CHAT_MODEL = "qwen2.5-7b-mlx-4bit"
 
 
 def _probe_handler(args: dict, ctx: dict) -> dict:
-    """Fixed tool handler — returns a distinguishable result so tests
-    can assert the tool actually executed in the ``allowed`` branch."""
+    """固定工具处理器 —— 返回可区分的结果，以便测试
+    能在 ``allowed`` 分支中断言工具确实执行了。"""
     return {
         "content": [{"type": "text", "text": "probe-ok"}],
         "isError": False,
@@ -47,7 +47,7 @@ def _probe_handler(args: dict, ctx: dict) -> dict:
 
 @pytest.fixture()
 def gate_probe():
-    """Register the gate probe tool for the duration of one test."""
+    """在单个测试期间注册闸门探针工具。"""
     register_tool(
         PROBE_TOOL,
         description="gate test probe",
@@ -62,8 +62,8 @@ def gate_probe():
 
 
 def _post_chat(client, auth_headers, *, xijian=None):
-    """POST a chat completion that forces the MCP tools pipeline to
-    emit exactly one tool call (the probe tool)."""
+    """POST 一次聊天补全请求，强制 MCP 工具管道
+    恰好发出一次工具调用（探针工具）。"""
     return client.post(
         "/v1/chat/completions",
         headers=auth_headers,
@@ -86,7 +86,7 @@ def _post_chat(client, auth_headers, *, xijian=None):
 
 
 def _first_tool_call(body: dict) -> dict:
-    """Return the first logged tool call from the response body."""
+    """从响应体中返回第一条被记录的工具调用。"""
     tools_block = body["xijian"]["tools"]
     assert tools_block["enabled"] is True
     assert len(tools_block["tool_calls"]) >= 1
@@ -94,10 +94,10 @@ def _first_tool_call(body: dict) -> dict:
 
 
 class TestChatMCPGateAllowed:
-    """Verdict ``allowed`` → the tool executes normally."""
+    """判定 ``allowed`` → 工具正常执行。"""
 
     def test_allowed_executes_tool(self, client, auth_headers, gate_probe):
-        # World default=allow → no-match is allowed (no rules seeded).
+        # 世界默认 allow → 无匹配规则时放行（未播种任何规则）。
         mcp_stub.set_world_policy("w_gate", default="allow")
         resp = _post_chat(client, auth_headers, xijian={"world_id": "w_gate"})
         assert resp.status_code == 200
@@ -116,10 +116,10 @@ class TestChatMCPGateAllowed:
 
 
 class TestChatMCPGateDenied:
-    """Verdict ``denied`` (default=deny, no match) → refused + audited."""
+    """判定 ``denied``（default=deny，无匹配）→ 拒绝并审计。"""
 
     def test_denied_refuses_execution(self, client, auth_headers, gate_probe):
-        # Fresh world with default=deny and no rules → denied.
+        # 全新世界，默认 deny 且无规则 → 拒绝。
         resp = _post_chat(client, auth_headers, xijian={"world_id": "w_deny"})
         assert resp.status_code == 200
         tc = _first_tool_call(resp.get_json())
@@ -129,7 +129,7 @@ class TestChatMCPGateDenied:
         assert mcp_stub.count_audit(verdict="denied", world_id="w_deny") >= 1
 
     def test_denied_without_world(self, client, auth_headers, gate_probe):
-        # No world → default policy (default=deny) applies.
+        # 无世界 → 应用默认策略（default=deny）。
         resp = _post_chat(client, auth_headers, xijian={})
         assert resp.status_code == 200
         tc = _first_tool_call(resp.get_json())
@@ -140,10 +140,10 @@ class TestChatMCPGateDenied:
 
 
 class TestChatMCPGateFrozen:
-    """Verdict ``denied_frozen`` — pending safety-stop freeze."""
+    """判定 ``denied_frozen`` — 待处理的安全停机冻结。"""
 
     def test_frozen_refuses_execution(self, client, auth_headers, gate_probe):
-        # A pending safety-stop on the world short-circuits check().
+        # 世界存在待处理的安全停机 → 使 check() 短路。
         freeze = mcp_stub.safety_stop(world_id="w_frozen", reason="test")
         assert freeze["status"] == "frozen"
         resp = _post_chat(client, auth_headers, xijian={"world_id": "w_frozen"})
@@ -155,7 +155,7 @@ class TestChatMCPGateFrozen:
 
 
 class TestChatMCPGateLockout:
-    """Verdict ``denied_lockout`` — world in lockout."""
+    """判定 ``denied_lockout`` — 世界处于锁定状态。"""
 
     def test_lockout_refuses_execution(self, client, auth_headers, gate_probe):
         from xijian_api.utils.time import now_ts
@@ -172,7 +172,7 @@ class TestChatMCPGateLockout:
 
 
 class TestChatMCPGateCrash:
-    """Verdict ``denied_crashed`` — rulebook matcher blows up."""
+    """判定 ``denied_crashed`` — 规则簿匹配器崩溃。"""
 
     def test_crash_refuses_execution(self, client, auth_headers, gate_probe, monkeypatch):
         def _boom(*args, **kwargs):

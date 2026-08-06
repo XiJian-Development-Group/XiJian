@@ -32,7 +32,7 @@ def _post_chat(client, auth_headers, *, messages, xijian=None):
 
 
 def test_recall_pipeline_auto_executes_tool_and_returns_citations(client, auth_headers):
-    # Seed an entry so the recall search has something to find.
+    # 播种一条记忆条目，让召回搜索有内容可查。
     state.memory.clear()
     memory_stub.seed_default(character_id="char_yuki")
 
@@ -55,11 +55,11 @@ def test_recall_pipeline_auto_executes_tool_and_returns_citations(client, auth_h
     assert len(recall["tool_calls"]) == 1
     tc = recall["tool_calls"][0]
     assert tc["name"] == "recall_memory"
-    # The mock fires the recall with query="memory", but the seed
-    # entry matches nothing for "memory"; instead the mock emits the
-    # final-turn text which references entry_ids from the tool result.
-    # In the no-hits case citations are empty but the tool was still
-    # executed — that's the contract under test.
+    # Mock 以 query="memory" 触发召回，但种子
+    # 条目对 "memory" 并无匹配；相反 mock 发出
+    # 引用工具结果中 entry_ids 的最后一轮文本。
+    # 在无命中情况下引用为空，但工具仍然
+    # 执行了 —— 这正是被测的契约。
 
     audit_block = body["xijian"]["audit"]
     assert audit_block is not None
@@ -70,12 +70,12 @@ def test_recall_pipeline_returns_real_citations_when_query_hits(client, auth_hea
     state.memory.clear()
     memory_stub.seed_default(character_id="char_yuki")
 
-    # Use the mock model but with a customisation that lets the test
-    # pick the recall query.  We do this by routing through the
-    # standard mock path and asserting that the seed entries are
-    # cited when the recall search matches them.  The mock backend
-    # hard-codes query="memory" for the tool call, so we put a seed
-    # entry whose content matches that substring.
+    # 使用 mock 模型，但通过定制方式让测试
+    # 决定召回查询。做法是走标准的
+    # mock 路径，并断言当召回搜索匹配到种子条目时
+    # 它们会被引用。mock 后端将工具调用
+    # 硬编码为 query="memory"，因此我们放入一条
+    # 内容包含该子串的种子条目。
     memory_stub.create(
         {
             "character_id": "char_yuki",
@@ -100,8 +100,8 @@ def test_recall_pipeline_returns_real_citations_when_query_hits(client, auth_hea
     citations = body["xijian"]["recall"]["citations"]
     assert citations, "recall should have produced at least one citation"
 
-    # The final-turn text echoes the entry ids, so the audit should
-    # see at least one audited entry.
+    # 最后一轮文本回显了条目 id，因此审计应
+    # 至少看到一条被审计的条目。
     audit_block = body["xijian"]["audit"]
     assert len(audit_block["audited_entry_ids"]) >= 1
     assert audit_block["missing_entry_ids"] == []
@@ -113,11 +113,11 @@ def test_recall_pipeline_does_not_run_without_character_id(client, auth_headers)
         client,
         auth_headers,
         messages=[{"role": "user", "content": "hi"}],
-        xijian={"recall": {"enabled": True}},  # missing character_id
+        xijian={"recall": {"enabled": True}},  # 缺少 character_id
     )
     assert response.status_code == 200
     body = response.get_json()
-    # No recall block when pipeline is disabled.
+    # 管道被禁用时不返回 recall 块。
     assert "recall" not in body["xijian"]
 
 
@@ -144,20 +144,19 @@ def test_regular_chat_path_unchanged_when_no_xijian(client, auth_headers):
     )
     assert response.status_code == 200
     body = response.get_json()
-    # ``xijian.backend`` is set; ``xijian.recall`` is not.
+    # ``xijian.backend`` 已设置；``xijian.recall`` 未设置。
     assert body["xijian"].get("backend") == "mock"
     assert "recall" not in body["xijian"]
     assert "audit" not in body["xijian"]
 
 
 def test_recall_pipeline_appends_system_instruction(client, auth_headers):
-    """The injected system message contains the recall prompt.
+    """注入的系统消息包含召回提示词。
 
-    We can't observe the messages sent to the backend directly from the
-    route, but we can verify the mock backend received them by
-    exercising a follow-up chat that reads the latest system message.
-    For now we just confirm the response is well-formed — the detailed
-    injection behaviour is covered in the chat stub unit tests below.
+    我们无法直接从路由观察发送给后端的消息，但可以通过
+    发起一次读取最新系统消息的后续聊天来验证 mock 后端
+    确实收到了它们。目前我们只确认响应格式良好 —— 详细的
+    注入行为由下面聊天 stub 的单元测试覆盖。
     """
     state.memory.clear()
     memory_stub.seed_default(character_id="char_yuki")

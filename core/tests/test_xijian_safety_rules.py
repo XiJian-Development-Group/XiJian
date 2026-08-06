@@ -35,7 +35,7 @@ from xijian_api.stubs.safety_rules import (
 
 
 # ---------------------------------------------------------------------------
-# Pure helpers
+# 纯辅助函数
 # ---------------------------------------------------------------------------
 
 
@@ -267,7 +267,7 @@ class TestUpdate:
 
 
 # ---------------------------------------------------------------------------
-# Hot path
+# 热路径
 # ---------------------------------------------------------------------------
 
 
@@ -328,7 +328,7 @@ class TestMatchActiveRules:
         rules_stub.create(
             rule_kind=KIND_OOC_PATTERN, pattern=r"[invalid("
         )
-        # No crash, just empty hits.
+        # 不崩溃，仅返回空命中。
         assert rules_stub.match_active_rules(
             "hello", rule_kind=KIND_OOC_PATTERN
         ) == []
@@ -344,7 +344,7 @@ class TestMatchActiveRules:
 
 
 # ---------------------------------------------------------------------------
-# HTTP routes
+# HTTP 路由
 # ---------------------------------------------------------------------------
 
 

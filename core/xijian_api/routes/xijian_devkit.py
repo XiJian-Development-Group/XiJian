@@ -1,12 +1,10 @@
-"""``/v1/xijian/devkit/*`` routes — DevKit preview/test environment.
+"""``/v1/xijian/devkit/*`` 路由 — DevKit 预览/测试环境。
 
-Provides endpoints for the main program to discover, preview, and load
-creations from the standalone DevKit process.  Implements the "本地预览
-与测试 → 通过? → 回炉修改" loop (C0) by bridging the DevKit's save
-directory into the core runtime.
+为主程序提供端点，用于发现、预览和加载独立 DevKit 进程中的创作。
+通过将 DevKit 的保存目录桥接到核心运行时，实现
+“本地预览与测试 → 通过? → 回炉修改”循环 (C0)。
 
-All endpoints are read-heavy (listing / previewing) with only three
-mutating verbs — load, unload, and rescan.
+所有端点都以读为主（列表 / 预览），仅有三个变更动词 — 加载、卸载和重新扫描。
 """
 
 from __future__ import annotations
@@ -21,15 +19,15 @@ bp = Blueprint("xijian_devkit", __name__)
 
 
 # ---------------------------------------------------------------------------
-# Status
+# 状态
 # ---------------------------------------------------------------------------
 
 
 @bp.get("/v1/xijian/devkit/status")
 def devkit_status():
-    """Check DevKit directory availability and return a brief summary.
+    """检查 DevKit 目录可用性并返回简要摘要。
 
-    Response::
+    响应示例::
 
         {
             "available": true,
@@ -67,18 +65,17 @@ def devkit_status():
 
 
 # ---------------------------------------------------------------------------
-# Character list, preview, load, unload
+# 角色列表、预览、加载、卸载
 # ---------------------------------------------------------------------------
 
 
 @bp.get("/v1/xijian/devkit/characters")
 def devkit_characters():
-    """List all characters saved in the DevKit directory.
+    """列出 DevKit 目录中保存的所有角色。
 
-    Query params
+    查询参数
     ------------
-    ``loaded_only`` — if ``"true"``, only return characters that are
-    currently loaded into the core runtime.
+    ``loaded_only`` — 为 ``"true"`` 时，仅返回当前已加载到核心运行时的角色。
     """
     chars = devkit_stub.scan_characters()
 
@@ -90,7 +87,7 @@ def devkit_characters():
         }
         chars = [c for c in chars if c.get("id") in loaded_ids]
 
-    # Enrich each entry with preview metadata.
+    # 为每个条目补充预览元数据。
     for c in chars:
         preview = devkit_stub.get_character_preview(c.get("id", ""))
         if preview:
@@ -103,7 +100,7 @@ def devkit_characters():
 
 @bp.get("/v1/xijian/devkit/characters/<id>")
 def devkit_character_detail(id: str):
-    """Return full preview data for a single DevKit character."""
+    """返回单个 DevKit 角色的完整预览数据。"""
     preview = devkit_stub.get_character_preview(id)
     if preview is None:
         raise ApiError(404, f"DevKit character {id} not found",
@@ -113,9 +110,9 @@ def devkit_character_detail(id: str):
 
 @bp.post("/v1/xijian/devkit/characters/<id>/load")
 def devkit_character_load(id: str):
-    """Load a DevKit character into the core runtime.
+    """将 DevKit 角色加载到核心运行时。
 
-    If the character was previously loaded, the old record is replaced.
+    若该角色此前已加载，旧记录会被替换。
     """
     record = devkit_stub.load_character(id)
     if record is None:
@@ -127,10 +124,10 @@ def devkit_character_load(id: str):
 @bp.delete("/v1/xijian/devkit/characters/<id>")
 @bp.post("/v1/xijian/devkit/characters/<id>/unload")
 def devkit_character_unload(id: str):
-    """Unload a DevKit character from the core runtime.
+    """从核心运行时卸载 DevKit 角色。
 
-    Accepts both ``DELETE`` and ``POST /unload`` (some clients prefer
-    ``POST`` for mutating endpoints behind restrictive proxies).
+    同时接受 ``DELETE`` 和 ``POST /unload``（某些客户端在限制性代理
+    后面偏好对变更端点使用 ``POST``）。
     """
     ok = devkit_stub.unload("character", id)
     if not ok:
@@ -140,13 +137,13 @@ def devkit_character_unload(id: str):
 
 
 # ---------------------------------------------------------------------------
-# World list, preview, load, unload
+# 世界列表、预览、加载、卸载
 # ---------------------------------------------------------------------------
 
 
 @bp.get("/v1/xijian/devkit/worlds")
 def devkit_worlds():
-    """List all worlds saved in the DevKit directory."""
+    """列出 DevKit 目录中保存的所有世界。"""
     worlds = devkit_stub.scan_worlds()
     for w in worlds:
         preview = devkit_stub.get_world_preview(w.get("id", ""))
@@ -159,7 +156,7 @@ def devkit_worlds():
 
 @bp.get("/v1/xijian/devkit/worlds/<id>")
 def devkit_world_detail(id: str):
-    """Return full preview data for a single DevKit world."""
+    """返回单个 DevKit 世界的完整预览数据。"""
     preview = devkit_stub.get_world_preview(id)
     if preview is None:
         raise ApiError(404, f"DevKit world {id} not found",
@@ -169,7 +166,7 @@ def devkit_world_detail(id: str):
 
 @bp.post("/v1/xijian/devkit/worlds/<id>/load")
 def devkit_world_load(id: str):
-    """Load a DevKit world into the core runtime."""
+    """将 DevKit 世界加载到核心运行时。"""
     record = devkit_stub.load_world(id)
     if record is None:
         raise ApiError(404, f"DevKit world {id} not found or unreadable",
@@ -180,7 +177,7 @@ def devkit_world_load(id: str):
 @bp.delete("/v1/xijian/devkit/worlds/<id>")
 @bp.post("/v1/xijian/devkit/worlds/<id>/unload")
 def devkit_world_unload(id: str):
-    """Unload a DevKit world from the core runtime."""
+    """从核心运行时卸载 DevKit 世界。"""
     ok = devkit_stub.unload("world", id)
     if not ok:
         raise ApiError(404, f"No devkit-loaded world {id} found",
@@ -189,29 +186,28 @@ def devkit_world_unload(id: str):
 
 
 # ---------------------------------------------------------------------------
-# Loaded items & reload
+# 已加载条目与重新加载
 # ---------------------------------------------------------------------------
 
 
 @bp.get("/v1/xijian/devkit/loaded")
 def devkit_loaded():
-    """Return all currently-loaded DevKit items, grouped by kind."""
+    """返回所有当前已加载的 DevKit 条目，按类型分组。"""
     loaded = devkit_stub.list_loaded()
     return jsonify(loaded)
 
 
 @bp.post("/v1/xijian/devkit/reload")
 def devkit_reload():
-    """Rescan the DevKit directory and reload everything.
+    """重新扫描 DevKit 目录并重新加载所有内容。
 
-    This is the "重新加载" button endpoint — after editing a character
-    or world in the DevKit, call this to refresh the core runtime without
-    restarting the API server.
+    这是“重新加载”按钮端点 — 在 DevKit 中编辑角色或世界后调用它，
+    无需重启 API 服务器即可刷新核心运行时。
 
-    Query params
+    查询参数
     ------------
-    ``kind`` — optional filter (``"character"`` or ``"world"``).
-    If omitted, both kinds are reloaded.
+    ``kind`` — 可选过滤（``"character"`` 或 ``"world"``）。
+    省略时重新加载两种类型。
     """
     kind = request.args.get("kind", "").strip().lower()
 
@@ -231,13 +227,13 @@ def devkit_reload():
 
 
 # ---------------------------------------------------------------------------
-# Generic kind-based endpoints (alternative access)
+# 通用 kind 端点（替代访问方式）
 # ---------------------------------------------------------------------------
 
 
 @bp.get("/v1/xijian/devkit/<kind>")
 def devkit_list(kind: str):
-    """Generic list — dispatches to characters or worlds based on ``kind``."""
+    """通用列表 — 根据 ``kind`` 分发到角色或世界。"""
     if kind == "characters":
         return devkit_characters()
     elif kind == "worlds":
@@ -248,7 +244,7 @@ def devkit_list(kind: str):
 
 @bp.get("/v1/xijian/devkit/<kind>/<id>")
 def devkit_detail(kind: str, id: str):
-    """Generic detail — dispatches to character or world preview."""
+    """通用详情 — 分发到角色或世界的预览。"""
     if kind == "characters":
         return devkit_character_detail(id)
     elif kind == "worlds":

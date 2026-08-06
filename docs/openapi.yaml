@@ -3,16 +3,16 @@ info:
   title: 隙间（XiJian）本地 API 协议规范
   version: 1.0.0
   description: |
-    「隙间」跨平台本地 API 的完整 OpenAPI 3.0 规范。
+    「隙间」Core API 的 OpenAPI 3.0 规范。
 
     ## 架构总览
-    隙间本地 API 是 **「OAI 兼容 + 隙间扩展」** 的双协议栈：
+    隙间本地 API 是「OAI 兼容 + 隙间扩展」的双协议栈：
 
-    - **OAI 兼容层** (`/v1/*`)：完整实现 OpenAI 官方 API 表面（chat / embeddings / audio / images / video / models / files / fine-tuning 等），第三方客户端（openai-python、langchain、llama-index）可零修改接入。
-    - **隙间扩展层** (`/v1/xijian/*`)：以命名空间承载项目特有能力（角色、互动、世界、记忆、保护模块等）。
+    - **OAI 兼容层** (`/v1/*`)：完整实现 OpenAI 官方 API 表面（chat / embeddings / audio / images / video / models / files / fine-tuning 等），第三方客户端（openai-python、langchain、llama-index）可快速接入测试/使用。
+    - **隙间核心层** (`/v1/xijian/*`)：以命名空间承载项目特有能力（角色、互动、世界、记忆、保护模块等）。
 
     ## 传输
-    - HTTP + SSE + WebSocket 三栈并行。请求-响应 → HTTP；流式生成 → SSE 或 NDJSON；双向推送（角色主动消息、AI 控制信号）→ WebSocket (`ws://127.0.0.1:{port}/v1/ws`)。
+    - HTTP + SSE + WebSocket 三栈并行。请求-响应 使用 HTTP；流式生成 使用 SSE 或 NDJSON；双向推送（角色主动消息、AI 控制信号）则使用 WebSocket (`ws://127.0.0.1:{port}/v1/ws`)。
     - 流式协议 SSE 与 NDJSON 同时支持，由客户端通过 `Accept` 头协商。
 
     ## 鉴权
@@ -25,11 +25,11 @@ info:
     - 详细协议见 `docs/api.md`
     - 功能清单见 `docs/Dev. Function List功能清单v2.md`
   license:
-    name: 完全开源、无付费、无广告
+    name: 使用MIT协议开源
     identifier: MIT
 servers:
 - url: http://127.0.0.1:{port}/v1
-  description: 本地环回地址（仅监听 127.0.0.1，绝不暴露 0.0.0.0）
+  description: 本地环回（外部不可访问，若需要外部访问，请修改到0.0.0.0）
   variables:
     port:
       default: '8000'
@@ -64,57 +64,57 @@ tags:
 - name: abort
   description: 请求取消与中断
 - name: xijian.character
-  description: 隙间扩展 - 角色系统
+  description: 隙间核心 - 角色系统
 - name: xijian.interaction
-  description: 隙间扩展 - 互动系统
+  description: 隙间核心 - 互动系统
 - name: xijian.world
-  description: 隙间扩展 - 模拟世界系统
+  description: 隙间核心 - 模拟世界系统
 - name: xijian.memory
-  description: 隙间扩展 - 记忆系统
+  description: 隙间核心 - 记忆系统
 - name: xijian.session
-  description: 隙间扩展 - 会话与上下文
+  description: 隙间核心 - 会话与上下文
 - name: xijian.settings
-  description: 隙间扩展 - 设置与偏好
+  description: 隙间核心 - 设置与偏好
 - name: xijian.resource
-  description: 隙间扩展 - 资源与导入
+  description: 隙间核心 - 资源与导入
 - name: xijian.backup
-  description: 隙间扩展 - 备份与快照
+  description: 隙间核心 - 备份与快照
 - name: xijian.mcp
-  description: 隙间扩展 - MCP 桥接（规划中）
+  description: 隙间核心 - MCP 桥接（规划中）
 - name: mcp
   description: mcp
 - name: xijian.economy
-  description: xijian.economy
+  description: 隙间核心 - 经济
 - name: xijian.event
-  description: xijian.event
+  description: 隙间核心 - 事件
 - name: xijian.generation
-  description: xijian.generation
+  description: 隙间核心 - 生成
 - name: xijian.npc
-  description: xijian.npc
+  description: 隙间核心 - NPC
 - name: xijian.overload
-  description: xijian.overload
+  description: 隙间核心 - 过载
 - name: xijian.safety
-  description: xijian.safety
+  description: 隙间核心 - 安全
 - name: xijian.scene
-  description: xijian.scene
+  description: 隙间核心 - 场景
 - name: websocket
   description: websocket
 - name: multimodal
   description: multimodal
 - name: xijian_devkit
-  description: xijian_devkit
+  description: 隙间核心开发者工具
 - name: xijian_desktop
   description: xijian_desktop
 - name: xijian_initiated
   description: xijian_initiated
 - name: xijian_manual_backups
-  description: xijian_manual_backups
+  description: 隙间核心 - 手动备份
 - name: xijian_migration
   description: xijian_migration
 - name: xijian_packs
   description: xijian_packs
 - name: xijian_plot
-  description: xijian_plot
+  description: 隙间核心 - 剧情
 - name: xijian_voice_calls
   description: xijian_voice_calls
 paths:

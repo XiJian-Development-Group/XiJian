@@ -1,46 +1,44 @@
-"""Pywebview entry point for the Developer Kit.
+"""开发者工具的 Pywebview 入口点。
 
-Run with::
+运行方式::
 
-    python -m devkit                                  # open the window
-    xijian-devkit                                     # same, via console_scripts
+    python -m devkit                                  # 打开窗口
+    xijian-devkit                                     # 同上，通过 console_scripts
 
-CLI flags::
+CLI 标志::
 
-    --smtp-host HOST     override XIJIAN_DEV_SMTP_HOST
-    --smtp-port PORT     override XIJIAN_DEV_SMTP_PORT (int)
-    --no-smtp-tls        disable STARTTLS
-    --smtp-user USER     override SMTP auth user
-    --recipient ADDR     override recipient address
-    --width N            window width (default 1280)
-    --height N           window height (default 820)
-    --headless           skip start(); just print the resolved config and exit
+    --smtp-host HOST     覆盖 XIJIAN_DEV_SMTP_HOST
+    --smtp-port PORT     覆盖 XIJIAN_DEV_SMTP_PORT（整数）
+    --no-smtp-tls        禁用 STARTTLS
+    --smtp-user USER     覆盖 SMTP 认证用户
+    --recipient ADDR     覆盖收件人地址
+    --width N            窗口宽度（默认 1280）
+    --height N           窗口高度（默认 820）
+    --headless           跳过 start()；仅打印解析后的配置并退出
 
-The DevKit is intentionally *standalone* — it is its own top-level
-``devkit`` package, does not import ``xijian_api`` at all, never opens
-a Flask server, and never reads the main ``Config`` object.  The window
-you get here is the only thing that runs, which is what lets it ship as
-a self-contained PyInstaller binary (function list v2.3, C5).
+DevKit **刻意保持独立** —— 它是自己的顶层 ``devkit`` 包，完全不导入
+``xijian_api``，从不开启 Flask 服务器，也从不读取主 ``Config`` 对象。
+这里得到的窗口是唯一运行的东西，这正是它能作为自包含 PyInstaller
+二进制包发布的原因（功能清单 v2.3，C5）。
 
-Why pywebview + local HTTP server rather than a Flask blueprint
+为什么用 pywebview + 本地 HTTP 服务器而不是 Flask 蓝图
 ---------------------------------------------------------------
 
-* 0 http surface for the *application* logic (function list v2.2 requirement).
-* Cross-platform: pywebview picks the native webview on macOS
-  (``WKWebView``), Windows (``WebView2``) and Linux (``webkitgtk``).
-* Direct ``window.pywebview.api.<method>()`` calls from JS — no
-  JSON envelopes, no CORS, no auth header.
-* Local HTTP server only serves static UI assets (HTML/JS/CSS/vendor),
-  avoiding WKWebView's strict ``file://`` CORS restrictions.
+* *应用*逻辑的 HTTP 暴露面为 0（功能清单 v2.2 要求）。
+* 跨平台：pywebview 在 macOS 上选择原生 webview
+  （``WKWebView``），Windows 上为 ``WebView2``，Linux 上为 ``webkitgtk``。
+* 从 JS 直接调用 ``window.pywebview.api.<method>()`` —— 没有
+  JSON 信封、没有 CORS、没有认证头。
+* 本地 HTTP 服务器只提供静态 UI 资源（HTML/JS/CSS/vendor），
+  避免 WKWebView 严格的 ``file://`` CORS 限制。
 
-Failure modes
+失败模式
 -------------
 
-* If ``pywebview`` is not installed, :func:`run` raises a clear
-  ``RuntimeError`` pointing the user at ``pip install pywebview``.
-* If the GUI toolkit can't open (e.g. headless CI), ``pywebview``
-  itself raises — we let it bubble so the operator sees the real
-  error.
+* 如果未安装 ``pywebview``，:func:`run` 会抛出清晰的
+  ``RuntimeError``，引导用户执行 ``pip install pywebview``。
+* 如果 GUI 工具包无法打开（例如无头 CI），``pywebview``
+  自身会抛出异常——我们让它向上冒泡，以便操作者看到真实错误。
 """
 
 from __future__ import annotations
@@ -67,27 +65,27 @@ from devkit import (
 _LOGGER = logging.getLogger("devkit.main")
 
 
-#: Default window geometry.  Picked to fit a 13" laptop screen with
-#: a small margin; user-resizable at runtime.
+#: 默认窗口几何尺寸。选取为适合 13 英寸笔记本屏幕并留少量边距；
+#: 运行时用户可调整大小。
 DEFAULT_WIDTH = 1280
 DEFAULT_HEIGHT = 820
 
 
 class _UIHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
-    """Serve the DevKit UI directory with no caching (dev-friendly)."""
+    """提供 DevKit UI 目录，不缓存（对开发友好）。"""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=str(ui_dir()), **kwargs)
 
     def end_headers(self):
-        # Disable caching so devs see JS/CSS changes immediately on reload.
+        # 禁用缓存，让开发者刷新后立即可见 JS/CSS 更改。
         self.send_header("Cache-Control", "no-store, must-revalidate")
         self.send_header("Pragma", "no-cache")
         self.send_header("Expires", "0")
         super().end_headers()
 
     def log_message(self, format: str, *args) -> None:  # noqa: A002
-        # Quiet the default "GET / HTTP/1.1" logs; use our logger instead.
+        # 静默默认的 "GET / HTTP/1.1" 日志；改用我们自己的日志器。
         _LOGGER.debug("%s - %s", self.address_string(), format % args)
 
 
@@ -98,7 +96,7 @@ def _pick_free_port() -> int:
 
 
 class _UIServer:
-    """Background HTTP server for the DevKit UI assets."""
+    """DevKit UI 资源的后台 HTTP 服务器。"""
 
     def __init__(self, port: int):
         self._port = port
@@ -120,23 +118,23 @@ class _UIServer:
 
 
 # ---------------------------------------------------------------------------
-# Public entry point
+# 公共入口点
 # ---------------------------------------------------------------------------
 
 
 def run(argv: Sequence[str] | None = None) -> int:
-    """Start the DevKit window and block until the user closes it.
+    """启动 DevKit 窗口并阻塞直到用户关闭它。
 
-    Parameters
+    参数
     ----------
     argv:
-        CLI arguments (``--smtp-host foo --no-smtp-tls ...``).
-        When ``None`` falls back to ``sys.argv[1:]``.
+        CLI 参数（``--smtp-host foo --no-smtp-tls ...``）。
+        为 ``None`` 时回退到 ``sys.argv[1:]``。
     """
     args = _parse_args(argv)
 
-    # Apply CLI overrides onto the module-level constants BEFORE the
-    # UI is constructed, so :func:`DevKitApi.whoami` returns them.
+    # 在构造 UI **之前**将 CLI 覆盖应用到模块级常量上，
+    # 以便 :func:`DevKitApi.whoami` 能返回它们。
     if args.smtp_host:
         os.environ["XIJIAN_DEV_SMTP_HOST"] = args.smtp_host
         import devkit as _devkit_mod
@@ -158,8 +156,8 @@ def run(argv: Sequence[str] | None = None) -> int:
 
         _devkit_mod.DEV_SUBMIT_SMTP_USER = args.smtp_user
     if args.recipient:
-        # The submission recipient is hard-coded in code and cannot be
-        # overridden (config file or CLI).  Ignore this flag silently.
+        # 提交收件人在代码中硬编码，无法被覆盖（配置文件或 CLI 都不行）。
+        # 静默忽略此标志。
         import sys as _sys
 
         print(
@@ -182,9 +180,9 @@ def run(argv: Sequence[str] | None = None) -> int:
 
     from devkit import state as _dk_state
 
-    # Load persisted state (submissions, cooldowns, last session) BEFORE
-    # constructing the API so the window restores the previous login and
-    # the per-developer submit cooldown survives a restart.
+    # 在构造 API 之前加载持久化状态（提交、冷却、上次会话），
+    # 以便窗口恢复之前的登录状态，且每个开发者的提交冷却
+    # 在重启后仍然有效。
     work_dir = DevKitApi()._work_dir()
     _dk_state.load(work_dir)
     api = DevKitApi()
@@ -192,7 +190,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         _LOGGER.info("restored DevKit session for developer %s", api._active_developer)
     _LOGGER.info("starting DevKit window (%sx%s)", args.width, args.height)
 
-    # Start local HTTP server for UI assets (avoids file:// CORS issues on WKWebView)
+    # 为 UI 资源启动本地 HTTP 服务器（避免 WKWebView 上的 file:// CORS 问题）
     port = _pick_free_port()
     ui_server = _UIServer(port)
     ui_server.start()
@@ -208,14 +206,14 @@ def run(argv: Sequence[str] | None = None) -> int:
             confirm_close=True,
             text_select=True,
         )
-        webview.start(debug=False) # Use "debug=True" while debugging
+        webview.start(debug=False) # 调试时使用 "debug=True"
     finally:
         ui_server.stop()
     return 0
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    """CLI entry point; sets up logging then calls :func:`run`."""
+    """CLI 入口点；设置日志后调用 :func:`run`。"""
     logging.basicConfig(
         level=os.environ.get("XIJIAN_LOG_LEVEL", "INFO"),
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -224,29 +222,29 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# 辅助函数
 # ---------------------------------------------------------------------------
 
 
 def _ui_url() -> str:
-    """Return the URL the window should load.
+    """返回窗口应加载的 URL。
 
-    pywebview's ``create_window`` accepts either a URL or a local
-    path; we hand it a ``file://`` URL pointing at ``ui/index.html``
-    inside the package so the DevKit ships as a single wheel.
+    pywebview 的 ``create_window`` 接受 URL 或本地路径；我们传入
+    指向包内 ``ui/index.html`` 的 ``file://`` URL，使 DevKit
+    以单个 wheel 形式发布。
 
-    When the package is frozen by PyInstaller, :func:`ui_dir` resolves
-    to ``sys._MEIPASS`` automatically — no special-casing here.
+    当包被 PyInstaller 冻结时，:func:`ui_dir` 会自动解析到
+    ``sys._MEIPASS`` —— 这里无需特殊处理。
     """
     here = ui_dir() / "index.html"
     if not here.is_file():  # pragma: no cover — packaging sanity
         raise RuntimeError(f"DevKit ui/index.html not found at {here!s}")
-    # pywebview's load_url wants a file:// URL it can read.
+    # pywebview 的 load_url 需要一个它可读取的 file:// URL。
     return here.as_uri()
 
 
 def _print_config() -> None:
-    """Dump the resolved DevKit config to stdout (for `xijian-devkit --headless`)."""
+    """将解析后的 DevKit 配置输出到 stdout（供 `xijian-devkit --headless` 使用）。"""
     cfg: dict[str, Any] = {
         "smtp_host": DEV_SUBMIT_SMTP_HOST,
         "smtp_port": int(DEV_SUBMIT_SMTP_PORT),
@@ -264,7 +262,7 @@ def _print_config() -> None:
 
 
 def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
-    """Parse the CLI; isolated so tests can exercise it without pywebview."""
+    """解析 CLI；隔离出来以便测试无需 pywebview 即可运行。"""
     parser = argparse.ArgumentParser(
         prog="xijian-devkit",
         description="Launch the 隙间 Developer Kit (Pywebview window).",

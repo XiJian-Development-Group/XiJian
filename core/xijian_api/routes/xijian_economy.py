@@ -1,49 +1,49 @@
-"""``/v1/xijian/economy/*`` routes — A4.4.
+"""``/v1/xijian/economy/*`` 路由 — A4.4。
 
-Currencies
+货币
 ==========
 
-* ``GET    /v1/xijian/currencies``                       — list (optional ?world_id)
-* ``POST   /v1/xijian/currencies``                       — create
-* ``GET    /v1/xijian/currencies/<wid>/<code>``          — get
-* ``PATCH  /v1/xijian/currencies/<wid>/<code>``          — patch
-* ``DELETE /v1/xijian/currencies/<wid>/<code>``          — delete (?cascade=true)
+* ``GET    /v1/xijian/currencies``                       — 列表 (可选 ?world_id)
+* ``POST   /v1/xijian/currencies``                       — 创建
+* ``GET    /v1/xijian/currencies/<wid>/<code>``          — 获取
+* ``PATCH  /v1/xijian/currencies/<wid>/<code>``          — 修改
+* ``DELETE /v1/xijian/currencies/<wid>/<code>``          — 删除 (?cascade=true)
 
-Wallets
+钱包
 =======
 
-* ``GET    /v1/xijian/wallets``                          — list (?world_id, ?owner_kind, ?owner_id)
-* ``POST   /v1/xijian/wallets/ensure``                   — idempotent ensure
-* ``GET    /v1/xijian/wallets/<kind>/<id>``              — list-for-owner
-* ``GET    /v1/xijian/wallets/<kind>/<id>/<wid>/<code>`` — get
-* ``DELETE /v1/xijian/wallets/<kind>/<id>/<wid>/<code>`` — delete
-* ``POST   /v1/xijian/wallets/<kind>/<id>/<wid>/<code>/deposit``  — deposit
-* ``POST   /v1/xijian/wallets/<kind>/<id>/<wid>/<code>/withdraw`` — withdraw
+* ``GET    /v1/xijian/wallets``                          — 列表 (?world_id, ?owner_kind, ?owner_id)
+* ``POST   /v1/xijian/wallets/ensure``                   — 幂等确保
+* ``GET    /v1/xijian/wallets/<kind>/<id>``              — 按所有者列出
+* ``GET    /v1/xijian/wallets/<kind>/<id>/<wid>/<code>`` — 获取
+* ``DELETE /v1/xijian/wallets/<kind>/<id>/<wid>/<code>`` — 删除
+* ``POST   /v1/xijian/wallets/<kind>/<id>/<wid>/<code>/deposit``  — 存入
+* ``POST   /v1/xijian/wallets/<kind>/<id>/<wid>/<code>/withdraw`` — 取出
 
-Transactions
+交易
 ============
 
-* ``GET    /v1/xijian/economy/transactions``             — list (?world_id, ?kind, ?owner)
-* ``GET    /v1/xijian/economy/transactions/<txn_id>``    — get
-* ``GET    /v1/xijian/economy/transactions/summary``     — aggregate (?world_id)
+* ``GET    /v1/xijian/economy/transactions``             — 列表 (?world_id, ?kind, ?owner)
+* ``GET    /v1/xijian/economy/transactions/<txn_id>``    — 获取
+* ``GET    /v1/xijian/economy/transactions/summary``     — 汇总 (?world_id)
 
-Economy state
+经济状态
 =============
 
-* ``GET    /v1/xijian/economy/state/<wid>``              — get
-* ``PATCH  /v1/xijian/economy/state/<wid>``              — patch
-* ``POST   /v1/xijian/economy/state/<wid>/tick``         — dev-only (XIJIAN_DEV=1)
-* ``GET    /v1/xijian/economy/state/<wid>/summary``      — per-world overview
+* ``GET    /v1/xijian/economy/state/<wid>``              — 获取
+* ``PATCH  /v1/xijian/economy/state/<wid>``              — 修改
+* ``POST   /v1/xijian/economy/state/<wid>/tick``         — 仅限开发 (XIJIAN_DEV=1)
+* ``GET    /v1/xijian/economy/state/<wid>/summary``      — 按世界概览
 
-Trade + crime
+交易 + 犯罪
 =============
 
-* ``POST   /v1/xijian/economy/purchase``                 — user buys from NPC
-* ``POST   /v1/xijian/economy/sale``                     — user sells to NPC
-* ``POST   /v1/xijian/economy/reward``                   — system grant
-* ``POST   /v1/xijian/economy/transfer``                 — user-to-user
-* ``POST   /v1/xijian/economy/crime/theft``              — NPC attempts theft
-* ``POST   /v1/xijian/economy/crime/scam``               — NPC attempts scam
+* ``POST   /v1/xijian/economy/purchase``                 — 用户向 NPC 购买
+* ``POST   /v1/xijian/economy/sale``                     — 用户向 NPC 出售
+* ``POST   /v1/xijian/economy/reward``                   — 系统发放
+* ``POST   /v1/xijian/economy/transfer``                 — 用户间转账
+* ``POST   /v1/xijian/economy/crime/theft``              — NPC 尝试偷窃
+* ``POST   /v1/xijian/economy/crime/scam``               — NPC 尝试诈骗
 """
 
 from __future__ import annotations
@@ -70,7 +70,7 @@ _LOGGER = logging.getLogger("xijian_api.routes.xijian_economy")
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# 辅助函数
 # ---------------------------------------------------------------------------
 
 
@@ -113,7 +113,7 @@ def _parse_positive_number(value: Any, name: str) -> float:
 
 
 # ---------------------------------------------------------------------------
-# Currencies
+# 货币
 # ---------------------------------------------------------------------------
 
 
@@ -217,7 +217,7 @@ def delete_currency(world_id: str, code: str):
 
 
 # ---------------------------------------------------------------------------
-# Wallets — list / ensure / get
+# 钱包 — 列表 / 确保 / 获取
 # ---------------------------------------------------------------------------
 
 
@@ -338,7 +338,7 @@ def withdraw_wallet(owner_kind: str, owner_id: str, world_id: str, currency_code
 
 
 # ---------------------------------------------------------------------------
-# Transactions
+# 交易
 # ---------------------------------------------------------------------------
 
 
@@ -387,7 +387,7 @@ def get_transaction(txn_id: str):
 
 
 # ---------------------------------------------------------------------------
-# Economy state
+# 经济状态
 # ---------------------------------------------------------------------------
 
 
@@ -443,7 +443,7 @@ def economy_state_summary(world_id: str):
 
 
 # ---------------------------------------------------------------------------
-# Trade + crime orchestrator
+# 交易 + 犯罪编排器
 # ---------------------------------------------------------------------------
 
 

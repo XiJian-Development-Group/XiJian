@@ -1,4 +1,4 @@
-"""Image routes — generations / edits / variations."""
+"""图像路由 — 生成 / 编辑 / 变体。"""
 
 from __future__ import annotations
 

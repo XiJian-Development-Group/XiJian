@@ -1,34 +1,29 @@
-"""Model management routes — ``/v1/models`` family.
+"""模型管理路由 — ``/v1/models`` 系列。
 
-Implements the OAI-compatible model endpoints plus a XiJian ``load``
-progress URL.
+实现 OAI 兼容的模型端点，外加隙间的 ``load`` 进度 URL。
 
-Model population
-----------------
+模型填充
+--------
 
-At start-up :func:`init_app` is called by the route registrar and
-seeds :data:`xijian_api.stubs.state.models` from
-``app.config["XIJIAN_CONFIG"].models`` (the ``[[models]]`` block in
-``config.toml``).  Nothing is hardcoded: if the config has no models
-the bucket starts empty and operators register them with
-``POST /v1/models/<id>/load`` once the checkpoint is on disk.
+启动时，路由注册器调用 :func:`init_app`，从
+``app.config["XIJIAN_CONFIG"].models``（``config.toml`` 中的 ``[[models]]`` 块）
+填充 :data:`xijian_api.stubs.state.models`。没有任何硬编码：
+若配置中没有模型，则桶保持为空，操作员可在检查点落盘后通过
+``POST /v1/models/<id>/load`` 注册模型。
 
-Load semantics
---------------
+加载语义
+--------
 
-``POST /v1/models/<id>/load`` returns immediately with ``202`` and a
-progress URL; the actual load runs in a background thread that calls
-:func:`xijian_api.ai.get_registry().load`.  The op transitions to
-``status="loaded"`` on success or ``status="failed"`` on error; in
-the failure case the ``error`` field is populated with the underlying
-``message`` and ``code`` from the AI layer's
-:class:`xijian_api.ai.base.BackendError` /
-:class:`xijian_api.ai.base.ModelNotFound`.
+``POST /v1/models/<id>/load`` 立即返回 ``202`` 和进度 URL；
+实际加载在后台线程中运行，调用 :func:`xijian_api.ai.get_registry().load`。
+成功后操作转为 ``status="loaded"``，出错时转为 ``status="failed"``；
+失败情况下 ``error`` 字段填充来自 AI 层
+:class:`xijian_api.ai.base.BackendError` / :class:`xijian_api.ai.base.ModelNotFound`
+的底层 ``message`` 和 ``code``。
 
-The ``seed_default_models`` helper remains a no-op when the bucket is
-already populated — tests that manually clear the bucket can call it
-to re-populate from the active Flask app's config without depending on
-the route module's import-time side effects.
+当桶已非空时，``seed_default_models`` 辅助函数保持空操作——
+测试中手动清空桶后，可调用它以从当前 Flask 应用的配置重新填充，
+而无需依赖路由模块导入时的副作用。
 """
 
 from __future__ import annotations
@@ -50,7 +45,7 @@ bp = Blueprint("models", __name__)
 
 
 def _entry_to_oai_record(entry: ModelEntry) -> dict:
-    """Render a :class:`ModelEntry` into the OAI-compatible record shape."""
+    """将 :class:`ModelEntry` 渲染为 OAI 兼容的记录结构。"""
     return {
         "id": entry.id,
         "object": "model",
@@ -61,12 +56,10 @@ def _entry_to_oai_record(entry: ModelEntry) -> dict:
 
 
 def _seed_models_from_config(config: Config) -> None:
-    """Populate :data:`state.models` from ``config.models``.
+    """从 ``config.models`` 填充 :data:`state.models`。
 
-    No-op when the bucket is already non-empty so manual registrations
-    (or models added at runtime) aren't overwritten.  When the config
-    has no ``[[models]]`` entries the bucket stays empty — no demo data
-    is added.
+    当桶已非空时为空操作，以免覆盖手动注册（或运行时添加）的模型。
+    当配置没有 ``[[models]]`` 条目时桶保持为空 — 不添加任何演示数据。
     """
     if state.models:
         return
@@ -75,16 +68,15 @@ def _seed_models_from_config(config: Config) -> None:
 
 
 def seed_default_models() -> None:
-    """Re-seed the models bucket from the active Flask app's config.
+    """从当前 Flask 应用的配置重新填充模型桶。
 
-    Public helper so the test reset path (which clears ``state.models``)
-    can re-populate it without depending on the route module's import
-    side effects.
+    公共辅助函数，使测试重置路径（会清空 ``state.models``）可以重新填充，
+    而无需依赖路由模块导入时的副作用。
     """
     try:
         config = current_app.config.get("XIJIAN_CONFIG")
     except RuntimeError:
-        # No application context (e.g. imported from a script).  Skip.
+        # 无应用上下文（例如从脚本导入）。跳过。
         return
     if config is None:
         return
@@ -92,7 +84,7 @@ def seed_default_models() -> None:
 
 
 def init_app(app) -> None:
-    """Populate the model bucket from the app's :class:`Config`."""
+    """从应用的 :class:`Config` 填充模型桶。"""
     config = app.config.get("XIJIAN_CONFIG")
     if config is not None:
         _seed_models_from_config(config)
@@ -100,7 +92,7 @@ def init_app(app) -> None:
 
 @bp.get("/v1/models")
 def list_models():
-    """List every known model."""
+    """列出所有已知模型。"""
     return jsonify(
         {
             "object": "list",
@@ -119,24 +111,21 @@ def get_model(model_id: str):
 
 @bp.post("/v1/models/<model_id>/load")
 def load_model(model_id: str):
-    """Kick off a background load for ``model_id`` and return 202 with a progress URL.
+    """为 ``model_id`` 启动后台加载，返回 202 与进度 URL。
 
-    The actual load runs in a daemon thread that delegates to
-    :func:`xijian_api.ai.get_registry`.  The op transitions to
-    ``status="loaded"`` on success or ``status="failed"`` on any
-    AI-layer error; the failure case populates ``error`` with
-    ``message`` and ``code`` so clients can surface a useful
-    diagnostic.  ``record["xijian"]["loaded"]`` tracks the registry's
-    state in the public OAI listing.
+    实际加载在守护线程中运行，委托给 :func:`xijian_api.ai.get_registry`。
+    成功时操作转为 ``status="loaded"``，任何 AI 层错误时转为
+    ``status="failed"``；失败情况会用 ``message`` 和 ``code`` 填充
+    ``error``，使客户端能展示有用的诊断信息。``record["xijian"]["loaded"]``
+    在公开 OAI 列表中跟踪注册表的状态。
     """
     record = state.models.get(model_id)
     if record is None:
         raise ApiError(404, f"model not found: {model_id}", "not_found_error", code="model_not_found")
     config: Config | None = current_app.config.get("XIJIAN_CONFIG")
     if config is None:
-        # ``XIJIAN_CONFIG`` is always set by the app factory; guard
-        # here so a future refactor that drops the config doesn't
-        # crash the load thread with an opaque traceback.
+        # ``XIJIAN_CONFIG`` 始终由应用工厂设置；此处加防护，
+        # 使未来去掉配置的重构不会让加载线程以不透明的回溯崩溃。
         raise ApiError(500, "server config not initialised", "server_error", code="config_missing")
     payload = request.get_json(silent=True) or {}
     op_id = gen_load_op_id()
@@ -152,11 +141,9 @@ def load_model(model_id: str):
     state.models[op_id] = op
 
     def _run() -> None:
-        # The registry is a process-wide singleton; calling ``load``
-        # here is safe even when many requests race for the same
-        # ``model_id`` — :meth:`ModelRegistry._lock_for` serialises
-        # the actual work and the second call returns the cached
-        # ``LoadedModel`` cheaply.
+        # 注册表是进程级单例；此处调用 ``load`` 即使多个请求
+        # 竞争同一 ``model_id`` 也是安全的 — :meth:`ModelRegistry._lock_for`
+        # 串行化实际工作，第二个调用会廉价地返回缓存的 ``LoadedModel``。
         registry = get_registry()
         try:
             registry.load(model_id, config=config, **payload)
@@ -189,10 +176,9 @@ def load_model(model_id: str):
         record["xijian"]["loaded"] = True
 
     threading.Thread(target=_run, daemon=True).start()
-    # Snapshot the op for the response so the background thread can't
-    # mutate it mid-serialise.  Mocks load in microseconds and were
-    # racing jsonify, flipping ``status`` from ``"loading"`` to
-    # ``"loaded"`` before the test could observe the queued state.
+    # 为响应快照操作，使后台线程无法在序列化中途修改它。
+    # 模拟模型微秒级加载，曾与 jsonify 竞争，在测试观察到排队状态前
+    # 就把 ``status`` 从 ``"loading"`` 翻转为 ``"loaded"``。
     snapshot = dict(op)
     response = jsonify(snapshot)
     response.status_code = 202

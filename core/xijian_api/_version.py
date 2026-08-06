@@ -15,9 +15,11 @@ PEP 440 form used in packaging metadata.
 from __future__ import annotations
 
 #: Raw display version from ``Config/Config.json`` → ``Version.CoreApi``.
+#: 原始展示版本，来自 ``Config/Config.json`` → ``Version.CoreApi``。
 CORE_VERSION = 'v1.2.0-Alpha'
 
 #: PEP 440 normalized form (used by pyproject / ``__version__``).
+#: PEP 440 规范化形式（供 pyproject / ``__version__`` 使用）。
 CORE_VERSION_NORMALIZED = '1.2.0a0'
 
 __all__ = ["CORE_VERSION", "CORE_VERSION_NORMALIZED"]

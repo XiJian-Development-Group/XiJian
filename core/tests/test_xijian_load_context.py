@@ -30,7 +30,7 @@ def _wipe() -> None:
 
 
 def _seed_long(char_id: str, content: str, importance: float) -> str:
-    """Insert one long-term entry directly and return its id."""
+    """直接插入一条长期条目并返回其 id。"""
     record = memory_stub.create(
         {
             "character_id": char_id,
@@ -40,9 +40,9 @@ def _seed_long(char_id: str, content: str, importance: float) -> str:
             "source": "manual",
         }
     )
-    # ``create`` uses ``now_ts`` as the timestamps; long entries don't
-    # decay so the timestamp is informational.  Pin ``created_at`` to
-    # a deterministic epoch so the test order is stable.
+    # ``create`` 使用 ``now_ts`` 作为时间戳；长期条目不会
+    # 衰减，因此时间戳仅供参考。将 ``created_at`` 固定到
+    # 一个确定的纪元值，保证测试顺序稳定。
     record["created_at"] = 1_700_000_000_000
     record["updated_at"] = 1_700_000_000_000
     record["last_access_at"] = 1_700_000_000_000
@@ -58,7 +58,7 @@ def _seed_short(
     age_hours: float = 0.0,
     created_at: int | None = None,
 ) -> str:
-    """Insert one short-term entry and optionally age it via created_at."""
+    """插入一条短期条目，并可通过 created_at 设置其年龄。"""
     record = memory_stub.create(
         {
             "character_id": char_id,
@@ -77,7 +77,7 @@ def _seed_short(
 
 
 # ---------------------------------------------------------------------------
-# Basic selection
+# 基础选择
 # ---------------------------------------------------------------------------
 
 
@@ -96,7 +96,7 @@ def test_load_context_returns_empty_when_no_entries_match():
     _wipe()
     envelope = memory_stub.load_context("ghost_character")
     assert envelope["empty"] is True
-    # budget still resolved from defaults (8000 - 2000 = 6000).
+    # 预算仍从默认值解析（8000 - 2000 = 6000）。
     assert envelope["budget_tokens"] == 6000
     assert envelope["estimated_tokens"] == 0
 
@@ -105,31 +105,31 @@ def test_load_context_picks_seeded_yuki_entries():
     _wipe()
     memory_stub.seed_default(character_id="char_yuki")
     envelope = memory_stub.load_context("char_yuki")
-    # Seed contains 1 long + 2 short entries (both above default thresholds).
+    # 种子包含 1 条长期 + 2 条短期条目（均高于默认阈值）。
     assert envelope["long_term_count"] == 1
     assert envelope["short_term_count"] == 2
     assert envelope["empty"] is False
-    # The rendered system message mentions both sections.
+    # 渲染出的系统消息同时提到两个部分。
     assert "## 长期记忆" in envelope["system_message"]
     assert "## 短期记忆" in envelope["system_message"]
-    # Short-term entries are sorted by decay × importance — the
-    # 0.7 × 0.95 = 0.665 entry ranks above the 0.4 × 0.6 = 0.24 entry.
+    # 短期条目按 衰减 × importance 排序 ——
+    # 0.7 × 0.95 = 0.665 的条目排在 0.4 × 0.6 = 0.24 的条目之前。
     short_ids = envelope["short_term_ids"]
     assert len(short_ids) == 2
-    # Both ids are recorded and stable across calls.
+    # 两个 id 均被记录且跨调用稳定。
     envelope2 = memory_stub.load_context("char_yuki")
     assert envelope2["short_term_ids"] == short_ids
 
 
 # ---------------------------------------------------------------------------
-# Importance filtering
+# Importance 过滤
 # ---------------------------------------------------------------------------
 
 
 def test_long_term_below_importance_min_is_excluded():
     _wipe()
     _seed_long("c1", "high-importance identity", 0.9)
-    _seed_long("c1", "borderline-low identity", 0.5)  # below default 0.6
+    _seed_long("c1", "borderline-low identity", 0.5)  # 低于默认值 0.6
     envelope = memory_stub.load_context("c1")
     assert envelope["long_term_count"] == 1
     contents = envelope["system_message"]
@@ -139,7 +139,7 @@ def test_long_term_below_importance_min_is_excluded():
 
 def test_short_term_below_decay_threshold_is_excluded():
     _wipe()
-    # Entry with low importance + aged → low live decay score.
+    # 低 importance + 时间久远的条目 → 实时衰减得分低。
     _seed_short("c1", "forgettable chatter", 0.2, decay_score=0.5, age_hours=24)
     _seed_short("c1", "remembered preference", 0.8, decay_score=0.95, age_hours=0)
     envelope = memory_stub.load_context("c1")
@@ -183,15 +183,15 @@ def test_per_character_filter_isolates_other_characters():
 
 
 # ---------------------------------------------------------------------------
-# Token budget + importance trim
+# Token 预算 + importance 裁剪
 # ---------------------------------------------------------------------------
 
 
 def test_token_budget_override_triggers_trim_when_oversized():
     _wipe()
-    # Three long entries all above the importance threshold; the top
-    # entry is intentionally long so even alpha + headers fill the
-    # budget — trim kicks in and lower-importance entries get dropped.
+    # 三条长期条目均高于 importance 阈值；最上面的
+    # 条目刻意很长，即使 alpha + 头部也会撑满
+    # 预算 —— 裁剪生效，低 importance 条目被丢弃。
     _seed_long(
         "c1",
         "alpha-alpha-alpha-alpha-alpha-alpha-alpha-alpha-alpha-alpha-alpha-alpha",
@@ -206,7 +206,7 @@ def test_token_budget_override_triggers_trim_when_oversized():
     assert envelope["long_term_count"] >= 1
     assert envelope["estimated_tokens"] <= envelope["budget_tokens"]
     assert "alpha" in envelope["system_message"]
-    # Lower-importance entries are dropped first.
+    # 低 importance 条目首先被丢弃。
     assert "beta-beta-beta-beta-beta-beta-beta-beta" not in envelope["system_message"]
     assert "gamma-gamma-gamma-gamma-gamma-gamma-gamma" not in envelope["system_message"]
 
@@ -222,23 +222,23 @@ def test_no_trim_when_assembly_fits_budget():
 
 def test_trim_prefers_long_when_importance_scores_tie():
     _wipe()
-    # Two long + one short, all with the same importance so the
-    # long-first tie-break (sort key includes kind rank) should keep
-    # the long entries over the short one when budget is tight.
+    # 两条长期 + 一条短期，importance 全部相同，因此
+    # 长期优先的平局规则（排序键含 kind 等级）应在预算紧张时
+    # 保留长期条目而非短期条目。
     _seed_long("c1", "long identity A", 0.7)
     _seed_long("c1", "long identity B", 0.7)
     _seed_short("c1", "short preference same importance", 0.7)
     envelope = memory_stub.load_context("c1", budget_tokens=80)
-    # All three should fit; what matters is the long entries
-    # are *present* and the short entry doesn't displace them.
+    # 三者都应放下；关键是长期条目
+    # *在场*，且短期条目不会挤掉它们。
     assert envelope["long_term_count"] == 2
     assert envelope["short_term_count"] == 1
 
 
 def test_trim_drops_low_importance_long_first():
     _wipe()
-    # Two long entries both above threshold; the higher-importance one
-    # wins the trim when the budget can't hold both.
+    # 两条长期条目均高于阈值；预算无法同时容纳时，
+    # importance 更高者胜出。
     _seed_long("c1", "very-important identity", 0.95)
     _seed_long("c1", "less-important identity is longer string", 0.7)
     envelope = memory_stub.load_context("c1", budget_tokens=25)
@@ -251,14 +251,14 @@ def test_zero_budget_returns_empty_after_trim():
     _wipe()
     _seed_long("c1", "any entry", 0.9)
     envelope = memory_stub.load_context("c1", budget_tokens=0)
-    # Header overhead alone exceeds the budget so nothing survives.
+    # 仅头部开销就超过预算，因此无任何条目幸存。
     assert envelope["trimmed"] is True
     assert envelope["long_term_count"] == 0
     assert envelope["empty"] is True
 
 
 # ---------------------------------------------------------------------------
-# Read-as-access bookkeeping
+# 读取即访问的记账
 # ---------------------------------------------------------------------------
 
 
@@ -282,7 +282,7 @@ def test_load_context_with_bump_access_false_does_not_mutate():
 
 
 # ---------------------------------------------------------------------------
-# Diagnostics block
+# 诊断块
 # ---------------------------------------------------------------------------
 
 

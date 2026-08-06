@@ -14,9 +14,9 @@ from xijian_api.stubs import state
 
 
 def _seed_now_offset(hours: float):
-    """Return a callable that produces a 'now' ``hours`` after the epoch
-    base used by the seeded entries (whose ``created_at`` is the value
-    of ``memory_stub.now_ts()`` at seed time)."""
+    """返回一个可调用对象，生成距纪元基准 ``hours`` 小时后的 'now'
+    时间；该基准是种子条目所用的时间（其 ``created_at`` 为
+    播种时 ``memory_stub.now_ts()`` 的值）。"""
     base = memory_stub.now_ts()
     return int(base + hours * 3600)
 
@@ -25,7 +25,7 @@ def test_decay_score_long_term_is_pinned_to_one():
     record = memory_stub.create(
         {"character_id": "char_decay", "type": "long", "importance": 0.9, "content": "x"}
     )
-    # 100 hours later, the long-term entry is still at 1.0.
+    # 100 小时后，长期条目的分值仍为 1.0。
     later = (record["created_at"] or 0) + 100 * 3600
     assert memory_stub.compute_decay_score(record, now=later) == 1.0
 
@@ -41,7 +41,7 @@ def test_decay_score_short_term_decays_exponentially():
         }
     )
     rate = memory_stub.DEFAULT_SHORT_TERM_DECAY_RATE
-    # After 1 hour: score == exp(-rate * 1).
+    # 1 小时后：score == exp(-rate * 1)。
     later_one = (record["created_at"] or 0) + 3600
     expected_one = math.exp(-rate * 1.0)
     assert math.isclose(
@@ -50,7 +50,7 @@ def test_decay_score_short_term_decays_exponentially():
         rel_tol=1e-9,
     )
 
-    # After 10 hours: score == exp(-rate * 10).
+    # 10 小时后：score == exp(-rate * 10)。
     later_ten = (record["created_at"] or 0) + 10 * 3600
     expected_ten = math.exp(-rate * 10.0)
     assert math.isclose(
@@ -65,8 +65,8 @@ def test_decay_score_uses_last_access_at_when_present():
         {"character_id": "char_decay", "type": "short", "decay_score": 1.0, "content": "x"}
     )
     created = record["created_at"] or 0
-    # Last access 2 hours after creation; querying 1 hour after that
-    # means Δh = 1, not 3.
+    # 创建后 2 小时最后一次访问；再往后 1 小时查询，
+    # 意味着 Δh = 1，而不是 3。
     record["last_access_at"] = created + 2 * 3600
     later = created + 3 * 3600
     score = memory_stub.compute_decay_score(record, now=later)
@@ -75,7 +75,7 @@ def test_decay_score_uses_last_access_at_when_present():
 
 
 def test_should_promote_to_long_respects_importance_and_access():
-    # Eligible: short, importance ≥ 0.5, decay below threshold, <2 accesses.
+    # 符合条件：短期、importance ≥ 0.5、衰减低于阈值、访问次数 < 2。
     eligible = memory_stub.create(
         {
             "character_id": "char_decay",
@@ -88,7 +88,7 @@ def test_should_promote_to_long_respects_importance_and_access():
     )
     assert memory_stub.should_promote_to_long(eligible) is True
 
-    # Ineligible: long already.
+    # 不符合条件：已是长期。
     long_rec = memory_stub.create(
         {
             "character_id": "char_decay",
@@ -100,7 +100,7 @@ def test_should_promote_to_long_respects_importance_and_access():
     )
     assert memory_stub.should_promote_to_long(long_rec) is False
 
-    # Ineligible: too many accesses (≥2).
+    # 不符合条件：访问次数过多（≥ 2）。
     too_popular = memory_stub.create(
         {
             "character_id": "char_decay",
@@ -113,7 +113,7 @@ def test_should_promote_to_long_respects_importance_and_access():
     )
     assert memory_stub.should_promote_to_long(too_popular) is False
 
-    # Ineligible: importance too low.
+    # 不符合条件：importance 过低。
     low_imp = memory_stub.create(
         {
             "character_id": "char_decay",
@@ -154,13 +154,13 @@ def test_decay_score_does_not_go_negative_for_far_future():
     )
     far_future = (record["created_at"] or 0) + 10_000 * 3600
     score = memory_stub.compute_decay_score(record, now=far_future)
-    # Decay is strictly positive (asymptotic to 0).
+    # 衰减严格为正（渐近趋近于 0）。
     assert 0.0 <= score < 1e-6
 
 
 def test_recall_search_ranks_importance_and_decay():
-    # Reset to a clean store so seed entries from other tests don't
-    # contaminate ranking.
+    # 重置为干净的存储，避免其它测试的种子条目
+    # 干扰排序。
     state.memory.clear()
     low = memory_stub.create(
         {
@@ -184,7 +184,7 @@ def test_recall_search_ranks_importance_and_decay():
         character_id="char_recall", query="冰淇淋", top_k=5
     )
     assert len(hits) == 2
-    # High importance / high decay must outrank low / low.
+    # importance 高 / 衰减高的条目必须排在低 / 低的条目之前。
     assert hits[0]["entry"]["id"] == high["id"]
     assert hits[1]["entry"]["id"] == low["id"]
 

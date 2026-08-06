@@ -39,7 +39,7 @@ def test_jsonrpc_accept_yields_jsonrpc_envelope(client, auth_headers):
     assert body["id"] is None
     assert "error" in body
     error = body["error"]
-    assert error["code"] == -32001  # not_found_error → -32001
+    assert error["code"] == -32001  # not_found_error 错误 → -32001
     assert "message" in error
     # The data block preserves the OAI-style fields.
     # (data 块保留 OAI 风格字段。)

@@ -1,26 +1,23 @@
-"""Auto-update engine for the DevKit (GitHub Releases based).
+"""DevKit 的自动更新引擎（基于 GitHub Releases）。
 
-Flow (function list C6, opt-in network use)
+流程（功能清单 C6，选择性联网）
 -------------------------------------------
-1. :func:`check_for_update` — hit the GitHub Releases API for the repo
-   configured in ``Config/Config.json`` and compare the latest tag
-   against the running app's version.
-2. :func:`download_update` — **only after explicit user consent** —
-   stream the platform's release asset into
-   ``~/Library/Application Support/XiJian/Updates/Downloads``.
-3. :func:`apply_update` — **only after a second user consent** —
-   install the downloaded asset and relaunch.
+1. :func:`check_for_update` —— 请求 ``Config/Config.json`` 中配置的
+   仓库的 GitHub Releases API，将最新 tag 与当前运行版本比较。
+2. :func:`download_update` —— **仅在用户明确同意之后** —— 将当前平台的
+   发行资产流式下载到 ``~/Library/Application Support/XiJian/Updates/Downloads``。
+3. :func:`apply_update` —— **仅在用户第二次同意之后** ——
+   安装下载的资产并重新启动。
 
-Network policy
+网络策略
 --------------
-This is the *second* (and only other) feature besides submission (C5)
-that is allowed to touch the network.  Every network call is gated
-behind an explicit user action or the user-controlled
-"check-on-launch" toggle, and every failure degrades silently /
-returns a structured error — the DevKit stays fully usable offline.
+这是除提交（C5）之外*第二个*（也是唯一另一个）允许联网的功能。
+每次网络调用都受显式用户操作或用户控制的“启动时检查”开关门控，
+任何失败都会静默降级 / 返回结构化错误——DevKit 在离线状态下
+完全可用。
 
-Only the Python stdlib is used (``urllib``) so the frozen binary gains
-no new third-party dependency.
+仅使用 Python 标准库（``urllib``），因此冻结后的二进制包
+不会新增任何第三方依赖。
 """
 
 from __future__ import annotations
@@ -41,60 +38,58 @@ from typing import Any, Callable
 
 from devkit import version as _version
 
-#: GitHub requires a User-Agent on all API requests.
+#: GitHub 要求所有 API 请求携带 User-Agent。
 _USER_AGENT = "XiJian-DevKit-Updater"
 
-#: Network timeout (seconds) for update checks / downloads.
+#: 更新检查 / 下载的网络超时（秒）。
 _TIMEOUT = 20
 
-#: Mainland-China users almost always reach GitHub through an accelerator
-#: / proxy whose TLS interception breaks certificate verification
-#: (``CERTIFICATE_VERIFY_FAILED``).  Since the update payload's integrity
-#: is what matters (and we could add checksum verification later), we
-#: intentionally skip TLS cert verification so update checks/downloads
-#: work behind those proxies.
+#: 中国大陆用户几乎总是通过加速器 / 代理访问 GitHub，其 TLS 拦截
+#: 会破坏证书验证（``CERTIFICATE_VERIFY_FAILED``）。由于更新负载的
+#: 完整性才是关键（我们以后可以增加校验和验证），我们刻意跳过 TLS
+#: 证书验证，使更新检查 / 下载能通过这些代理正常工作。
 _SSL_CONTEXT = ssl.create_default_context()
 _SSL_CONTEXT.check_hostname = False
 _SSL_CONTEXT.verify_mode = ssl.CERT_NONE
 
 
 def _urlopen(req: "urllib.request.Request"):
-    """Open a URL with TLS verification disabled (proxy-friendly)."""
+    """以禁用 TLS 验证的方式打开 URL（对代理友好）。"""
     return urllib.request.urlopen(req, timeout=_TIMEOUT, context=_SSL_CONTEXT)
 
 
 # ---------------------------------------------------------------------------
-# Version parsing / comparison
+# 版本解析 / 比较
 # ---------------------------------------------------------------------------
 
-#: Ordering rank for common pre-release labels (lower = earlier).
+#: 常见预发布标签的排序等级（越小越早）。
 _PRERELEASE_RANK = {
     "alpha": 0,
     "a": 0,
     "beta": 1,
     "b": 1,
     "rc": 2,
-    "": 3,  # a final release outranks any pre-release of the same number
+    "": 3,  # 正式版比同号的任何预发布版都新
 }
 
 
 def parse_version(v: str) -> tuple[tuple[int, ...], int, str]:
-    """Parse ``v1.2.3-Beta`` into a comparable ``(nums, rank, label)``.
+    """将 ``v1.2.3-Beta`` 解析为可比较的 ``(nums, rank, label)``。
 
-    * ``nums``  — numeric components as an int tuple (``(1, 2, 3)``).
-    * ``rank``  — pre-release rank (final > rc > beta > alpha).
-    * ``label`` — the lowercased pre-release label for tie-breaking.
+    * ``nums``  —— 数值部分，为 int 元组（``(1, 2, 3)``）。
+    * ``rank``  —— 预发布等级（final > rc > beta > alpha）。
+    * ``label`` —— 小写化的预发布标签，用于平局时的决胜。
     """
     if not isinstance(v, str):
         v = str(v or "")
     s = v.strip().lstrip("vV")
-    # Split numeric core from a pre-release suffix (``-beta`` / ``.beta``).
+    # 将数字核心与预发布后缀（``-beta`` / ``.beta``）分开。
     m = re.match(r"^(\d+(?:\.\d+)*)[-.]?([A-Za-z][A-Za-z0-9.]*)?", s)
     if not m:
         return ((0,), 3, "")
     nums = tuple(int(x) for x in m.group(1).split("."))
     label_raw = (m.group(2) or "").lower()
-    # Normalise leading label word for ranking (e.g. "beta2" -> "beta").
+    # 规范化用于排序的前导标签词（例如 "beta2" -> "beta"）。
     word = re.match(r"[a-z]+", label_raw)
     rank = _PRERELEASE_RANK.get(word.group(0) if word else "", 3) if label_raw else 3
     return (nums, rank, label_raw)
@@ -106,7 +101,7 @@ def _pad(a: tuple[int, ...], b: tuple[int, ...]) -> tuple[tuple[int, ...], tuple
 
 
 def is_newer(latest: str, current: str) -> bool:
-    """Return ``True`` if ``latest`` is a strictly newer version than ``current``."""
+    """如果 ``latest`` 严格新于 ``current``，返回 ``True``。"""
     ln, lr, ll = parse_version(latest)
     cn, cr, cl = parse_version(current)
     ln, cn = _pad(ln, cn)
@@ -118,12 +113,12 @@ def is_newer(latest: str, current: str) -> bool:
 
 
 # ---------------------------------------------------------------------------
-# Paths
+# 路径
 # ---------------------------------------------------------------------------
 
 
 def downloads_dir() -> pathlib.Path:
-    """Return (creating) the internal update-downloads directory."""
+    """返回（并创建）内部更新下载目录。"""
     base = pathlib.Path(os.path.expanduser("~")) / "Library" / "Application Support" / "XiJian" / "Updates" / "Downloads"
     base.mkdir(parents=True, exist_ok=True)
     return base
@@ -138,12 +133,12 @@ def _platform_key() -> str:
 
 
 def _pick_asset(assets: list[dict[str, Any]]) -> dict[str, Any] | None:
-    """Choose the release asset matching this platform.
+    """选择与当前平台匹配的发行资产。
 
-    Asset names are platform-specific (``DevKit_macOS.zip`` /
-    ``DevKit_Windows.zip``).  We match the configured name exactly
-    (case-insensitive); if the pattern still looks like a bare suffix
-    (``.zip``) we fall back to a suffix match.
+    资产名称是平台相关的（``DevKit_macOS.zip`` /
+    ``DevKit_Windows.zip``）。我们精确匹配配置的名称
+    （不区分大小写）；如果模式看起来仍像裸后缀（``.zip``），
+    则回退到后缀匹配。
     """
     if not assets:
         return None
@@ -151,11 +146,11 @@ def _pick_asset(assets: list[dict[str, Any]]) -> dict[str, Any] | None:
     if not pattern:
         return None
     pat = pattern.lower()
-    # Exact filename match first.
+    # 先精确匹配文件名。
     for a in assets:
         if str(a.get("name", "")).lower() == pat:
             return a
-    # Suffix fallback (handles patterns configured as bare extensions).
+    # 后缀回退（处理配置为裸扩展名的模式）。
     for a in assets:
         if str(a.get("name", "")).lower().endswith(pat):
             return a
@@ -163,14 +158,14 @@ def _pick_asset(assets: list[dict[str, Any]]) -> dict[str, Any] | None:
 
 
 def _strip_tag_prefix(tag: str, prefix: str) -> str:
-    """Remove a component tag prefix (``DevKit@``) from a release tag."""
+    """从发行 tag 中移除组件 tag 前缀（``DevKit@``）。"""
     if prefix and tag.startswith(prefix):
         return tag[len(prefix):]
     return tag
 
 
 # ---------------------------------------------------------------------------
-# Check
+# 检查
 # ---------------------------------------------------------------------------
 
 
@@ -179,24 +174,24 @@ def check_for_update(
     *,
     _opener: Callable[[urllib.request.Request], Any] | None = None,
 ) -> dict[str, Any]:
-    """Check GitHub Releases for a newer version.
+    """检查 GitHub Releases 是否有更新版本。
 
-    Returns a dict::
+    返回 dict::
 
         {
-          "configured": bool,        # owner/repo set in Config.json?
+          "configured": bool,        # 是否在 Config.json 中设置了 owner/repo？
           "update_available": bool,
           "current_version": str,
           "latest_version": str,
           "release_notes": str,
-          "html_url": str,           # release page (browser fallback)
-          "asset_name": str,         # chosen asset filename ('' if none)
-          "asset_url": str,          # asset download URL ('' if none)
+          "html_url": str,           # 发行页（浏览器回退）
+          "asset_name": str,         # 选中的资产文件名（无则 ''）
+          "asset_url": str,          # 资产下载 URL（无则 ''）
           "asset_size": int,
         }
 
-    Never raises for network errors — returns ``error`` key instead.
-    ``_opener`` is a test seam (defaults to ``urllib.request.urlopen``).
+    网络错误从不抛出——改为返回 ``error`` 键。
+    ``_opener`` 是测试接缝（默认为 ``urllib.request.urlopen``）。
     """
     current = current_version or _version.get_app_version()
     src = _version.get_update_source()
@@ -231,12 +226,12 @@ def check_for_update(
         result["error"] = f"检查更新失败：{exc}"
         return result
 
-    # ``/releases`` returns a list; ``/releases/latest`` returns a dict.
-    # Normalise to a list so both endpoints work.
+    # ``/releases`` 返回列表；``/releases/latest`` 返回 dict。
+    # 归一化为列表，使两个端点都能工作。
     releases = payload if isinstance(payload, list) else [payload]
 
-    # Keep only this component's releases (tag prefixed with ``DevKit@``),
-    # excluding drafts/pre-releases, and pick the highest version.
+    # 只保留该组件的发行版（tag 带 ``DevKit@`` 前缀），
+    # 排除草稿/预发布，并选取最高的版本。
     best: dict[str, Any] | None = None
     best_ver = ""
     for rel in releases:
@@ -272,7 +267,7 @@ def check_for_update(
 
 
 # ---------------------------------------------------------------------------
-# Download
+# 下载
 # ---------------------------------------------------------------------------
 
 
@@ -283,15 +278,14 @@ def download_update(
     progress_cb: Callable[[int, int], None] | None = None,
     _opener: Callable[[urllib.request.Request], Any] | None = None,
 ) -> dict[str, Any]:
-    """Download a release asset into :func:`downloads_dir`.
+    """将发行资产下载到 :func:`downloads_dir`。
 
-    ``progress_cb(downloaded_bytes, total_bytes)`` is invoked
-    periodically when provided.  Returns ``{"path": str, "size": int}``
-    or ``{"error": str}``.
+    提供时，会周期性调用 ``progress_cb(downloaded_bytes, total_bytes)``。
+    返回 ``{"path": str, "size": int}`` 或 ``{"error": str}``。
     """
     if not asset_url or not asset_name:
         return {"error": "缺少下载地址或文件名"}
-    # Guard against path traversal in the asset name.
+    # 防止资产名中的路径遍历。
     safe_name = os.path.basename(asset_name)
     dest = downloads_dir() / safe_name
     tmp = dest.with_suffix(dest.suffix + ".part")
@@ -327,12 +321,12 @@ def download_update(
 
 
 # ---------------------------------------------------------------------------
-# Apply (install + relaunch)
+# 应用（安装 + 重新启动）
 # ---------------------------------------------------------------------------
 
 
 def _current_app_bundle() -> pathlib.Path | None:
-    """Return the running ``.app`` bundle path on macOS (or ``None``)."""
+    """在 macOS 上返回正在运行的 ``.app`` 包路径（否则返回 ``None``）。"""
     if sys.platform != "darwin":
         return None
     exe = pathlib.Path(sys.executable).resolve()
@@ -350,13 +344,12 @@ def _find_app_in(directory: pathlib.Path) -> pathlib.Path | None:
 
 
 def apply_update(downloaded_path: str) -> dict[str, Any]:
-    """Install a downloaded asset and schedule a relaunch.
+    """安装下载的资产并安排重新启动。
 
-    macOS only for now (the packaged target).  Handles ``.dmg`` and
-    ``.zip`` assets that contain a ``.app`` bundle.  A detached helper
-    script waits for this process to exit, swaps the bundle, and
-    relaunches — so the caller should quit the app right after a
-    ``{"scheduled": True}`` result.
+    目前仅支持 macOS（打包目标）。处理包含 ``.app`` 包的 ``.dmg``
+    和 ``.zip`` 资产。一个分离的辅助脚本会等待本进程退出、交换
+    应用包并重新启动——因此调用方应在收到 ``{"scheduled": True}``
+    结果后立即退出应用。
     """
     path = pathlib.Path(downloaded_path)
     if not path.is_file():
@@ -382,7 +375,7 @@ def apply_update(downloaded_path: str) -> dict[str, Any]:
             new_app = _find_app_in(staging)
         elif path.suffix.lower() == ".dmg":
             mount_point = pathlib.Path(tempfile.mkdtemp(prefix="xijian_dmg_"))
-            # Use timeout and don't capture output to avoid hangs
+            # 使用超时且不捕获输出，以避免挂起
             result = subprocess.run(
                 ["hdiutil", "attach", "-nobrowse", "-mountpoint", str(mount_point), str(path)],
                 check=True, timeout=60, capture_output=False,
@@ -399,7 +392,7 @@ def apply_update(downloaded_path: str) -> dict[str, Any]:
         return {"error": f"解包更新失败：{exc}"}
     finally:
         if mount_point is not None:
-            # Best effort detach, ignore errors
+            # 尽力卸载，忽略错误
             subprocess.run(
                 ["hdiutil", "detach", str(mount_point)],
                 timeout=30, capture_output=False,
@@ -408,7 +401,7 @@ def apply_update(downloaded_path: str) -> dict[str, Any]:
     if new_app is None or not new_app.exists():
         return {"error": "更新包中未找到 .app 应用"}
 
-    # Detached helper: wait for us to exit, swap bundles, relaunch.
+    # 分离的辅助脚本：等待本进程退出、交换应用包、重新启动。
     pid = os.getpid()
     helper = staging / "apply_update.sh"
     helper.write_text(
@@ -417,12 +410,12 @@ def apply_update(downloaded_path: str) -> dict[str, Any]:
         f'PID={pid}\n'
         f'NEW_APP="{new_app}"\n'
         f'CUR_APP="{current_app}"\n'
-        # Wait for parent to exit (max 30 seconds)
+        # 等待父进程退出（最多 30 秒）
         'for i in {1..60}; do\n'
         '  if ! kill -0 "$PID" 2>/dev/null; then break; fi\n'
         '  sleep 0.5\n'
         'done\n'
-        # Force kill if still alive after timeout
+        # 超时后若仍存活则强制杀掉
         'if kill -0 "$PID" 2>/dev/null; then\n'
         '  kill -9 "$PID" 2>/dev/null || true\n'
         'fi\n'
@@ -432,7 +425,7 @@ def apply_update(downloaded_path: str) -> dict[str, Any]:
         encoding="utf-8",
     )
     helper.chmod(0o755)
-    # Use Popen with proper detachment
+    # 使用 Popen 并正确分离进程
     subprocess.Popen(
         ["/bin/bash", str(helper)],
         stdout=subprocess.DEVNULL,

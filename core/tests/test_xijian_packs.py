@@ -181,7 +181,7 @@ def test_install_archive_loads_character(tmp_path, archiver):
     assert record["loaded"]["characters"] == ["char-yuki"]
     assert record["loaded"]["memories"] == ["mem_char-yuki_1", "mem_char-yuki_2"]
 
-    # Pack directory installed under <packs_root>/<package_id>/.
+    # 资源包目录安装到 <packs_root>/<package_id>/ 下。
     assert (tmp_path / "packs" / "char-yuki" / "manifest.json").is_file()
 
     char = stubs_state.characters["char-yuki"]
@@ -190,16 +190,16 @@ def test_install_archive_loads_character(tmp_path, archiver):
     assert char[packs_stub._ORIGINAL_ID_TAG] == "char-yuki"
     assert char["persona_doc"].startswith("# Persona")
 
-    # Sidecars tagged.
+    # 副产物已打标签。
     assert stubs_state.memory_configs["char-yuki"].get(packs_stub._ORIGINAL_ID_TAG) == "char-yuki"
     assert stubs_state.character_state_configs["char-yuki"].get(packs_stub._ORIGINAL_ID_TAG) == "char-yuki"
-    # Memories loaded with pack tag.
+    # 记忆以资源包标签加载。
     mem = stubs_state.memory["mem_char-yuki_1"]
     assert mem["character_id"] == "char-yuki"
     assert mem[packs_stub._ORIGINAL_ID_TAG] == "char-yuki"
     assert mem["source"] == "pack_initial"
 
-    # Index updated.
+    # 索引已更新。
     entry = packs_stub.get_pack("char-yuki")
     assert entry is not None
     assert entry["version"] == "1.0.0"
@@ -235,7 +235,7 @@ def test_install_archive_7z_world(tmp_path):
     assert stubs_state.world_environment["world-yuki"].get(packs_stub._ORIGINAL_ID_TAG) == "world-yuki"
     assert stubs_state.world_compute_config["world-yuki"].get(packs_stub._ORIGINAL_ID_TAG) == "world-yuki"
 
-    # NPC auto-generation (mirrors devkit behavior).
+    # NPC 自动生成（镜像 devkit 行为）。
     npcs = [n for n in stubs_state.npcs.values() if n.get("world_id") == "world-yuki"]
     assert len(npcs) > 0
 
@@ -249,7 +249,7 @@ def test_install_pack_dir(tmp_path):
     record = packs_stub.install_pack_dir(src)
     assert record["package_id"] == "dir-pack"
     assert (tmp_path / "packs" / "dir-pack" / "manifest.json").is_file()
-    # Source directory untouched.
+    # 源目录未被改动。
     assert (src / "manifest.json").is_file()
 
 
@@ -260,12 +260,12 @@ def test_install_archive_wrapper_dir_layout_zip(tmp_path):
     """
     src = tmp_path / "payload"
     pack = _write_pack_dir(src, package_id="wrap-pack", name="Wrap Pack", char_id="wrap-char")
-    # Re-wrap: move the pack dir into a single top-level wrapper dir.
+    # 重新包装：将资源包目录移入单个顶层包装目录。
     wrapper = tmp_path / "wrapped"
     wrapper.mkdir()
     shutil.move(str(pack), str(wrapper / "wrap-pack"))
     archive = tmp_path / "wrap.zip"
-    _zip_dir(wrapper, archive)  # archive root = wrapper dir
+    _zip_dir(wrapper, archive)  # 归档根 = 包装目录
 
     record = packs_stub.install_archive(archive)
     assert record["package_id"] == "wrap-pack"
@@ -273,7 +273,7 @@ def test_install_archive_wrapper_dir_layout_zip(tmp_path):
     assert "wrap-char" in stubs_state.characters
     final = tmp_path / "packs" / "wrap-pack"
     assert (final / "manifest.json").is_file()
-    assert not (final / "wrapped").exists()  # no nested wrapper layer
+    assert not (final / "wrapped").exists()  # 没有嵌套的包装层
 
 
 def test_install_archive_wrapper_dir_layout_7z(tmp_path):
@@ -313,7 +313,7 @@ def test_zip_symlink_entry_rejected(tmp_path):
     dest = tmp_path / "out"
     with pytest.raises(packs_stub.PackValidationError, match="symlink"):
         packs_stub.extract_archive(evil, dest)
-    # Nothing left behind.
+    # 无任何残留。
     assert not dest.exists() or not any(dest.iterdir())
 
 
@@ -351,14 +351,14 @@ def test_install_archive_replaces_existing_same_package(tmp_path):
     first = packs_stub.install_archive(archive)
     assert len(_packed_character_ids()) == 1
 
-    # Overwrite with a new version of the same package.
+    # 用同一资源包的新版本覆盖。
     pack2 = _write_pack_dir(tmp_path / "v2", package_id="char-yuki", name="Yuki", version="2.0.0")
     archive2 = tmp_path / "a2.zip"
     _zip_dir(pack2, archive2)
 
     second = packs_stub.install_archive(archive2)
     assert second["version"] == "2.0.0"
-    assert len(_packed_character_ids()) == 1  # replaced, not duplicated
+    assert len(_packed_character_ids()) == 1  # 已替换，而非重复
     assert stubs_state.characters["char-yuki"]["name"] == "Yuki"
     assert packs_stub.get_pack("char-yuki")["version"] == "2.0.0"
 
@@ -370,7 +370,7 @@ def test_install_archive_replaces_existing_same_package(tmp_path):
 
 
 def test_manifest_missing_name_rejected(tmp_path):
-    """A manifest without a name is rejected."""
+    """缺少 name 的 manifest 会被拒绝。"""
     pack = _write_pack_dir(tmp_path, package_id="bad-pack", name="")
     (pack / "manifest.json").write_text(
         json.dumps({"schema": "xijian.pack/v1", "version": "1.0.0", "kind": "character"}),
@@ -383,7 +383,7 @@ def test_manifest_missing_name_rejected(tmp_path):
 
 
 def test_manifest_bad_schema_rejected(tmp_path):
-    """A manifest with an unsupported schema is rejected."""
+    """不支持的 schema 的 manifest 会被拒绝。"""
     pack = _write_pack_dir(tmp_path, package_id="bad-pack")
     (pack / "manifest.json").write_text(
         json.dumps({"schema": "xijian.v99", "name": "X", "version": "1.0.0", "kind": "character"}),
@@ -396,7 +396,7 @@ def test_manifest_bad_schema_rejected(tmp_path):
 
 
 def test_manifest_bad_kind_rejected(tmp_path):
-    """A manifest with an invalid kind is rejected."""
+    """无效 kind 的 manifest 会被拒绝。"""
     pack = _write_pack_dir(tmp_path, package_id="bad-pack")
     (pack / "manifest.json").write_text(
         json.dumps({"schema": "xijian.pack/v1", "name": "X", "version": "1.0.0", "kind": "robot"}),
@@ -444,7 +444,7 @@ def test_manifest_kind_derived_from_layout(tmp_path):
     archive = tmp_path / "d.zip"
     _zip_dir(pack, archive)
     record = packs_stub.install_archive(archive)
-    assert record["kind"] == "character"  # only characters/ present
+    assert record["kind"] == "character"  # 只有 characters/ 存在
     assert record["loaded"]["characters"] == ["char-yuki"]
 
 
@@ -462,7 +462,7 @@ def test_package_id_slugified_when_invalid(tmp_path):
 
 
 def test_archive_without_manifest_rejected(tmp_path):
-    """An archive with no manifest.json is rejected."""
+    """没有 manifest.json 的归档会被拒绝。"""
     pack = tmp_path / "empty-pack"
     pack.mkdir()
     (pack / "characters").mkdir()
@@ -473,7 +473,7 @@ def test_archive_without_manifest_rejected(tmp_path):
 
 
 def test_unsupported_archive_format_rejected(tmp_path):
-    """A .tar.gz archive is rejected with PackValidationError."""
+    """.tar.gz 归档会被拒绝并抛出 PackValidationError。"""
     bad = tmp_path / "x.tar.gz"
     bad.write_bytes(b"not an archive")
     with pytest.raises(packs_stub.PackValidationError, match="unsupported"):
@@ -493,12 +493,12 @@ def test_path_traversal_zip_rejected_and_cleaned(tmp_path):
     dest = tmp_path / "out"
     with pytest.raises(packs_stub.PackValidationError, match=r"\.\."):
         packs_stub.extract_archive(evil, dest)
-    # Nothing left behind.
+    # 无任何残留。
     assert not dest.exists() or not any(dest.iterdir())
 
 
 def test_path_traversal_absolute_and_backslash_rejected(tmp_path):
-    """Absolute and backslash entries are rejected too."""
+    """绝对路径和反斜杠条目也会被拒绝。"""
     evil = tmp_path / "evil2.zip"
     with zipfile.ZipFile(evil, "w") as zf:
         zf.writestr("/etc/passwd", "x")
@@ -528,7 +528,7 @@ def test_scan_packs_rebuilds_index_and_runtime(tmp_path):
     _zip_dir(pack, archive)
     packs_stub.install_archive(archive)
 
-    # Wipe index + runtime to simulate a cold start.
+    # 清除索引 + 运行时以模拟冷启动。
     stubs_state.packs_index.clear()
     stubs_state.characters.clear()
 
@@ -538,7 +538,7 @@ def test_scan_packs_rebuilds_index_and_runtime(tmp_path):
     assert stubs_state.packs_index["char-yuki"]["version"] == "1.0.0"
     assert "char-yuki" in stubs_state.characters
 
-    # Idempotent: a second scan replaces records without duplicating.
+    # 幂等：第二次扫描替换记录而不重复。
     result2 = packs_stub.scan_packs()
     assert len(result2["installed"]) == 1
     assert len(_packed_character_ids()) == 1
@@ -560,8 +560,8 @@ def test_unload_pack_clears_runtime_only(tmp_path):
     assert "char-yuki" not in stubs_state.memory_configs
     assert "char-yuki" not in stubs_state.character_state_configs
     assert not [m for m in stubs_state.memory.values() if m.get(packs_stub._ORIGINAL_ID_TAG) == "char-yuki"]
-    assert packs_stub.get_pack("char-yuki") is not None  # index untouched
-    assert (tmp_path / "packs" / "char-yuki").is_dir()  # dir untouched
+    assert packs_stub.get_pack("char-yuki") is not None  # 索引未被改动
+    assert (tmp_path / "packs" / "char-yuki").is_dir()  # 目录未被改动
 
 
 def test_uninstall_pack_clears_runtime_and_directory(tmp_path):
@@ -616,11 +616,11 @@ def test_ensure_preload_packs_installs_and_is_idempotent(tmp_path, monkeypatch):
     preload = tmp_path / "preload"
     preload.mkdir()
 
-    # Archive entry.
+    # 归档条目。
     pack = _write_pack_dir(tmp_path / "src", package_id="pre-pack", name="Pre Pack", char_id="pre-pack")
     archive = preload / "pre-pack.zip"
     _zip_dir(pack, archive)
-    # Directory entry (already extracted).
+    # 目录条目（已解压）。
     _write_pack_dir(preload, package_id="dir-pack", name="Dir Pack", char_id="dir-pack")
 
     monkeypatch.setenv("XIJIAN_PRELOAD_PACKS_DIR", str(preload))
@@ -700,10 +700,10 @@ def test_api_install_multipart_and_path(client, auth_headers, tmp_path):
 
     POST install 同时接受 multipart 文件与 JSON path。
     """
-    # multipart (done by the helper above).
+    # multipart（由上面的辅助函数完成）。
     _install_zip_via_api(client, auth_headers, tmp_path, package_id="mp-pack")
 
-    # JSON path.
+    # JSON 路径。
     pack = _write_pack_dir(tmp_path / "path-src", package_id="path-pack", name="Path Pack")
     archive = tmp_path / "path.zip"
     _zip_dir(pack, archive)
@@ -792,7 +792,7 @@ def test_api_rescan(client, auth_headers, tmp_path):
     """
     _install_zip_via_api(client, auth_headers, tmp_path, package_id="scan-pack")
 
-    # Wipe the index to simulate drift.
+    # 清除索引以模拟漂移。
     stubs_state.packs_index.clear()
 
     resp = client.post("/v1/xijian/packs/rescan", headers=auth_headers)
@@ -802,5 +802,5 @@ def test_api_rescan(client, auth_headers, tmp_path):
     assert body["errors"] == []
 
     assert packs_stub.get_pack("scan-pack") is not None
-    # The pack's character id is char-yuki (default in the helper).
+    # 资源包的角色 id 是 char-yuki（辅助函数中的默认值）。
     assert "char-yuki" in stubs_state.characters

@@ -276,6 +276,7 @@ class ModelEntry:
     type: str             # chat | embeddings | tts | stt | image | video | multimodal | video_understanding
     backend: str          # mlx | gguf | openai | mock
     filename: str         # file or directory name under model_dir(type, id)
+    # 在 model_dir(type, id) 下的文件名或目录名
     family: str = ""
     size_b: float = 0.0
     quant: str = ""
@@ -426,7 +427,7 @@ class Config:
 
     @classmethod
     def empty(cls) -> "Config":
-        """Create a Config with all defaults (no TOML file)."""
+        """创建全部使用默认值的 Config（不读取 TOML 文件）。"""
         return cls()
 
     @classmethod

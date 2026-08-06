@@ -1,39 +1,39 @@
-"""``/v1/xijian/npcs/*`` routes — A4.2.
+"""``/v1/xijian/npcs/*`` 路由 — A4.2。
 
 NPC CRUD
 ========
 
-* ``GET    /v1/xijian/npcs``                          — list (optional ?world_id)
-* ``POST   /v1/xijian/npcs``                          — create (50-cap enforced)
-* ``GET    /v1/xijian/npcs/<npc_id>``                 — get
-* ``PATCH  /v1/xijian/npcs/<npc_id>``                 — patch (no tier change)
-* ``DELETE /v1/xijian/npcs/<npc_id>``                 — delete
+* ``GET    /v1/xijian/npcs``                          — 列表 (可选 ?world_id)
+* ``POST   /v1/xijian/npcs``                          — 创建 (强制 50 上限)
+* ``GET    /v1/xijian/npcs/<npc_id>``                 — 获取
+* ``PATCH  /v1/xijian/npcs/<npc_id>``                 — 修改（不改变 tier）
+* ``DELETE /v1/xijian/npcs/<npc_id>``                 — 删除
 
-Tier transitions
+Tier 转换
 ================
 
-* ``PUT    /v1/xijian/npcs/<npc_id>/tier``            — set tier (logs)
-* ``PUT    /v1/xijian/npcs/<npc_id>/state``          — patch state_json
-                                                       (NPC internal state)
+* ``PUT    /v1/xijian/npcs/<npc_id>/tier``            — 设置 tier（记录日志）
+* ``PUT    /v1/xijian/npcs/<npc_id>/state``          — 修改 state_json
+                                                       （NPC 内部状态）
 
-Scheduling
+调度
 ==========
 
-* ``GET    /v1/xijian/npcs/scheduling/log``           — global log (filtered)
-* ``GET    /v1/xijian/npcs/<npc_id>/scheduling/log``  — per-NPC log
-* ``GET    /v1/xijian/npcs/scheduling/summary``       — per-world budgets
-* ``POST   /v1/xijian/npcs/scheduling/tick``          — dev-only (XIJIAN_DEV=1)
-* ``POST   /v1/xijian/npcs/scheduling/tick/all``      — dev-only
-* ``GET    /v1/xijian/npcs/scheduling/status``        — tick lifecycle
-* ``POST   /v1/xijian/npcs/scheduling/resume``        — wake from overload
-                                                       (manual override)
+* ``GET    /v1/xijian/npcs/scheduling/log``           — 全局日志（可过滤）
+* ``GET    /v1/xijian/npcs/<npc_id>/scheduling/log``  — 按 NPC 日志
+* ``GET    /v1/xijian/npcs/scheduling/summary``       — 按世界预算
+* ``POST   /v1/xijian/npcs/scheduling/tick``          — 仅限开发 (XIJIAN_DEV=1)
+* ``POST   /v1/xijian/npcs/scheduling/tick/all``      — 仅限开发
+* ``GET    /v1/xijian/npcs/scheduling/status``        — tick 生命周期
+* ``POST   /v1/xijian/npcs/scheduling/resume``        — 从过载中唤醒
+                                                       （手动覆盖）
 
-A4.1 cross-link
+A4.1 交叉链接
 ===============
 
-* ``POST   /v1/xijian/npcs/affected/preview``        — preview the
-                                                       affected-NPC selector
-                                                       (for A4.1 event authors)
+* ``POST   /v1/xijian/npcs/affected/preview``        — 预览受影响 NPC
+                                                       选择器
+                                                       （供 A4.1 事件作者使用）
 """
 
 from __future__ import annotations
@@ -55,7 +55,7 @@ _LOGGER = logging.getLogger("xijian_api.routes.xijian_npcs")
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# 辅助函数
 # ---------------------------------------------------------------------------
 
 
@@ -70,7 +70,7 @@ def _require_json() -> dict:
 
 
 def _dev_only() -> None:
-    """Block dev-only routes unless ``XIJIAN_DEV=1`` is set."""
+    """除非设置 ``XIJIAN_DEV=1``，否则阻止仅限开发的路由。"""
     if os.environ.get("XIJIAN_DEV") != "1":
         raise ApiError(
             403, "dev-only endpoint", "forbidden_error", code="dev_only",
@@ -123,7 +123,7 @@ def create_npc():
             is_alive=bool(body.get("is_alive", True)),
         )
     except npcs_stub.NPCError as exc:
-        # 50-cap or unknown-world → 409 / 404.
+        # 50 上限或未知世界 → 409 / 404。
         msg = str(exc)
         if "does not exist" in msg:
             raise ApiError(404, msg, "not_found_error", code="world_not_found")
@@ -163,7 +163,7 @@ def delete_npc(npc_id: str):
 
 
 # ---------------------------------------------------------------------------
-# Tier transitions
+# Tier 转换
 # ---------------------------------------------------------------------------
 
 
@@ -205,7 +205,7 @@ def patch_npc_state(npc_id: str):
 
 
 # ---------------------------------------------------------------------------
-# Scheduling — log / summary
+# 调度 — 日志 / 摘要
 # ---------------------------------------------------------------------------
 
 
@@ -229,8 +229,7 @@ def global_scheduling_log():
 
 
 def npcs_stub_state_values():
-    """Lazy accessor for the log bucket to keep the route module
-    decoupled from a direct state import."""
+    """日志桶的惰性访问器，使路由模块与直接导入状态解耦。"""
     from xijian_api.stubs import state
     return state.npc_scheduling_log
 
@@ -291,16 +290,16 @@ def resume_from_overload():
 
 
 # ---------------------------------------------------------------------------
-# A4.1 cross-link — preview affected NPCs
+# A4.1 交叉链接 — 预览受影响 NPC
 # ---------------------------------------------------------------------------
 
 
 @bp.post("/v1/xijian/npcs/affected/preview")
 def preview_affected():
-    """Preview which NPCs would be affected by a hypothetical event.
+    """预览假设事件会影响哪些 NPC。
 
-    Used by A4.1 event authors to see "if I fire this event, who
-    gets tagged".  Body: ``{"world_id": "...", "event": {...}}``.
+    供 A4.1 事件作者查看“如果我触发此事件，谁会被标记”。
+    Body: ``{"world_id": "...", "event": {...}}``。
     """
     body = _require_json()
     world_id = body.get("world_id")

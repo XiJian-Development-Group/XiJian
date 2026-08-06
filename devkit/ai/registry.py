@@ -1,6 +1,6 @@
-"""DevKit AI backend registry — adapted from core/xijian_api/ai/registry.py.
+"""DevKit AI 后端注册表 —— 改编自 core/xijian_api/ai/registry.py。
 
-This module provides lazy import + fallback logic for MLX / GGUF backends.
+本模块为 MLX / GGUF 后端提供懒加载 + 回退逻辑。
 """
 
 from __future__ import annotations
@@ -26,7 +26,7 @@ from devkit.ai.types import (
 )
 
 # ---------------------------------------------------------------------------
-# Registry tables (populated by decorators)
+# 注册表（由装饰器填充）
 # ---------------------------------------------------------------------------
 
 _chat_backends: dict[str, type[ChatBackend]] = {}
@@ -80,7 +80,7 @@ def register_video(name: str) -> Callable[[type[VideoGenBackend]], type[VideoGen
 
 
 def available_backends() -> dict[str, list[str]]:
-    """Return the names of every backend that has registered and reports available."""
+    """返回每个已注册且报告可用的后端的名称。"""
     out: dict[str, list[str]] = {}
     for kind, table in (
         ("chat", _chat_backends),
@@ -103,7 +103,7 @@ def available_backends() -> dict[str, list[str]]:
 
 
 # ---------------------------------------------------------------------------
-# Lazy import + fallback logic
+# 懒加载 + 回退逻辑
 # ---------------------------------------------------------------------------
 
 _BUILTIN_IMPORTS: dict[str, dict[str, str]] = {
@@ -136,7 +136,7 @@ _BUILTIN_IMPORTS: dict[str, dict[str, str]] = {
 
 
 def _ensure_loaded(task: str, name: str) -> None:
-    """Import the backend module on first use; no-op if already registered."""
+    """在首次使用时导入后端模块；如果已注册则不做任何操作。"""
     table = {
         "chat": _chat_backends,
         "embeddings": _embedding_backends,
@@ -159,7 +159,7 @@ def _ensure_loaded(task: str, name: str) -> None:
 
 
 def _pick(task: str, requested: str, fallbacks: tuple[str, ...]):
-    """Try each backend name in order; return the first usable instance."""
+    """按顺序依次尝试每个后端名称；返回第一个可用实例。"""
     table = {
         "chat": _chat_backends,
         "embeddings": _embedding_backends,
@@ -201,7 +201,7 @@ def _pick(task: str, requested: str, fallbacks: tuple[str, ...]):
 
 
 # ---------------------------------------------------------------------------
-# Public helpers
+# 公共辅助函数
 # ---------------------------------------------------------------------------
 
 
@@ -235,7 +235,7 @@ def get_video_backend(name: str | None = None, fallbacks: tuple[str, ...] = ()) 
     return _pick("video", requested, fallbacks)
 
 
-# Need to import os for the public helpers
+# 为公共辅助函数导入 os
 import os
 
 __all__ = [

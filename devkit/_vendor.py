@@ -1,38 +1,36 @@
-"""Vendored helpers so the DevKit is a fully self-contained package.
+"""内置辅助函数，使 DevKit 成为一个完全自包含的包。
 
-Why this module exists
+为什么存在这个模块
 ----------------------
 
-The DevKit used to live inside ``xijian_api`` (as ``xijian_api.devkit``)
-and borrowed three small utilities from the API package:
+DevKit 曾经位于 ``xijian_api`` 包内（即 ``xijian_api.devkit``），
+并从 API 包借用了三个小工具：
 
-* ``xijian_api.errors.ApiError``      — the base error type
+* ``xijian_api.errors.ApiError``      —— 基础错误类型
 * ``xijian_api.utils.ids.gen_submission_id``
 * ``xijian_api.utils.time.iso_now`` / ``now_ts``
 
-That coupling is a problem once the DevKit ships **separately** — it is
-PyInstaller-packaged into a double-clickable app while the API is built
-as a wheel/service (function list v2.3, C5 packaging split).  Dragging
-``xijian_api`` (and, transitively, **Flask**) into the frozen DevKit
-binary would bloat it by tens of MB for three tiny functions and would
-break the long-standing "DevKit never imports Flask" contract.
+一旦 DevKit **单独**发布，这种耦合就成了问题——它会被 PyInstaller
+打包成可双击运行的应用程序，而 API 则以 wheel/服务形式构建（功能清单
+v2.3，C5 打包拆分）。把 ``xijian_api``（并间接带入 **Flask**）拖进
+冻结后的 DevKit 二进制包，会为了三个小函数而增大几十 MB，
+还会破坏长期存在的“DevKit 绝不导入 Flask”约定。
 
-So we vendor minimal, dependency-free copies here.  These are
-deliberately kept byte-for-byte behaviour-compatible with their
-``xijian_api`` originals:
+因此我们在这里内置了最小化、零依赖的副本。这些副本刻意保持与
+``xijian_api`` 原版逐字节行为兼容：
 
-* :class:`ApiError` mirrors ``xijian_api.errors.ApiError``'s constructor
-  and attributes (``status`` / ``message`` / ``type_`` / ``code`` /
-  ``param`` / ``extra``).  The Flask rendering side (``render_error`` /
-  ``register_error_handlers``) is intentionally **not** copied — the
-  DevKit surfaces errors as plain dicts via
-  :func:`devkit.api.serialize_error`, never as HTTP envelopes.
-* :func:`gen_submission_id` mirrors ``xijian_api.utils.ids`` (``sub_``
-  prefix + 12 crypto-grade hex chars).
-* :func:`iso_now` / :func:`now_ts` mirror ``xijian_api.utils.time``.
+* :class:`ApiError` 与 ``xijian_api.errors.ApiError`` 的构造函数和属性
+  （``status`` / ``message`` / ``type_`` / ``code`` /
+  ``param`` / ``extra``）保持一致。Flask 渲染部分（``render_error`` /
+  ``register_error_handlers``）刻意**不**复制——DevKit 通过
+  :func:`devkit.api.serialize_error` 以纯 dict 形式呈现错误，
+  从不使用 HTTP 信封格式。
+* :func:`gen_submission_id` 与 ``xijian_api.utils.ids`` 保持一致
+  （``sub_`` 前缀 + 12 位加密级十六进制字符）。
+* :func:`iso_now` / :func:`now_ts` 与 ``xijian_api.utils.time`` 保持一致。
 
-If the API-side originals ever change their contract, mirror the change
-here too (see docs/notes.md → "没动的与原因").
+如果 API 侧原版将来改变了约定，请在此处同步修改
+（参见 docs/notes.md → “没动的与原因”）。
 """
 
 from __future__ import annotations
@@ -43,33 +41,32 @@ from typing import Any
 
 
 # ---------------------------------------------------------------------------
-# Error base (vendored from xijian_api.errors.ApiError — no Flask)
+# 错误基类（来自 xijian_api.errors.ApiError 的内置副本 —— 不含 Flask）
 # ---------------------------------------------------------------------------
 
 
 class ApiError(Exception):
-    """Structured error carrying the OAI ``(status, type_, code)`` triple.
+    """携带 OAI ``(status, type_, code)`` 三元组的结构化错误。
 
-    Behaviour-compatible with ``xijian_api.errors.ApiError`` so DevKit
-    error records keep the exact same shape the rest of the project uses,
-    but with **zero** Flask dependency — the DevKit renders errors as
-    plain dicts (see :func:`devkit.api.serialize_error`), never as HTTP
-    responses.
+    与 ``xijian_api.errors.ApiError`` 行为兼容，因此 DevKit 的错误记录
+    与项目其他部分保持完全相同的结构，但**零** Flask 依赖——DevKit
+    将错误渲染为纯 dict（参见 :func:`devkit.api.serialize_error`），
+    从不渲染为 HTTP 响应。
 
-    Parameters
+    参数
     ----------
     status:
-        HTTP-style status code (e.g. ``400``, ``429``, ``502``).
+        HTTP 风格状态码（例如 ``400``、``429``、``502``）。
     message:
-        Human-readable message.
+        人类可读的消息。
     type_:
-        OAI error type (``server_error``, ``invalid_request_error``, …).
+        OAI 错误类型（``server_error``、``invalid_request_error`` 等）。
     code:
-        Machine-readable code (e.g. ``rate_limited``).
+        机器可读的错误码（例如 ``rate_limited``）。
     param:
-        Optional parameter name the error relates to.
+        与该错误相关的可选参数名。
     **extra:
-        Any additional fields to merge into the serialised error dict.
+        要合并进序列化错误 dict 的任何其他字段。
     """
 
     def __init__(
@@ -91,35 +88,35 @@ class ApiError(Exception):
 
 
 # ---------------------------------------------------------------------------
-# ID generation (vendored from xijian_api.utils.ids)
+# ID 生成（来自 xijian_api.utils.ids 的内置副本）
 # ---------------------------------------------------------------------------
 
-#: Number of hex chars in a short identifier (matches xijian_api.utils.ids).
+#: 短标识符的十六进制字符数（与 xijian_api.utils.ids 保持一致）。
 _SHORT_HEX_LEN = 12
 
 
 def gen_submission_id() -> str:
-    """Return a Developer-Kit submission id (``sub_<12 hex>``).
+    """返回一个 DevKit 提交 ID（``sub_<12 位十六进制>``）。
 
-    Every archive / SMTP submission gets its own short id so it can be
-    referenced from the receiving side without leaking sensitive content
-    into local logs.  Uses :func:`secrets.token_hex` (crypto-grade).
+    每次归档 / SMTP 提交都会获得自己的短 ID，以便接收方引用，
+    而不会将敏感内容泄露到本地日志中。使用 :func:`secrets.token_hex`
+    （加密级）。
     """
     return f"sub_{secrets.token_hex(_SHORT_HEX_LEN // 2)}"
 
 
 # ---------------------------------------------------------------------------
-# Time helpers (vendored from xijian_api.utils.time)
+# 时间辅助函数（来自 xijian_api.utils.time 的内置副本）
 # ---------------------------------------------------------------------------
 
 
 def now_ts() -> int:
-    """Return the current Unix timestamp (seconds since epoch)."""
+    """返回当前 Unix 时间戳（自纪元以来的秒数）。"""
     return int(_dt.datetime.now(_dt.timezone.utc).timestamp())
 
 
 def iso_now() -> str:
-    """Return the current UTC time as ISO-8601 with a ``Z`` suffix."""
+    """返回带 ``Z`` 后缀的 ISO-8601 格式当前 UTC 时间。"""
     return _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 

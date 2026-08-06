@@ -88,7 +88,7 @@ def open_chest(client, auth_headers, world, poi):
 
 
 # ---------------------------------------------------------------------------
-# Pure helpers
+# 纯辅助函数
 # ---------------------------------------------------------------------------
 
 
@@ -127,7 +127,7 @@ class TestPureHelpers:
             si_stub._validate_effects("not a dict")
         # None → {}
         assert si_stub._validate_effects(None) == {}
-        # dict passes through
+        # dict 直接通过
         assert si_stub._validate_effects({"k": 1}) == {"k": 1}
 
     def test_default_cooldown_is_a_small_positive_int(self):
@@ -138,8 +138,8 @@ class TestPureHelpers:
         assert VALID_TARGET_TYPES == frozenset({"npc", "object", "mechanism"})
 
     def test_character_interactable_with_no_state(self):
-        # No state record → interactable (the stub is friendly to
-        # characters the operator hasn't yet wired to A3.2).
+        # 无状态记录 → 可交互（stub 对尚未接入 A3.2 的
+        # 角色很友好）。
         assert si_stub._character_is_interactable("char_xx") is True
 
     def test_character_interactable_with_full_health(self):
@@ -196,7 +196,7 @@ class TestStubCRUD:
             )
 
     def test_create_rejects_poi_from_different_world(self, world, poi, client, auth_headers):
-        # Build a second world with its own POI.
+        # 构建一个拥有自己 POI 的第二个世界。
         other_world = client.post(
             "/v1/xijian/worlds", json={"name": "Other"}, headers=auth_headers
         ).get_json()
@@ -212,9 +212,9 @@ class TestStubCRUD:
                     target_type="object", target_id="x", action="open",
                 )
         finally:
-            # Tidy up: only the world's audit log + world record
-            # matter; the POI is in ``state.pois`` so we leave it
-            # for the next test's reset.
+            # 清理：只有世界的审计日志 + 世界记录
+            # 重要；POI 位于 ``state.pois`` 中，留给
+            # 下一个测试的 reset 处理。
             pass
 
     def test_create_rejects_invalid_target_type(self, world, poi):
@@ -314,7 +314,7 @@ class TestStubCRUD:
             world_id=world, poi_id=poi["id"],
             target_type="object", target_id="x", action="open",
         )
-        # Fire once to seed a cooldown.
+        # 触发一次以播种冷却时间。
         si_stub.trigger(si["id"], character_id="char_a")
         assert si_stub.delete(si["id"]) is True
         assert si_stub.get(si["id"]) is None
@@ -341,7 +341,7 @@ class TestTrigger:
         assert out["world_id"] == world
         assert out["effects"]["loot"] == ["gold_coin"]
         assert out["audit_id"] is not None
-        # Audit log has the entry.
+        # 审计日志中有该条目。
         assert wa_stub.count_for(world) >= 1
 
     def test_trigger_respects_cooldown(self, world, poi, open_chest):
@@ -358,7 +358,7 @@ class TestTrigger:
     def test_trigger_allows_other_characters_during_cooldown(self, world, poi, open_chest):
         first = si_stub.trigger(open_chest["id"], character_id="char_a")
         assert first["accepted"] is True
-        # char_b has no cooldown of its own yet.
+        # char_b 自身尚无冷却时间。
         second = si_stub.trigger(
             open_chest["id"], character_id="char_b", now=first["cooldown_until"] - 1
         )
@@ -401,8 +401,8 @@ class TestTrigger:
         assert out["reason"] == "target_dead"
 
     def test_trigger_fires_a4_1_event_when_effects_says_so(self, world, poi, monkeypatch):
-        # Stub out ``events.fire_event`` so the test doesn't need
-        # the full A4.1 world-event wiring.
+        # 将 ``events.fire_event`` 打桩，使测试无需
+        # 完整的 A4.1 世界事件接线。
         from xijian_api.stubs import events as events_stub
         calls = []
         monkeypatch.setattr(
@@ -422,20 +422,20 @@ class TestTrigger:
         assert calls[0]["kwargs"]["payload"]["source"] == "scene_interaction"
 
     def test_trigger_audit_failure_still_returns_success(self, world, poi, open_chest, monkeypatch):
-        # Force audit log to fail; trigger should still succeed.
+        # 强制审计日志失败；trigger 仍应成功。
         from xijian_api.stubs import world_audit as wa
         def boom(*args, **kwargs):
             raise RuntimeError("ledger broken")
         monkeypatch.setattr(wa, "record", boom)
         out = si_stub.trigger(open_chest["id"], character_id="char_a")
         assert out["accepted"] is True
-        assert out["audit_id"] is None  # we mark the audit as None when it fails
+        assert out["audit_id"] is None  # 审计失败时我们将 audit 置为 None
 
     def test_clear_cooldowns_helper(self, world, poi, open_chest):
         si_stub.trigger(open_chest["id"], character_id="char_a")
         si_stub.clear_cooldowns()
-        # After clearing, even a "now" before the original cooldown
-        # should be accepted.
+        # 清除后，即使是早于原冷却时间的 "now"
+        # 也应被接受。
         out = si_stub.trigger(
             open_chest["id"], character_id="char_a", now=0.0
         )
@@ -604,7 +604,7 @@ class TestRoutes:
         assert res.get_json()["error"]["code"] == "character_not_interactable"
 
     def test_trigger_no_body_works(self, client, auth_headers, open_chest):
-        # ``optional=True`` lets the route accept an empty body.
+        # ``optional=True`` 允许路由接受空请求体。
         res = client.post(
             f"/v1/xijian/scenes/interactions/{open_chest['id']}/trigger",
             headers=auth_headers,
@@ -613,13 +613,13 @@ class TestRoutes:
 
 
 # ---------------------------------------------------------------------------
-# A4.3 effects actually applied (AC-2 / AC-3)
+# A4.3 效果实际生效（AC-2 / AC-3）
 # ---------------------------------------------------------------------------
 
 
 class TestEffectsApplied:
-    """The trigger() path must *apply* effects — the old behaviour only
-    returned them.  These tests pin the state mutations."""
+    """trigger() 路径必须 *应用* 效果 —— 旧行为只是返回它们。
+    这些测试固定状态变更。"""
 
     def test_stamina_delta_applied_to_character(self, world, poi):
         from xijian_api.stubs import character_state as cs_stub
@@ -648,7 +648,7 @@ class TestEffectsApplied:
         assert out["accepted"] is True
         record = cs_stub.get_state("char_a")
         assert record["health"] == 80.0
-        assert record["mood"] == 60.0  # 70 default − 10
+        assert record["mood"] == 60.0  # 默认 70 − 10
 
     def test_npc_mood_delta_applied_to_npc_target(self, world, poi):
         from xijian_api.stubs import npcs as npcs_stub
@@ -685,7 +685,7 @@ class TestEffectsApplied:
             effects={"stamina_delta": -2},
             cooldown_sec=0,
         )
-        # No character_id → stamina cannot be deducted; trigger still accepts.
+        # 无 character_id → 无法扣除体力；trigger 仍接受。
         out = si_stub.trigger(si["id"])
         assert out["accepted"] is True
         assert "stamina_delta" not in out["effects_applied"]

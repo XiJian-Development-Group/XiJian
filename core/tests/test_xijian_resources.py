@@ -27,12 +27,12 @@ from xijian_api.utils.ids import gen_import_job_id
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# 辅助函数
 # ---------------------------------------------------------------------------
 
 
 def _write_character_pack_dir(root: Path, *, package_id: str = "char-yuki", name: str = "Yuki") -> Path:
-    """Create a minimal character pack directory on disk."""
+    """在磁盘上创建一个最小的角色资源包目录。"""
     pack = root / package_id
     pack.mkdir(parents=True, exist_ok=True)
     manifest: dict[str, Any] = {
@@ -64,7 +64,7 @@ def _write_character_pack_dir(root: Path, *, package_id: str = "char-yuki", name
 
 
 def _zip_dir(src: Path, dest: Path) -> None:
-    """Zip a directory with manifest.json at the archive root."""
+    """将包含 manifest.json 的目录压缩为归档，manifest 位于归档根。"""
     with zipfile.ZipFile(dest, "w", zipfile.ZIP_DEFLATED) as zf:
         for f in sorted(src.rglob("*")):
             if f.is_file():
@@ -72,15 +72,15 @@ def _zip_dir(src: Path, dest: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Fixtures
+# 夹具
 # ---------------------------------------------------------------------------
 
 
 @pytest.fixture(autouse=True)
 def _isolate_imports(tmp_path):
-    """Point the packs directory at a fresh temp dir per test and clear import jobs."""
+    """每个测试将资源包目录指向新的临时目录，并清除导入任务。"""
     packs_stub._set_paths_for_test(tmp_path / "packs")
-    # Clear import jobs
+    # 清除导入任务
     stubs_state.import_jobs.clear()
     yield
     packs_stub._set_paths_for_test(None)
@@ -88,12 +88,12 @@ def _isolate_imports(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# Stub layer — start_import / get
+# Stub 层 — start_import / get
 # ---------------------------------------------------------------------------
 
 
 def test_start_import_queues_job_and_returns_file_id(tmp_path):
-    """start_import creates a queued job with a fresh file_id."""
+    """start_import 创建一个带有全新 file_id 的排队任务。"""
     pack = _write_character_pack_dir(tmp_path)
     archive = tmp_path / "pack.zip"
     _zip_dir(pack, archive)
@@ -109,7 +109,7 @@ def test_start_import_queues_job_and_returns_file_id(tmp_path):
     assert job["name"] == "Test Import"
     assert "file_id" in job
 
-    # The archive bytes are persisted by the background thread; poll until done.
+    # 归档字节由后台线程持久化；轮询直到完成。
     import time
     for _ in range(50):
         job = resources_stub.get(job_id)
@@ -121,7 +121,7 @@ def test_start_import_queues_job_and_returns_file_id(tmp_path):
 
 
 def test_start_import_with_file_id(tmp_path):
-    """start_import works with an uploaded file_id source."""
+    """start_import 支持已上传的 file_id 来源。"""
     pack = _write_character_pack_dir(tmp_path)
     archive = tmp_path / "pack.zip"
     _zip_dir(pack, archive)
@@ -136,7 +136,7 @@ def test_start_import_with_file_id(tmp_path):
 
     job = resources_stub.get(job_id)
     assert job["status"] == "queued"
-    # start_import always allocates its own fresh destination file_id.
+    # start_import 总是分配自己的全新目标 file_id。
     assert job["file_id"] != file_id
 
     import time
@@ -150,7 +150,7 @@ def test_start_import_with_file_id(tmp_path):
 
 
 def test_start_import_requires_path_or_file_id():
-    """start_import without path/file_id fails the job in the background thread."""
+    """start_import 缺少 path/file_id 时，任务在后台线程中失败。"""
     job_id = gen_import_job_id()
     payload = {"name": "No Source"}
     resources_stub.start_import(payload, job_id)
@@ -166,17 +166,17 @@ def test_start_import_requires_path_or_file_id():
 
 
 def test_get_nonexistent_returns_none():
-    """get returns None for unknown job_id."""
+    """get 对未知的 job_id 返回 None。"""
     assert resources_stub.get("nope") is None
 
 
 # ---------------------------------------------------------------------------
-# Integration — full async import flow
+# 集成 — 完整异步导入流程
 # ---------------------------------------------------------------------------
 
 
 def test_import_job_completes_successfully(tmp_path):
-    """A valid pack archive results in a completed job with package_id + summary."""
+    """有效的资源包归档产生已完成的任务，含 package_id + summary。"""
     pack = _write_character_pack_dir(tmp_path, package_id="char-yuki", name="Yuki")
     archive = tmp_path / "pack.zip"
     _zip_dir(pack, archive)
@@ -185,7 +185,7 @@ def test_import_job_completes_successfully(tmp_path):
     payload = {"name": "Import Yuki", "kind": "character", "path": str(archive)}
     resources_stub.start_import(payload, job_id)
 
-    # Wait for background thread to complete.
+    # 等待后台线程完成。
     import time
     for _ in range(50):
         job = resources_stub.get(job_id)
@@ -205,14 +205,14 @@ def test_import_job_completes_successfully(tmp_path):
     assert job["result"]["loaded_memories"] == 1
     assert job["completed_at"] is not None
 
-    # Pack installed in runtime.
+    # 资源包已安装到运行时。
     assert "char-yuki" in stubs_state.characters
     assert stubs_state.characters["char-yuki"][packs_stub._SOURCE_TAG] is True
     assert stubs_state.characters["char-yuki"][packs_stub._ORIGINAL_ID_TAG] == "char-yuki"
 
 
 def test_import_job_fails_on_invalid_archive(tmp_path):
-    """A corrupt/bad archive results in a failed job with non-empty error."""
+    """损坏/错误的归档产生失败的任务，且错误信息非空。"""
     bad = tmp_path / "bad.zip"
     bad.write_bytes(b"not an archive")
 
@@ -235,7 +235,7 @@ def test_import_job_fails_on_invalid_archive(tmp_path):
 
 
 def test_import_job_fails_on_missing_archive(tmp_path):
-    """A non-existent path results in a failed job."""
+    """不存在的路径产生失败的任务。"""
     job_id = gen_import_job_id()
     payload = {"name": "Missing", "path": str(tmp_path / "nope.zip")}
     resources_stub.start_import(payload, job_id)
@@ -254,7 +254,7 @@ def test_import_job_fails_on_missing_archive(tmp_path):
 
 
 def test_import_job_persists_archive_to_files_storage(tmp_path):
-    """The import thread persists the archive bytes to files storage under the job's file_id."""
+    """导入线程将归档字节以任务的 file_id 持久化到文件存储。"""
     pack = _write_character_pack_dir(tmp_path)
     archive = tmp_path / "pack.zip"
     _zip_dir(pack, archive)
@@ -280,12 +280,12 @@ def test_import_job_persists_archive_to_files_storage(tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# HTTP layer
+# HTTP 层
 # ---------------------------------------------------------------------------
 
 
 def _install_via_import(client, auth_headers, tmp_path, **overrides) -> dict:
-    """Helper: POST /v1/xijian/resources/import with a JSON path, wait, return job."""
+    """辅助函数：以 JSON path POST /v1/xijian/resources/import，等待并返回任务。"""
     pack = _write_character_pack_dir(tmp_path, **overrides)
     archive = tmp_path / "import.zip"
     _zip_dir(pack, archive)
@@ -299,7 +299,7 @@ def _install_via_import(client, auth_headers, tmp_path, **overrides) -> dict:
     job = resp.get_json()
     job_id = job["job_id"]
 
-    # Poll until done.
+    # 轮询直到完成。
     import time
     for _ in range(50):
         r = client.get(f"/v1/xijian/resources/imports/{job_id}", headers=auth_headers)
@@ -312,7 +312,7 @@ def _install_via_import(client, auth_headers, tmp_path, **overrides) -> dict:
 
 
 def test_api_import_json_path_returns_202_then_completed(client, auth_headers, tmp_path):
-    """POST import with JSON path returns 202, then job completes."""
+    """POST import 携带 JSON path 返回 202，随后任务完成。"""
     job = _install_via_import(client, auth_headers, tmp_path, package_id="api-char", name="API Char")
     assert job["status"] == "completed"
     assert job["package_id"] == "api-char"
@@ -320,12 +320,12 @@ def test_api_import_json_path_returns_202_then_completed(client, auth_headers, t
 
 
 def test_api_import_with_file_id(client, auth_headers, tmp_path):
-    """POST import with file_id works."""
+    """POST import 携带 file_id 可用。"""
     pack = _write_character_pack_dir(tmp_path, package_id="fileid-char", name="FileID Char")
     archive = tmp_path / "fid.zip"
     _zip_dir(pack, archive)
 
-    # Upload to files endpoint first.
+    # 先上传到文件端点。
     up = client.post(
         "/v1/files",
         headers=auth_headers,
@@ -335,7 +335,7 @@ def test_api_import_with_file_id(client, auth_headers, tmp_path):
     assert up.status_code == 201
     file_id = up.get_json()["id"]
 
-    # Import via file_id.
+    # 通过 file_id 导入。
     resp = client.post(
         "/v1/xijian/resources/import",
         headers=auth_headers,
@@ -357,7 +357,7 @@ def test_api_import_with_file_id(client, auth_headers, tmp_path):
 
 
 def test_api_import_missing_name_returns_400(client, auth_headers):
-    """POST import without name returns 400."""
+    """POST import 缺少 name 返回 400。"""
     resp = client.post(
         "/v1/xijian/resources/import",
         headers=auth_headers,
@@ -368,7 +368,7 @@ def test_api_import_missing_name_returns_400(client, auth_headers):
 
 
 def test_api_get_import_returns_job(client, auth_headers, tmp_path):
-    """GET /v1/xijian/resources/imports/<job_id> returns the job record."""
+    """GET /v1/xijian/resources/imports/<job_id> 返回任务记录。"""
     job = _install_via_import(client, auth_headers, tmp_path, package_id="get-char", name="Get Char")
     job_id = job["id"]
 
@@ -381,14 +381,14 @@ def test_api_get_import_returns_job(client, auth_headers, tmp_path):
 
 
 def test_api_get_nonexistent_import_returns_404(client, auth_headers):
-    """GET unknown import job returns 404."""
+    """GET 未知的导入任务返回 404。"""
     r = client.get("/v1/xijian/resources/imports/nope", headers=auth_headers)
     assert r.status_code == 404
     assert r.get_json()["error"]["code"] == "import_not_found"
 
 
 def test_import_devkit_submission_schema(tmp_path):
-    """DevKit submission schema (xijian.devkit.submission/v1) is accepted."""
+    """DevKit 提交模式（xijian.devkit.submission/v1）被接受。"""
     pack = _write_character_pack_dir(tmp_path, package_id="dk-char", name="DK Char")
     manifest = json.loads((pack / "manifest.json").read_text(encoding="utf-8"))
     manifest["schema"] = "xijian.devkit.submission/v1"
@@ -417,8 +417,8 @@ def test_import_devkit_submission_schema(tmp_path):
 
 
 def test_import_world_pack(tmp_path):
-    """Importing a world pack loads world + environment + NPCs."""
-    # Build a world pack.
+    """导入世界资源包会加载世界 + 环境 + NPC。"""
+    # 构建一个世界资源包。
     pack = tmp_path / "world-pack"
     pack.mkdir()
     manifest = {

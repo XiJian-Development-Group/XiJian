@@ -57,7 +57,7 @@ from xijian_api.stubs.npcs import (
 
 @pytest.fixture()
 def world(client, auth_headers):
-    """Create a fresh world for NPC tests."""
+    """为 NPC 测试创建一个全新世界。"""
     body = {"name": "NPC Test World"}
     res = client.post("/v1/xijian/worlds", json=body, headers=auth_headers)
     assert res.status_code == 201
@@ -66,7 +66,7 @@ def world(client, auth_headers):
 
 @pytest.fixture()
 def npc(client, auth_headers, world):
-    """Create a low_active NPC in the fixture world."""
+    """在夹具世界中创建一个 low_active NPC。"""
     body = {"world_id": world, "name": "Test NPC"}
     res = client.post("/v1/xijian/npcs", json=body, headers=auth_headers)
     assert res.status_code == 201
@@ -449,7 +449,7 @@ class TestSetTier:
             npc = npcs_stub.create(world_id=world["id"], name="x")
             result = npcs_stub.set_tier(npc["id"], TIER_LOW_ACTIVE)
             assert result is not None
-            # No new log entry.
+            # 无新的日志条目。
             log = [
                 e for e in stubs_state.npc_scheduling_log.values()
                 if e.get("npc_id") == npc["id"] and e["action"] in {"sleep", "wake"}
@@ -504,7 +504,7 @@ class TestComputeBudget:
     def test_over_budget_flag(self):
         world = worlds_stub.create(name="W")
         try:
-            # Lower the world total to force overage.
+            # 调低世界总量以强制超额。
             from xijian_api.stubs import world_compute_config as wcc_stub
             wcc_stub.update(world["id"], {"total_token_budget": 100})
             npcs_stub.create(world_id=world["id"], name="a", compute_budget=80)
@@ -517,7 +517,7 @@ class TestComputeBudget:
     def test_tier_over(self):
         world = worlds_stub.create(name="W")
         try:
-            # 4 high_active NPCs → 1 over the cap.
+            # 4 个 high_active NPC → 1 个超出上限。
             for i in range(4):
                 npcs_stub.create(
                     world_id=world["id"], name=f"n{i}",
@@ -570,7 +570,7 @@ class TestTickWorld:
             npcs_stub.create(world_id=world["id"], name="b", compute_budget=80)
             out = npcs_stub.tick_world(world["id"])
             assert out["demoted"] >= 1
-            # The lowest-importance NPC was demoted.
+            # importance 最低的 NPC 被降级。
             tiers = [n["activity_tier"] for n in npcs_stub.list_for_world(world["id"])]
             assert TIER_IDLE in tiers
         finally:
@@ -582,7 +582,7 @@ class TestTickWorld:
             npc = npcs_stub.create(
                 world_id=world["id"], name="x", activity_tier=TIER_HIGH_ACTIVE
             )
-            # Backdate last_think_at so the idle threshold trips.
+            # 将 last_think_at 回调到过去，使空闲阈值触发。
             npcs_stub.update(npc["id"], {"last_think_at": 0.0})
             npcs_stub.tick_world(world["id"])
             refreshed = npcs_stub.get(npc["id"])
@@ -607,7 +607,7 @@ class TestTickWorld:
                 world["id"], queue_p99_latency_s=DEFAULT_DEGRADE_P99_LATENCY_S + 1
             )
             refreshed = npcs_stub.get(npc["id"])
-            # LLM-queue pressure is severe — directly to idle, not low.
+            # LLM 队列压力严重 —— 直接降为 idle，而非 low。
             assert refreshed["activity_tier"] == TIER_LOW_ACTIVE
             log = [
                 e for e in stubs_state.npc_scheduling_log.values()
@@ -642,8 +642,8 @@ class TestTickLifecycle:
     def test_start_stop(self):
         npcs_stub.stop_tick()
         out = npcs_stub.start_tick()
-        # Env default is "0" → disabled, so it should refuse.
-        # To exercise the start path, flip the env flag temporarily.
+        # 环境变量默认是 "0" → 已禁用，因此应拒绝。
+        # 为演练启动路径，临时翻转环境变量标志。
         old = os.environ.get("XIJIAN_NPC_TICK")
         os.environ["XIJIAN_NPC_TICK"] = "1"
         try:
@@ -674,13 +674,13 @@ class TestTickLifecycle:
 
 class TestOverloadHandler:
     def test_handler_installed_at_seed(self):
-        # The autouse fixture called seed_all() → install_overload_handler.
+        # autouse 夹具调用了 seed_all() → install_overload_handler。
         handlers = ov_stub.list_action_handlers()
         registered = handlers.get(ov_stub.ACTION_SUSPEND_IDLE_NPCS, [])
         assert len(registered) >= 1
-        # The registered handler is the module-level
-        # ``_suspend_for_overload`` from npcs.py — its repr carries
-        # the function name, so a substring check pins the contract.
+        # 注册的处理器是 npcs.py 中模块级的
+        # ``_suspend_for_overload`` —— 其 repr 携带
+        # 函数名，因此子串检查即可固定契约。
         assert any("_suspend_for_overload" in h for h in registered)
 
     def test_suspend_drops_active_npcs(self):
@@ -688,19 +688,19 @@ class TestOverloadHandler:
         try:
             npcs_stub.create(world_id=world["id"], name="a", activity_tier=TIER_HIGH_ACTIVE)
             npcs_stub.create(world_id=world["id"], name="b", activity_tier=TIER_LOW_ACTIVE)
-            # CPU pressure → ACTION_SUSPEND_IDLE_NPCS (per overload
-            # metric→action mapping).  This is the path that should
-            # fan out to the NPC stub's _suspend_for_overload handler.
+            # CPU 压力 → ACTION_SUSPEND_IDLE_NPCS（按过载
+            # 指标→动作映射）。该路径应
+            # 分发到 NPC stub 的 _suspend_for_overload 处理器。
             ov_stub.simulate_overload(ov_stub.METRIC_CPU)
             tiers = [n["activity_tier"] for n in npcs_stub.list_for_world(world["id"])]
             assert all(t == TIER_IDLE for t in tiers), tiers
         finally:
-            # Make sure we resume so other tests aren't affected.
+            # 确保恢复，以免影响其它测试。
             npcs_stub.resume_from_overload()
             worlds_stub.delete(world["id"])
 
     def test_suspended_skips_tick(self):
-        # Force suspend state via CPU overload, then tick → should return suspended.
+        # 通过 CPU 过载强制挂起状态，然后 tick → 应返回 suspended。
         world = worlds_stub.create(name="W")
         try:
             npcs_stub.create(world_id=world["id"], name="a")
@@ -941,7 +941,7 @@ class TestHttpScheduling:
         )
         assert res.status_code == 200
         assert npc not in res.get_json()["affected_npcs"]
-        # Now flip to high_active and re-check.
+        # 现在切换为 high_active 并重新检查。
         client.put(
             f"/v1/xijian/npcs/{npc}/tier",
             json={"activity_tier": TIER_HIGH_ACTIVE},
@@ -988,13 +988,13 @@ class TestAuthCoverage:
 
 
 # ---------------------------------------------------------------------------
-# A4.2 — template-based auto NPC generation + state effects
+# A4.2 — 基于模板的自动 NPC 生成 + 状态效果
 # ---------------------------------------------------------------------------
 
 
 class TestAutoGenerateNpcs:
-    """A4.2 US-02 — auto NPC generation driven by the world lore doc
-    (template-based; LLM hook documented but not required)."""
+    """A4.2 US-02 — 由世界背景文档驱动的自动 NPC 生成
+    （基于模板；LLM 钩子已文档化但非必需）。"""
 
     def _make_world(self, tmp_path, lore: str) -> str:
         from xijian_api.stubs import worlds as worlds_stub
@@ -1020,16 +1020,16 @@ class TestAutoGenerateNpcs:
         assert out["created"] == 4
         assert len(out["npc_ids"]) == 4
         names = [npcs_stub.get(i)["name"] for i in out["npc_ids"]]
-        # Headings / emphasis / list items yield real entity names,
-        # not generic NPC_1 fallbacks.
+        # 标题 / 强调 / 列表项产生真实实体名，
+        # 而非通用的 NPC_1 回退名。
         assert any(n != "NPC_1" for n in names)
 
     def test_persona_includes_tendency_and_role(self, tmp_path):
         wid = self._make_world(tmp_path, "**商人** — 集市里的盐商\n")
         out = npcs_stub.auto_generate_npcs(wid, count=1)
         npc = npcs_stub.get(out["npc_ids"][0])
-        # The entity name becomes the NPC name; the role + tendency
-        # flow into the persona.
+        # 实体名成为 NPC 名称；角色 + 倾向
+        # 流入 persona。
         assert npc["name"] == "商人"
         assert "集市里的盐商" in npc["persona_doc"]
         assert "性格" in npc["persona_doc"]
@@ -1057,8 +1057,8 @@ class TestAutoGenerateNpcs:
             name="W", world_doc_path="",
             config_path="c.json", state_doc_path="s.json",
         )
-        # Fill the world to the cap then ask for more — the create()
-        # cap raises inside auto_generate; the return must not crash.
+        # 把世界填满到上限后再请求更多 —— create()
+        # 在 auto_generate 内部触发上限；返回值不能崩溃。
         for i in range(npcs_stub.MAX_NPCS_PER_WORLD):
             npcs_stub.create(world_id=world["id"], name=f"N{i}")
         out = npcs_stub.auto_generate_npcs(world["id"], count=3)
@@ -1067,7 +1067,7 @@ class TestAutoGenerateNpcs:
 
 
 class TestApplyNpcStateEffect:
-    """A4.1 events / A4.3 interactions apply npc_* deltas through this."""
+    """A4.1 事件 / A4.3 交互通过它应用 npc_* 增量。"""
 
     def test_applies_delta_and_clamps(self, world):
         npc = npcs_stub.create(
@@ -1078,7 +1078,7 @@ class TestApplyNpcStateEffect:
         npcs_stub.apply_npc_state_effect(npc["id"], "health", 200)
         state_json = npcs_stub.get(npc["id"])["state_json"]
         assert state_json["mood"] == 70.0
-        assert state_json["health"] == 100.0  # clamped
+        assert state_json["health"] == 100.0  # 已钳制
 
     def test_unknown_field_rejected(self, world):
         npc = npcs_stub.create(world_id=world, name="N")

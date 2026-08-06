@@ -44,11 +44,11 @@ def world(client, auth_headers):
 
 @pytest.fixture()
 def tiny_tree(client, auth_headers, world):
-    """Build the canonical ``map → region → leaf`` tree.
+    """构建规范的 ``map → region → leaf`` 树。
 
-    Returns a dict ``{"map": <poi>, "region": <poi>, "shop": <poi>,
-    "city": <poi>, "wild": <poi>, "dungeon": <poi>}`` so individual
-    tests can pluck any node by name.
+    返回一个字典 ``{"map": <poi>, "region": <poi>, "shop": <poi>,
+    "city": <poi>, "wild": <poi>, "dungeon": <poi>}``，以便各测试
+    按名称取用任意节点。
     """
     body_map = {"world_id": world, "name": "Map", "kind": "map"}
     m = client.post(
@@ -78,7 +78,7 @@ def tiny_tree(client, auth_headers, world):
 
 
 # ---------------------------------------------------------------------------
-# Pure helpers
+# 纯辅助函数
 # ---------------------------------------------------------------------------
 
 
@@ -135,8 +135,8 @@ class TestPureHelpers:
 
 
 # ---------------------------------------------------------------------------
-# CRUD (stub)
-# CRUD — (stub)
+# CRUD（stub）
+# CRUD —（stub）
 # ---------------------------------------------------------------------------
 
 
@@ -243,10 +243,10 @@ class TestStubCRUD:
     def test_delete_refuses_orphan(self, world):
         m = pois_stub.create(world_id=world, name="M", kind="map")
         r = pois_stub.create(world_id=world, name="R", kind="region", parent_id=m["id"])
-        # Try to delete the region which still has / can have children
-        # — but it has no children, so this should succeed.
+        # 尝试删除仍可能包含子节点的 region
+        # —— 但它没有子节点，因此应成功。
         assert pois_stub.delete(r["id"]) is True
-        # Now the map has no children, so it should also be deletable.
+        # 现在 map 没有子节点，因此也应可删除。
         assert pois_stub.delete(m["id"]) is True
 
     def test_delete_refuses_when_children_exist(self, world):
@@ -257,7 +257,7 @@ class TestStubCRUD:
 
 
 # ---------------------------------------------------------------------------
-# Tree queries (stub)
+# 树查询（stub）
 # ---------------------------------------------------------------------------
 
 
@@ -270,7 +270,7 @@ class TestStubTree:
         assert len(root["children"]) == 1
         region = root["children"][0]
         assert region["name"] == "Region"
-        # children are sorted by name
+        # 子节点按名称排序
         names = [c["name"] for c in region["children"]]
         assert names == sorted(names)
 
@@ -338,7 +338,7 @@ class TestRoutes:
         res = client.get(f"/v1/xijian/scenes/pois?world_id={world}", headers=auth_headers)
         assert res.status_code == 200
         body = res.get_json()
-        # map + region + 4 leaves = 6 records
+        # map + region + 4 个叶子 = 6 条记录
         assert len(body["data"]) == 6
 
     def test_get_returns_record(self, client, auth_headers, tiny_tree):

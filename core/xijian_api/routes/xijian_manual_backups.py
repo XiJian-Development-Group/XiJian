@@ -1,22 +1,20 @@
-"""``/v1/backups`` + ``/v1/protected-modules`` routes — A1.1.
+"""``/v1/backups`` + ``/v1/protected-modules`` 路由 — A1.1。
 
-A1.1 manual backup / restore / protected-module endpoints per
-``docs/Dev. Function List功能清单v2.md`` §A1.1:
+按 ``docs/Dev. Function List功能清单v2.md`` §A1.1 的 A1.1 手动备份 / 恢复 / 受保护模块端点：
 
-* ``POST /v1/backups``            — trigger a manual backup
-                                    (per-character, versioned)
-* ``GET  /v1/backups``            — list backups (?character_id, ?limit)
-* ``GET  /v1/backups/<bid>``      — get one backup
-* ``POST /v1/backups/<bid>/restore`` — restore (optional ``scope`` /
-                                    ``target_character_id``)
-* ``DELETE /v1/backups/<bid>``    — delete a backup
-* ``GET  /v1/protected-modules``  — protected-module registry
-                                    (?character_id → per-char assoc)
-* ``GET  /v1/characters/<cid>/protected-modules`` — per-character view
-* ``PATCH /v1/characters/<cid>/protected-modules`` — toggle auto_backup
+* ``POST /v1/backups``            — 触发手动备份
+                                    （按角色、带版本）
+* ``GET  /v1/backups``            — 列出备份 (?character_id, ?limit)
+* ``GET  /v1/backups/<bid>``      — 获取单个备份
+* ``POST /v1/backups/<bid>/restore`` — 恢复（可选 ``scope`` /
+                                    ``target_character_id``）
+* ``DELETE /v1/backups/<bid>``    — 删除备份
+* ``GET  /v1/protected-modules``  — 受保护模块注册表
+                                    (?character_id → 按角色关联)
+* ``GET  /v1/characters/<cid>/protected-modules`` — 按角色视图
+* ``PATCH /v1/characters/<cid>/protected-modules`` — 切换 auto_backup
 
-Error style follows the other xijian route modules (ApiError with
-machine-readable ``code``).
+错误风格与其他 xijian 路由模块一致（带机器可读 ``code`` 的 ApiError）。
 """
 
 from __future__ import annotations
@@ -42,7 +40,7 @@ def _require_json() -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Protected modules (AC-1)
+# 受保护模块（AC-1）
 # ---------------------------------------------------------------------------
 
 
@@ -83,7 +81,7 @@ def patch_character_protection(character_id: str):
 
 
 # ---------------------------------------------------------------------------
-# Manual backups (AC-2 / AC-3)
+# 手动备份（AC-2 / AC-3）
 # ---------------------------------------------------------------------------
 
 

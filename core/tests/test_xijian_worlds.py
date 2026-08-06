@@ -59,7 +59,7 @@ from xijian_api.stubs.worlds import (
 
 @pytest.fixture()
 def world(client, auth_headers):
-    """Create a world via the HTTP surface and return its id."""
+    """通过 HTTP 接口创建世界并返回其 id。"""
     body = {
         "name": "Test World",
         "world_doc_path": "worlds/test/lore.md",
@@ -72,13 +72,13 @@ def world(client, auth_headers):
 
 
 # ---------------------------------------------------------------------------
-# Pure helpers
+# 纯辅助函数
 # ---------------------------------------------------------------------------
 
 
 class TestWhitelistedFields:
     def test_state_whitelist_is_frozen(self):
-        # Spec Dev.md §4.3.3 — these are the canonical system dimensions.
+        # 规格 Dev.md §4.3.3 —— 这些是规范的系统维度。
         assert "economy" in WHITELISTED_STATE_FIELDS
         assert "health" in WHITELISTED_STATE_FIELDS
         assert "diet" in WHITELISTED_STATE_FIELDS
@@ -159,7 +159,7 @@ class TestCreateWorld:
         wid = res.get_json()["id"]
         assert wid in stubs_state.world_environment
         assert wid in stubs_state.world_compute_config
-        # Audit log gets a "create" entry.
+        # 审计日志获得一条 "create" 条目。
         entries = audit_stub.list_log(world_id=wid, action="create")
         assert any(e["action"] == "create" for e in entries)
 
@@ -187,7 +187,7 @@ class TestListWorlds:
         )
         res = client.get("/v1/xijian/worlds", headers=auth_headers)
         names = [w["name"] for w in res.get_json()["data"]]
-        # Active entries come before inactive ones.
+        # 激活条目排在未激活条目之前。
         active_idx = names.index("Active")
         inactive_idx = names.index("Inactive")
         assert active_idx < inactive_idx
@@ -240,7 +240,7 @@ class TestDeleteWorld:
         res = client.delete(f"/v1/xijian/worlds/{world}", headers=auth_headers)
         assert res.status_code == 200
         assert res.get_json()["deleted"] is True
-        # Subsequent get → 404.
+        # 后续 get → 404。
         res = client.get(f"/v1/xijian/worlds/{world}", headers=auth_headers)
         assert res.status_code == 404
 
@@ -250,7 +250,7 @@ class TestDeleteWorld:
 
     def test_delete_writes_audit_before_removal(self, client, auth_headers, world):
         client.delete(f"/v1/xijian/worlds/{world}", headers=auth_headers)
-        # The audit log still has the entry.
+        # 审计日志仍保留该条目。
         entries = audit_stub.list_log(world_id=world, action="delete")
         assert any(e["action"] == "delete" for e in entries)
 
@@ -293,7 +293,7 @@ class TestWorldState:
     def test_patch_state_unknown_field_is_silently_accepted(
         self, client, auth_headers, world
     ):
-        # Forward-compat — unknown keys are stored but DEBUG-logged.
+        # 前向兼容 — 未知键会被存储但记录 DEBUG 日志。
         res = client.patch(
             f"/v1/xijian/worlds/{world}/state",
             json={"custom_metric": 99},
@@ -320,7 +320,7 @@ class TestWorldState:
 
 
 # ---------------------------------------------------------------------------
-# Lifecycle — switch / reset
+# 生命周期 — 切换 / 重置
 # ---------------------------------------------------------------------------
 
 
@@ -356,7 +356,7 @@ class TestSwitchActive:
 
 class TestReset:
     def test_full_reset_flow(self, client, auth_headers, world):
-        # Add an NPC so we can verify reset wipes it.
+        # 添加一个 NPC，以便验证重置会清除它。
         client.post(
             "/v1/xijian/npcs",
             json={"world_id": world, "name": "Test NPC"},
@@ -369,13 +369,13 @@ class TestReset:
             json={"economy": 99},
             headers=auth_headers,
         )
-        # Preview.
+        # 预览。
         res = client.post(
             f"/v1/xijian/worlds/{world}/reset/preview", headers=auth_headers
         )
         assert res.status_code == 200
         token = res.get_json()["reset_token"]
-        # Confirm.
+        # 确认。
         res = client.post(
             f"/v1/xijian/worlds/{world}/reset/confirm",
             json={"reset_token": token},
@@ -388,8 +388,8 @@ class TestReset:
         assert res.status_code == 200
         state = res.get_json()
         assert "economy" not in state["environment"]
-        # NPC was wiped.
-        # NPC — was wiped.
+        # NPC 已被清除。
+        # NPC —— 已被清除。
         assert state["npc_count"] == 0
 
     def test_confirm_without_token_returns_400(self, client, auth_headers, world):
@@ -423,13 +423,13 @@ class TestReset:
         assert res.get_json().get("error", {}).get("code") == "no_pending_reset"
 
     def test_confirm_with_expired_token_returns_408(self, client, auth_headers, world, monkeypatch):
-        # Issue a preview, then advance past the TTL.
+        # 发起一次预览，然后将时间推进超过 TTL。
         res = client.post(
             f"/v1/xijian/worlds/{world}/reset/preview", headers=auth_headers
         )
         token = res.get_json()["reset_token"]
-        # Use a stub-level clock patch — the route doesn't expose `now`
-        # so we directly mutate the token store.
+        # 使用 stub 层时钟补丁 —— 路由不暴露 `now`，
+        # 因此我们直接修改 token 存储。
         handle = worlds_stub._reset_tokens[world]
         handle["expires_at"] = time.time() - 1
         res = client.post(
@@ -448,7 +448,7 @@ class TestReset:
             f"/v1/xijian/worlds/{world}/reset/cancel", headers=auth_headers
         )
         assert res.status_code == 200
-        # Confirming now should fail with no_pending_reset.
+        # 现在确认应失败，返回 no_pending_reset。
         res = client.post(
             f"/v1/xijian/worlds/{world}/reset/confirm",
             json={"reset_token": "x"},
@@ -458,7 +458,7 @@ class TestReset:
 
 
 # ---------------------------------------------------------------------------
-# Cross-module — env / compute / audit / npcs
+# 跨模块 — env / compute / audit / npcs
 # ---------------------------------------------------------------------------
 
 
@@ -481,7 +481,7 @@ class TestEnvironment:
         data = res.get_json()
         assert data["weather"] == "rain"
         assert data["time_of_day"] == 360
-        # light_level auto-derives from time_of_day.
+        # light_level 从 time_of_day 自动推导。
         assert 0.0 <= data["light_level"] <= 1.0
 
     def test_environment_unknown_world_returns_404(self, client, auth_headers):
@@ -655,7 +655,7 @@ class TestWorldsGlobalSummary:
 
 
 # ---------------------------------------------------------------------------
-# Legacy aliases (pre-A4.2)
+# 旧版别名（A4.2 之前）
 # ---------------------------------------------------------------------------
 
 
@@ -667,7 +667,7 @@ class TestLegacyTransition:
             headers=auth_headers,
         )
         assert res.status_code == 200
-        # Audit log has a "transition" entry.
+        # 审计日志有一条 "transition" 条目。
         entries = audit_stub.list_log(world_id=world, action="transition")
         assert any(e["action"] == "transition" for e in entries)
 
@@ -708,7 +708,7 @@ class TestLegacyAddEvent:
 
 
 # ---------------------------------------------------------------------------
-# Stub-level
+# Stub 层
 # ---------------------------------------------------------------------------
 
 
@@ -761,7 +761,7 @@ class TestStubDirect:
             worlds_stub.delete(wid)
 
     def test_seed_default_idempotent(self):
-        # Already seeded by the autouse fixture — verify it's there.
+        # 已由 autouse 夹具播种 — 验证它存在。
         assert DEFAULT_WORLD_ID in stubs_state.worlds
 
 
@@ -811,8 +811,8 @@ class TestAuthCoverage:
 
 
 class TestMaxWorlds:
-    """Single instance supports at least 3 concurrent worlds (fixed);
-    the 4th active world is rejected."""
+    """单实例支持至少 3 个并发世界（固定）；
+    第 4 个激活世界会被拒绝。"""
 
     def test_constant_is_three(self):
         from xijian_api.stubs.worlds import MAX_WORLDS
@@ -821,11 +821,11 @@ class TestMaxWorlds:
     def test_capacity_reports_limits(self):
         cap = worlds_stub.worlds_capacity()
         assert cap["max_worlds"] == 3
-        assert cap["active_worlds"] >= 1  # seeded demo world
+        assert cap["active_worlds"] >= 1  # 已播种的演示世界
         assert cap["slots_left"] == 3 - cap["active_worlds"]
 
     def test_fourth_active_world_rejected(self):
-        # Seeded demo world + 2 more = 3 active; the 4th must fail.
+        # 种子演示世界 + 2 个更多 = 3 个激活；第 4 个必须失败。
         worlds_stub.create(name="W2")
         worlds_stub.create(name="W3")
         with pytest.raises(WorldError, match="active world limit"):
@@ -834,7 +834,7 @@ class TestMaxWorlds:
     def test_inactive_creation_does_not_consume_slot(self):
         worlds_stub.create(name="W2")
         worlds_stub.create(name="W3")
-        # Inactive worlds are allowed past the active limit.
+        # 未激活的世界允许超过激活数量上限。
         rec = worlds_stub.create(name="W4", is_active=False)
         assert rec["is_active"] is False
 
@@ -843,7 +843,7 @@ class TestMaxWorlds:
         w3 = worlds_stub.create(name="W3")
         with pytest.raises(WorldError, match="active world limit"):
             worlds_stub.create(name="W4")
-        # Deactivate one → creation succeeds again.
+        # 停用一个 → 再次创建成功。
         worlds_stub.update(w3["id"], {"is_active": False})
         rec = worlds_stub.create(name="W4")
         assert rec["is_active"] is True

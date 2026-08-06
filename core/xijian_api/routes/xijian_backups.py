@@ -1,49 +1,37 @@
-"""``/v1/xijian/backups/*`` routes — A5.3.
+"""``/v1/xijian/backups/*`` 路由 — A5.3。
 
-Snapshot CRUD
+快照 CRUD
 ==============
 
-* ``GET    /v1/xijian/backups/snapshots``         — list
+* ``GET    /v1/xijian/backups/snapshots``         — 列表
                                                      (?scope,
                                                      ?target_id,
                                                      ?reason,
                                                      ?limit)
-* ``POST   /v1/xijian/backups/snapshots``         — create
-* ``GET    /v1/xijian/backups/snapshots/<id>``    — get
-* ``DELETE /v1/xijian/backups/snapshots/<id>``    — delete
-* ``POST   /v1/xijian/backups/snapshots/<id>/compress`` — force-recompress
+* ``POST   /v1/xijian/backups/snapshots``         — 创建
+* ``GET    /v1/xijian/backups/snapshots/<id>``    — 获取
+* ``DELETE /v1/xijian/backups/snapshots/<id>``    — 删除
+* ``POST   /v1/xijian/backups/snapshots/<id>/compress`` — 强制重新压缩
 
-Capacity
+容量
 ========
 
-* ``GET    /v1/xijian/backups/capacity``         — current
-                                                     total +
-                                                     ceiling
-* ``POST   /v1/xijian/backups/capacity/resolve``  — operator
-                                                     response
-                                                     to the
-                                                     prompt
-                                                     record
-                                                     (compress
-                                                     / drop /
-                                                     force)
+* ``GET    /v1/xijian/backups/capacity``         — 当前总量 + 上限
+* ``POST   /v1/xijian/backups/capacity/resolve``  — 操作员对提示记录的
+                                                     响应 (压缩 / 丢弃 / 强制)
 
-Prune
+清理
 =====
 
-* ``POST   /v1/xijian/backups/prune``             — drop
-                                                     expired
-                                                     snapshots
+* ``POST   /v1/xijian/backups/prune``             — 丢弃过期快照
                                                      (?dry_run)
 
-Policy
+策略
 ======
 
-* ``GET    /v1/xijian/backups/policy``            — read
-* ``PUT    /v1/xijian/backups/policy``            — set
-* ``DELETE /v1/xijian/backups/policy``            — reset
-                                                     to
-                                                     defaults
+* ``GET    /v1/xijian/backups/policy``            — 读取
+* ``PUT    /v1/xijian/backups/policy``            — 设置
+* ``DELETE /v1/xijian/backups/policy``            — 重置为默认值
 """
 
 from __future__ import annotations
@@ -61,7 +49,7 @@ _LOGGER = logging.getLogger("xijian_api.routes.xijian_backups")
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# 辅助函数
 # ---------------------------------------------------------------------------
 
 
@@ -78,7 +66,7 @@ def _require_json(silent: bool = False) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Snapshot CRUD
+# 快照 CRUD
 # ---------------------------------------------------------------------------
 
 
@@ -112,11 +100,10 @@ def post_snapshot():
             force=bool(body.get("force", False)),
         )
     except snap_stub.CapacityExceededError as exc:
-        # 409 + the prompt body so the operator can decide.
-        # The body includes ``action: "prompt"`` plus
-        # the current_total / ceiling / oldest candidates
-        # so a UI can render a confirmation dialog
-        # directly off this response.
+        # 返回 409 + 提示体，供操作员决策。
+        # 响应体包含 ``action: "prompt"`` 以及
+        # current_total / ceiling / 最旧候选，
+        # 使 UI 能直接据此渲染确认对话框。
         raise ApiError(
             409, str(exc), "invalid_request_error",
             code="capacity_exceeded", **exc.prompt,
@@ -161,7 +148,7 @@ def compress_snapshot(snapshot_id: str):
 
 
 # ---------------------------------------------------------------------------
-# Capacity
+# 容量
 # ---------------------------------------------------------------------------
 
 
@@ -198,7 +185,7 @@ def resolve_capacity():
 
 
 # ---------------------------------------------------------------------------
-# Prune
+# 清理
 # ---------------------------------------------------------------------------
 
 
@@ -207,7 +194,7 @@ def prune():
     body = _require_json(silent=True) or {}
     dry_run = bool(body.get("dry_run", False))
     if dry_run:
-        # Count candidates without removing them.
+        # 仅统计候选而不删除它们。
         import time
         moment = float(time.time())
         candidates = 0
@@ -221,7 +208,7 @@ def prune():
 
 
 # ---------------------------------------------------------------------------
-# Policy
+# 策略
 # ---------------------------------------------------------------------------
 
 

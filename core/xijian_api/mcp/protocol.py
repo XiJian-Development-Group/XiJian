@@ -67,7 +67,7 @@ PROTOCOL_VERSION = "2025-06-18"  # MCP spec version we follow / 遵循的 MCP �
 SERVER_NAME = "xijian-core"
 SERVER_VERSION = "1.0.0"
 
-# JSON-RPC 2.0 error codes
+# JSON-RPC 2.0 error codes / JSON-RPC 2.0 错误码
 ERR_PARSE_ERROR = -32700
 ERR_INVALID_REQUEST = -32600
 ERR_METHOD_NOT_FOUND = -32601
