@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>隙间 — 二次元 AI 聊天</title>
 <meta name="description" content="隙间（XiJian）—— 二次元 AI 聊天。实时语音、3D 角色、模拟世界、长期记忆。数据本地运行，完全开源免费。">
+<meta name="theme-color" content="#000000">
 <meta property="og:title" content="隙间 — 二次元 AI 聊天">
 <meta property="og:description" content="与你的角色实时对话，数据始终留在本地。完全开源免费。">
 <meta property="og:type" content="website">
@@ -31,7 +32,7 @@
       <a href="#join">加入我们</a>
       <a href="https://github.com/XiJian-Development-Group/" target="_blank" rel="noopener">GitHub</a>
     </nav>
-    <button class="nav-toggle" id="navToggle" aria-label="菜单" aria-expanded="false">
+    <button class="nav-toggle" id="navToggle" type="button" aria-label="菜单" aria-controls="navLinks" aria-expanded="false">
       <span></span><span></span><span></span>
     </button>
   </div>
@@ -54,6 +55,7 @@
 <section class="section">
   <div class="container">
     <div class="philosophy">
+      <h2 class="sr-only">项目理念</h2>
       <div class="philosophy-item">
         <h3>本地 AI</h3>
         <p>默认在本地运行全部 AI，数据不出你的设备。未来也支持连接 OpenAI 兼容 API。</p>
@@ -105,6 +107,7 @@
         </svg>
         <h3>主动聊天</h3>
         <p>角色会主动向你发送消息。把角色放进动态壁纸，壁纸里的她依然能回应、互动，就像在 App 中一样。</p>
+        <p class="card-note">主动聊天与动态壁纸目前仅支持 macOS（iOS 适配计划中）；壁纸功能需保持主程序开启。</p>
       </article>
       <article class="card">
         <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -138,11 +141,11 @@
       </div>
       <div class="platform">
         <h3>Windows</h3>
-        <p>Windows ≥ 24H2<br>建议 20GB 可用显存，固态硬盘</p>
+        <p>Windows ≥ 24H2<br>需 20GB 可用显存（最低），固态硬盘</p>
       </div>
       <div class="platform">
         <h3>iOS / Android</h3>
-        <p>适配计划中<br>可连接运行隙间的电脑，使用全部功能</p>
+        <p>适配计划中<br>iOS 可连接运行隙间的电脑，使用全部功能</p>
       </div>
     </div>
   </div>
@@ -186,6 +189,7 @@
         <h3>反馈建议</h3>
         <p>你的想法会得到认真聆听。请将建议发送至项目组管理员邮箱，并附上邮件主题格式。</p>
         <p class="join-qq">管理员邮箱：<strong class="qq-num">panmofan@icloud.com</strong></p>
+        <p class="card-note">邮件请包含：建议内容（120 字内）、提出原因、你希望如何解决。</p>
         <a href="mailto:panmofan@icloud.com?subject=%5BXiJian%20Project%3A%20Contact%20Us%2Fsuggestions%5D%20%E6%82%A8%E7%9A%84%E4%B8%BB%E9%A2%98" class="btn btn-secondary btn-sm">发送邮件</a>
       </div>
       <div class="join-card">
@@ -206,7 +210,7 @@
       <ul>
         <li>本项目具有操控用户设备的功能（需用户手动启用），并具备生成文本、图片、音频与视频的能力。因使用本项目所造成的任何损失与后果，均由使用者承担，与开发组无关。</li>
         <li>请勿滥用开发者工具。开发者工具仅供提交合法的创作内容使用，不得用于任何其他行为。</li>
-        <li>本项目完全开源免费（MIT License），请不要售卖或付费购买本项目。本项目使用了若干开源项目，详见 docs/Deps.md。</li>
+        <li>本项目完全开源免费（MIT License），请不要售卖或付费购买本项目。本项目使用了若干开源项目，详见<a href="https://github.com/XiJian-Development-Group/XiJian/blob/main/docs/Deps.md">依赖清单</a>。</li>
       </ul>
     </div>
   </div>

@@ -48,8 +48,10 @@
         ta.style.opacity = "0";
         document.body.appendChild(ta);
         ta.select();
-        try { document.execCommand("copy"); done(); } catch (e) {}
+        var ok = false;
+        try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
         document.body.removeChild(ta);
+        if (ok) { done(); }
       }
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(text).then(done, fallback);
