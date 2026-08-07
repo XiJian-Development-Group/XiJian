@@ -242,8 +242,26 @@ final class CoreManagerTests: XCTestCase {
         let core = CoreManager.shared
         core.appendLog("第一行")
         core.appendLog("第二行")
-        XCTAssertEqual(core.recentLogs, ["第一行", "第二行"])
+        XCTAssertEqual(core.recentLogs.map(\.message), ["第一行", "第二行"])
         core.appendLog("   ")
         XCTAssertEqual(core.recentLogs.count, 2, "空白行应被忽略")
+        // 级别识别：默认进程输出为信息；含关键词行识别为对应级别
+        core.appendLog("[XiJian] 已启动 Core 进程")
+        core.appendLog("WARNING 磁盘空间不足")
+        core.appendLog("ERROR: 请求失败")
+        XCTAssertEqual(core.recentLogs.count, 5)
+        XCTAssertEqual(core.recentLogs.last?.level, .error)
+        XCTAssertTrue(core.recentLogs.contains { $0.level == .warning })
+        XCTAssertTrue(core.recentLogs.contains { $0.level == .info })
+    }
+
+    func testLogBufferCapsAt1000Entries() {
+        let core = CoreManager.shared
+        for i in 0..<1010 {
+            core.appendLog("第 \(i) 行")
+        }
+        XCTAssertEqual(core.recentLogs.count, 1000, "环形缓冲最多保留 1000 条")
+        XCTAssertEqual(core.recentLogs.first?.message, "第 10 行")
+        XCTAssertEqual(core.recentLogs.last?.message, "第 1009 行")
     }
 }

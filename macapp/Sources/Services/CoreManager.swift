@@ -40,8 +40,8 @@ public final class CoreManager {
     private(set) var token: String?
     /// 子进程 PID
     private(set) var pid: Int32?
-    /// 最近捕获的进程输出（环形缓冲，用于诊断）
-    private(set) var recentLogs: [String] = []
+    /// 最近捕获的进程输出（环形缓冲，最多 1000 条，用于诊断与日志页）
+    private(set) var recentLogs: [LogEntry] = []
 
     // MARK: - 连接设置（UserDefaults 持久化）
 
@@ -355,6 +355,10 @@ public final class CoreManager {
             try? fm.removeItem(at: coreDir)
         }
         recentLogs.removeAll()
+        logEntries.removeAll()
+        fileRawLines.removeAll()
+        logFileExists = false
+        logFileLoadError = nil
         appendLog("[XiJian] 已重置 Core 数据目录：\(coreDir.path)")
     }
 
@@ -528,14 +532,112 @@ public final class CoreManager {
 
     private var outputTasks: [Task<Void, Never>] = []
 
-    /// 追加日志（环形缓冲，最多 1000 行）
+    /// 追加日志（环形缓冲，最多 1000 条），按规则识别级别
     func appendLog(_ line: String) {
         let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        recentLogs.append(trimmed)
+        recentLogs.append(LogEntry.parseAppLine(trimmed))
         if recentLogs.count > 1000 {
             recentLogs.removeFirst(recentLogs.count - 1000)
         }
+    }
+
+    // MARK: - 日志（合并查看）
+
+    /// 合并后的全部日志（Core 日志文件 + App 捕获的进程输出），由 refreshLogs() 更新。
+    /// 文件行与进程输出内容重叠时以文件为准去重，避免重复展示。
+    private(set) var logEntries: [LogEntry] = []
+    /// Core 日志文件是否存在（最近一次 refreshLogs/loadCoreLogFile 的结果）
+    private(set) var logFileExists = false
+    /// 读取 Core 日志文件失败时的错误描述（nil 表示无错误）
+    private(set) var logFileLoadError: String?
+    /// 最近一次读取的日志文件原始行（供与进程输出去重）
+    private var fileRawLines: [String] = []
+    /// 日志文件读取上限（字节）：超过后只读尾部，避免大文件卡 UI
+    private static let maxLogFileReadBytes: Int64 = 8 * 1024 * 1024
+
+    /// Core 日志文件路径：~/Library/Application Support/XiJian/Core/logs/xijian-api.log
+    var coreLogFileURL: URL? {
+        coreDirectory?.appendingPathComponent("logs").appendingPathComponent("xijian-api.log")
+    }
+
+    /// 重新读取 Core 日志文件并合并进程输出缓冲，更新 logEntries。
+    /// 供日志页 onAppear、手动刷新与进程输出变化时调用。
+    func refreshLogs() {
+        let fileEntries = loadCoreLogFile()
+        var merged = fileEntries
+        let raw = fileRawLines
+        if raw.isEmpty {
+            // 日志文件不存在或为空：全部保留进程输出
+            merged.append(contentsOf: recentLogs)
+        } else {
+            // 文件与进程输出内容重叠：以文件为准，按原始行去重
+            let rawSet = Set(raw.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) })
+            merged.append(contentsOf: recentLogs.filter { !rawSet.contains($0.message) })
+        }
+        logEntries = merged
+    }
+
+    /// 解析 Core 日志文件（最多 maxLines 行，默认最近 5000 行），返回日志条目。
+    /// 文件不存在时返回空数组，并同步更新 logFileExists / logFileLoadError。
+    func loadCoreLogFile(maxLines: Int = 5000) -> [LogEntry] {
+        guard let url = coreLogFileURL else {
+            logFileExists = false
+            logFileLoadError = nil
+            fileRawLines = []
+            return []
+        }
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: url.path) else {
+            logFileExists = false
+            logFileLoadError = nil
+            fileRawLines = []
+            return []
+        }
+        logFileExists = true
+        do {
+            let rawLines = try Self.readRecentLines(of: url, maxLines: maxLines)
+            fileRawLines = rawLines
+            logFileLoadError = nil
+            return LogEntry.parseCoreLogLines(rawLines)
+        } catch {
+            logFileLoadError = "读取日志文件失败：\(error.localizedDescription)"
+            fileRawLines = []
+            return []
+        }
+    }
+
+    /// 读取文件最近 maxLines 行；文件超过读取上限字节时仅读尾部（从第一个完整行开始），
+    /// 避免大文件整读卡住 UI。
+    nonisolated static func readRecentLines(of url: URL, maxLines: Int) throws -> [String] {
+        let fm = FileManager.default
+        let attrs = try fm.attributesOfItem(atPath: url.path)
+        let size = (attrs[.size] as? NSNumber)?.int64Value ?? 0
+        var text: String
+        if size > Self.maxLogFileReadBytes {
+            let handle = try FileHandle(forReadingFrom: url)
+            defer { try? handle.close() }
+            try handle.seek(toOffset: UInt64(size - Self.maxLogFileReadBytes))
+            let data = handle.readDataToEndOfFile()
+            guard let chunk = String(data: data, encoding: .utf8) else {
+                throw CocoaError(.fileReadCorruptFile)
+            }
+            text = chunk
+            // 丢弃第一个可能不完整的行（从第一个换行符之后开始）
+            if let newline = text.firstIndex(of: "\n") {
+                text = String(text[text.index(after: newline)...])
+            }
+        } else {
+            text = try String(contentsOf: url, encoding: .utf8)
+        }
+        var lines = text.components(separatedBy: .newlines)
+        // 去掉首尾空行（文件常以换行结尾，避免空行占用行数上限）
+        while let first = lines.first, first.isEmpty { lines.removeFirst() }
+        while let last = lines.last, last.isEmpty { lines.removeLast() }
+        if lines.count > maxLines {
+            lines = Array(lines.suffix(maxLines))
+        }
+        return lines
     }
 
     // MARK: - 测试辅助
@@ -554,6 +656,10 @@ public final class CoreManager {
         pid = nil
         token = nil
         recentLogs.removeAll()
+        logEntries.removeAll()
+        fileRawLines.removeAll()
+        logFileExists = false
+        logFileLoadError = nil
         state = .stopped
     }
 }

@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 import XiJianKit
 
 /// 设置：Core 服务、主题个性化、安全、备份、剧情
@@ -241,60 +242,316 @@ struct ServerSettingsSection: View {
 
 // MARK: - 日志查看器
 
-/// 进程输出日志查看（最近 1000 行）
+/// 日志级别筛选选项（全部 = 不筛选；其余为最低显示级别）
+private enum LogFilter: Int, CaseIterable, Identifiable {
+    case all, debug, info, warning, error, critical
+
+    var id: Int { rawValue }
+
+    var title: String {
+        switch self {
+        case .all: return "全部"
+        case .debug: return "调试"
+        case .info: return "信息"
+        case .warning: return "警告"
+        case .error: return "错误"
+        case .critical: return "严重"
+        }
+    }
+
+    /// 对应的最低显示级别（全部 = nil）
+    var minimumLevel: LogLevel? {
+        switch self {
+        case .all: return nil
+        case .debug: return .debug
+        case .info: return .info
+        case .warning: return .warning
+        case .error: return .error
+        case .critical: return .critical
+        }
+    }
+}
+
+/// 日志查看器：Core 日志文件 + App 捕获的进程输出（支持分级筛选、复制、导出）
 struct LogViewerSection: View {
     @Environment(CoreManager.self) private var core
 
+    @State private var filter: LogFilter = .all
+    @State private var copied = false
+    @State private var showAlert = false
+    @State private var alertTitle = ""
+    @State private var alertMessage = ""
+
+    private var allEntries: [LogEntry] { core.logEntries }
+
+    private var filteredEntries: [LogEntry] {
+        allEntries.filter { $0.matches(levelFilter: filter.minimumLevel) }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Text("最近日志")
-                    .font(.headline)
+            toolbar
+            Divider()
+            if !core.logFileExists && !allEntries.isEmpty {
+                Text("未找到 Core 日志文件（logs/xijian-api.log），以下为 App 捕获的进程输出。")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 10)
+                    .padding(.top, 6)
+            }
+            if filteredEntries.isEmpty {
+                emptyState
+            } else {
+                logList
+            }
+        }
+        .navigationTitle("Core 日志")
+        .onAppear {
+            core.refreshLogs()
+        }
+        .onChange(of: core.recentLogs.count) {
+            core.refreshLogs()
+        }
+        .onChange(of: core.state) {
+            core.refreshLogs()
+        }
+        .alert(alertTitle, isPresented: $showAlert) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(alertMessage)
+        }
+    }
+
+    // MARK: 工具栏
+
+    private var toolbar: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 10) {
+                Picker("级别筛选", selection: $filter) {
+                    ForEach(LogFilter.allCases) { option in
+                        Text(option.title).tag(option)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(maxWidth: 460)
                 Spacer()
+                Text(countText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            HStack(spacing: 8) {
+                Button {
+                    core.refreshLogs()
+                } label: {
+                    Label("刷新", systemImage: "arrow.clockwise")
+                }
+                .controlSize(.small)
+
+                Button {
+                    copyFilteredLogs()
+                } label: {
+                    Label(copied ? "已复制" : "复制", systemImage: copied ? "checkmark" : "doc.on.doc")
+                }
+                .controlSize(.small)
+                .disabled(filteredEntries.isEmpty)
+
+                Button {
+                    exportFilteredLogs()
+                } label: {
+                    Label("导出", systemImage: "square.and.arrow.up")
+                }
+                .controlSize(.small)
+                .disabled(filteredEntries.isEmpty)
+
                 Button("打开日志目录") {
                     core.openLogDirectory()
                 }
                 .controlSize(.small)
-            }
-            .padding(10)
 
-            Divider()
-
-            if core.recentLogs.isEmpty {
-                VStack(spacing: 8) {
-                    Text("暂无日志")
-                        .foregroundStyle(.tertiary)
-                    Text("启动 Core 后，其输出会显示在这里。")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                ScrollView {
-                    ScrollViewReader { proxy in
-                        LazyVStack(alignment: .leading, spacing: 2) {
-                            ForEach(Array(core.recentLogs.enumerated()), id: \.offset) { _, line in
-                                Text(line)
-                                    .font(.system(size: 11, design: .monospaced))
-                                    .foregroundStyle(.secondary)
-                                    .textSelection(.enabled)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                        }
-                        .padding(8)
-                        .onAppear {
-                            proxy.scrollTo(core.recentLogs.count - 1, anchor: .bottom)
-                        }
-                        .onChange(of: core.recentLogs.count) {
-                            proxy.scrollTo(core.recentLogs.count - 1, anchor: .bottom)
-                        }
-                    }
-                }
-                .background(Color(.textBackgroundColor))
+                Spacer()
             }
         }
-        .navigationTitle("Core 日志")
+        .padding(10)
     }
+
+    /// 条数说明：有筛选时显示「共 N 条（筛选自 M 条）」
+    private var countText: String {
+        if filter.minimumLevel != nil {
+            return "共 \(filteredEntries.count) 条（筛选自 \(allEntries.count) 条）"
+        }
+        return "共 \(allEntries.count) 条"
+    }
+
+    // MARK: 列表 / 空态
+
+    private var logList: some View {
+        ScrollView {
+            ScrollViewReader { proxy in
+                LazyVStack(alignment: .leading, spacing: 2) {
+                    ForEach(filteredEntries) { entry in
+                        LogEntryRow(entry: entry)
+                    }
+                }
+                .padding(8)
+                .onAppear {
+                    scrollToBottom(proxy)
+                }
+                .onChange(of: filteredEntries.count) {
+                    scrollToBottom(proxy)
+                }
+            }
+        }
+        .background(Color(.textBackgroundColor))
+    }
+
+    private func scrollToBottom(_ proxy: ScrollViewProxy) {
+        if let lastID = filteredEntries.last?.id {
+            proxy.scrollTo(lastID, anchor: .bottom)
+        }
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 8) {
+            if allEntries.isEmpty && !core.logFileExists {
+                Image(systemName: "doc.text.magnifyingglass")
+                    .font(.largeTitle)
+                    .foregroundStyle(.tertiary)
+                Text("暂无日志")
+                    .foregroundStyle(.secondary)
+                Text("未找到 Core 日志文件：\n\(core.coreLogFileURL?.path ?? "—")\n启动 Core 后日志会自动生成。")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .multilineTextAlignment(.center)
+            } else if allEntries.isEmpty {
+                Image(systemName: "doc.text")
+                    .font(.largeTitle)
+                    .foregroundStyle(.tertiary)
+                Text("暂无日志")
+                    .foregroundStyle(.secondary)
+                Text(core.logFileLoadError ?? "Core 日志文件为空，暂无进程输出。")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+                    .multilineTextAlignment(.center)
+            } else {
+                Image(systemName: "line.3.horizontal.decrease.circle")
+                    .font(.largeTitle)
+                    .foregroundStyle(.tertiary)
+                Text("没有符合当前筛选条件的日志")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    // MARK: 复制 / 导出
+
+    /// 复制当前筛选后的全部日志（含级别中文名与时间）到剪贴板
+    private func copyFilteredLogs() {
+        let text = logText(for: filteredEntries)
+        guard !text.isEmpty else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        copied = true
+        Task {
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            copied = false
+        }
+    }
+
+    /// 导出当前筛选后的全部日志到用户选择的文件（默认下载目录，默认名 xijian-logs-时间戳.log）
+    private func exportFilteredLogs() {
+        let text = logText(for: filteredEntries)
+        guard !text.isEmpty else { return }
+        let panel = NSSavePanel()
+        panel.title = "导出日志"
+        panel.message = "将当前筛选后的全部日志导出为文本文件"
+        panel.nameFieldStringValue = Self.exportFileName()
+        panel.allowedContentTypes = [.plainText]
+        panel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
+        panel.begin { response in
+            Task { @MainActor [self] in
+                guard response == .OK, let url = panel.url else { return }
+                do {
+                    try text.write(to: url, atomically: true, encoding: .utf8)
+                    self.alertTitle = "导出成功"
+                    self.alertMessage = "日志已导出到：\n\(url.path)"
+                    self.showAlert = true
+                } catch {
+                    self.alertTitle = "导出失败"
+                    self.alertMessage = "写入文件失败：\(error.localizedDescription)"
+                    self.showAlert = true
+                }
+            }
+        }
+    }
+
+    /// 日志文本格式：[级别中文名] 时间 消息（复制 / 导出共用）
+    private func logText(for entries: [LogEntry]) -> String {
+        entries.map { entry in
+            var parts = ["[\(entry.level.displayName)]"]
+            if let timestamp = entry.timestamp {
+                parts.append(Self.logTextFormatter.string(from: timestamp))
+            }
+            parts.append(entry.message)
+            return parts.joined(separator: " ")
+        }
+        .joined(separator: "\n")
+    }
+
+    private static let logTextFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return formatter
+    }()
+
+    private static func exportFileName() -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        return "xijian-logs-\(formatter.string(from: Date())).log"
+    }
+}
+
+/// 单条日志行：级别徽标 + 时间 + 消息（按级别着色）
+struct LogEntryRow: View {
+    let entry: LogEntry
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(entry.level.displayName)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(entry.level.color)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(entry.level.color.opacity(0.12), in: Capsule())
+
+            Text(timeText)
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(entry.level.color)
+
+            Text(entry.message)
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(entry.level.color)
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.vertical, 1)
+    }
+
+    private var timeText: String {
+        guard let timestamp = entry.timestamp else { return "—" }
+        return Self.timeFormatter.string(from: timestamp)
+    }
+
+    private static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return formatter
+    }()
 }
 
 // MARK: - 主题个性化
