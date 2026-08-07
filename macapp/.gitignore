@@ -1,4 +1,8 @@
+# macOS App (.gitignore)
 *.xcworkspace/
 *.xcodeproj/
 build/
 DerivedData/
+
+# 嵌入的 Core 二进制（构建时由 build-core.sh 生成，不入库）
+Resources/Core/

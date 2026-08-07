@@ -1,0 +1,298 @@
+import SwiftUI
+import XiJianKit
+
+/// 对话界面：模型选择、参数调节、消息流、输入栏
+struct ChatView: View {
+    @Bindable var viewModel: ChatViewModel
+    @Environment(CoreManager.self) private var core
+    @Environment(ThemeSettings.self) private var theme
+    @State private var inputText = ""
+    @State private var showModelPicker = false
+    @State private var showError = false
+    @State private var errorMessage = ""
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+            Divider()
+            messagesList
+            if viewModel.isStreaming {
+                streamingBar
+            }
+            Divider()
+            ChatInputBar(
+                text: $inputText,
+                isStreaming: viewModel.isStreaming,
+                onSend: { Task { await send() } },
+                onStop: { viewModel.stopStreaming() }
+            )
+        }
+        .background(theme.appearanceMode == .dark ? Color.black.opacity(0.2) : Color(nsColor: .windowBackgroundColor))
+        .alert("出错了", isPresented: $showError) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(errorMessage)
+        }
+        .onChange(of: viewModel.showError) { _, newValue in
+            if newValue {
+                errorMessage = viewModel.errorMessage ?? "未知错误"
+                showError = true
+                viewModel.showError = false
+            }
+        }
+    }
+
+    // MARK: 顶部栏
+
+    private var header: some View {
+        HStack(spacing: 10) {
+            // 模型选择
+            Menu {
+                if viewModel.models.isEmpty {
+                    Text("暂无可用模型")
+                }
+                ForEach(viewModel.models) { model in
+                    Button {
+                        viewModel.selectedModelID = model.id
+                    } label: {
+                        if viewModel.selectedModelID == model.id {
+                            Label(model.displayName, systemImage: "checkmark")
+                        } else {
+                            Text(model.displayName)
+                        }
+                    }
+                }
+                Divider()
+                Button("刷新模型列表") {
+                    Task { await viewModel.loadModels() }
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "cpu")
+                    Text(viewModel.selectedModel ?? "选择模型")
+                        .lineLimit(1)
+                    Image(systemName: "chevron.down")
+                        .font(.caption2)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(Color(.controlBackgroundColor))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
+                )
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+
+            if let model = viewModel.models.first(where: { $0.id == viewModel.selectedModelID }),
+               let xijian = model.xijian {
+                Text("\(xijian.backend ?? "未知后端") · \(xijian.quant ?? "") · \(xijian.context_length.map { "\($0) ctx" } ?? "")")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            // 会话操作
+            Button {
+                Task { await viewModel.newSession() }
+            } label: {
+                Label("新会话", systemImage: "plus.bubble")
+            }
+            .help("新建会话")
+
+            Button {
+                Task { await viewModel.clearChat() }
+            } label: {
+                Label("清空", systemImage: "trash")
+            }
+            .help("清空当前会话")
+
+            // 参数弹窗
+            Button {
+                showModelPicker.toggle()
+            } label: {
+                Image(systemName: "slider.horizontal.3")
+            }
+            .help("聊天参数")
+            .popover(isPresented: $showModelPicker) {
+                ChatParameterPanel(viewModel: viewModel)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+    }
+
+    // MARK: 消息列表
+
+    private var messagesList: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 0) {
+                    if viewModel.messages.isEmpty {
+                        emptyState
+                    }
+                    ForEach(Array(viewModel.messages.enumerated()), id: \.element.id) { index, message in
+                        MessageBubbleView(
+                            message: message,
+                            isStreaming: viewModel.isStreaming && index == viewModel.messages.count - 1
+                        )
+                        .id(message.id)
+                    }
+                }
+                .padding(.vertical, 8)
+            }
+            .onChange(of: viewModel.messages.count) {
+                if let last = viewModel.messages.last, let lastID = last.id {
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        proxy.scrollTo(lastID, anchor: .bottom)
+                    }
+                }
+            }
+            .onChange(of: viewModel.messages.last?.content) {
+                if let last = viewModel.messages.last, let lastID = last.id {
+                    proxy.scrollTo(lastID, anchor: .bottom)
+                }
+            }
+        }
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "bubble.left.and.bubble.right")
+                .font(.system(size: 44))
+                .foregroundStyle(.tertiary)
+            Text("开始与隙间对话")
+                .font(.title3)
+                .foregroundStyle(.secondary)
+            Text("在下方输入消息，或先选择一个模型")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.top, 80)
+    }
+
+    private var streamingBar: some View {
+        HStack(spacing: 8) {
+            ProgressView()
+                .controlSize(.small)
+            Text("正在生成...")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Button("停止生成") {
+                viewModel.stopStreaming()
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(.bar)
+    }
+
+    // MARK: 发送
+
+    private func send() async {
+        let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        inputText = ""
+        await viewModel.send(text: text)
+    }
+}
+
+/// 聊天参数面板
+struct ChatParameterPanel: View {
+    @Bindable var viewModel: ChatViewModel
+    @Environment(ThemeSettings.self) private var theme
+    @State private var appVM = AppViewModel.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("聊天参数", systemImage: "slider.horizontal.3")
+                .font(.headline)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("温度")
+                    Spacer()
+                    Text(String(format: "%.2f", appVM.temperature))
+                        .foregroundStyle(.secondary)
+                }
+                Slider(value: Bindable(appVM).temperature, in: 0...2, step: 0.05)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("最大 Token")
+                    Spacer()
+                    Text("\(appVM.maxTokens)")
+                        .foregroundStyle(.secondary)
+                }
+                Slider(value: Binding(
+                    get: { Double(appVM.maxTokens) },
+                    set: { appVM.maxTokens = Int($0) }
+                ), in: 64...8192, step: 64)
+            }
+
+            Toggle("启用记忆召回", isOn: Bindable(appVM).recallEnabled)
+            Toggle("显示时间戳", isOn: Bindable(theme).showTimestamps)
+
+            Divider()
+
+            Text("角色与世界（注入聊天请求）")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            CharacterWorldPicker(characterID: Bindable(appVM).selectedCharacterID, worldID: Bindable(appVM).selectedWorldID)
+        }
+        .padding(16)
+        .frame(width: 320)
+    }
+}
+
+/// 角色/世界选择器（复用：聊天参数、角色详情）
+struct CharacterWorldPicker: View {
+    @Binding var characterID: String?
+    @Binding var worldID: String?
+
+    @State private var characters: [CharacterInfo] = []
+    @State private var worlds: [WorldInfo] = []
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Picker("角色", selection: $characterID) {
+                Text("无").tag(String?.none)
+                ForEach(characters) { character in
+                    Text(character.displayName).tag(String?.some(character.id))
+                }
+            }
+            .onAppear { Task { await load() } }
+
+            Picker("世界", selection: $worldID) {
+                Text("无").tag(String?.none)
+                ForEach(worlds) { world in
+                    Text(world.name ?? world.worldID).tag(String?.some(world.worldID))
+                }
+            }
+        }
+        .labelsHidden()
+        .frame(maxWidth: .infinity)
+    }
+
+    private func load() async {
+        let core = CoreManager.shared
+        guard let client = core.makeClient() else { return }
+        if characters.isEmpty {
+            characters = (try? await client.listCharacters()) ?? []
+        }
+        if worlds.isEmpty {
+            worlds = (try? await client.listWorlds()) ?? []
+        }
+    }
+}

@@ -1,0 +1,283 @@
+import SwiftUI
+import XiJianKit
+
+/// 剧情系统：设计列表、运行时创建/推进/暂停/恢复/删除
+struct PlotSettingsView: View {
+    @Environment(CoreManager.self) private var core
+    @Environment(ThemeSettings.self) private var theme
+
+    @State private var designs: [PlotDesign] = []
+    @State private var runtimes: [PlotRuntime] = []
+    @State private var worlds: [WorldInfo] = []
+
+    @State private var isLoading = false
+    @State private var showError = false
+    @State private var errorMessage = ""
+
+    @State private var selectedDesignID: String?
+    @State private var selectedWorldID: String?
+    @State private var showCreateRuntime = false
+    @State private var runtimeResult: String?
+    @State private var initialVariablesText = ""
+    @State private var advanceResult: String?
+
+    var body: some View {
+        Form {
+            Section("剧情设计") {
+                if designs.isEmpty {
+                    if isLoading {
+                        ProgressView("加载中...")
+                    } else {
+                        Text("暂无剧情设计（DevKit 工作目录为空）。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    ForEach(designs) { design in
+                        HStack {
+                            Image(systemName: "film.stack")
+                                .foregroundStyle(theme.accentColor)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(design.title ?? design.plot_id)
+                                    .font(.subheadline)
+                                Text("\(design.plot_id) · \(design.node_count ?? 0) 节点 / \(design.edge_count ?? 0) 边")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+            }
+
+            Section("创建剧情运行时") {
+                if designs.isEmpty {
+                    Text("请先准备剧情设计。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Picker("剧情设计", selection: $selectedDesignID) {
+                        ForEach(designs) { design in
+                            Text(design.title ?? design.plot_id).tag(String?.some(design.plot_id))
+                        }
+                    }
+                    .onAppear {
+                        if selectedDesignID == nil { selectedDesignID = designs.first?.plot_id }
+                    }
+
+                    if worlds.isEmpty {
+                        Text("无可用世界。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Picker("目标世界", selection: $selectedWorldID) {
+                            ForEach(worlds) { world in
+                                Text(world.name ?? world.worldID).tag(String?.some(world.worldID))
+                            }
+                        }
+                        .onAppear {
+                            if selectedWorldID == nil { selectedWorldID = worlds.first?.worldID }
+                        }
+                    }
+
+                    TextField("初始变量（k=v, k2=v2）", text: $initialVariablesText)
+                        .textFieldStyle(.roundedBorder)
+
+                    Button("创建并启动") {
+                        Task { await createRuntime() }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(selectedDesignID == nil || selectedWorldID == nil)
+                }
+            }
+
+            Section("运行时实例") {
+                if runtimes.isEmpty {
+                    Text("暂无运行时。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(runtimes) { runtime in
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Image(systemName: "play.rectangle")
+                                    .foregroundStyle(statusColor(runtime.status ?? ""))
+                                Text("\(runtime.plot_id ?? "?") · \(runtime.world_id ?? "?")")
+                                    .font(.subheadline)
+                                Spacer()
+                                Text(runtime.status ?? "unknown")
+                                    .font(.caption2)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 1)
+                                    .background(Capsule().fill(statusColor(runtime.status ?? "").opacity(0.15)))
+                                    .foregroundStyle(statusColor(runtime.status ?? ""))
+                            }
+                            if let node = runtime.current_node_id {
+                                Text("当前节点：\(node)")
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            HStack(spacing: 10) {
+                                Button("推进剧情") {
+                                    Task { await advance(runtime) }
+                                }
+                                .controlSize(.small)
+                                .disabled(runtime.status == "completed" || runtime.status == "failed")
+
+                                if runtime.status == "paused" {
+                                    Button("恢复") {
+                                        Task { await resume(runtime) }
+                                    }
+                                    .controlSize(.small)
+                                } else if runtime.status == "running" {
+                                    Button("暂停") {
+                                        Task { await pause(runtime) }
+                                    }
+                                    .controlSize(.small)
+                                }
+
+                                Button("删除", role: .destructive) {
+                                    Task { await delete(runtime) }
+                                }
+                                .controlSize(.small)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+            }
+
+            if let result = runtimeResult {
+                Section("结果") {
+                    Text(result)
+                        .font(.caption)
+                        .textSelection(.enabled)
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .navigationTitle("剧情系统")
+        .alert("出错了", isPresented: $showError) {
+            Button("好", role: .cancel) {}
+        } message: {
+            Text(errorMessage)
+        }
+        .task {
+            await load()
+        }
+    }
+
+    // MARK: 加载
+
+    private func load() async {
+        guard let client = core.makeClient() else { return }
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            designs = try await client.listPlotDesigns()
+            runtimes = try await client.listPlotRuntimes(worldID: nil)
+            worlds = try await client.listWorlds()
+        } catch {
+            presentError(error)
+        }
+    }
+
+    // MARK: 动作
+
+    private func createRuntime() async {
+        guard let client = core.makeClient(), let plotID = selectedDesignID, let worldID = selectedWorldID else { return }
+        do {
+            let variables = parseVariables(initialVariablesText)
+            let runtime = try await client.createPlotRuntime(plotID: plotID, worldID: worldID, initialVariables: variables.isEmpty ? nil : variables)
+            runtimeResult = "运行时已创建：\(runtime.runtime_id)"
+            await load()
+        } catch {
+            presentError(error)
+        }
+    }
+
+    private func advance(_ runtime: PlotRuntime) async {
+        guard let client = core.makeClient() else { return }
+        do {
+            let result = try await client.advancePlotRuntime(runtime.runtime_id, chooseEdgeID: nil)
+            let node = result["current_node_id"]?.stringValue ?? result["message"]?.stringValue ?? ""
+            runtimeResult = "剧情已推进。\(node.isEmpty ? "" : "当前节点：\(node)")"
+            await load()
+        } catch {
+            presentError(error)
+        }
+    }
+
+    private func pause(_ runtime: PlotRuntime) async {
+        guard let client = core.makeClient() else { return }
+        do {
+            _ = try await client.pausePlotRuntime(runtime.runtime_id)
+            runtimeResult = "已暂停：\(runtime.runtime_id)"
+            await load()
+        } catch {
+            presentError(error)
+        }
+    }
+
+    private func resume(_ runtime: PlotRuntime) async {
+        guard let client = core.makeClient() else { return }
+        do {
+            _ = try await client.resumePlotRuntime(runtime.runtime_id)
+            runtimeResult = "已恢复：\(runtime.runtime_id)"
+            await load()
+        } catch {
+            presentError(error)
+        }
+    }
+
+    private func delete(_ runtime: PlotRuntime) async {
+        guard let client = core.makeClient() else { return }
+        do {
+            try await client.deletePlotRuntime(runtime.runtime_id)
+            runtimes.removeAll { $0.runtime_id == runtime.runtime_id }
+            runtimeResult = "已删除：\(runtime.runtime_id)"
+        } catch {
+            presentError(error)
+        }
+    }
+
+    // MARK: 辅助
+
+    private func parseVariables(_ text: String) -> [String: JSONValue] {
+        var result: [String: JSONValue] = [:]
+        for part in text.split(separator: ",") {
+            let kv = part.split(separator: "=", maxSplits: 1)
+            guard kv.count == 2 else { continue }
+            let key = kv[0].trimmingCharacters(in: .whitespaces)
+            let value = kv[1].trimmingCharacters(in: .whitespaces)
+            if let number = Double(value) {
+                result[key] = .number(number)
+            } else if value == "true" {
+                result[key] = .bool(true)
+            } else if value == "false" {
+                result[key] = .bool(false)
+            } else {
+                result[key] = .string(value)
+            }
+        }
+        return result
+    }
+
+    private func statusColor(_ status: String) -> Color {
+        switch status {
+        case "running": return .green
+        case "paused": return .orange
+        case "completed": return .blue
+        case "failed": return .red
+        default: return .gray
+        }
+    }
+
+    private func presentError(_ error: Error) {
+        if let apiError = error as? APIError {
+            errorMessage = apiError.message
+        } else {
+            errorMessage = error.localizedDescription
+        }
+        showError = true
+    }
+}

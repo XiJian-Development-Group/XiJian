@@ -1,18 +1,22 @@
 #!/usr/bin/env bash
-# build-macapp.sh — Build the XiJian macOS native app.
+# build-macapp.sh — 构建 XiJian macOS 原生 App。
 #
-# Orchestrates:
-#   1. build-core.sh         — freeze + 7z the Flask server binary
-#   2. xcodegen              — generate .xcodeproj from Project.yml
-#   3. xcodebuild            — compile + sign the .app bundle
+# 编排流程：
+#   1. build-core.sh      — PyInstaller onedir 打包 Core → 嵌入 Resources/Core/
+#   2. xcodegen           — 从 project.yml 生成 XiJian.xcodeproj
+#   3. xcodebuild         — 编译 .app（DerivedData 用系统默认位置，
+#                           绝不放在 XiJian 项目目录内）
 #
-# Usage
-# -----
-#     ./build-macapp.sh                  # full build (Debug)
-#     ./build-macapp.sh --release        # Release build
-#     ./build-macapp.sh --skip-core      # skip core rebuild (faster iteration)
-#     ./build-macapp.sh --clean          # wipe build artifacts first
+# 用法
+# ----
+#     ./build-macapp.sh                 # 完整构建（Debug）
+#     ./build-macapp.sh --release       # Release 构建
+#     ./build-macapp.sh --skip-core     # 跳过 Core 重建（快速迭代 UI）
+#     ./build-macapp.sh --clean         # 先清理构建缓存
 #
+# 产物
+# ----
+#     ~/Library/Developer/Xcode/DerivedData/XiJian-*/Build/Products/<config>/XiJian.app
 
 set -euo pipefail
 
@@ -28,18 +32,30 @@ for arg in "$@"; do
         --skip-core) SKIP_CORE=1 ;;
         --clean) CLEAN=1 ;;
         -h|--help)
-            sed -n '3,12p' "${BASH_SOURCE[0]}"
+            sed -n '3,14p' "${BASH_SOURCE[0]}"
             exit 0
             ;;
     esac
 done
+
+# --- 工具检查 --------------------------------------------------------------
+
+if ! command -v xcodegen &>/dev/null; then
+    echo "ERROR: xcodegen 未安装，请执行: brew install xcodegen" >&2
+    exit 1
+fi
+if ! command -v xcodebuild &>/dev/null; then
+    echo "ERROR: xcodebuild 不可用，请安装 Xcode" >&2
+    exit 1
+fi
 
 if [[ "${CLEAN}" == "1" ]]; then
     echo "==> cleaning"
     rm -rf "${MACAPP_DIR}/build" "${MACAPP_DIR}/XiJian.xcodeproj"
 fi
 
-# Step 1: Build the core server binary
+# --- 1/3: 构建 Core --------------------------------------------------------
+
 if [[ "${SKIP_CORE}" == "0" ]]; then
     echo "==> [1/3] building core server binary"
     "${MACAPP_DIR}/build-core.sh"
@@ -47,26 +63,25 @@ else
     echo "==> [1/3] skipping core build (--skip-core)"
 fi
 
-# Step 2: Generate Xcode project
-echo "==> [2/3] generating Xcode project with XcodeGen"
-if ! command -v xcodegen &>/dev/null; then
-    echo "ERROR: xcodegen not found. Install with: brew install xcodegen" >&2
-    exit 1
-fi
+# --- 2/3: xcodegen 生成工程 -------------------------------------------------
 
+echo "==> [2/3] generating Xcode project with XcodeGen"
 cd "${MACAPP_DIR}"
-xcodegen generate --project . --spec Project.yml
+xcodegen generate --project . --spec project.yml
 echo "    -> ${MACAPP_DIR}/XiJian.xcodeproj"
 
-# Step 3: Build with xcodebuild
+# --- 3/3: xcodebuild 构建 ---------------------------------------------------
+# 注意：不传 -derivedDataPath，使用 Xcode 默认 DerivedData 位置，
+#       避免在 XiJian 项目目录内产生构建产物。
+
 echo "==> [3/3] building XiJian (${CONFIGURATION})"
 xcodebuild -project "${MACAPP_DIR}/XiJian.xcodeproj" \
            -scheme XiJian \
            -configuration "${CONFIGURATION}" \
-           -derivedDataPath "${MACAPP_DIR}/build/DerivedData" \
            build
 
-# Locate the built app
-APP_PATH="${MACAPP_DIR}/build/DerivedData/Build/Products/${CONFIGURATION}/隙间.app"
+# --- 定位产物 ---------------------------------------------------------------
+
 echo ""
-echo "==> build complete: ${APP_PATH}"
+echo "==> build complete. 产物位于 DerivedData 默认位置:"
+echo "    ~/Library/Developer/Xcode/DerivedData/XiJian-*/Build/Products/${CONFIGURATION}/XiJian.app"

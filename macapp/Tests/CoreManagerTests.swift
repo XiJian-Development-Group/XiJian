@@ -1,0 +1,249 @@
+import XCTest
+@testable import XiJianKit
+
+/// CoreManager 路径与状态逻辑测试（不真正启动 Core 进程）
+@MainActor
+final class CoreManagerTests: XCTestCase {
+
+    override func setUp() {
+        super.setUp()
+        CoreManager.shared.resetForTesting()
+    }
+
+    override func tearDown() {
+        CoreManager.shared.resetForTesting()
+        super.tearDown()
+    }
+
+    // MARK: - 路径
+
+    func testCoreDirectoryResolvesUnderApplicationSupport() {
+        let core = CoreManager.shared
+        let dir = core.coreDirectory
+        XCTAssertNotNil(dir, "coreDirectory 不应为 nil")
+        XCTAssertTrue(dir!.path.contains("Library/Application Support/XiJian/Core"),
+                      "coreDirectory 应为 ~/Library/Application Support/XiJian/Core，实际：\(dir!.path)")
+    }
+
+    func testAppSupportDirectory() {
+        let core = CoreManager.shared
+        XCTAssertTrue(core.appSupportDirectory.path.contains("XiJian"))
+    }
+
+    func testBaseURLUsesConfiguredPort() {
+        let core = CoreManager.shared
+        core.port = 18500
+        core.useCustomServer = false
+        XCTAssertEqual(core.baseURL.absoluteString, "http://127.0.0.1:18500")
+        XCTAssertEqual(core.effectivePort, 18500)
+    }
+
+    func testBaseURLWithCustomServer() {
+        let core = CoreManager.shared
+        core.useCustomServer = true
+        core.customBaseURL = "http://127.0.0.1:19999"
+        XCTAssertEqual(core.baseURL.absoluteString, "http://127.0.0.1:19999")
+        XCTAssertEqual(core.effectivePort, 19999)
+        core.useCustomServer = false
+    }
+
+    func testPortClamping() {
+        let core = CoreManager.shared
+        core.port = 99999
+        XCTAssertEqual(core.port, 65535, "端口应被钳制到 65535")
+        core.port = 0
+        XCTAssertEqual(core.port, 1, "端口应被钳制到 1")
+        core.port = 18500
+    }
+
+    // MARK: - 状态机
+
+    func testInitialStateIsStopped() {
+        XCTAssertEqual(CoreManager.shared.state, .stopped)
+    }
+
+    func testMakeClientNilWhenStopped() {
+        XCTAssertNil(CoreManager.shared.makeClient(), "未运行时 makeClient 应为 nil")
+    }
+
+    func testMakeClientWorksWhenRunning() {
+        let core = CoreManager.shared
+        core.setRunningForTesting(port: 18500, token: "test-token")
+        let client = core.makeClient()
+        XCTAssertNotNil(client)
+        XCTAssertEqual(client?.baseURL.absoluteString, "http://127.0.0.1:18500")
+        XCTAssertEqual(client?.token, "test-token")
+    }
+
+    func testMakeClientNilWhenRunningWithoutToken() {
+        let core = CoreManager.shared
+        core.setRunningForTesting(port: 18500, token: "")
+        XCTAssertNil(core.makeClient(), "缺少 token 时不应生成客户端")
+    }
+
+    func testMakeClientUsesCustomServerWhenConfigured() {
+        let core = CoreManager.shared
+        core.useCustomServer = true
+        core.customBaseURL = "http://127.0.0.1:21000"
+        core.setRunningForTesting(port: 21000, token: "custom-token")
+        let client = core.makeClient()
+        XCTAssertNotNil(client, "自定义服务器模式应始终生成客户端")
+        XCTAssertEqual(client?.baseURL.absoluteString, "http://127.0.0.1:21000")
+        core.useCustomServer = false
+        core.resetForTesting()
+    }
+
+    func testMakeClientUsesCustomTokenInCustomServerMode() {
+        let core = CoreManager.shared
+        let originalToken = core.customToken
+        core.customToken = "custom-secret-token"
+        core.useCustomServer = true
+        core.customBaseURL = "http://127.0.0.1:21001"
+        // 即使本机 token 已存在，自定义服务器模式也应使用 customToken
+        core.setRunningForTesting(port: 21001, token: "local-token")
+        let client = core.makeClient()
+        XCTAssertNotNil(client, "自定义服务器模式应始终生成客户端")
+        XCTAssertEqual(client?.token, "custom-secret-token", "自定义服务器模式应使用 customToken 作为 Bearer token")
+        core.useCustomServer = false
+        core.customToken = originalToken
+        core.resetForTesting()
+    }
+
+    func testStartCoreSkipsLocalCoreWhenCustomServer() async {
+        let core = CoreManager.shared
+        // 即使 bundle 资源缺失，useCustomServer 守卫也应先行返回，不进入 error
+        let missing = FileManager.default.temporaryDirectory
+            .appendingPathComponent("xijian-test-custom-flag-\(UUID().uuidString)")
+        core.bundleCoreOverride = missing
+        core.isolatedCoreDirectoryOverride = FileManager.default.temporaryDirectory
+            .appendingPathComponent("xijian-isolated-custom-flag-\(UUID().uuidString)")
+
+        core.useCustomServer = true
+        await core.startCore()
+
+        XCTAssertEqual(core.state, .customServer, "使用自定义服务器时不应启动本机 Core，也不应报错")
+        XCTAssertNil(core.pid, "自定义服务器模式下不应产生本机 Core 进程 PID")
+
+        core.useCustomServer = false
+        core.bundleCoreOverride = nil
+        core.isolatedCoreDirectoryOverride = nil
+        core.resetForTesting()
+    }
+
+    func testRestartCoreInCustomServerModeStaysCustomServer() async {
+        let core = CoreManager.shared
+        core.bundleCoreOverride = FileManager.default.temporaryDirectory
+            .appendingPathComponent("xijian-test-custom-restart-\(UUID().uuidString)")
+        core.isolatedCoreDirectoryOverride = FileManager.default.temporaryDirectory
+            .appendingPathComponent("xijian-isolated-custom-restart-\(UUID().uuidString)")
+
+        core.useCustomServer = true
+        await core.startCore()
+        XCTAssertEqual(core.state, .customServer)
+
+        // 自定义服务器模式下重启不应异常，最终应回到 customServer 状态
+        await core.restartCore()
+        XCTAssertEqual(core.state, .customServer, "自定义服务器模式下 restartCore 后应保持 customServer 状态")
+
+        core.useCustomServer = false
+        core.bundleCoreOverride = nil
+        core.isolatedCoreDirectoryOverride = nil
+        core.resetForTesting()
+    }
+
+    // MARK: - 启动失败路径（无 bundle Core 资源）
+
+    func testStartCoreFailsWhenBundleCoreMissing() async {
+        let core = CoreManager.shared
+        // 测试环境没有嵌入的 Core 资源（也显式覆盖为不存在路径）
+        let missing = FileManager.default.temporaryDirectory
+            .appendingPathComponent("xijian-test-missing-\(UUID().uuidString)")
+        core.bundleCoreOverride = missing
+        // 隔离应用数据目录，避免污染真实目录
+        let isolated = FileManager.default.temporaryDirectory
+            .appendingPathComponent("xijian-isolated-missing-\(UUID().uuidString)")
+        core.isolatedCoreDirectoryOverride = isolated
+
+        await core.startCore()
+
+        guard case .error(let message) = core.state else {
+            XCTFail("缺少内置 Core 时应进入 error 状态，实际：\(core.state)")
+            return
+        }
+        XCTAssertTrue(message.contains("build-core.sh"), "错误信息应提示先构建 Core，实际：\(message)")
+        core.bundleCoreOverride = nil
+        core.isolatedCoreDirectoryOverride = nil
+        try? FileManager.default.removeItem(at: isolated)
+    }
+
+    // MARK: - 复制失败路径
+
+    func testStartCoreFailsWhenBundleCoreIsNotExecutable() async {
+        let core = CoreManager.shared
+        // 构造一个"伪 Core 目录"，包含不可执行的 xijian-api 文件
+        let fakeBundle = FileManager.default.temporaryDirectory
+            .appendingPathComponent("xijian-fake-bundle-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: fakeBundle, withIntermediateDirectories: true)
+        let exePath = fakeBundle.appendingPathComponent("xijian-api").path
+        try? "not an executable".write(toFile: exePath, atomically: true, encoding: .utf8)
+
+        // 隔离应用数据目录，避免污染真实目录
+        let isolated = FileManager.default.temporaryDirectory
+            .appendingPathComponent("xijian-isolated-data-\(UUID().uuidString)")
+        core.isolatedCoreDirectoryOverride = isolated
+
+        core.bundleCoreOverride = fakeBundle
+        await core.startCore()
+
+        guard case .error(let message) = core.state else {
+            XCTFail("不可执行的核心应进入 error 状态，实际：\(core.state)")
+            return
+        }
+        XCTAssertTrue(message.contains("不可执行") || message.contains("xijian-api"),
+                      "错误信息应指向可执行文件问题，实际：\(message)")
+
+        // 清理
+        core.bundleCoreOverride = nil
+        core.isolatedCoreDirectoryOverride = nil
+        try? FileManager.default.removeItem(at: fakeBundle)
+        try? FileManager.default.removeItem(at: isolated)
+    }
+
+    // MARK: - 重置数据（S1）
+
+    func testResetCoreDataOnlyRemovesCoreSubdirectory() async {
+        let core = CoreManager.shared
+        // 构造隔离的应用数据目录：XiJian/ 下除 Core 外还有其它子目录（如 DevKit 残留）
+        let base = FileManager.default.temporaryDirectory
+            .appendingPathComponent("xijian-reset-\(UUID().uuidString)")
+        let appSupport = base.appendingPathComponent("XiJian")
+        let coreDir = appSupport.appendingPathComponent("Core")
+        let otherDir = appSupport.appendingPathComponent("DevKit")
+        try? FileManager.default.createDirectory(at: coreDir, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(at: otherDir, withIntermediateDirectories: true)
+        try? "core-file".write(to: coreDir.appendingPathComponent("xijian-api"), atomically: true, encoding: .utf8)
+        try? "precious".write(to: otherDir.appendingPathComponent("devkit_config.json"), atomically: true, encoding: .utf8)
+        core.isolatedCoreDirectoryOverride = coreDir
+
+        await core.resetCoreData()
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: coreDir.path),
+                       "重置应删除 Core 子目录")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: otherDir.path),
+                      "重置不得删除 XiJian/ 下其它子目录（DevKit 数据）")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: otherDir.appendingPathComponent("devkit_config.json").path),
+                      "DevKit 配置不应被删除")
+
+        core.isolatedCoreDirectoryOverride = nil
+        try? FileManager.default.removeItem(at: base)
+    }
+
+    func testLogBufferAppendsAndCaps() {
+        let core = CoreManager.shared
+        core.appendLog("第一行")
+        core.appendLog("第二行")
+        XCTAssertEqual(core.recentLogs, ["第一行", "第二行"])
+        core.appendLog("   ")
+        XCTAssertEqual(core.recentLogs.count, 2, "空白行应被忽略")
+    }
+}
