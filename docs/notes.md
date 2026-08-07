@@ -1046,6 +1046,32 @@ new file:   core/tests/test_xijian_scene_interactions.py  (810 行)
 
 ---
 
+## 2026-08-07 · macapp 资源包导入与管理（macapp 恢复维护）
+
+**主题**：macapp 侧落地「导入角色/世界观资源包 + 资源包管理」；清理 OpenClaw 半成品（引用不存在的 ImportPackSheet 导致编译失败）；macapp 自本轮起恢复维护。
+
+**改动清单**：
+
+- 角色页：工具栏「新建角色」→「导入角色」（Finder 选 .7z/.zip → 异步导入 → 结果摘要），empty state 文案同步。`CharacterEditSheet.create` 模式保留为死代码（详情页 edit 模式仍在用），未删除以免影响既有编辑链路。
+- 世界页：新增「导入资源包」入口（与角色页共用 `ImportPackSheet`），empty state 文案更新。
+- 侧边栏：新增「资源包」tab（`AppViewModel.Tab.packs`，icon `shippingbox`）。
+- 资源包管理页 `PackListView`：已安装包列表（名称/类型徽标/版本/描述）+ 卸载（二次确认，明示删除包目录与运行时记录，不可恢复）+ 重新扫描（`POST /v1/xijian/packs/rescan`）+ 导入入口。
+- 导入面板 `ImportPackSheet`：NSOpenPanel 选包（.zip + UTType 7z 兜底）→ `POST /v1/xijian/resources/import`（kind 传 "mixed"，manifest 决定实际类型）→ `pollImportJob` 轮询 → 完成显示「已导入角色 X/世界观 Y/记忆 Z 条」→ 回调刷新列表；失败显示 job.error / APIError。
+- 来源标记：`CharacterInfo`/`WorldInfo` 补 `packSource`/`packID`（CodingKeys 映射 `_pack_source`/`_pack_id`，Core 原样透出，端到端冒烟已验证）；列表行显示「资源包」紫色徽标，hover 显示包 ID。
+- 模型/API：`PackManifest`/`PackInfo`/`ImportJobInfo` + `APIClient` 8 个 packs/import 方法（部分为 OpenClaw 遗留，本轮修正两处真实 bug：① `PackManifest` 自定义 `init(from:)` 吞掉合成成员初始化器导致 `PackInfo` 编译失败 → 移到 extension；② Core `POST /v1/xijian/resources/import` 202 只返回 `job_id` 无 `id`，原解码 `job.id` 为空会轮询 404 → 加 `job_id` 兜底）。
+- 测试：macapp Swift 测试 80 → **91**（ModelsTests +9：PackManifest/PackInfo/ImportJobInfo/来源标记解码；APIClientTests +6：listPacks/importResource/getImportJob/uninstallPack/rescanPacks/installPack，MockURLProtocol 模式）。`xcodebuild build` 与 `test` 均 SUCCEEDED。
+- Core 端到端冒烟（委托 general 执行，隔离 `XIJIAN_DATA_DIR=/tmp`）：`POST /packs/install`（zip + 7z 双格式、wrapper 形态展平）201、`GET /packs`、`GET /packs/<id>`、异步 `resources/import` 202→completed（含 result 三类计数）、错误码 `archive_not_found`/`invalid_extension` 400、`DELETE /packs/<id>` 后角色/世界/磁盘目录同步移除、同包重复安装幂等替换。测试包保留在 `/tmp/xijian-e2e-52982352/` 备用。
+
+**没动的与原因**：
+
+- `core/`、`devkit/`、`website/`、`.github/`、`Config/`、项目根文件：规则只允许 docs/macapp（用户本轮授权范围）。
+- `CharacterEditSheet` 的 create 模式：角色页入口虽移除，但该 sheet 由详情页 edit 模式共用，删除 create 分支会扩大改动面、无收益。
+- `Config/Config.json` 的 `macOSUIApp: "Unavailable"`：macapp 版本尚未接入 sync-versions.py，属事实（维护教程 §5.1/§5.3 已改注释对齐）；接入版本同步属后续任务，不在本轮授权目录内。
+- 真实 GUI 点击验证（选文件→导入→完成 的端到端 UI 操作）：本环境无法驱动 macOS App 交互，未执行；HTTP 层已由 91 个单测 + Core 端到端冒烟覆盖，UI 人工验收留待用户。
+- DevKit 侧无改动：导出即包（§B v2.10 已实装），与本轮 macapp 导入天然兼容，冒烟包即按 DevKit 布局构造验证。
+
+---
+
 ## 维护约定
 
 - 每次改完一个章节，**当日**补一条到本文件，格式：日期 + 章节 + 改动清单 + 没动的与原因

@@ -12,11 +12,12 @@ macapp/
 ├── Sources/                  # Swift 源码
 │   ├── App.swift             # App 入口（@main）、AppDelegate（菜单栏、Core 生命周期）
 │   ├── Info.plist            # App Info.plist
-│   ├── Models/               # 数据模型（角色 / 世界 / 记忆等）
+│   ├── Models/               # 数据模型（角色 / 世界 / 资源包 / 记忆等）
 │   ├── Services/             # CoreManager（Core 进程管理）、APIClient（HTTP 封装）
 │   ├── Theme/                # 主题个性化（AppTheme）
-│   ├── ViewModels/           # 各界面视图模型
-│   └── Views/                # SwiftUI 视图（对话 / 角色 / 世界 / 记忆 / 设置等）
+│   ├── ViewModels/           # 各界面视图模型（含 PackViewModel）
+│   └── Views/                # SwiftUI 视图（对话 / 角色 / 世界 / 资源包 / 记忆 / 设置等，
+│                             #   含 ImportPackSheet / PackListView）
 ├── Resources/
 │   ├── Assets.xcassets       # 图标与颜色资源
 │   └── Core/                 # 内嵌 Core 产物（build-core.sh 生成，随 App 分发）
@@ -68,8 +69,12 @@ SIGKILL，并同步等待退出。Core 的日志（stdout/stderr）汇入 App �
 ## 4. 功能范围
 
 - **对话**：流式对话，支持 Markdown 渲染（swift-markdown-ui）；
-- **角色**：角色列表 / 详情 / 创建与编辑；
-- **世界**：世界列表 / 详情 / 创建与编辑；
+- **角色**：角色列表 / 详情 / 编辑；**导入资源包**（替换原「新建角色」入口，
+  通过 Finder 选择 .7z/.zip 资源包导入，导入后列表刷新）；
+- **世界**：世界列表 / 详情 / 创建与编辑；**导入资源包**（与角色页共用同一个导入面板）；
+- **资源包**：侧边栏独立 tab —— 已安装资源包列表（名称 / 类型 / 版本 / 描述）、
+  卸载（二次确认，删除包目录并移除运行时记录）、重新扫描（手动投放包后同步）、导入；
+  从资源包导入的角色 / 世界在列表中带「资源包」来源徽标；
 - **记忆**：记忆查看与管理（MemoryView / MemoryViewModel）；
 - **备份**：备份与恢复（BackupSettingsView）；
 - **设置**：Core 端口、自定义服务器与访问令牌、主题个性化、剧情与安全相关设置
