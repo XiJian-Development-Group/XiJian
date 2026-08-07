@@ -264,4 +264,48 @@ final class CoreManagerTests: XCTestCase {
         XCTAssertEqual(core.recentLogs.first?.message, "第 10 行")
         XCTAssertEqual(core.recentLogs.last?.message, "第 1009 行")
     }
+
+    // MARK: - 端口文件 / 实际生效端口（端口被占用自动换端口）
+
+    func testParsePortFileDataAcceptsValidPort() {
+        XCTAssertEqual(CoreManager.parsePortFileData(Data("18500".utf8)), 18500)
+        XCTAssertEqual(CoreManager.parsePortFileData(Data(" 18600 \n".utf8)), 18600, "应容忍首尾空白与换行")
+        XCTAssertEqual(CoreManager.parsePortFileData(Data("1".utf8)), 1, "端口下限 1 应合法")
+        XCTAssertEqual(CoreManager.parsePortFileData(Data("65535".utf8)), 65535, "端口上限 65535 应合法")
+    }
+
+    func testParsePortFileDataRejectsInvalidContent() {
+        XCTAssertNil(CoreManager.parsePortFileData(Data()), "空内容应解析失败")
+        XCTAssertNil(CoreManager.parsePortFileData(Data("  \n".utf8)), "纯空白应解析失败")
+        XCTAssertNil(CoreManager.parsePortFileData(Data("abc".utf8)), "非数字应解析失败")
+        XCTAssertNil(CoreManager.parsePortFileData(Data("18500.5".utf8)), "小数应解析失败")
+        XCTAssertNil(CoreManager.parsePortFileData(Data("0".utf8)), "端口 0 应解析失败")
+        XCTAssertNil(CoreManager.parsePortFileData(Data("70000".utf8)), "超上限端口应解析失败")
+        XCTAssertNil(CoreManager.parsePortFileData(Data("-1".utf8)), "负数应解析失败")
+        XCTAssertNil(CoreManager.parsePortFileData(Data([0xFF, 0xFE])), "非 UTF-8 内容应解析失败")
+    }
+
+    func testBaseURLUsesActivePortWhenCoreFellBack() {
+        let core = CoreManager.shared
+        core.port = 18500
+        core.useCustomServer = false
+        // 模拟 Core 因端口占用自动换到 18600（setRunningForTesting 会写入 activePort）
+        core.setRunningForTesting(port: 18600, token: "test-token")
+        XCTAssertEqual(core.activePort, 18600)
+        XCTAssertEqual(core.effectivePort, 18600, "实际生效端口应优先于配置端口")
+        XCTAssertEqual(core.baseURL.absoluteString, "http://127.0.0.1:18600")
+        XCTAssertEqual(core.makeClient()?.baseURL.absoluteString, "http://127.0.0.1:18600",
+                       "API 客户端应使用实际生效端口")
+        core.resetForTesting()
+    }
+
+    func testBaseURLFallsBackToConfiguredPortAfterReset() {
+        let core = CoreManager.shared
+        core.port = 18500
+        core.setRunningForTesting(port: 18600, token: "t")
+        core.resetForTesting()
+        XCTAssertNil(core.activePort, "重置后 activePort 应为 nil")
+        XCTAssertEqual(core.effectivePort, 18500, "未确认实际端口时回落配置端口")
+        XCTAssertEqual(core.baseURL.absoluteString, "http://127.0.0.1:18500")
+    }
 }

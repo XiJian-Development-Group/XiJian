@@ -1075,6 +1075,27 @@ new file:   core/tests/test_xijian_scene_interactions.py  (810 行)
 - `testRescanPacksPostsPath` mock 形状修正为真实契约 `{"installed":N,"errors":[]}`（原 mock `{"rescanned":2,"packs":[...]}` 是自证式断言，运行时不受影响）。
 - `ImportPackSheet` importing 阶段补「取消」按钮 + 「关闭后导入仍在后台继续」提示（原 120s 轮询期间无法在 sheet 内主动关闭）。
 
+## 2026-08-07 · Core 端口占用自动换端口（core + macapp 联动）
+
+**主题**：Core API 启动时配置端口被占用**不再退出**——检测占用 → 报告占用进程 → 自动换空闲端口启动 → 通过端口文件把实际端口下发给 macapp；macapp 启动流程改为「端口文件 → 真实端口 healthz → token」。用户 ask_user 确认 3 个决策（默认自动换 + `--port-strict` 开关 / 最多探测 100 个 / Core 写 `run/xijian-<pid>.port` 文件作为正式发现机制）。
+
+**改动清单**：
+
+- `core/xijian_api/ports.py`（新）：`is_port_in_use`（SO_REUSEADDR 短连接探测，不保留端口）、`find_port_occupant`（psutil 尽力而为，绝不上抛）、`resolve_available_port`（从配置端口逐个 +1，最多 100 个）→ `PortResolution(port, occupied_by, changed)`，全部占满抛 `PortExhaustedError`。
+- `core/xijian_api/app.py`：新增 `--port-strict`（保留「占用即退出」，供 DevKit 等固定端口场景）；默认模式在 `_serve` 前预检端口，占用时打印占用进程详情 + `已自动更换端口: X → Y`；新增 `_write_port_file`，在 discovery 写入后把**实际**端口写 `run/xijian-<pid>.port`（dev 模式落 `/tmp`）。
+- `core/xijian_api/runtime.py`：新增 `default_port_file(pid)`，与 token 文件同目录同规则，导出进 `__all__`。
+- `core/tests/test_port_fallback.py`（新，14 项）：真实 bind 探测、psutil 伪造（占用进程 PID/名称报告、空闲 None、死进程不抛）、扫描上移/换端口/耗尽/65535 边界、`--port-strict` 解析与中止、子进程端到端（占用 → 换端口 → 端口文件 → 真实端口 /healthz）。全量回归 **2259 passed**，0 回归。
+- `macapp/Sources/Services/CoreManager.swift`：新增 `activePort`（`baseURL`/`effectivePort` 优先取它，未确认时回落配置端口）；新增 `waitForPortFile`（解析逻辑抽成静态 `parsePortFileData` 可单测）；启动流程改为 启动 → 读端口文件 → 真实端口 healthz → token → `.running(port: 实际端口)`；换端口时追加日志；stopCore / stopCoreSync / 意外退出 / resetForTesting 均清 `activePort`。
+- `macapp/Tests/CoreManagerTests.swift`：+4 项（端口文件解析合法/非法、换端口后 baseURL 用实际端口、reset 后回落配置端口）。Swift 测试 80 → **95**，`xcodebuild build` 与 `test` 均 SUCCEEDED。
+
+**没动的与原因**：
+
+- 探测上限固定 100：从配置端口逐个 +1，避免扫进其他服务的端口段（Q2 决策）。
+- 只报告**首选端口**的占用进程：中间候选端口只是过渡台阶，逐个报告没意义。
+- 探测用短连接且不保留端口：避免对刚关闭端口误判；TOCTOU 窗口极小，`_serve` 的 EADDRINUSE 处理仍兜底干净退出（本地单用户服务，可接受）。
+- `--port-strict` 是唯一跳过自动换端口的路径：外部需要固定端口的调用方用它保持「占用即退出」旧行为。
+- macapp 一旦读到端口文件，所有请求（healthz / API 客户端）都走真实端口，不再有轮询错端口的窗口；端口文件读不到（超时）按启动失败处理并给出明确错误信息。
+
 ---
 
 ## 维护约定

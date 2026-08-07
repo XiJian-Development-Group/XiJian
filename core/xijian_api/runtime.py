@@ -192,6 +192,23 @@ def default_token_file(pid: int | None = None) -> Path:
     return default_token_dir() / f"xijian-{pid}.token"
 
 
+def default_port_file(pid: int | None = None) -> Path:
+    """Return the default port file path.
+
+    返回默认端口文件路径。
+
+    Written at startup with the *actual* listening port (which may differ
+    from the configured one after automatic port fallback); clients (the
+    macOS app) wait for this file to learn the real port.
+
+    启动时写入*实际*监听端口（自动换端口后可能与配置端口不同）；
+    客户端（macOS App）等待该文件以得知真实端口。
+    """
+    if pid is None:
+        pid = os.getpid()
+    return default_token_dir() / f"xijian-{pid}.port"
+
+
 def default_storage_dir() -> Path:
     """Return the default storage root directory.
 
@@ -301,6 +318,7 @@ __all__ = [
     "default_log_file",
     "default_token_dir",
     "default_token_file",
+    "default_port_file",
     "default_storage_dir",
     "setup_external_libs",
     "ensure_runtime_dirs",

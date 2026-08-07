@@ -9,8 +9,9 @@ import Observation
 /// 1. 检查 bundle 内 Resources/Core/xijian-api 是否存在
 /// 2. 若 `~/Library/Application Support/XiJian/Core/` 不存在则整目录复制
 /// 3. 以 `<dir>/xijian-api --port <port>` 启动子进程（不 zip 解压，避免首启慢）
-/// 4. 轮询 `GET /healthz` 直到 200（超时 60 秒）
-/// 5. 读取 `run/xijian-<pid>.token` 作为 Bearer token
+/// 4. 读取 `run/xijian-<pid>.port` 获取实际生效端口（端口被占用时 Core 自动换端口）
+/// 5. 在真实端口上轮询 `GET /healthz` 直到 200（超时 60 秒）
+/// 6. 读取 `run/xijian-<pid>.token` 作为 Bearer token
 @Observable
 @MainActor
 public final class CoreManager {
@@ -40,6 +41,9 @@ public final class CoreManager {
     private(set) var token: String?
     /// 子进程 PID
     private(set) var pid: Int32?
+    /// 实际生效端口（端口被占用时 Core 自动换端口后，从 run/xijian-<pid>.port 读取；
+    /// nil 表示尚未确认，此时回落使用配置端口）
+    private(set) var activePort: Int?
     /// 最近捕获的进程输出（环形缓冲，最多 1000 条，用于诊断与日志页）
     private(set) var recentLogs: [LogEntry] = []
 
@@ -134,12 +138,13 @@ public final class CoreManager {
         appSupportDirectory.appendingPathComponent("Data", isDirectory: true)
     }
 
-    /// 有效端口：自定义服务器时取自定义 URL 中的端口，否则取设置端口
+    /// 有效端口：自定义服务器时取自定义 URL 中的端口，否则取实际生效端口
+    ///（未确认时回落配置端口）
     var effectivePort: Int {
         if useCustomServer, let url = URL(string: customBaseURL), let p = url.port {
             return p
         }
-        return port
+        return activePort ?? port
     }
 
     /// API base URL（http://127.0.0.1:<port> 或自定义）
@@ -147,7 +152,7 @@ public final class CoreManager {
         if useCustomServer, let url = URL(string: customBaseURL), !customBaseURL.isEmpty {
             return url
         }
-        return URL(string: "http://127.0.0.1:\(port)")!
+        return URL(string: "http://127.0.0.1:\(activePort ?? port)")!
     }
 
     // MARK: - 启动
@@ -156,6 +161,7 @@ public final class CoreManager {
     public func startCore() async {
         // 使用自定义服务器时不管理本机 Core 进程：直接进入自定义服务器状态，不启动子进程。
         if useCustomServer {
+            activePort = nil
             state = .customServer
             return
         }
@@ -250,8 +256,23 @@ public final class CoreManager {
 
         appendLog("[XiJian] 已启动 Core 进程 pid=\(proc.processIdentifier) port=\(launchPort)")
 
-        // 4. 轮询健康检查
-        let ready = await waitForHealth(port: launchPort, id: myID)
+        // 4. 读取端口文件，确认实际生效端口
+        //（配置端口被占用时 Core 会报告占用进程并自动换端口，真实端口通过
+        //  run/xijian-<pid>.port 下发，必须等它出现后再做健康检查，否则会轮询到错误端口）
+        let actualPort = await waitForPortFile(pid: proc.processIdentifier, id: myID)
+        guard myID == operationID else { return }
+        guard let actualPort else {
+            if let p = process, p.isRunning { p.terminate() }
+            state = .error("等待 Core 端口文件超时（\(Int(tokenTimeout)) 秒内未生成 run/xijian-\(proc.processIdentifier).port）。请查看日志或尝试重启。")
+            return
+        }
+        activePort = actualPort
+        if actualPort != launchPort {
+            appendLog("[XiJian] 端口 \(launchPort) 被占用，Core 已自动切换到端口 \(actualPort)")
+        }
+
+        // 5. 在真实端口上轮询健康检查
+        let ready = await waitForHealth(port: actualPort, id: myID)
         guard myID == operationID else { return }
         guard ready else {
             if let p = process, p.isRunning { p.terminate() }
@@ -259,12 +280,12 @@ public final class CoreManager {
             return
         }
 
-        // 5. 读取 token
+        // 6. 读取 token
         let token = await waitForToken(pid: proc.processIdentifier, id: myID)
         guard myID == operationID else { return }
         self.token = token
-        appendLog("[XiJian] Core 就绪：http://127.0.0.1:\(launchPort)（token 已读取）")
-        state = .running(port: launchPort)
+        appendLog("[XiJian] Core 就绪：http://127.0.0.1:\(actualPort)（token 已读取）")
+        state = .running(port: actualPort)
     }
 
     // MARK: - 停止 / 重启
@@ -278,6 +299,7 @@ public final class CoreManager {
             process = nil
             pid = nil
             token = nil
+            activePort = nil
             state = .stopped
             isStopping = false
             return
@@ -303,6 +325,7 @@ public final class CoreManager {
         process = nil
         pid = nil
         token = nil
+        activePort = nil
         isStopping = false
         state = .stopped
         appendLog("[XiJian] Core 已停止")
@@ -323,6 +346,7 @@ public final class CoreManager {
             process = nil
             pid = nil
             token = nil
+            activePort = nil
             isStopping = false
             state = .stopped
             return
@@ -338,6 +362,7 @@ public final class CoreManager {
         process = nil
         pid = nil
         token = nil
+        activePort = nil
         isStopping = false
         state = .stopped
     }
@@ -468,6 +493,7 @@ public final class CoreManager {
         process = nil
         pid = nil
         token = nil
+        activePort = nil
         if case .running = state {
             state = .error("Core 进程意外退出（\(code)）。可在设置中查看日志或重启 Core。")
         } else if case .starting = state {
@@ -495,6 +521,31 @@ public final class CoreManager {
             try? await Task.sleep(nanoseconds: UInt64(healthPollInterval * 1_000_000_000))
         }
         return false
+    }
+
+    /// 等待 run/xijian-<pid>.port 出现并读取实际生效端口
+    ///（端口被占用时 Core 会自动换端口，真实端口通过该文件下发）
+    private func waitForPortFile(pid: Int32, id: Int) async -> Int? {
+        guard let coreDir = coreDirectory else { return nil }
+        let portFile = coreDir.appendingPathComponent("run").appendingPathComponent("xijian-\(pid).port")
+        let deadline = Date().addingTimeInterval(tokenTimeout)
+        while Date() < deadline {
+            if id != operationID { return nil }
+            if let data = try? Data(contentsOf: portFile),
+               let port = Self.parsePortFileData(data) {
+                return port
+            }
+            try? await Task.sleep(nanoseconds: 200_000_000)
+        }
+        return nil
+    }
+
+    /// 解析端口文件内容（去空白、必须是 1...65535 的整数），无效时返回 nil。
+    nonisolated static func parsePortFileData(_ data: Data) -> Int? {
+        guard let text = String(data: data, encoding: .utf8) else { return nil }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let port = Int(trimmed), (1...65535).contains(port) else { return nil }
+        return port
     }
 
     /// 等待 run/xijian-<pid>.token 出现并读取
@@ -645,6 +696,7 @@ public final class CoreManager {
     /// 测试用：直接设置运行态（不真正启动进程）
     func setRunningForTesting(port: Int, token: String) {
         self.token = token
+        self.activePort = port
         self.state = .running(port: port)
     }
 
@@ -655,6 +707,7 @@ public final class CoreManager {
         process = nil
         pid = nil
         token = nil
+        activePort = nil
         recentLogs.removeAll()
         logEntries.removeAll()
         fileRawLines.removeAll()

@@ -222,6 +222,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help=f"监听端口 (默认 {DEFAULT_PORT}，或 config.toml [server].port，或 $XIJIAN_API_PORT)",
     )
     parser.add_argument(
+        "--port-strict",
+        action="store_true",
+        help="端口被占用时直接报错退出，不自动更换端口 (默认自动更换可用端口)",
+    )
+    parser.add_argument(
         "--host",
         default=None,
         help=f"监听地址 (默认 {DEFAULT_HOST}，或 $XIJIAN_HOST，或 config.toml)",
@@ -387,6 +392,27 @@ def _with_dev(config: Config) -> Config:
 
     new_server = dataclasses.replace(config.server, dev=True)
     return dataclasses.replace(config, server=new_server)
+
+
+def _write_port_file(port: int) -> None:
+    """Write the actual listening port to ``run/xijian-<pid>.port`` so
+    client processes (the macOS app) can discover it after automatic
+    port fallback.
+
+    将实际监听端口写入 ``run/xijian-<pid>.port``，使客户端进程
+    （macOS App）在自动换端口后能够发现真实端口。
+
+    Best-effort: a failure is logged but never blocks startup.
+    尽力而为：失败仅记录日志，绝不阻塞启动。
+    """
+    from xijian_api.runtime import default_port_file
+
+    path = default_port_file()
+    try:
+        path.write_text(str(port), encoding="utf-8")
+        _LOGGER.info("实际端口已写入 %s (%d)", path, port)
+    except OSError as exc:
+        _LOGGER.warning("写入端口文件失败 %s: %s（macapp 可能无法自动发现端口）", path, exc)
 
 
 def _print_banner(
@@ -662,6 +688,43 @@ def _run(args: argparse.Namespace, log_file: Optional[str]) -> int:
         _LOGGER.error("端口 %d 越界 (1-65535)，回退到默认 %d", port, DEFAULT_PORT)
         port = DEFAULT_PORT
 
+    # Port pre-flight: if the configured port is occupied, report the
+    # occupant and fall back to the next free port (unless --port-strict).
+    # 端口预检：配置端口被占用时报告占用进程并自动更换到下一个空闲端口
+    # （除非指定 --port-strict）。
+    if args.port_strict:
+        from xijian_api.ports import find_port_occupant, is_port_in_use
+
+        if is_port_in_use(host, port):
+            occupant = find_port_occupant(port)
+            detail = f"，被 {occupant} 占用" if occupant else ""
+            _LOGGER.error(
+                "端口 %d 已被占用%s。--port-strict 已指定，拒绝启动。"
+                "请释放该端口或改用其他端口。",
+                port,
+                detail,
+            )
+            return 1
+    else:
+        from xijian_api.ports import resolve_available_port
+
+        try:
+            resolution = resolve_available_port(host, port)
+        except Exception as exc:  # noqa: BLE001 - startup report
+            _LOGGER.error("自动更换端口失败: %s", exc)
+            return 1
+        if resolution.changed:
+            occupant = resolution.occupied_by
+            detail = f"，被 {occupant} 占用" if occupant else ""
+            _LOGGER.warning(
+                "端口 %d 已被占用%s。已自动更换端口: %d → %d",
+                port,
+                detail,
+                port,
+                resolution.port,
+            )
+            port = resolution.port
+
     _LOGGER.info(
         "启动参数解析完成: host=%s port=%d dev=%s config=%s",
         host,
@@ -734,6 +797,15 @@ def _run(args: argparse.Namespace, log_file: Optional[str]) -> int:
         write_discovery(port=port, auth_token=token, pid=os.getpid())
         atexit.register(remove_discovery)
         _LOGGER.info("Core discovery published for port %d", port)
+
+    # Publish the actual port to the pid-scoped port file (the macOS app
+    # waits for this file, then polls /healthz on that port).  Written
+    # *before* serving so the app finds the port even when fallback
+    # changed it.
+    # 将实际端口发布到按 pid 隔离的端口文件（macOS App 等待该文件，
+    # 然后用该端口轮询 /healthz）。在服务启动*之前*写入，使 App 在
+    # 端口被自动更换后也能找到真实端口。
+    _write_port_file(port)
 
     # ------------------------------------------------------------------
     # 9. Serve.

@@ -57,9 +57,11 @@ App 启动时（`CoreManager.startCore`）：
 2. 若 `~/Library/Application Support/XiJian/Core/` 不存在则整目录复制；
    已存在时按需合并（`shouldMergeCore` 比较可执行文件与 `_internal` 目录总大小，
    有差异才重新合并；`config.toml` 等用户数据保留）；
-3. 以 `<dir>/xijian-api --port 18500` 启动 Core 子进程；
-4. 轮询 `GET http://127.0.0.1:18500/healthz` 直到 200（默认超时 60 秒）；
-5. 读取 `run/xijian-<pid>.token` 作为后续请求的 Bearer token。
+3. 以 `<dir>/xijian-api --port <配置端口>` 启动 Core 子进程（默认 18500）；
+4. 读取 `run/xijian-<pid>.port` 获取**实际生效端口**——配置端口被占用时 Core 不会退出，
+   而是报告占用进程并自动切换到空闲端口（最多向上探测 100 个），真实端口通过该文件下发；
+5. 在真实端口上轮询 `GET http://127.0.0.1:<实际端口>/healthz` 直到 200（默认超时 60 秒）；
+6. 读取 `run/xijian-<pid>.token` 作为后续请求的 Bearer token。
 
 退出时（菜单栏「退出」或 Cmd+Q）向子进程发送 SIGTERM，超时后依次 SIGINT、
 SIGKILL，并同步等待退出。Core 的日志（stdout/stderr）汇入 App 内环形缓冲，
@@ -82,7 +84,8 @@ SIGKILL，并同步等待退出。Core 的日志（stdout/stderr）汇入 App �
 
 ## 5. 已知限制
 
-- 默认端口 **18500**（与 Core 的 DEFAULT_PORT 一致，可在设置中修改）；
+- 默认端口 **18500**（与 Core 的 DEFAULT_PORT 一致，可在设置中修改）；配置端口被占用时
+  Core 自动换端口，实际生效端口以 `run/xijian-<pid>.port` 为准；
 - 发布签名：`project.yml` 中 `DEVELOPMENT_TEAM` 留空，正式分发前需用户填入
   自己的 Team ID 并配置签名证书；Entitlements 为最小非沙盒集合
   （禁库校验、允许未签名可执行内存、JIT、网络客户端）。
