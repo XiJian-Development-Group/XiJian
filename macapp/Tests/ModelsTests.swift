@@ -265,4 +265,122 @@ final class ModelsTests: XCTestCase {
         // 时间文本应非空
         XCTAssertFalse(date.xijianTimeText.isEmpty)
     }
+
+    // MARK: - 资源包
+
+    func testPackManifestDecodes() throws {
+        let json = """
+        {"schema":"xijian-pack/1","package_id":"char_yuki","name":"Yuki 角色包","version":"1.0.0","kind":"character","author":"mofan","description":"演示角色","dependencies":["base"],"created_at":"2026-06-01T00:00:00Z","files":["characters/yuki/character.json"]}
+        """
+        let manifest = try decoder.decode(PackManifest.self, from: Data(json.utf8))
+        XCTAssertEqual(manifest.package_id, "char_yuki")
+        XCTAssertEqual(manifest.name, "Yuki 角色包")
+        XCTAssertEqual(manifest.version, "1.0.0")
+        XCTAssertEqual(manifest.kind, "character")
+        XCTAssertEqual(manifest.effectiveKind, "character")
+        XCTAssertTrue(manifest.hasCharacters)
+        XCTAssertFalse(manifest.hasWorlds)
+        XCTAssertEqual(manifest.files?.count, 1)
+    }
+
+    func testPackManifestKindMissingIgnoresDevKitFields() throws {
+        // kind 缺失 + DevKit submission 字段：额外字段应被忽略并默认 mixed
+        let json = """
+        {"name":"纯包","version":"0.1.0","developer_id":"dev-1","submitted_at":"2026-06-02T00:00:00Z","ai_ratio":0.3,"notes":"内部提交"}
+        """
+        let manifest = try decoder.decode(PackManifest.self, from: Data(json.utf8))
+        XCTAssertEqual(manifest.name, "纯包")
+        XCTAssertEqual(manifest.version, "0.1.0")
+        XCTAssertNil(manifest.kind)
+        XCTAssertEqual(manifest.effectiveKind, "mixed")
+        XCTAssertEqual(manifest.developer_id, "dev-1")
+        XCTAssertEqual(manifest.submitted_at, "2026-06-02T00:00:00Z")
+        XCTAssertEqual(manifest.ai_ratio, 0.3)
+        XCTAssertEqual(manifest.notes, "内部提交")
+        XCTAssertTrue(manifest.hasCharacters)
+        XCTAssertTrue(manifest.hasWorlds)
+    }
+
+    func testPackInfoDecodesWithNestedManifest() throws {
+        let json = """
+        {"package_id":"char_yuki","kind":"mixed","name":"Yuki 组合包","version":"2.1.0","path":"/data/packs/char_yuki","loaded":true,
+         "manifest":{"schema":"xijian-pack/1","package_id":"char_yuki","name":"Yuki 组合包","version":"2.1.0","kind":"mixed","description":"含角色与世界"}}
+        """
+        let pack = try decoder.decode(PackInfo.self, from: Data(json.utf8))
+        XCTAssertEqual(pack.package_id, "char_yuki")
+        XCTAssertEqual(pack.id, "char_yuki")
+        XCTAssertEqual(pack.kind, "mixed")
+        XCTAssertEqual(pack.displayKind, "混合")
+        XCTAssertTrue(pack.loaded)
+        XCTAssertEqual(pack.path, "/data/packs/char_yuki")
+        XCTAssertEqual(pack.manifest.description, "含角色与世界")
+        XCTAssertEqual(pack.manifest.effectiveKind, "mixed")
+        XCTAssertTrue(pack.hasCharacters)
+        XCTAssertTrue(pack.hasWorlds)
+    }
+
+    func testImportJobInfoCompletedDecodesWithResult() throws {
+        let json = """
+        {"id":"imp_1","object":"resource.import","status":"completed","kind":"mixed","name":"组合包","file_id":"f_1","package_id":"char_yuki","created_at":1718000000.5,"completed_at":1718000010,
+         "result":{"kind":"mixed","loaded_characters":1,"loaded_worlds":2,"loaded_memories":3}}
+        """
+        let job = try decoder.decode(ImportJobInfo.self, from: Data(json.utf8))
+        XCTAssertEqual(job.id, "imp_1")
+        XCTAssertTrue(job.isCompleted)
+        XCTAssertFalse(job.isFailed)
+        XCTAssertEqual(job.package_id, "char_yuki")
+        XCTAssertEqual(job.result?.loaded_characters, 1)
+        XCTAssertEqual(job.result?.loaded_worlds, 2)
+        XCTAssertEqual(job.result?.loaded_memories, 3)
+    }
+
+    func testImportJobInfoFailedDecodesWithError() throws {
+        let json = """
+        {"id":"imp_2","object":"resource.import","status":"failed","name":"坏包","created_at":1718000000,"completed_at":1718000005,"error":"pack validation failed: missing manifest"}
+        """
+        let job = try decoder.decode(ImportJobInfo.self, from: Data(json.utf8))
+        XCTAssertTrue(job.isFailed)
+        XCTAssertFalse(job.isCompleted)
+        XCTAssertEqual(job.error, "pack validation failed: missing manifest")
+        XCTAssertNil(job.result)
+    }
+
+    func testImportJobInfoDecodesFromQueuedResponse() throws {
+        // POST /v1/xijian/resources/import 的 202 响应只返回 job_id（无 id 键）
+        let json = #"{"job_id":"imp_9","status":"queued"}"#
+        let job = try decoder.decode(ImportJobInfo.self, from: Data(json.utf8))
+        XCTAssertEqual(job.id, "imp_9")
+        XCTAssertTrue(job.isRunning)
+        XCTAssertEqual(job.status, "queued")
+    }
+
+    // MARK: - 来源标记（资源包）
+
+    func testCharacterInfoDecodesPackSource() throws {
+        let json = """
+        {"id":"char_yuki","object":"character","name":"Yuki","display_name":"Yuki","persona_doc":"温柔细心","voice_profile":"v1","default_emotion":"neutral","tags":["demo","default"],"loaded":true,"created_at":1718000000,"updated_at":1718000000,"_pack_source":true,"_pack_id":"char_yuki-pack"}
+        """
+        let character = try decoder.decode(CharacterInfo.self, from: Data(json.utf8))
+        XCTAssertTrue(character.isFromPack)
+        XCTAssertEqual(character.packID, "char_yuki-pack")
+    }
+
+    func testCharacterInfoWithoutPackSourceDefaultsFalse() throws {
+        let json = """
+        {"id":"char_a","object":"character","name":"A","loaded":false}
+        """
+        let character = try decoder.decode(CharacterInfo.self, from: Data(json.utf8))
+        XCTAssertFalse(character.isFromPack)
+        XCTAssertNil(character.packID)
+    }
+
+    func testWorldInfoDecodesPackSource() throws {
+        let json = """
+        {"id":"world_1","name":"东京","world_doc_path":"w/lore.md","config_path":"w/config.json","state_doc_path":"w/state.json","is_active":true,"last_active_at":1718000000,"created_at":1718000000,"updated_at":1718000000,"_pack_source":true,"_pack_id":"world-pack"}
+        """
+        let world = try decoder.decode(WorldInfo.self, from: Data(json.utf8))
+        XCTAssertTrue(world.isFromPack)
+        XCTAssertEqual(world.packID, "world-pack")
+        XCTAssertTrue(world.isActive)
+    }
 }

@@ -10,6 +10,7 @@ public struct ContentView: View {
     @State private var characterVM = CharacterViewModel()
     @State private var worldVM = WorldViewModel()
     @State private var memoryVM = MemoryViewModel()
+    @State private var packVM = PackViewModel()
 
     public init() {}
 
@@ -61,6 +62,8 @@ public struct ContentView: View {
             CharacterListView(viewModel: characterVM)
         case .worlds:
             WorldListView(viewModel: worldVM)
+        case .packs:
+            PackListView(viewModel: packVM)
         case .memory:
             MemoryView(viewModel: memoryVM)
         case .settings:

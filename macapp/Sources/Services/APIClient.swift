@@ -315,6 +315,62 @@ struct APIClient {
         try await postVoid("/v1/chat/abort", body: AbortBody(request_id: requestID))
     }
 
+    // MARK: - 资源包管理
+
+    func listPacks() async throws -> [PackInfo] {
+        try await get("/v1/xijian/packs")
+    }
+
+    func getPack(_ packageID: String) async throws -> PackInfo {
+        try await get("/v1/xijian/packs/\(packageID)")
+    }
+
+    /// 安装资源包（同步，服务端本地路径）
+    func installPack(path: String) async throws -> PackInfo {
+        try await post("/v1/xijian/packs/install", body: ["path": path])
+    }
+
+    /// 卸载资源包
+    func uninstallPack(_ packageID: String) async throws -> PackInfo {
+        try await delete("/v1/xijian/packs/\(packageID)")
+    }
+
+    /// 重新扫描资源包目录
+    func rescanPacks() async throws -> [String: JSONValue] {
+        try await post("/v1/xijian/packs/rescan")
+    }
+
+    // MARK: - 资源导入（异步）
+
+    /// 启动异步导入任务
+    func importResource(name: String, kind: String, path: String) async throws -> ImportJobInfo {
+        let body: [String: JSONValue] = [
+            "name": .string(name),
+            "kind": .string(kind),
+            "path": .string(path)
+        ]
+        return try await post("/v1/xijian/resources/import", body: body)
+    }
+
+    /// 查询导入任务状态
+    func getImportJob(_ jobID: String) async throws -> ImportJobInfo {
+        try await get("/v1/xijian/resources/imports/\(jobID)")
+    }
+
+    /// 轮询导入任务直到完成或失败
+    func pollImportJob(_ jobID: String, interval: TimeInterval = 0.5, timeout: TimeInterval = 120) async throws -> ImportJobInfo {
+        let startTime = Date()
+        while Date().timeIntervalSince(startTime) < timeout {
+            let job = try await getImportJob(jobID)
+            if job.isCompleted || job.isFailed {
+                return job
+            }
+            try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+        }
+        // 超时返回最新状态
+        return try await getImportJob(jobID)
+    }
+
     // MARK: - 角色
 
     func listCharacters() async throws -> [CharacterInfo] {

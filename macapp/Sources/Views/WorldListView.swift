@@ -12,6 +12,7 @@ struct WorldListView: View {
     @State private var selectedID: String?
     @State private var showDetail = false
     @State private var pendingDelete: WorldInfo?
+    @State private var showImportSheet = false
 
     var body: some View {
         NavigationStack {
@@ -40,6 +41,14 @@ struct WorldListView: View {
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
+                        showImportSheet = true
+                    } label: {
+                        Label("导入资源包", systemImage: "square.and.arrow.down")
+                    }
+                    .disabled(!coreIsRunning)
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
                         showCreateSheet = true
                     } label: {
                         Label("新建世界", systemImage: "plus")
@@ -52,6 +61,11 @@ struct WorldListView: View {
                         Label("刷新", systemImage: "arrow.clockwise")
                     }
                 }
+            }
+        }
+        .sheet(isPresented: $showImportSheet) {
+            ImportPackSheet() {
+                await viewModel.refresh()
             }
         }
         .sheet(isPresented: $showCreateSheet) {
@@ -101,11 +115,17 @@ struct WorldListView: View {
             Text("还没有世界")
                 .font(.title3)
                 .foregroundStyle(.secondary)
-            Text("点击右上角 + 新建世界，或确认 Core 已启动")
+            Text("点击右上角新建世界或导入资源包，或确认 Core 已启动")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var coreIsRunning: Bool {
+        if case .running = core.state { return true }
+        return false
     }
 
     private var createSheet: some View {
@@ -164,6 +184,15 @@ struct WorldRow: View {
                             .padding(.vertical, 1)
                             .background(Capsule().fill(Color.blue.opacity(0.2)))
                             .foregroundStyle(.blue)
+                    }
+                    if world.isFromPack {
+                        Text("资源包")
+                            .font(.caption2)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 1)
+                            .background(Capsule().fill(Color.purple.opacity(0.2)))
+                            .foregroundStyle(.purple)
+                            .help("来自资源包：\(world.packID ?? "")")
                     }
                 }
                 Text(world.worldID)

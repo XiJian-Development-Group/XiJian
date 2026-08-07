@@ -1,15 +1,15 @@
 import SwiftUI
 import XiJianKit
 
-/// 角色列表：CRUD、加载/卸载、进入详情
+/// 角色列表：CRUD、加载/卸载、进入详情、导入资源包
 struct CharacterListView: View {
     @Bindable var viewModel: CharacterViewModel
     @Environment(CoreManager.self) private var core
-    @State private var showCreateSheet = false
     @State private var showError = false
     @State private var errorMessage = ""
     @State private var selectedID: String?
     @State private var showDetail = false
+    @State private var showImportSheet = false
 
     var body: some View {
         NavigationStack {
@@ -38,10 +38,11 @@ struct CharacterListView: View {
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
-                        showCreateSheet = true
+                        showImportSheet = true
                     } label: {
-                        Label("新建角色", systemImage: "plus")
+                        Label("导入角色", systemImage: "square.and.arrow.down")
                     }
+                    .disabled(!coreIsRunning)
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Button {
@@ -52,8 +53,10 @@ struct CharacterListView: View {
                 }
             }
         }
-        .sheet(isPresented: $showCreateSheet) {
-            CharacterEditSheet(viewModel: viewModel, mode: .create)
+        .sheet(isPresented: $showImportSheet) {
+            ImportPackSheet() {
+                await viewModel.refresh()
+            }
         }
         .sheet(isPresented: $showDetail) {
             if let id = selectedID {
@@ -85,9 +88,10 @@ struct CharacterListView: View {
             Text("还没有角色")
                 .font(.title3)
                 .foregroundStyle(.secondary)
-            Text("点击右上角 + 新建角色，或确认 Core 已启动")
+            Text("点击右上角「导入角色」选择资源包（.7z/.zip），或确认 Core 已启动")
                 .font(.caption)
                 .foregroundStyle(.tertiary)
+                .multilineTextAlignment(.center)
             if !coreIsRunning {
                 Button("启动 Core") {
                     Task { await core.startCore() }
@@ -133,6 +137,15 @@ struct CharacterRow: View {
                             .padding(.vertical, 1)
                             .background(Capsule().fill(Color.green.opacity(0.2)))
                             .foregroundStyle(.green)
+                    }
+                    if character.isFromPack {
+                        Text("资源包")
+                            .font(.caption2)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 1)
+                            .background(Capsule().fill(Color.purple.opacity(0.2)))
+                            .foregroundStyle(.purple)
+                            .help("来自资源包：\(character.packID ?? "")")
                     }
                 }
                 if !character.tagList.isEmpty {

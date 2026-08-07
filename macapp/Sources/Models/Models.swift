@@ -175,10 +175,21 @@ struct CharacterInfo: Codable, Identifiable, Hashable {
     let loaded: Bool?
     let created_at: Double?
     let updated_at: Double?
+    /// 来源标记：来自资源包（Core 原样返回 _pack_source / _pack_id）
+    let packSource: Bool?
+    let packID: String?
 
     var displayName: String { display_name ?? name ?? id }
     var isLoaded: Bool { loaded ?? false }
     var tagList: [String] { tags ?? [] }
+    var isFromPack: Bool { packSource ?? false }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, object, name, display_name, persona_doc, voice_profile
+        case default_emotion, tags, loaded, created_at, updated_at
+        case packSource = "_pack_source"
+        case packID = "_pack_id"
+    }
 }
 
 /// 角色状态（GET /v1/xijian/characters/{id}/state）— 动态字段
@@ -220,9 +231,20 @@ struct WorldInfo: Codable, Identifiable, Hashable {
     let last_active_at: Double?
     let created_at: Double?
     let updated_at: Double?
+    /// 来源标记：来自资源包（Core 原样返回 _pack_source / _pack_id）
+    let packSource: Bool?
+    let packID: String?
 
     var worldID: String { id ?? "" }
     var isActive: Bool { is_active ?? false }
+    var isFromPack: Bool { packSource ?? false }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, world_doc_path, config_path, state_doc_path
+        case is_active, last_active_at, created_at, updated_at
+        case packSource = "_pack_source"
+        case packID = "_pack_id"
+    }
 }
 
 /// 世界状态（GET /v1/xijian/worlds/{id}/state）
@@ -499,6 +521,147 @@ enum SSEEvent {
     case chunk(ChatStreamChunk)
     case done
     case aborted
+}
+
+// MARK: - 资源包
+
+/// 资源包清单
+struct PackManifest: Codable, Hashable {
+    let schema: String?
+    let package_id: String?
+    let name: String
+    let version: String
+    let kind: String?  // character | world | mixed
+    let author: String?
+    let description: String?
+    let dependencies: [String]?
+    let created_at: String?
+    let files: [String]?
+    
+    // 兼容 DevKit 提交字段（忽略）
+    let developer_id: String?
+    let submitted_at: String?
+    let ai_ratio: Double?
+    let notes: String?
+    
+    /// 实际类型：kind 为空时从 manifest 推导，或默认 mixed
+    var effectiveKind: String { kind ?? "mixed" }
+    
+    /// 是否包含角色
+    var hasCharacters: Bool { effectiveKind == "character" || effectiveKind == "mixed" }
+    
+    /// 是否包含世界观
+    var hasWorlds: Bool { effectiveKind == "world" || effectiveKind == "mixed" }
+}
+
+/// 自定义解码放在扩展中，保留合成成员初始化器（PackInfo 解码兜底需要）
+extension PackManifest {
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        schema = try container.decodeIfPresent(String.self, forKey: .schema)
+        package_id = try container.decodeIfPresent(String.self, forKey: .package_id)
+        name = try container.decodeIfPresent(String.self, forKey: .name) ?? ""
+        version = try container.decodeIfPresent(String.self, forKey: .version) ?? ""
+        kind = try container.decodeIfPresent(String.self, forKey: .kind)
+        author = try container.decodeIfPresent(String.self, forKey: .author)
+        description = try container.decodeIfPresent(String.self, forKey: .description)
+        dependencies = try container.decodeIfPresent([String].self, forKey: .dependencies)
+        created_at = try container.decodeIfPresent(String.self, forKey: .created_at)
+        files = try container.decodeIfPresent([String].self, forKey: .files)
+        developer_id = try container.decodeIfPresent(String.self, forKey: .developer_id)
+        submitted_at = try container.decodeIfPresent(String.self, forKey: .submitted_at)
+        ai_ratio = try container.decodeIfPresent(Double.self, forKey: .ai_ratio)
+        notes = try container.decodeIfPresent(String.self, forKey: .notes)
+    }
+}
+
+/// 已安装资源包信息（GET /v1/xijian/packs）
+struct PackInfo: Codable, Identifiable, Hashable {
+    let package_id: String
+    let kind: String  // character | world | mixed
+    let name: String
+    let version: String
+    let path: String
+    let manifest: PackManifest
+    let loaded: Bool
+    
+    var id: String { package_id }
+    
+    var displayKind: String {
+        switch kind {
+        case "character": return "角色"
+        case "world": return "世界观"
+        case "mixed": return "混合"
+        default: return kind
+        }
+    }
+    
+    var hasCharacters: Bool { kind == "character" || kind == "mixed" }
+    var hasWorlds: Bool { kind == "world" || kind == "mixed" }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        package_id = try container.decodeIfPresent(String.self, forKey: .package_id) ?? ""
+        kind = try container.decodeIfPresent(String.self, forKey: .kind) ?? "mixed"
+        name = try container.decodeIfPresent(String.self, forKey: .name) ?? ""
+        version = try container.decodeIfPresent(String.self, forKey: .version) ?? ""
+        path = try container.decodeIfPresent(String.self, forKey: .path) ?? ""
+        manifest = try container.decodeIfPresent(PackManifest.self, forKey: .manifest) ?? PackManifest(schema: nil, package_id: nil, name: "", version: "", kind: nil, author: nil, description: nil, dependencies: nil, created_at: nil, files: nil, developer_id: nil, submitted_at: nil, ai_ratio: nil, notes: nil)
+        loaded = try container.decodeIfPresent(Bool.self, forKey: .loaded) ?? false
+    }
+}
+
+/// 导入任务信息（POST /v1/xijian/resources/import → 202，GET /v1/xijian/resources/imports/{job_id}）
+struct ImportJobInfo: Codable, Identifiable, Hashable {
+    let id: String
+    let object: String?
+    let status: String  // queued | running | completed | failed
+    let kind: String?
+    let name: String?
+    let file_id: String?
+    let package_id: String?
+    let created_at: Double?
+    let completed_at: Double?
+    let error: String?
+    let result: ImportResult?
+    
+    struct ImportResult: Codable, Hashable {
+        let kind: String?
+        let loaded_characters: Int?
+        let loaded_worlds: Int?
+        let loaded_memories: Int?
+    }
+    
+    var isCompleted: Bool { status == "completed" }
+    var isFailed: Bool { status == "failed" }
+    var isRunning: Bool { status == "running" || status == "queued" }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        // POST /v1/xijian/resources/import 的 202 响应只返回 job_id，需要兜底
+        let jobID = (try? decoder.container(keyedBy: JobIDKey.self))
+            .flatMap { try? $0.decodeIfPresent(String.self, forKey: .job_id) }
+        id = try container.decodeIfPresent(String.self, forKey: .id) ?? jobID ?? ""
+        object = try container.decodeIfPresent(String.self, forKey: .object)
+        status = try container.decodeIfPresent(String.self, forKey: .status) ?? "queued"
+        kind = try container.decodeIfPresent(String.self, forKey: .kind)
+        name = try container.decodeIfPresent(String.self, forKey: .name)
+        file_id = try container.decodeIfPresent(String.self, forKey: .file_id)
+        package_id = try container.decodeIfPresent(String.self, forKey: .package_id)
+        created_at = try container.decodeIfPresent(Double.self, forKey: .created_at)
+        completed_at = try container.decodeIfPresent(Double.self, forKey: .completed_at)
+        error = try container.decodeIfPresent(String.self, forKey: .error)
+        result = try container.decodeIfPresent(ImportResult.self, forKey: .result)
+    }
+
+    private enum JobIDKey: String, CodingKey {
+        case job_id
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, object, status, kind, name, file_id, package_id
+        case created_at, completed_at, error, result
+    }
 }
 
 // MARK: - 时间格式化

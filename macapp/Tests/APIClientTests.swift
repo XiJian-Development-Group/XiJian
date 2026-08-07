@@ -292,4 +292,103 @@ final class APIClientTests: XCTestCase {
         let result = try await client.health()
         XCTAssertFalse(result)
     }
+
+    // MARK: - 资源包
+
+    func testListPacksPath() async throws {
+        let json = """
+        [{"package_id":"p1","kind":"character","name":"包1","version":"1.0.0","path":"/packs/p1","loaded":true,
+          "manifest":{"name":"包1","version":"1.0.0","kind":"character"}}]
+        """
+        MockURLProtocol.requestHandler = { request in
+            XCTAssertEqual(request.url?.path, "/v1/xijian/packs")
+            XCTAssertEqual(request.httpMethod, "GET")
+            return (200, Data(json.utf8), ["Content-Type": "application/json"])
+        }
+        let packs = try await client.listPacks()
+        XCTAssertEqual(packs.count, 1)
+        XCTAssertEqual(packs.first?.package_id, "p1")
+        XCTAssertEqual(packs.first?.displayKind, "角色")
+        XCTAssertTrue(packs.first?.loaded == true)
+    }
+
+    func testImportResourcePostsBody() async throws {
+        var captured: URLRequest?
+        MockURLProtocol.requestHandler = { request in
+            captured = request
+            // 真实 Core 的 202 响应只返回 job_id
+            return (202, Data(#"{"job_id":"imp_1","status":"queued"}"#.utf8), ["Content-Type": "application/json"])
+        }
+
+        let job = try await client.importResource(name: "test.7z", kind: "mixed", path: "/tmp/test.7z")
+
+        let request = try XCTUnwrap(captured)
+        XCTAssertEqual(request.url?.path, "/v1/xijian/resources/import")
+        XCTAssertEqual(request.httpMethod, "POST")
+        let body = try XCTUnwrap(captureRequestBody(request))
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        XCTAssertEqual(json["name"] as? String, "test.7z")
+        XCTAssertEqual(json["kind"] as? String, "mixed")
+        XCTAssertEqual(json["path"] as? String, "/tmp/test.7z")
+        // job_id 应兜底解码为 id
+        XCTAssertEqual(job.id, "imp_1")
+        XCTAssertTrue(job.isRunning)
+    }
+
+    func testGetImportJobPath() async throws {
+        let json = """
+        {"id":"imp_1","object":"resource.import","status":"running","name":"x","created_at":1}
+        """
+        MockURLProtocol.requestHandler = { request in
+            XCTAssertEqual(request.url?.path, "/v1/xijian/resources/imports/imp_1")
+            XCTAssertEqual(request.httpMethod, "GET")
+            return (200, Data(json.utf8), ["Content-Type": "application/json"])
+        }
+        let job = try await client.getImportJob("imp_1")
+        XCTAssertEqual(job.id, "imp_1")
+        XCTAssertTrue(job.isRunning)
+    }
+
+    func testUninstallPackDeletePath() async throws {
+        let json = """
+        {"package_id":"p1","kind":"character","name":"包1","version":"1.0.0","path":"/packs/p1","loaded":false,
+         "manifest":{"name":"包1","version":"1.0.0","kind":"character"}}
+        """
+        MockURLProtocol.requestHandler = { request in
+            XCTAssertEqual(request.url?.path, "/v1/xijian/packs/p1")
+            XCTAssertEqual(request.httpMethod, "DELETE")
+            return (200, Data(json.utf8), ["Content-Type": "application/json"])
+        }
+        let pack = try await client.uninstallPack("p1")
+        XCTAssertEqual(pack.package_id, "p1")
+    }
+
+    func testRescanPacksPostsPath() async throws {
+        MockURLProtocol.requestHandler = { request in
+            XCTAssertEqual(request.url?.path, "/v1/xijian/packs/rescan")
+            XCTAssertEqual(request.httpMethod, "POST")
+            return (200, Data(#"{"rescanned":2,"packs":["p1","p2"]}"#.utf8), ["Content-Type": "application/json"])
+        }
+        let result = try await client.rescanPacks()
+        XCTAssertEqual(result["rescanned"]?.doubleValue, 2)
+        XCTAssertEqual(result["packs"]?.stringValue, nil)
+    }
+
+    func testInstallPackPostsBodyWithPath() async throws {
+        var captured: URLRequest?
+        MockURLProtocol.requestHandler = { request in
+            captured = request
+            return (200, Data(#"{"package_id":"p1","kind":"mixed","name":"包1","version":"1.0.0","path":"/packs/p1","loaded":true,"manifest":{"name":"包1","version":"1.0.0"}}"#.utf8), ["Content-Type": "application/json"])
+        }
+
+        let pack = try await client.installPack(path: "/tmp/test.7z")
+
+        let request = try XCTUnwrap(captured)
+        XCTAssertEqual(request.url?.path, "/v1/xijian/packs/install")
+        XCTAssertEqual(request.httpMethod, "POST")
+        let body = try XCTUnwrap(captureRequestBody(request))
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        XCTAssertEqual(json["path"] as? String, "/tmp/test.7z")
+        XCTAssertEqual(pack.package_id, "p1")
+    }
 }

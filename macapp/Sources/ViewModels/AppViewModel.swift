@@ -13,6 +13,7 @@ public final class AppViewModel {
         case chat = "对话"
         case characters = "角色"
         case worlds = "世界"
+        case packs = "资源包"
         case memory = "记忆"
         case settings = "设置"
 
@@ -23,6 +24,7 @@ public final class AppViewModel {
             case .chat: return "bubble.left.and.bubble.right"
             case .characters: return "person.2"
             case .worlds: return "globe.asia.australia"
+            case .packs: return "shippingbox"
             case .memory: return "brain.head.profile"
             case .settings: return "gearshape"
             }
