@@ -110,6 +110,13 @@ struct ImportPackSheet: View {
                     .foregroundStyle(.secondary)
             }
             .padding(.vertical, 8)
+            HStack {
+                Spacer()
+                Button("取消") { dismiss() }
+            }
+            Text("关闭后导入仍在后台继续，完成后可在对应列表查看")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
         }
     }
 

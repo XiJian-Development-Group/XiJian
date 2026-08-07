@@ -364,14 +364,15 @@ final class APIClientTests: XCTestCase {
     }
 
     func testRescanPacksPostsPath() async throws {
+        // 真实契约：POST /v1/xijian/packs/rescan → {"installed": n, "errors": [...]}
         MockURLProtocol.requestHandler = { request in
             XCTAssertEqual(request.url?.path, "/v1/xijian/packs/rescan")
             XCTAssertEqual(request.httpMethod, "POST")
-            return (200, Data(#"{"rescanned":2,"packs":["p1","p2"]}"#.utf8), ["Content-Type": "application/json"])
+            return (200, Data(#"{"installed":1,"errors":[]}"#.utf8), ["Content-Type": "application/json"])
         }
         let result = try await client.rescanPacks()
-        XCTAssertEqual(result["rescanned"]?.doubleValue, 2)
-        XCTAssertEqual(result["packs"]?.stringValue, nil)
+        XCTAssertEqual(result["installed"]?.doubleValue, 1)
+        XCTAssertEqual(result["errors"]?.stringValue, nil)
     }
 
     func testInstallPackPostsBodyWithPath() async throws {

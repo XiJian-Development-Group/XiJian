@@ -1070,6 +1070,11 @@ new file:   core/tests/test_xijian_scene_interactions.py  (810 行)
 - 真实 GUI 点击验证（选文件→导入→完成 的端到端 UI 操作）：本环境无法驱动 macOS App 交互，未执行；HTTP 层已由 91 个单测 + Core 端到端冒烟覆盖，UI 人工验收留待用户。
 - DevKit 侧无改动：导出即包（§B v2.10 已实装），与本轮 macapp 导入天然兼容，冒烟包即按 DevKit 布局构造验证。
 
+**QA 整改（丝柯克复核后）**：
+
+- `testRescanPacksPostsPath` mock 形状修正为真实契约 `{"installed":N,"errors":[]}`（原 mock `{"rescanned":2,"packs":[...]}` 是自证式断言，运行时不受影响）。
+- `ImportPackSheet` importing 阶段补「取消」按钮 + 「关闭后导入仍在后台继续」提示（原 120s 轮询期间无法在 sheet 内主动关闭）。
+
 ---
 
 ## 维护约定
