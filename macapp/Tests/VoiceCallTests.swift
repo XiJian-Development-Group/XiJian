@@ -47,6 +47,11 @@ final class MockVoiceCallService: VoiceCallServicing {
         interrupted_previous: false, user_event_id: nil, reply_event_id: nil,
         synchronous: true, error: nil
     ))
+    var sendAudioResult: Result<SpeechResult, Error> = .success(SpeechResult(
+        ok: true, turn: 1, user_text: "你好", reply: "",
+        interrupted_previous: false, user_event_id: nil, reply_event_id: nil,
+        synchronous: false, error: nil
+    ))
     var setBargeInResult: Result<VoiceCallRecord, Error> = .success(.testRecord(id: "call_1", status: .active, bargeIn: true))
     var singResult: Result<SongResult, Error> = .success(SongResult(
         ok: false, status: "unavailable", reason: "diffsinger_engine_not_wired", message: "引擎未接入"
@@ -60,6 +65,7 @@ final class MockVoiceCallService: VoiceCallServicing {
     private(set) var rejectCalls: [String] = []
     private(set) var endCalls: [String] = []
     private(set) var speechCalls: [(callId: String, text: String)] = []
+    private(set) var audioCalls: [(callId: String, audioData: Data, language: String?)] = []
     private(set) var bargeInCalls: [(callId: String, active: Bool)] = []
     private(set) var singCalls: [(callId: String, lyrics: String)] = []
     private(set) var listEventsCalls: [(callId: String, limit: Int)] = []
@@ -97,6 +103,11 @@ final class MockVoiceCallService: VoiceCallServicing {
     func sendSpeech(callId: String, text: String) async throws -> SpeechResult {
         speechCalls.append((callId, text))
         return try sendSpeechResult.get()
+    }
+
+    func sendAudio(callId: String, audioData: Data, language: String?) async throws -> SpeechResult {
+        audioCalls.append((callId, audioData, language))
+        return try sendAudioResult.get()
     }
 
     func setBargeIn(callId: String, active: Bool) async throws -> VoiceCallRecord {
