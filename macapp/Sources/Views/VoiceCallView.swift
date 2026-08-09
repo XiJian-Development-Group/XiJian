@@ -288,7 +288,7 @@ struct VoiceCallView: View {
                 }
 
                 HStack(alignment: .bottom, spacing: 8) {
-                    TextField(loc("说点什么…（文本路径，音频采集后续接入）"), text: $inputText)
+                    TextField(loc("说点什么…"), text: $inputText)
                         .textFieldStyle(.plain)
                         .font(.system(size: max(theme.fontSize, 13)))
                         .padding(8)
@@ -303,7 +303,24 @@ struct VoiceCallView: View {
                         .onSubmit {
                             Task { await send() }
                         }
-                        .disabled(viewModel.isBusy)
+                        .disabled(viewModel.isBusy || viewModel.isRecording)
+
+                    // 麦克风按钮：点击开始录音，再点停止并发送（录音中变红）
+                    Button {
+                        if viewModel.isRecording {
+                            Task { await viewModel.stopRecordingAndSend() }
+                        } else {
+                            viewModel.startRecording()
+                        }
+                    } label: {
+                        Image(systemName: "mic.fill")
+                            .font(.system(size: 24))
+                            .foregroundStyle(viewModel.isRecording ? Color.red : theme.accentColor)
+                            .symbolEffect(.pulse, options: .repeating, isActive: viewModel.isRecording)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(viewModel.isBusy)
+                    .help(viewModel.isRecording ? loc("停止并发送") : loc("开始录音"))
 
                     Button {
                         Task { await send() }
@@ -313,9 +330,34 @@ struct VoiceCallView: View {
                             .foregroundStyle(theme.accentColor)
                     }
                     .buttonStyle(.plain)
-                    .disabled(inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.isBusy)
+                    .disabled(inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.isBusy || viewModel.isRecording)
                     .help(loc("发送"))
                 }
+
+                // 录音 / 播放状态指示
+                HStack(spacing: 12) {
+                    if viewModel.isRecording {
+                        HStack(spacing: 6) {
+                            Circle()
+                                .fill(Color.red)
+                                .frame(width: 8, height: 8)
+                            Text(loc("录音中…"))
+                                .font(.caption)
+                        }
+                        .foregroundStyle(Color.red)
+                    }
+                    if viewModel.isPlayingAudio {
+                        HStack(spacing: 6) {
+                            Image(systemName: "speaker.wave.2.fill")
+                                .font(.caption2)
+                            Text(loc("播放中…"))
+                                .font(.caption)
+                        }
+                        .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal, 2)
             }
             .padding(12)
         case .ended:
