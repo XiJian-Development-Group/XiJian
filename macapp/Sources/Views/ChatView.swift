@@ -10,6 +10,10 @@ struct ChatView: View {
     @State private var showModelPicker = false
     @State private var showError = false
     @State private var errorMessage = ""
+    // A6 实时通话入口
+    @State private var showCallPicker = false
+    @State private var showCallSheet = false
+    @State private var voiceCallVM: VoiceCallViewModel?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -40,6 +44,16 @@ struct ChatView: View {
                 viewModel.showError = false
             }
         }
+        .sheet(isPresented: $showCallSheet) {
+            if let vm = voiceCallVM {
+                VoiceCallView(viewModel: vm)
+            }
+        }
+    }
+
+    private var coreIsRunning: Bool {
+        if case .running = core.state { return true }
+        return false
     }
 
     // MARK: 顶部栏
@@ -96,6 +110,26 @@ struct ChatView: View {
             }
 
             Spacer()
+
+            // A6 实时通话入口（拨出：选角色 → 建通话 → 响铃 → 接通）
+            Button {
+                showCallPicker.toggle()
+            } label: {
+                Label("通话", systemImage: "phone")
+            }
+            .disabled(!coreIsRunning)
+            .help(coreIsRunning ? "实时语音通话（A6）" : "Core 未运行，无法通话")
+            .popover(isPresented: $showCallPicker) {
+                VoiceCallCharacterPicker { character in
+                    let vm = VoiceCallViewModel()
+                    voiceCallVM = vm
+                    showCallPicker = false
+                    showCallSheet = true
+                    Task {
+                        await vm.startCall(characterId: character.id, characterName: character.displayName)
+                    }
+                }
+            }
 
             // 会话操作
             Button {

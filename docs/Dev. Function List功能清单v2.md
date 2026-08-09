@@ -1192,6 +1192,13 @@
       end
   ```
 
+> **状态（2026-08-09）**：会话管理层已实装（`stubs/voice_calls.py` + `routes/xijian_voice_calls.py`，
+> 状态机/事件/barge-in 语义/WS 推送齐全，回复生成与 DiffSinger 为可插拔钩子）；
+> macapp 侧通话 UI 已交付（VoiceCallService / VoiceCallViewModel / VoiceCallView，
+> 入口在对话页「通话」按钮，文本快捷路径 + WS 事件驱动，详见 `docs/macapp.md` §5）。
+> 待接入：真实 STT/TTS 后端与音频采集（AC-1 延迟依赖后端）、DiffSinger 引擎钩子
+> （`set_sing_engine` 接 devkit.voice_cloner.generate_singing）、VRM 动作联动（US-A6-02）。
+
 ---
 
 ### A7. 主动发起聊天或通话（仅支持 macOS 与 iOS/iPadOS）

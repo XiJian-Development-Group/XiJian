@@ -13,11 +13,12 @@ macapp/
 │   ├── App.swift             # App 入口（@main）、AppDelegate（菜单栏、Core 生命周期）
 │   ├── Info.plist            # App Info.plist
 │   ├── Models/               # 数据模型（角色 / 世界 / 资源包 / 记忆等）
-│   ├── Services/             # CoreManager（Core 进程管理）、APIClient（HTTP 封装）
+│   ├── Services/             # CoreManager（Core 进程管理）、APIClient（HTTP 封装）、
+│   │                         #   WebSocketClient（/v1/ws 事件推送）、VoiceCallService（A6 通话 API）
 │   ├── Theme/                # 主题个性化（AppTheme）
-│   ├── ViewModels/           # 各界面视图模型（含 PackViewModel）
+│   ├── ViewModels/           # 各界面视图模型（含 PackViewModel、VoiceCallViewModel）
 │   └── Views/                # SwiftUI 视图（对话 / 角色 / 世界 / 资源包 / 记忆 / 设置等，
-│                             #   含 ImportPackSheet / PackListView）
+│                             #   含 ImportPackSheet / PackListView / VoiceCallView）
 ├── Resources/
 │   ├── Assets.xcassets       # 图标与颜色资源
 │   └── Core/                 # 内嵌 Core 产物（build-core.sh 生成，随 App 分发）
@@ -71,6 +72,9 @@ SIGKILL，并同步等待退出。Core 的日志（stdout/stderr）汇入 App �
 ## 4. 功能范围
 
 - **对话**：流式对话，支持 Markdown 渲染（swift-markdown-ui）；
+- **通话（A6）**：实时语音通话会话管理 —— 对话页顶部「通话」按钮 → 选角色 → 拨出（响铃）→
+  接通后文本发送（服务端 STT→AI→TTS 管线，text 快捷路径）、barge-in 打断开关、歌唱请求、
+  对话记录展示；经 WebSocket 订阅 `call.state_changed` / `call.event` 驱动状态刷新；
 - **角色**：角色列表 / 详情 / 编辑；**导入资源包**（替换原「新建角色」入口，
   通过 Finder 选择 .7z/.zip 资源包导入，导入后列表刷新）；
 - **世界**：世界列表 / 详情 / 创建与编辑；**导入资源包**（与角色页共用同一个导入面板）；
@@ -82,7 +86,42 @@ SIGKILL，并同步等待退出。Core 的日志（stdout/stderr）汇入 App �
 - **设置**：Core 端口、自定义服务器与访问令牌、主题个性化、剧情与安全相关设置
   （SettingsView / PlotSettingsView / SafetySettingsView）。
 
-## 5. 已知限制
+## 5. A6 实时通话
+
+A6 通话会话管理在 Core 侧为可运行 stub（状态机 idle → ringing → active → ended，
+见 `core/xijian_api/routes/xijian_voice_calls.py`），macapp 侧提供完整 UI。
+
+### 入口
+
+对话页（ChatView）顶部工具栏「通话」按钮（Core 未运行时禁用）→ 弹出角色选择器
+（VoiceCallCharacterPicker，从 `GET /v1/xijian/characters` 加载）→ 选择角色后以 sheet
+弹出 VoiceCallView 并自动拨出。通话页关闭（onDisappear）时断开 WS；若通话仍活跃，
+尽力调用 `end` 通知服务端挂断。
+
+### 分层职责
+
+- **VoiceCallService**（`Sources/Services/VoiceCallService.swift`）：`/v1/xijian/voice-calls`
+  全部端点的 URLSession 封装（创建 / ring / accept / reject / end / speech / barge-in /
+  song / events），请求构造、Bearer 认证、错误信封解析（`APIError`）与 APIClient 同风格；
+  baseURL / token 取自 `CoreManager.shared.baseURL` / `CoreManager.shared.token`，
+  不依赖 APIClient / CoreManager 改动。`VoiceCallServicing` 协议供 ViewModel 测试注入。
+- **VoiceCallViewModel**（`Sources/ViewModels/VoiceCallViewModel.swift`）：客户端通话状态机
+  （idle / ringing / active / ended），组合 VoiceCallService（REST 推进）与 WebSocketClient
+  （`call.state_changed` / `call.event` 事件驱动）；暴露 startCall / accept / reject / end /
+  sendText / toggleBargeIn / sing / refresh / close；对话记录按 (role, turn) 与服务端 event_id
+  去重（REST 回显与 WS 推送可能重复）。
+- **VoiceCallView**（`Sources/Views/VoiceCallView.swift`）：SwiftUI 通话界面 —— 状态头部
+  （响铃 / 通话时长）、对话记录气泡、拨出 / 挂断控制、文本输入发送、barge-in 开关、
+  歌唱输入 sheet；样式跟随 ThemeSettings（主题色 / 气泡 / 圆角 / 字号 / 深浅色）。
+
+### 依赖
+
+- **WebSocketClient**（commit e5b3e0f 基建）：每通通话按需建立 WS 连接（`startCall` 时
+  `connect`，`close` 时 `disconnect`），服务端广播的事件经 `call_id` 过滤只消费本通话。
+- 通话音频采集（audio_base64 路径）与真实 STT/TTS 后端未接入；本批使用 `speech` 端点的
+  `text` 快捷路径（服务端异步管线，回复经 WS 事件送达）。
+
+## 6. 已知限制
 
 - 默认端口 **18500**（与 Core 的 DEFAULT_PORT 一致，可在设置中修改）；配置端口被占用时
   Core 自动换端口，实际生效端口以 `run/xijian-<pid>.port` 为准；

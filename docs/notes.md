@@ -5,6 +5,38 @@
 
 ---
 
+## 2026-08-09 · macapp A6 实时通话 UI（VoiceCallService + ViewModel + View + 入口 + 测试）
+
+### 任务来源
+A6 实时通话第二批任务（第一批：core 记忆语义检索 + 剧情挂接 commit `dd4b4f1`、macapp WebSocket 客户端基建 commit `e5b3e0f`）。服务端通话会话管理已核实为可运行 stub（`core/xijian_api/routes/xijian_voice_calls.py` + `stubs/voice_calls.py`，状态机 idle→ringing→active→ended、WS 推送 `call.state_changed` / `call.event`）。
+
+### 已完成（实测一遍）
+
+#### 新增文件
+- `macapp/Sources/Services/VoiceCallService.swift`：`/v1/xijian/voice-calls` 全部端点（创建 / get / ring / accept / reject / end / speech / barge-in / song / events）的 URLSession 封装，请求构造 / Bearer 认证 / `APIError` 错误信封解析与 APIClient 同风格；baseURL / token 直接读 `CoreManager.shared`（internal 只读），未动红线文件。`VoiceCallServicing` 协议供 ViewModel 测试注入。
+- `macapp/Sources/ViewModels/VoiceCallViewModel.swift`：客户端状态机（idle/ringing/active/ended），组合 VoiceCallService（REST 推进）+ WebSocketClient（订阅 `call.*` 事件，按 call_id 过滤）；动作 startCall / accept / reject / end / sendText / toggleBargeIn / sing / refresh / close；对话记录按 (role, turn) 与服务端 event_id 去重（REST 回显与 WS 推送会重复）。
+- `macapp/Sources/Views/VoiceCallView.swift`：SwiftUI 通话界面（状态头部 / 通话时长 / 对话气泡 / 拨出挂断控制 / 文本发送 / barge-in 开关 / 歌唱输入 sheet / 重新拨打），样式跟随 ThemeSettings；附 `VoiceCallCharacterPicker`（入口弹层，从角色列表选人）。
+- `macapp/Tests/VoiceCallTests.swift`：VoiceCallServiceTests 7 项（请求路径 / 方法 / 头 / body / 响应解析 / 错误信封）+ VoiceCallViewModelTests 16 项（状态机、去重、WS 事件驱动、错误、close 挂断）。
+
+#### 接入点（最小改动，未碰红线文件）
+- `macapp/Sources/Views/ChatView.swift`（非红线）：对话页顶部新增「通话」按钮（Core 未运行时禁用）→ 弹层选角色 → sheet 弹 VoiceCallView 并自动拨出。仅新增 @State、一个按钮 + popover + sheet 挂载，无行为改动。
+- 角色选择默认取现有角色列表（`GET /v1/xijian/characters`），与 AppViewModel.selectedCharacterID 无关——通话角色由用户当场选，不依赖聊天参数。
+
+### 测试
+- `xcodegen generate` 自动纳入新文件（sources 按目录）。`xcodebuild -scheme XiJian build` **BUILD SUCCEEDED**。
+- 新增：VoiceCallServiceTests 7 + VoiceCallViewModelTests 16 = 23 项全过（`-only-testing:XiJianTests/VoiceCallServiceTests` / `VoiceCallViewModelTests`）。
+- 全量：**157 tests, 0 failures**（原 134 项零回归，含用户 WIP 的 CharacterViewModelTests 6 + ModelsTests 36）。
+
+### 没做的 / 留的口子
+1. 通话音频采集（audio_base64 路径）未做——本批按任务约定走 `speech` 端点 `text` 快捷路径；真实 STT（`stubs.audio.transcribe`）与 TTS（`stubs.audio.synth`）需要后端，macapp 侧麦克风采集 + 播放留后续（A6 后续批次）。
+2. `character_initiated`（角色主动来电）方向：Service/ViewModel 已支持（accept/reject 路径 + 来电响铃 UI 分支），但服务端没有触发角色来电的入口（依赖事件系统/调度），macapp 也未做全局 WS 监听来电——来电场景待服务端有真实触发源后接（届时需 App 级共享 WebSocketClient，当前是每通话一个连接）。
+3. `VoiceCallView` 关闭时对仍活跃的通话尽力 `end`（fire-and-forget）；若 App 整体退出，孤儿通话记录残留在服务端内存态，属 stub 数据层行为。
+4. 歌唱走 `song` 端点 DiffSinger 接口桩：未接引擎时返回 `unavailable`，UI 只记录不弹错（预期状态）。
+5. 通话事件仅展示 speech / song / barge_in；motion / effect（VRM 动画联动，US-A6-02）无客户端可展示对象，事件到达时忽略——等 3D 模型渲染接入后再联动。
+6. 红线文件（Models / APIClient / CoreManager / CharacterViewModel / CharacterDetailView / CharacterStatRing / 两个 WIP 测试文件）零改动；本次 commit 不含它们。
+
+---
+
 ## 2026-08-09 · 记忆语义检索升级（A1.2 向量化）+ C3 剧情调度挂接（events tick 集成）
 
 ### 任务来源
