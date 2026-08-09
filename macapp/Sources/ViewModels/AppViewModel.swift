@@ -19,6 +19,18 @@ public final class AppViewModel {
 
         var id: String { rawValue }
 
+        /// 本地化显示名
+        var displayName: String {
+            switch self {
+            case .chat: return loc("对话")
+            case .characters: return loc("角色")
+            case .worlds: return loc("世界")
+            case .packs: return loc("资源包")
+            case .memory: return loc("记忆")
+            case .settings: return loc("设置")
+            }
+        }
+
         var icon: String {
             switch self {
             case .chat: return "bubble.left.and.bubble.right"

@@ -53,7 +53,7 @@ struct CharacterStatRing: View {
                 Text(title)
                     .font(.caption)
                     .foregroundStyle(.secondary)
-                Text("上限 \(String(format: "%.0f", max))")
+                Text(loc("上限 %.0f", max))
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }
@@ -87,7 +87,7 @@ struct CharacterStatSliderSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("调整\(dimension.displayName)")
+            Text(loc("调整%@", dimension.displayName))
                 .font(.title3)
                 .bold()
 
@@ -101,15 +101,15 @@ struct CharacterStatSliderSheet: View {
                     .frame(width: 90, alignment: .trailing)
             }
 
-            Text("保存后通过状态接口提交，Core 会进行钳制与日志记录。")
+            Text(loc("保存后通过状态接口提交，Core 会进行钳制与日志记录。"))
                 .font(.caption)
                 .foregroundStyle(.tertiary)
 
             HStack {
                 Spacer()
-                Button("取消") { dismiss() }
+                Button(loc("取消")) { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Button("保存") {
+                Button(loc("保存")) {
                     Task { await save() }
                 }
                 .buttonStyle(.borderedProminent)
@@ -119,8 +119,8 @@ struct CharacterStatSliderSheet: View {
         }
         .padding(20)
         .frame(width: 380)
-        .alert("调整失败", isPresented: $showError) {
-            Button("好", role: .cancel) {}
+        .alert(loc("调整失败"), isPresented: $showError) {
+            Button(loc("好"), role: .cancel) {}
         } message: {
             Text(errorMessage)
         }
@@ -133,7 +133,7 @@ struct CharacterStatSliderSheet: View {
         if ok {
             dismiss()
         } else {
-            errorMessage = viewModel.errorMessage ?? "状态调整失败，请稍后重试。"
+            errorMessage = viewModel.errorMessage ?? loc("状态调整失败，请稍后重试。")
             showError = true
         }
     }
@@ -143,8 +143,8 @@ struct CharacterStatSliderSheet: View {
 
 #Preview("CharacterStatRing") {
     HStack(spacing: 24) {
-        CharacterStatRing(title: "饱食", icon: "fork.knife", value: 72, max: 100, color: .orange) {}
-        CharacterStatRing(title: "健康", icon: "heart.fill", value: 35, max: 100, color: .red) {}
+        CharacterStatRing(title: loc("饱食"), icon: "fork.knife", value: 72, max: 100, color: .orange) {}
+        CharacterStatRing(title: loc("健康"), icon: "heart.fill", value: 35, max: 100, color: .red) {}
     }
     .padding()
 }

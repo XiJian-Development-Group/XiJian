@@ -14,7 +14,7 @@ struct PackListView: View {
         NavigationStack {
             Group {
                 if viewModel.isLoading && viewModel.packs.isEmpty {
-                    ProgressView("加载资源包中...")
+                    ProgressView(loc("加载资源包中..."))
                 } else if viewModel.packs.isEmpty {
                     emptyState
                 } else {
@@ -27,13 +27,13 @@ struct PackListView: View {
                     }
                 }
             }
-            .navigationTitle("资源包")
+            .navigationTitle(loc("资源包"))
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         showImportSheet = true
                     } label: {
-                        Label("导入资源包", systemImage: "square.and.arrow.down")
+                        Label(loc("导入资源包"), systemImage: "square.and.arrow.down")
                     }
                     .disabled(!coreIsRunning)
                 }
@@ -41,14 +41,14 @@ struct PackListView: View {
                     Button {
                         Task { await viewModel.refresh() }
                     } label: {
-                        Label("刷新", systemImage: "arrow.clockwise")
+                        Label(loc("刷新"), systemImage: "arrow.clockwise")
                     }
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         Task { await viewModel.rescan() }
                     } label: {
-                        Label("重新扫描", systemImage: "arrow.triangle.2.circlepath")
+                        Label(loc("重新扫描"), systemImage: "arrow.triangle.2.circlepath")
                     }
                     .disabled(!coreIsRunning)
                 }
@@ -59,22 +59,22 @@ struct PackListView: View {
                 await viewModel.refresh()
             }
         }
-        .alert("卸载资源包", isPresented: Binding(
+        .alert(loc("卸载资源包"), isPresented: Binding(
             get: { pendingUninstall != nil },
             set: { if !$0 { pendingUninstall = nil } }
         )) {
-            Button("卸载", role: .destructive) {
+            Button(loc("卸载"), role: .destructive) {
                 if let pack = pendingUninstall {
                     Task { await viewModel.uninstall(pack.package_id) }
                 }
                 pendingUninstall = nil
             }
-            Button("取消", role: .cancel) { pendingUninstall = nil }
+            Button(loc("取消"), role: .cancel) { pendingUninstall = nil }
         } message: {
-            Text("卸载将删除包目录并移除其加载的角色/世界观/记忆记录，不可恢复。确定卸载「\(pendingUninstall?.name ?? "")」吗？")
+            Text(loc("卸载将删除包目录并移除其加载的角色/世界观/记忆记录，不可恢复。确定卸载「%@」吗？", pendingUninstall?.name ?? ""))
         }
-        .alert("出错了", isPresented: $showError) {
-            Button("好", role: .cancel) {}
+        .alert(loc("出错了"), isPresented: $showError) {
+            Button(loc("好"), role: .cancel) {}
         } message: {
             Text(errorMessage)
         }
@@ -83,7 +83,7 @@ struct PackListView: View {
         }
         .onChange(of: viewModel.showError) { _, newValue in
             if newValue {
-                errorMessage = viewModel.errorMessage ?? "未知错误"
+                errorMessage = viewModel.errorMessage ?? loc("未知错误")
                 showError = true
                 viewModel.showError = false
             }
@@ -95,10 +95,10 @@ struct PackListView: View {
             Image(systemName: "shippingbox")
                 .font(.system(size: 44))
                 .foregroundStyle(.tertiary)
-            Text("还没有资源包")
+            Text(loc("还没有资源包"))
                 .font(.title3)
                 .foregroundStyle(.secondary)
-            Text("可用 DevKit 导出资源包，或把 .7z/.zip 放入 Core 的 packs 目录后点击重新扫描")
+            Text(loc("可用 DevKit 导出资源包，或把 .7z/.zip 放入 Core 的 packs 目录后点击重新扫描"))
                 .font(.caption)
                 .foregroundStyle(.tertiary)
                 .multilineTextAlignment(.center)
@@ -169,7 +169,7 @@ struct PackRow: View {
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
-            .help("卸载资源包")
+            .help(loc("卸载资源包"))
         }
         .padding(.vertical, 4)
     }

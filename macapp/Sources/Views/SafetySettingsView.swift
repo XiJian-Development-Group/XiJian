@@ -28,33 +28,33 @@ struct SafetySettingsView: View {
 
     var body: some View {
         Form {
-            Section("保护闸门") {
+            Section(loc("保护闸门")) {
                 if let status {
-                    LabeledContent("状态", value: status.enabled ? "已启用" : "已禁用")
-                    LabeledContent("防护等级", value: status.guard_level ?? "standard")
-                    LabeledContent("审计日志条数", value: "\(status.audit_log_size ?? 0)")
-                    LabeledContent("版本", value: status.version ?? "—")
+                    LabeledContent(loc("状态"), value: status.enabled ? loc("已启用") : loc("已禁用"))
+                    LabeledContent(loc("防护等级"), value: status.guard_level ?? "standard")
+                    LabeledContent(loc("审计日志条数"), value: "\(status.audit_log_size ?? 0)")
+                    LabeledContent(loc("版本"), value: status.version ?? "—")
                 } else if isLoading {
-                    ProgressView("加载中...")
+                    ProgressView(loc("加载中..."))
                 } else {
-                    Text("无法获取闸门状态（Core 可能未运行）。")
+                    Text(loc("无法获取闸门状态（Core 可能未运行）。"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
 
                 HStack(spacing: 10) {
-                    Button("刷新状态") {
+                    Button(loc("刷新状态")) {
                         Task { await load() }
                     }
                     .buttonStyle(.bordered)
 
                     if status?.enabled == true {
-                        Button("关闭保护", role: .destructive) {
+                        Button(loc("关闭保护"), role: .destructive) {
                             startDisableFlow()
                         }
                         .buttonStyle(.bordered)
                     } else {
-                        Button("启用保护") {
+                        Button(loc("启用保护")) {
                             Task { await enable() }
                         }
                         .buttonStyle(.borderedProminent)
@@ -63,36 +63,36 @@ struct SafetySettingsView: View {
             }
 
             if disablePhase != .idle {
-                Section("关闭保护（两步确认）") {
+                Section(loc("关闭保护（两步确认）")) {
                     switch disablePhase {
                     case .awaitingChallenge:
-                        Text("关闭保护前需要双重确认。请输入确认短语：")
+                        Text(loc("关闭保护前需要双重确认。请输入确认短语："))
                             .font(.caption)
                         TextField("I understand the risks", text: $confirmationText)
                             .textFieldStyle(.roundedBorder)
                         HStack {
-                            Button("发起挑战") {
+                            Button(loc("发起挑战")) {
                                 Task { await startChallenge() }
                             }
                             .buttonStyle(.borderedProminent)
-                            Button("取消") { disablePhase = .idle }
+                            Button(loc("取消")) { disablePhase = .idle }
                         }
                     case .awaitingConfirmation:
                         if let challenge {
-                            Text("请在 60 秒内输入以下短语完成确认：")
+                            Text(loc("请在 60 秒内输入以下短语完成确认："))
                                 .font(.caption)
-                            Text("「\(challenge.challenge_phrase ?? "—")」")
+                            Text(loc("「%@」", challenge.challenge_phrase ?? "—"))
                                 .font(.headline)
                                 .foregroundStyle(theme.accentColor)
-                            TextField("输入挑战短语", text: $phrase)
+                            TextField(loc("输入挑战短语"), text: $phrase)
                                 .textFieldStyle(.roundedBorder)
                             HStack {
-                                Button("确认关闭") {
+                                Button(loc("确认关闭")) {
                                     Task { await confirmChallenge() }
                                 }
                                 .buttonStyle(.borderedProminent)
                                 .disabled(phrase.trimmingCharacters(in: .whitespaces).isEmpty)
-                                Button("取消") { disablePhase = .idle }
+                                Button(loc("取消")) { disablePhase = .idle }
                             }
                         }
                     case .idle:
@@ -101,18 +101,18 @@ struct SafetySettingsView: View {
                 }
             }
 
-            Section("扫描测试") {
-                TextField("输入要扫描的文本", text: $scanText, axis: .vertical)
+            Section(loc("扫描测试")) {
+                TextField(loc("输入要扫描的文本"), text: $scanText, axis: .vertical)
                     .lineLimit(3...6)
                     .textFieldStyle(.roundedBorder)
 
                 HStack(spacing: 10) {
-                    Button("扫描输入") {
+                    Button(loc("扫描输入")) {
                         Task { await scan(kind: "input") }
                     }
                     .buttonStyle(.bordered)
 
-                    Button("扫描输出") {
+                    Button(loc("扫描输出")) {
                         Task { await scan(kind: "output") }
                     }
                     .buttonStyle(.bordered)
@@ -124,24 +124,24 @@ struct SafetySettingsView: View {
                         HStack(spacing: 6) {
                             Image(systemName: result.isPass ? "checkmark.circle.fill" : (result.isBlock ? "xmark.octagon.fill" : "exclamationmark.triangle.fill"))
                                 .foregroundStyle(result.isPass ? .green : (result.isBlock ? .red : .orange))
-                            Text("判定：\(result.verdict ?? "未知")")
+                            Text(loc("判定：%@", result.verdict ?? loc("未知")))
                                 .font(.subheadline.bold())
-                            Text("（\(lastScanKind)）")
+                            Text(loc("（%@）", lastScanKind))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
                         if let blocked = result.blocked, !blocked.isEmpty {
-                            Text("拦截原因：\(blocked)")
+                            Text(loc("拦截原因：%@", blocked))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
                         if let matches = result.matches, !matches.isEmpty {
-                            Text("命中规则：\(matches.map(\.displayText).joined(separator: "、"))")
+                            Text(loc("命中规则：%@", matches.map(\.displayText).joined(separator: loc("、"))))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
                         if let auditID = result.audit_id {
-                            Text("审计 ID：\(auditID)")
+                            Text(loc("审计 ID：%@", auditID))
                                 .font(.caption2)
                                 .foregroundStyle(.tertiary)
                         }
@@ -155,16 +155,16 @@ struct SafetySettingsView: View {
                 }
             }
 
-            Section("说明") {
-                Text("安全模块默认开启。所有安全端点都受安全模块自身监控，任何尝试绕过安全系统的请求都会写入审计日志。")
+            Section(loc("说明")) {
+                Text(loc("安全模块默认开启。所有安全端点都受安全模块自身监控，任何尝试绕过安全系统的请求都会写入审计日志。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
-        .navigationTitle("安全模块")
-        .alert("出错了", isPresented: $showError) {
-            Button("好", role: .cancel) {}
+        .navigationTitle(loc("安全模块"))
+        .alert(loc("出错了"), isPresented: $showError) {
+            Button(loc("好"), role: .cancel) {}
         } message: {
             Text(errorMessage)
         }
@@ -200,7 +200,7 @@ struct SafetySettingsView: View {
         do {
             let result = try await client.startDisableGate(confirmation: confirmationText)
             if let error = result.error, result.challenge_id == nil {
-                presentErrorMessage("发起挑战失败：\(error)")
+                presentErrorMessage(loc("发起挑战失败：%@", error))
                 disablePhase = .idle
                 return
             }
@@ -219,7 +219,8 @@ struct SafetySettingsView: View {
                 status = GateStatus(enabled: false, guard_level: nil, audit_log_size: nil, version: nil)
                 disablePhase = .idle
             } else if let error = result.error {
-                presentErrorMessage("确认失败：\(error == "phrase_mismatch" ? "短语不匹配" : (error == "challenge_expired" ? "挑战已过期" : error))")
+                let reason = error == "phrase_mismatch" ? loc("短语不匹配") : (error == "challenge_expired" ? loc("挑战已过期") : error)
+                presentErrorMessage(loc("确认失败：%@", reason))
                 disablePhase = .idle
             }
         } catch {
@@ -247,7 +248,7 @@ struct SafetySettingsView: View {
             } else {
                 scanResult = try await client.scanOutput(text: text, characterID: nil, worldID: nil)
             }
-            lastScanKind = kind == "input" ? "输入" : "输出"
+            lastScanKind = kind == "input" ? loc("输入") : loc("输出")
         } catch {
             presentError(error)
         }

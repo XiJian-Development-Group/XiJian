@@ -49,9 +49,9 @@ enum JSONValue: Codable, Hashable {
         switch self {
         case .string(let s): return s
         case .number(let n): return n.truncatingRemainder(dividingBy: 1) == 0 ? String(Int(n)) : String(n)
-        case .bool(let b): return b ? "是" : "否"
-        case .null: return "无"
-        case .array(let arr): return arr.map(\.displayText).joined(separator: "、")
+        case .bool(let b): return b ? loc("是") : loc("否")
+        case .null: return loc("无")
+        case .array(let arr): return arr.map(\.displayText).joined(separator: loc("、"))
         case .object(let dict): return dict.map { "\($0.key): \($0.value.displayText)" }.sorted().joined(separator: "\n")
         }
     }
@@ -117,10 +117,10 @@ enum MessageRole: String, Codable, Hashable {
 
     var displayName: String {
         switch self {
-        case .system: return "系统"
-        case .user: return "用户"
-        case .assistant: return "助手"
-        case .tool: return "工具"
+        case .system: return loc("系统")
+        case .user: return loc("用户")
+        case .assistant: return loc("助手")
+        case .tool: return loc("工具")
         }
     }
 }
@@ -233,13 +233,13 @@ enum CharacterStatusDimension: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    /// 中文名
+    /// 本地化显示名
     var displayName: String {
         switch self {
-        case .hunger: return "饱食"
-        case .thirst: return "饮水"
-        case .health: return "健康"
-        case .mood: return "心情"
+        case .hunger: return loc("饱食")
+        case .thirst: return loc("饮水")
+        case .health: return loc("健康")
+        case .mood: return loc("心情")
         }
     }
 
@@ -331,16 +331,16 @@ struct CharacterStateSummary: Equatable {
     /// 是否处于 Critical（健康 ≤ 0，不可对话）
     var isCritical: Bool { status == "critical" }
 
-    /// 状态中文名
+    /// 状态本地化显示名
     var statusDisplayName: String {
         switch status {
-        case "healthy": return "健康"
-        case "hungry": return "饥饿"
-        case "thirsty": return "口渴"
-        case "sick": return "生病"
-        case "recovering": return "恢复中"
-        case "critical": return "危殆"
-        default: return status ?? "未知"
+        case "healthy": return loc("健康")
+        case "hungry": return loc("饥饿")
+        case "thirsty": return loc("口渴")
+        case "sick": return loc("生病")
+        case "recovering": return loc("恢复中")
+        case "critical": return loc("危殆")
+        default: return status ?? loc("未知")
         }
     }
 }
@@ -359,20 +359,20 @@ struct CharacterStateLogEntry: Codable, Hashable {
     let ref_id: String?
     let created_at: Double?
 
-    /// 维度中文名（未知字段回退原文）
+    /// 维度显示名（未知字段回退原文）
     var fieldDisplayName: String {
-        CharacterStatusDimension(fieldName: field ?? "")?.displayName ?? field ?? "未知"
+        CharacterStatusDimension(fieldName: field ?? "")?.displayName ?? field ?? loc("未知")
     }
 
-    /// 来源中文名
+    /// 来源本地化显示名
     var reasonDisplayName: String {
         switch reason {
-        case "tick": return "自然衰减"
-        case "dialogue": return "对话"
-        case "world_event": return "世界事件"
-        case "manual": return "手动调整"
-        case "admin_recover": return "强制恢复"
-        default: return reason ?? "未知"
+        case "tick": return loc("自然衰减")
+        case "dialogue": return loc("对话")
+        case "world_event": return loc("世界事件")
+        case "manual": return loc("手动调整")
+        case "admin_recover": return loc("强制恢复")
+        default: return reason ?? loc("未知")
         }
     }
 
@@ -531,7 +531,7 @@ struct MemoryEntry: Codable, Identifiable, Hashable {
     let attributes: [String: JSONValue]?
 
     var tagList: [String] { tags ?? [] }
-    var typeDisplay: String { type == "long" ? "长期" : "短期" }
+    var typeDisplay: String { type == "long" ? loc("长期") : loc("短期") }
 }
 
 // MARK: - 互动
@@ -777,9 +777,9 @@ struct PackInfo: Codable, Identifiable, Hashable {
     
     var displayKind: String {
         switch kind {
-        case "character": return "角色"
-        case "world": return "世界观"
-        case "mixed": return "混合"
+        case "character": return loc("角色")
+        case "world": return loc("世界观")
+        case "mixed": return loc("混合")
         default: return kind
         }
     }

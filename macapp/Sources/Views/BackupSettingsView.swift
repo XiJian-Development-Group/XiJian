@@ -25,13 +25,13 @@ struct BackupSettingsView: View {
 
     var body: some View {
         Form {
-            Section("角色") {
+            Section(loc("角色")) {
                 if characters.isEmpty {
-                    Text("暂无角色。")
+                    Text(loc("暂无角色。"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
-                    Picker("目标角色", selection: $selectedCharacterID) {
+                    Picker(loc("目标角色"), selection: $selectedCharacterID) {
                         ForEach(characters) { character in
                             Text(character.displayName).tag(String?.some(character.id))
                         }
@@ -42,14 +42,14 @@ struct BackupSettingsView: View {
                 }
             }
 
-            Section("手动备份") {
+            Section(loc("手动备份")) {
                 HStack(spacing: 10) {
-                    Picker("范围", selection: $scope) {
+                    Picker(loc("范围"), selection: $scope) {
                         ForEach(scopes, id: \.self) { Text(scopeDisplay($0)) }
                     }
                     .frame(width: 160)
 
-                    Button("创建备份") {
+                    Button(loc("创建备份")) {
                         Task { await createBackup() }
                     }
                     .buttonStyle(.borderedProminent)
@@ -58,9 +58,9 @@ struct BackupSettingsView: View {
 
                 if backups.isEmpty {
                     if isLoading {
-                        ProgressView("加载备份中...")
+                        ProgressView(loc("加载备份中..."))
                     } else {
-                        Text("暂无备份记录。")
+                        Text(loc("暂无备份记录。"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -80,18 +80,18 @@ struct BackupSettingsView: View {
                                 }
                             }
                             if let size = backup.size_bytes {
-                                Text("大小：\(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))")
+                                Text(loc("大小：%@", ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)))
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                             }
                             HStack(spacing: 10) {
-                                Button("恢复") {
+                                Button(loc("恢复")) {
                                     restoreTarget = backup
                                     restoreScope = "all"
                                     restoreMessage = nil
                                 }
                                 .controlSize(.small)
-                                Button("删除", role: .destructive) {
+                                Button(loc("删除"), role: .destructive) {
                                     Task { await deleteBackup(backup) }
                                 }
                                 .controlSize(.small)
@@ -102,9 +102,9 @@ struct BackupSettingsView: View {
                 }
             }
 
-            Section("受保护模块") {
+            Section(loc("受保护模块")) {
                 if modules.isEmpty {
-                    Text("加载中或暂无数据...")
+                    Text(loc("加载中或暂无数据..."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
@@ -120,7 +120,7 @@ struct BackupSettingsView: View {
                                 }
                             }
                             Spacer()
-                            Toggle("自动备份", isOn: Binding(
+                            Toggle(loc("自动备份"), isOn: Binding(
                                 get: { module.auto_backup ?? true },
                                 set: { newValue in
                                     Task {
@@ -136,16 +136,16 @@ struct BackupSettingsView: View {
                 }
             }
 
-            Section("说明") {
-                Text("备份文件为 zstd 压缩的 {character_id}_{ISO8601}_v{n}.bak，单角色最多保留 10 个版本。")
+            Section(loc("说明")) {
+                Text(loc("备份文件为 zstd 压缩的 {character_id}_{ISO8601}_v{n}.bak，单角色最多保留 10 个版本。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
-        .navigationTitle("备份与受保护模块")
-        .alert("出错了", isPresented: $showError) {
-            Button("好", role: .cancel) {}
+        .navigationTitle(loc("备份与受保护模块"))
+        .alert(loc("出错了"), isPresented: $showError) {
+            Button(loc("好"), role: .cancel) {}
         } message: {
             Text(errorMessage)
         }
@@ -167,27 +167,27 @@ struct BackupSettingsView: View {
 
     private func restoreSheet(_ backup: BackupRecord) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("恢复备份")
+            Text(loc("恢复备份"))
                 .font(.title3)
                 .bold()
-            Text("备份 ID：\(backup.backup_id)")
+            Text(loc("备份 ID：%@", backup.backup_id))
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            Picker("恢复范围", selection: $restoreScope) {
+            Picker(loc("恢复范围"), selection: $restoreScope) {
                 ForEach(scopes, id: \.self) { Text(scopeDisplay($0)) }
             }
 
             if let message = restoreMessage {
                 Text(message)
                     .font(.caption)
-                    .foregroundStyle(message.contains("成功") ? .green : .red)
+                    .foregroundStyle(message.contains(loc("恢复成功")) ? .green : .red)
             }
 
             HStack {
                 Spacer()
-                Button("取消") { restoreTarget = nil }
-                Button("执行恢复") {
+                Button(loc("取消")) { restoreTarget = nil }
+                Button(loc("执行恢复")) {
                     Task {
                         await restore(backup)
                     }
@@ -237,13 +237,13 @@ struct BackupSettingsView: View {
         guard let client = core.makeClient() else { return }
         do {
             let result = try await client.restoreBackup(backup.backup_id, scope: restoreScope, targetCharacterID: selectedCharacterID)
-            let summary = result["summary"]?.displayText ?? result["restored"]?.displayText ?? "恢复完成"
-            restoreMessage = "恢复成功：\(summary)"
+            let summary = result["summary"]?.displayText ?? result["restored"]?.displayText ?? loc("恢复完成")
+            restoreMessage = loc("恢复成功：%@", summary)
         } catch {
             if let apiError = error as? APIError {
-                restoreMessage = "恢复失败：\(apiError.message)"
+                restoreMessage = loc("恢复失败：%@", apiError.message)
             } else {
-                restoreMessage = "恢复失败：\(error.localizedDescription)"
+                restoreMessage = loc("恢复失败：%@", error.localizedDescription)
             }
         }
     }
@@ -263,10 +263,10 @@ struct BackupSettingsView: View {
 
     private func scopeDisplay(_ scope: String) -> String {
         switch scope {
-        case "all": return "全部"
-        case "memory_only": return "仅记忆"
-        case "state_only": return "仅状态"
-        case "doc_only": return "仅文档"
+        case "all": return loc("全部")
+        case "memory_only": return loc("仅记忆")
+        case "state_only": return loc("仅状态")
+        case "doc_only": return loc("仅文档")
         default: return scope
         }
     }

@@ -18,12 +18,12 @@ final class LogEntryTests: XCTestCase {
     // MARK: - LogLevel
 
     func testLogLevelChineseDisplayNames() {
-        XCTAssertEqual(LogLevel.debug.displayName, "调试")
-        XCTAssertEqual(LogLevel.info.displayName, "信息")
-        XCTAssertEqual(LogLevel.warning.displayName, "警告")
-        XCTAssertEqual(LogLevel.error.displayName, "错误")
-        XCTAssertEqual(LogLevel.critical.displayName, "严重")
-        XCTAssertEqual(LogLevel.unknown.displayName, "未知")
+        XCTAssertEqual(LogLevel.debug.displayName, loc("调试"))
+        XCTAssertEqual(LogLevel.info.displayName, loc("信息"))
+        XCTAssertEqual(LogLevel.warning.displayName, loc("警告"))
+        XCTAssertEqual(LogLevel.error.displayName, loc("错误"))
+        XCTAssertEqual(LogLevel.critical.displayName, loc("严重"))
+        XCTAssertEqual(LogLevel.unknown.displayName, loc("未知"))
     }
 
     func testLogLevelParseCaseInsensitive() {

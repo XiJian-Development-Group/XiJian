@@ -84,7 +84,7 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(summary.value(for: .thirst), 45.0)
         XCTAssertEqual(summary.max(for: .mood), 100.0)
         XCTAssertEqual(summary.status, "healthy")
-        XCTAssertEqual(summary.statusDisplayName, "健康")
+        XCTAssertEqual(summary.statusDisplayName, loc("健康"))
         XCTAssertTrue(summary.canDialogue == true)
         XCTAssertFalse(summary.isCritical)
     }
@@ -105,7 +105,7 @@ final class ModelsTests: XCTestCase {
         let state = try decoder.decode(CharacterStateInfo.self, from: Data(json.utf8))
         let summary = try XCTUnwrap(state.summary)
         XCTAssertTrue(summary.isCritical)
-        XCTAssertEqual(summary.statusDisplayName, "危殆")
+        XCTAssertEqual(summary.statusDisplayName, loc("危殆"))
         XCTAssertFalse(summary.canDialogue == true)
         // 缺失 max 的维度回退默认 100
         XCTAssertEqual(summary.max(for: .hunger), 100.0)
@@ -120,8 +120,8 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(entries.count, 1)
         let entry = try XCTUnwrap(entries.first)
         XCTAssertEqual(entry.field, "hunger")
-        XCTAssertEqual(entry.fieldDisplayName, "饱食")
-        XCTAssertEqual(entry.reasonDisplayName, "自然衰减")
+        XCTAssertEqual(entry.fieldDisplayName, loc("饱食"))
+        XCTAssertEqual(entry.reasonDisplayName, loc("自然衰减"))
         XCTAssertEqual(entry.deltaText, "-8")
         XCTAssertEqual(entry.deltaSign, -1)
     }
@@ -133,7 +133,7 @@ final class ModelsTests: XCTestCase {
         let entry = try decoder.decode(CharacterStateLogEntry.self, from: Data(json.utf8))
         XCTAssertEqual(entry.deltaText, "+15")
         XCTAssertEqual(entry.deltaSign, 1)
-        XCTAssertEqual(entry.reasonDisplayName, "手动调整")
+        XCTAssertEqual(entry.reasonDisplayName, loc("手动调整"))
     }
 
     // MARK: - 世界
@@ -176,7 +176,7 @@ final class ModelsTests: XCTestCase {
         let entry = try decoder.decode(MemoryEntry.self, from: Data(json.utf8))
         XCTAssertEqual(entry.id, "mem_1")
         XCTAssertEqual(entry.type, "long")
-        XCTAssertEqual(entry.typeDisplay, "长期")
+        XCTAssertEqual(entry.typeDisplay, loc("长期"))
         XCTAssertEqual(entry.importance, 0.9)
         XCTAssertEqual(entry.tagList, ["food", "ice_cream"])
         XCTAssertEqual(entry.attributes?["category"]?.stringValue, "preference")
@@ -311,7 +311,7 @@ final class ModelsTests: XCTestCase {
         // displayText
         XCTAssertEqual(values["s"]?.displayText, "文本")
         XCTAssertEqual(values["i"]?.displayText, "42")
-        XCTAssertEqual(values["b"]?.displayText, "是")
+        XCTAssertEqual(values["b"]?.displayText, loc("是"))
     }
 
     // MARK: - 设置
@@ -379,7 +379,7 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(pack.package_id, "char_yuki")
         XCTAssertEqual(pack.id, "char_yuki")
         XCTAssertEqual(pack.kind, "mixed")
-        XCTAssertEqual(pack.displayKind, "混合")
+        XCTAssertEqual(pack.displayKind, loc("混合"))
         XCTAssertTrue(pack.loaded)
         XCTAssertEqual(pack.path, "/data/packs/char_yuki")
         XCTAssertEqual(pack.manifest.description, "含角色与世界")

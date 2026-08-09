@@ -157,7 +157,7 @@ final class APIClientTests: XCTestCase {
             }
             XCTAssertEqual(code, 503)
             XCTAssertTrue(detail.contains("模型未加载"), "应包含服务端错误信息，实际：\(detail)")
-            XCTAssertTrue(error.message.contains("服务不可用"), "中文错误信息应包含状态描述，实际：\(error.message)")
+            XCTAssertTrue(error.message.contains(loc("服务不可用（模型未加载或后端未就绪）")), "错误信息应包含状态描述，实际：\(error.message)")
         } catch {
             XCTFail("意外错误类型：\(error)")
         }
@@ -171,7 +171,7 @@ final class APIClientTests: XCTestCase {
             let _: [ModelInfo] = try await client.get("/v1/models")
             XCTFail("应抛出错误")
         } catch let error as APIError {
-            XCTAssertTrue(error.message.contains("鉴权失败"), "实际：\(error.message)")
+            XCTAssertTrue(error.message.contains(loc("鉴权失败（token 无效）")), "实际：\(error.message)")
         } catch {
             XCTFail("意外错误类型：\(error)")
         }
@@ -308,7 +308,7 @@ final class APIClientTests: XCTestCase {
         let packs = try await client.listPacks()
         XCTAssertEqual(packs.count, 1)
         XCTAssertEqual(packs.first?.package_id, "p1")
-        XCTAssertEqual(packs.first?.displayKind, "角色")
+        XCTAssertEqual(packs.first?.displayKind, loc("角色"))
         XCTAssertTrue(packs.first?.loaded == true)
     }
 

@@ -99,7 +99,7 @@ final class CharacterViewModel {
 
     func create(name: String, displayName: String?, personaDoc: String, voiceProfile: String?, defaultEmotion: String?, tags: [String]) async {
         guard let client = core.makeClient() else {
-            presentError("Core 未运行，无法创建角色。")
+            presentError(loc("Core 未运行，无法创建角色。"))
             return
         }
         isMutating = true
@@ -191,18 +191,18 @@ final class CharacterViewModel {
             // 响应包含 response / action 等字段
             var parts: [String] = []
             if let response = result["response"]?.stringValue {
-                parts.append("回应：\(response)")
+                parts.append(loc("回应：%@", response))
             }
             if let reason = result["reason"]?.stringValue {
-                parts.append("原因：\(reason)")
+                parts.append(loc("原因：%@", reason))
             }
             if let action = result["action"] {
-                parts.append("动作：\(action.displayText)")
+                parts.append(loc("动作：%@", action.displayText))
             }
             if let accepted = result["accepted"]?.boolValue {
-                parts.append(accepted ? "互动已接受" : "互动被拒绝")
+                parts.append(accepted ? loc("互动已接受") : loc("互动被拒绝"))
             }
-            return parts.isEmpty ? (result["message"]?.stringValue ?? "互动完成") : parts.joined(separator: "\n")
+            return parts.isEmpty ? (result["message"]?.stringValue ?? loc("互动完成")) : parts.joined(separator: "\n")
         } catch {
             presentError(error)
             return nil

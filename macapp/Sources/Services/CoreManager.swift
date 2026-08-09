@@ -178,11 +178,11 @@ public final class CoreManager {
 
         // 1. bundle 内检查
         guard let bundleCore = bundleCoreURL else {
-            state = .error("未找到内置 Core 资源（Resources/Core/xijian-api）。请先运行 macapp/build-core.sh 构建 Core 后再启动。")
+            state = .error(loc("未找到内置 Core 资源（Resources/Core/xijian-api）。请先运行 macapp/build-core.sh 构建 Core 后再启动。"))
             return
         }
         guard let coreDir = coreDirectory else {
-            state = .error("无法解析 Core 运行目录。")
+            state = .error(loc("无法解析 Core 运行目录。"))
             return
         }
 
@@ -205,7 +205,7 @@ public final class CoreManager {
             guard myID == operationID else { return }
             switch copied {
             case .failure(let error):
-                state = .error("复制 Core 到应用数据目录失败：\(error.localizedDescription)")
+                state = .error(loc("复制 Core 到应用数据目录失败：%@", error.localizedDescription))
                 return
             case .success:
                 break
@@ -214,7 +214,7 @@ public final class CoreManager {
 
         // 3. 启动子进程
         guard FileManager.default.isExecutableFile(atPath: exeURL.path) else {
-            state = .error("Core 可执行文件不存在或不可执行：\(exeURL.path)")
+            state = .error(loc("Core 可执行文件不存在或不可执行：%@", exeURL.path))
             return
         }
 
@@ -246,7 +246,7 @@ public final class CoreManager {
         } catch {
             process = nil
             pid = nil
-            state = .error("启动 Core 进程失败：\(error.localizedDescription)")
+            state = .error(loc("启动 Core 进程失败：%@", error.localizedDescription))
             return
         }
 
@@ -256,7 +256,7 @@ public final class CoreManager {
             }
         }
 
-        appendLog("[XiJian] 已启动 Core 进程 pid=\(proc.processIdentifier) port=\(launchPort)")
+        appendLog(loc("[XiJian] 已启动 Core 进程 pid=%lld port=%lld", Int(proc.processIdentifier), launchPort))
 
         // 4. 读取端口文件，确认实际生效端口
         //（配置端口被占用时 Core 会报告占用进程并自动换端口，真实端口通过
@@ -265,12 +265,12 @@ public final class CoreManager {
         guard myID == operationID else { return }
         guard let actualPort else {
             if let p = process, p.isRunning { p.terminate() }
-            state = .error("等待 Core 端口文件超时（\(Int(tokenTimeout)) 秒内未生成 run/xijian-\(proc.processIdentifier).port）。请查看日志或尝试重启。")
+            state = .error(loc("等待 Core 端口文件超时（%lld 秒内未生成 run/xijian-%lld.port）。请查看日志或尝试重启。", Int(tokenTimeout), Int(proc.processIdentifier)))
             return
         }
         activePort = actualPort
         if actualPort != launchPort {
-            appendLog("[XiJian] 端口 \(launchPort) 被占用，Core 已自动切换到端口 \(actualPort)")
+            appendLog(loc("[XiJian] 端口 %lld 被占用，Core 已自动切换到端口 %lld", launchPort, actualPort))
         }
 
         // 5. 在真实端口上轮询健康检查
@@ -278,7 +278,7 @@ public final class CoreManager {
         guard myID == operationID else { return }
         guard ready else {
             if let p = process, p.isRunning { p.terminate() }
-            state = .error("Core 启动超时（\(Int(healthTimeout)) 秒内未就绪）。请查看日志或尝试重启。")
+            state = .error(loc("Core 启动超时（%lld 秒内未就绪）。请查看日志或尝试重启。", Int(healthTimeout)))
             return
         }
 
@@ -286,7 +286,7 @@ public final class CoreManager {
         let token = await waitForToken(pid: proc.processIdentifier, id: myID)
         guard myID == operationID else { return }
         self.token = token
-        appendLog("[XiJian] Core 就绪：http://127.0.0.1:\(actualPort)（token 已读取）")
+        appendLog(loc("[XiJian] Core 就绪：http://127.0.0.1:%lld（token 已读取）", actualPort))
         state = .running(port: actualPort)
     }
 
@@ -307,7 +307,7 @@ public final class CoreManager {
             return
         }
 
-        appendLog("[XiJian] 正在停止 Core（SIGTERM）...")
+        appendLog(loc("[XiJian] 正在停止 Core（SIGTERM）..."))
         proc.terminate()
 
         let deadline = Date().addingTimeInterval(8)
@@ -315,12 +315,12 @@ public final class CoreManager {
             try? await Task.sleep(nanoseconds: 100_000_000)
         }
         if proc.isRunning {
-            appendLog("[XiJian] 未响应 SIGTERM，发送 SIGINT ...")
+            appendLog(loc("[XiJian] 未响应 SIGTERM，发送 SIGINT ..."))
             proc.interrupt()
             try? await Task.sleep(nanoseconds: 800_000_000)
         }
         if proc.isRunning {
-            appendLog("[XiJian] 仍未退出，强制结束（SIGKILL）...")
+            appendLog(loc("[XiJian] 仍未退出，强制结束（SIGKILL）..."))
             kill(proc.processIdentifier, SIGKILL)
         }
 
@@ -330,7 +330,7 @@ public final class CoreManager {
         activePort = nil
         isStopping = false
         state = .stopped
-        appendLog("[XiJian] Core 已停止")
+        appendLog(loc("[XiJian] Core 已停止"))
     }
 
     /// 重启 Core
@@ -386,7 +386,7 @@ public final class CoreManager {
         fileRawLines.removeAll()
         logFileExists = false
         logFileLoadError = nil
-        appendLog("[XiJian] 已重置 Core 数据目录：\(coreDir.path)")
+        appendLog(loc("[XiJian] 已重置 Core 数据目录：%@", coreDir.path))
     }
 
     /// 打开 Core 日志目录（Finder）
@@ -489,17 +489,17 @@ public final class CoreManager {
             return
         }
         let code = finished.terminationReason == .exit
-            ? "退出码 \(finished.terminationStatus)"
-            : "信号 \(finished.terminationStatus)"
-        appendLog("[XiJian] Core 进程意外退出（\(code)）")
+            ? loc("退出码 %lld", Int(finished.terminationStatus))
+            : loc("信号 %lld", Int(finished.terminationStatus))
+        appendLog(loc("[XiJian] Core 进程意外退出（%@）", code))
         process = nil
         pid = nil
         token = nil
         activePort = nil
         if case .running = state {
-            state = .error("Core 进程意外退出（\(code)）。可在设置中查看日志或重启 Core。")
+            state = .error(loc("Core 进程意外退出（%@）。可在设置中查看日志或重启 Core。", code))
         } else if case .starting = state {
-            state = .error("Core 启动失败（\(code)）。请查看日志。")
+            state = .error(loc("Core 启动失败（%@）。请查看日志。", code))
         }
     }
 
@@ -654,7 +654,7 @@ public final class CoreManager {
             logFileLoadError = nil
             return LogEntry.parseCoreLogLines(rawLines)
         } catch {
-            logFileLoadError = "读取日志文件失败：\(error.localizedDescription)"
+            logFileLoadError = loc("读取日志文件失败：%@", error.localizedDescription)
             fileRawLines = []
             return []
         }

@@ -18,10 +18,10 @@ struct WorldDetailView: View {
             Divider()
             if let state = viewModel.state {
                 Picker("", selection: $selectedSection) {
-                    Text("状态与环境").tag(0)
-                    Text("地点转换").tag(1)
-                    Text("事件注入").tag(2)
-                    Text("状态编辑").tag(3)
+                    Text(loc("状态与环境")).tag(0)
+                    Text(loc("地点转换")).tag(1)
+                    Text(loc("事件注入")).tag(2)
+                    Text(loc("状态编辑")).tag(3)
                 }
                 .pickerStyle(.segmented)
                 .padding(.horizontal, 16)
@@ -41,13 +41,13 @@ struct WorldDetailView: View {
                     .padding(16)
                 }
             } else {
-                ProgressView("加载世界状态中...")
+                ProgressView(loc("加载世界状态中..."))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
         .frame(width: 580, height: 660)
-        .alert("出错了", isPresented: $showError) {
-            Button("好", role: .cancel) {}
+        .alert(loc("出错了"), isPresented: $showError) {
+            Button(loc("好"), role: .cancel) {}
         } message: {
             Text(errorMessage)
         }
@@ -56,7 +56,7 @@ struct WorldDetailView: View {
         }
         .onChange(of: viewModel.showError) { _, newValue in
             if newValue {
-                errorMessage = viewModel.errorMessage ?? "未知错误"
+                errorMessage = viewModel.errorMessage ?? loc("未知错误")
                 showError = true
                 viewModel.showError = false
             }
@@ -76,7 +76,7 @@ struct WorldDetailView: View {
                     .foregroundStyle(theme.accentColor)
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(viewModel.state?.name ?? "世界")
+                Text(viewModel.state?.name ?? loc("世界"))
                     .font(.title2)
                     .bold()
                 Text(worldID)
@@ -85,16 +85,16 @@ struct WorldDetailView: View {
             }
             Spacer()
             if let state = viewModel.state, state.is_active == false {
-                Button("设为当前") {
+                Button(loc("设为当前")) {
                     Task { await viewModel.switchActive(worldID) }
                 }
                 .buttonStyle(.bordered)
             }
-            Button("刷新") {
+            Button(loc("刷新")) {
                 Task { await viewModel.loadState(worldID) }
             }
             .buttonStyle(.bordered)
-            Button("关闭") { dismiss() }
+            Button(loc("关闭")) { dismiss() }
                 .buttonStyle(.bordered)
         }
         .padding(14)
@@ -107,24 +107,24 @@ struct WorldDetailView: View {
             // 环境
             if let env = state.environment {
                 VStack(alignment: .leading, spacing: 6) {
-                    Label("环境", systemImage: "cloud.sun")
+                    Label(loc("环境"), systemImage: "cloud.sun")
                         .font(.headline)
                     Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 4) {
                         GridRow {
-                            Text("天气").font(.caption).foregroundStyle(.secondary)
-                            Text(env.weather ?? "未知").textSelection(.enabled)
+                            Text(loc("天气")).font(.caption).foregroundStyle(.secondary)
+                            Text(env.weather ?? loc("未知")).textSelection(.enabled)
                         }
                         GridRow {
-                            Text("时段").font(.caption).foregroundStyle(.secondary)
-                            Text(env.time_of_day ?? "未知").textSelection(.enabled)
+                            Text(loc("时段")).font(.caption).foregroundStyle(.secondary)
+                            Text(env.time_of_day ?? loc("未知")).textSelection(.enabled)
                         }
                         GridRow {
-                            Text("亮度").font(.caption).foregroundStyle(.secondary)
-                            Text(env.light_level.map { String(format: "%.1f", $0) } ?? "未知")
+                            Text(loc("亮度")).font(.caption).foregroundStyle(.secondary)
+                            Text(env.light_level.map { String(format: "%.1f", $0) } ?? loc("未知"))
                         }
                         GridRow {
-                            Text("环境音").font(.caption).foregroundStyle(.secondary)
-                            Text(env.ambient_audio ?? "无").textSelection(.enabled)
+                            Text(loc("环境音")).font(.caption).foregroundStyle(.secondary)
+                            Text(env.ambient_audio ?? loc("无")).textSelection(.enabled)
                         }
                     }
                 }
@@ -133,23 +133,23 @@ struct WorldDetailView: View {
             // 计算配置
             if let config = state.compute_config {
                 VStack(alignment: .leading, spacing: 6) {
-                    Label("计算配置", systemImage: "cpu")
+                    Label(loc("计算配置"), systemImage: "cpu")
                         .font(.headline)
                     Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 4) {
                         GridRow {
-                            Text("活跃层级").font(.caption).foregroundStyle(.secondary)
-                            Text(config.active_tier ?? "未知")
+                            Text(loc("活跃层级")).font(.caption).foregroundStyle(.secondary)
+                            Text(config.active_tier ?? loc("未知"))
                         }
                         GridRow {
-                            Text("NPC 上限").font(.caption).foregroundStyle(.secondary)
+                            Text(loc("NPC 上限")).font(.caption).foregroundStyle(.secondary)
                             Text("\(config.max_npcs ?? 0)")
                         }
                         GridRow {
-                            Text("活跃 NPC").font(.caption).foregroundStyle(.secondary)
+                            Text(loc("活跃 NPC")).font(.caption).foregroundStyle(.secondary)
                             Text("\(config.max_active_npcs ?? 0)")
                         }
                         GridRow {
-                            Text("Token 预算").font(.caption).foregroundStyle(.secondary)
+                            Text(loc("Token 预算")).font(.caption).foregroundStyle(.secondary)
                             Text("\(config.total_token_budget ?? 0)")
                         }
                     }
@@ -159,7 +159,7 @@ struct WorldDetailView: View {
             // 自由状态字段（economy/health/diet/stamina/mentality）
             if !state.extra.isEmpty {
                 VStack(alignment: .leading, spacing: 6) {
-                    Label("状态维度", systemImage: "gauge")
+                    Label(loc("状态维度"), systemImage: "gauge")
                         .font(.headline)
                     Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 4) {
                         ForEach(state.extra.sorted(by: { $0.key < $1.key }), id: \.key) { entry in
@@ -173,11 +173,11 @@ struct WorldDetailView: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                Label("路径", systemImage: "folder")
+                Label(loc("路径"), systemImage: "folder")
                     .font(.headline)
-                Text(state.world_doc_path ?? "未设置")
-                Text(state.config_path ?? "未设置")
-                Text(state.state_doc_path ?? "未设置")
+                Text(state.world_doc_path ?? loc("未设置"))
+                Text(state.config_path ?? loc("未设置"))
+                Text(state.state_doc_path ?? loc("未设置"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -196,25 +196,25 @@ struct WorldDetailView: View {
 
     private var transitionSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("地点转换", systemImage: "arrow.triangle.swap")
+            Label(loc("地点转换"), systemImage: "arrow.triangle.swap")
                 .font(.headline)
 
-            TextField("出发地点", text: $fromLocation)
+            TextField(loc("出发地点"), text: $fromLocation)
                 .textFieldStyle(.roundedBorder)
-            TextField("到达地点", text: $toLocation)
+            TextField(loc("到达地点"), text: $toLocation)
                 .textFieldStyle(.roundedBorder)
 
-            Picker("交通方式", selection: $transport) {
+            Picker(loc("交通方式"), selection: $transport) {
                 ForEach(transports, id: \.self) { Text($0) }
             }
             .pickerStyle(.segmented)
 
             HStack {
-                Text("预计耗时（秒）")
+                Text(loc("预计耗时（秒）"))
                 Stepper("\(etaSeconds)", value: $etaSeconds, in: 0...86400, step: 60)
             }
 
-            Button("执行转换") {
+            Button(loc("执行转换")) {
                 Task {
                     await viewModel.transition(
                         worldID,
@@ -223,7 +223,7 @@ struct WorldDetailView: View {
                         transport: transport,
                         etaSeconds: etaSeconds
                     )
-                    transitionMessage = "转换已记录。"
+                    transitionMessage = loc("转换已记录。")
                 }
             }
             .buttonStyle(.borderedProminent)
@@ -246,16 +246,16 @@ struct WorldDetailView: View {
 
     private var eventSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("注入世界事件", systemImage: "bolt.badge.clock")
+            Label(loc("注入世界事件"), systemImage: "bolt.badge.clock")
                 .font(.headline)
 
-            TextField("事件名称", text: $eventName)
+            TextField(loc("事件名称"), text: $eventName)
                 .textFieldStyle(.roundedBorder)
-            TextField("事件描述", text: $eventDescription)
+            TextField(loc("事件描述"), text: $eventDescription)
                 .textFieldStyle(.roundedBorder)
-            Stepper("优先级：\(eventPriority)", value: $eventPriority, in: -10...10)
+            Stepper(loc("优先级：%lld", eventPriority), value: $eventPriority, in: -10...10)
 
-            Button("注入事件") {
+            Button(loc("注入事件")) {
                 let name = eventName.trimmingCharacters(in: .whitespacesAndNewlines)
                 let desc = eventDescription.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !name.isEmpty || !desc.isEmpty else { return }
@@ -268,7 +268,7 @@ struct WorldDetailView: View {
                         priority: eventPriority,
                         isEnabled: true
                     )
-                    eventMessage = "事件已注入并触发。"
+                    eventMessage = loc("事件已注入并触发。")
                     eventName = ""
                     eventDescription = ""
                 }
@@ -289,9 +289,9 @@ struct WorldDetailView: View {
 
     private var stateEditSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("编辑状态维度", systemImage: "slider.horizontal.3")
+            Label(loc("编辑状态维度"), systemImage: "slider.horizontal.3")
                 .font(.headline)
-            Text("支持 economy、health、diet、stamina、mentality 等字段；数值或文本均可。")
+            Text(loc("支持 economy、health、diet、stamina、mentality 等字段；数值或文本均可。"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -303,8 +303,8 @@ struct WorldDetailView: View {
                     ))
                 }
                 HStack {
-                    TextField("新字段名", text: $newStateKey)
-                    Button("添加") {
+                    TextField(loc("新字段名"), text: $newStateKey)
+                    Button(loc("添加")) {
                         let trimmed = newStateKey.trimmingCharacters(in: .whitespaces)
                         if !trimmed.isEmpty && stateFields[trimmed] == nil {
                             stateFields[trimmed] = ""
@@ -315,7 +315,7 @@ struct WorldDetailView: View {
             }
             .formStyle(.grouped)
 
-            Button("保存状态") {
+            Button(loc("保存状态")) {
                 var patch: [String: JSONValue] = [:]
                 for (key, value) in stateFields {
                     let trimmed = value.trimmingCharacters(in: .whitespaces)

@@ -11,6 +11,8 @@ Python Flask API 服务），Core 以子进程方式随 App 启停。
 macapp/
 ├── Sources/                  # Swift 源码
 │   ├── App.swift             # App 入口（@main）、AppDelegate（菜单栏、Core 生命周期）
+│   ├── BundleSupport.swift   # Bundle.xiJian（String Catalog 资源定位）
+│   ├── Localization.swift    # loc() / Text(xj:) 本地化封装
 │   ├── Info.plist            # App Info.plist
 │   ├── Models/               # 数据模型（角色 / 世界 / 资源包 / 记忆等）
 │   ├── Services/             # CoreManager（Core 进程管理）、APIClient（HTTP 封装）、
@@ -21,6 +23,7 @@ macapp/
 │                             #   含 ImportPackSheet / PackListView / VoiceCallView）
 ├── Resources/
 │   ├── Assets.xcassets       # 图标与颜色资源
+│   ├── Localizable.xcstrings # String Catalog（zh-Hans / en / ja，UI 文案唯一来源）
 │   └── Core/                 # 内嵌 Core 产物（build-core.sh 生成，随 App 分发）
 ├── Tests/                    # 单元测试（逻辑层框架测试，无宿主）
 ├── scripts/
@@ -121,7 +124,40 @@ A6 通话会话管理在 Core 侧为可运行 stub（状态机 idle → ringing 
 - 通话音频采集（audio_base64 路径）与真实 STT/TTS 后端未接入；本批使用 `speech` 端点的
   `text` 快捷路径（服务端异步管线，回复经 WS 事件送达）。
 
-## 6. 已知限制
+## 6. 本地化（String Catalog：zh-Hans / en / ja）
+
+macapp 全部用户可见文案（视图、日志、错误消息、状态文本）已迁移到 **String Catalog**
+（`macapp/Resources/Localizable.xcstrings`，sourceLanguage = zh-Hans，en / ja 全量翻译），
+随 `XiJianKit` framework 打包。系统语言为中文 / 英文 / 日文时自动切换界面语言。
+
+### 资源与封装
+
+- **String Catalog**：`Resources/Localizable.xcstrings`（key 即中文原文，含 `%@` / `%lld` 占位符）。
+- **Bundle 定位**：`Sources/BundleSupport.swift` —— `Bundle.xiJian` 指向 XiJianKit 框架 bundle；
+  所有本地化查找必须显式使用它（App target 的 main bundle 内没有该资源）。
+- **封装**：`Sources/Localization.swift`
+  - `loc("设置")` / `loc("网络错误：%@", detail)` / `loc("Core 运行中 · 端口 %lld", port)` ——
+    非 UI 文案（错误消息、日志、状态文本、菜单标题等），返回已本地化 `String`；
+    带参数时 key 必须用占位符形式（**不要**用 Swift 字符串插值拼接）。
+  - `Text(xj: "设置")` / `Text(xj: "Core 运行中 · 端口 \(port)")` —— SwiftUI 文本
+    （LocalizedStringKey 插值自动匹配 catalog 的 `%lld` / `%@`）。
+- SwiftUI 控件的标题（Button / Label / Section / Picker / Toggle / TextField / navigationTitle /
+  alert / confirmationDialog / help 等）直接传 `loc(...)` 的 `String`（利用 StringProtocol 重载），
+  避免 LocalizedStringKey 默认走 main bundle 导致查找不到。
+
+### 新增文案的步骤
+
+1. 在源码中用 `loc("新文案")` 或 `Text(xj: "新文案")` 书写；带参数用占位符 key（如 `"共 %lld 条"`）。
+2. 打开 `Resources/Localizable.xcstrings`（Xcode 内）或直接编辑 JSON，
+   补上新 key 与 en / ja 翻译（质量与既有条目一致；路径、代码符号等保留原文）。
+3. 若源码文案与 catalog key 不一致（换行 / 空格 / 标点差异），优先改源码匹配 catalog。
+4. 构建并全量测试（`xcodebuild -scheme XiJian build` + `test`）。
+
+> 说明：枚举的持久化 rawValue（如主题外观模式「跟随系统 / 浅色 / 深色」、气泡样式、
+> 侧边栏 Tab 名）与服务器返回的数据字段（role、status 等）**不做**本地化改写，
+> 展示时经 `displayName` / `loc()` 转换；`AppTheme` 预设色名同样以 `loc()` 展示。
+
+## 7. 已知限制
 
 - 默认端口 **18500**（与 Core 的 DEFAULT_PORT 一致，可在设置中修改）；配置端口被占用时
   Core 自动换端口，实际生效端口以 `run/xijian-<pid>.port` 为准；

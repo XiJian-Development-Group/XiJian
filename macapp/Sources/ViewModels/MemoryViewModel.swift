@@ -46,7 +46,7 @@ final class MemoryViewModel {
 
     func create(characterID: String?, content: String, importance: Double?, decay: String?, category: String?, tags: [String]) async {
         guard let client = core.makeClient() else {
-            presentError("Core 未运行，无法创建记忆。")
+            presentError(loc("Core 未运行，无法创建记忆。"))
             return
         }
         do {

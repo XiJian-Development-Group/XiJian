@@ -42,6 +42,14 @@ public final class ThemeSettings {
         case light = "浅色"
         case dark = "深色"
         var id: String { rawValue }
+        /// 本地化显示名（rawValue 为持久化存储值，展示时用 displayName）
+        var displayName: String {
+            switch self {
+            case .system: return loc("跟随系统")
+            case .light: return loc("浅色")
+            case .dark: return loc("深色")
+            }
+        }
     }
 
     /// 气泡样式
@@ -50,6 +58,14 @@ public final class ThemeSettings {
         case outlined = "描边"
         case flat = "扁平"
         var id: String { rawValue }
+        /// 本地化显示名（rawValue 为持久化存储值，展示时用 displayName）
+        var displayName: String {
+            switch self {
+            case .rounded: return loc("圆角")
+            case .outlined: return loc("描边")
+            case .flat: return loc("扁平")
+            }
+        }
     }
 
     /// 主题色预设

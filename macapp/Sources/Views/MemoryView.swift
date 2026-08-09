@@ -22,7 +22,7 @@ struct MemoryView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass")
                         .foregroundStyle(.secondary)
-                    TextField("搜索记忆（向量检索）", text: $viewModel.searchText)
+                    TextField(loc("搜索记忆（向量检索）"), text: $viewModel.searchText)
                         .textFieldStyle(.plain)
                         .onSubmit {
                             Task { await viewModel.search(characterID: selectedCharacterID) }
@@ -36,7 +36,7 @@ struct MemoryView: View {
                         }
                         .buttonStyle(.plain)
                     }
-                    Button("搜索") {
+                    Button(loc("搜索")) {
                         Task { await viewModel.search(characterID: selectedCharacterID) }
                     }
                     .buttonStyle(.bordered)
@@ -46,8 +46,8 @@ struct MemoryView: View {
 
                 // 角色过滤
                 if !characters.isEmpty {
-                    Picker("按角色过滤", selection: $selectedCharacterID) {
-                        Text("全部角色").tag(String?.none)
+                    Picker(loc("按角色过滤"), selection: $selectedCharacterID) {
+                        Text(loc("全部角色")).tag(String?.none)
                         ForEach(characters) { character in
                             Text(character.displayName).tag(String?.some(character.id))
                         }
@@ -64,7 +64,7 @@ struct MemoryView: View {
                     if let results = viewModel.searchResults {
                         resultsList(results)
                     } else if viewModel.isLoading && viewModel.entries.isEmpty {
-                        ProgressView("加载记忆中...")
+                        ProgressView(loc("加载记忆中..."))
                     } else if viewModel.entries.isEmpty {
                         emptyState
                     } else {
@@ -72,29 +72,29 @@ struct MemoryView: View {
                     }
                 }
             }
-            .navigationTitle("记忆")
+            .navigationTitle(loc("记忆"))
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         showCreateSheet = true
                     } label: {
-                        Label("新建记忆", systemImage: "plus")
+                        Label(loc("新建记忆"), systemImage: "plus")
                     }
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
-                        Button("整理记忆（提炼长期记忆）") {
+                        Button(loc("整理记忆（提炼长期记忆）")) {
                             showConsolidateConfirm = true
                         }
-                        Button("遗忘过期条目") {
+                        Button(loc("遗忘过期条目")) {
                             showForgetConfirm = true
                         }
                         Divider()
-                        Button("刷新列表") {
+                        Button(loc("刷新列表")) {
                             Task { await viewModel.refresh(characterID: selectedCharacterID) }
                         }
                     } label: {
-                        Label("更多", systemImage: "ellipsis.circle")
+                        Label(loc("更多"), systemImage: "ellipsis.circle")
                     }
                 }
             }
@@ -105,26 +105,26 @@ struct MemoryView: View {
         .sheet(item: $editingEntry) { entry in
             MemoryEditSheet(viewModel: viewModel, characters: characters, mode: .edit(entry))
         }
-        .alert("出错了", isPresented: $showError) {
-            Button("好", role: .cancel) {}
+        .alert(loc("出错了"), isPresented: $showError) {
+            Button(loc("好"), role: .cancel) {}
         } message: {
             Text(errorMessage)
         }
-        .confirmationDialog("确定整理记忆吗？", isPresented: $showConsolidateConfirm, titleVisibility: .visible) {
-            Button("整理") {
+        .confirmationDialog(loc("确定整理记忆吗？"), isPresented: $showConsolidateConfirm, titleVisibility: .visible) {
+            Button(loc("整理")) {
                 Task { await viewModel.consolidate(characterID: selectedCharacterID) }
             }
-            Button("取消", role: .cancel) {}
+            Button(loc("取消"), role: .cancel) {}
         } message: {
-            Text("将短期会话记忆提炼为长期记忆（异步任务）。")
+            Text(loc("将短期会话记忆提炼为长期记忆（异步任务）。"))
         }
-        .confirmationDialog("确定遗忘过期条目吗？", isPresented: $showForgetConfirm, titleVisibility: .visible) {
-            Button("遗忘") {
+        .confirmationDialog(loc("确定遗忘过期条目吗？"), isPresented: $showForgetConfirm, titleVisibility: .visible) {
+            Button(loc("遗忘")) {
                 Task { await viewModel.forget(entryIDs: [], decay: nil) }
             }
-            Button("取消", role: .cancel) {}
+            Button(loc("取消"), role: .cancel) {}
         } message: {
-            Text("按衰减策略删除过期记忆条目。")
+            Text(loc("按衰减策略删除过期记忆条目。"))
         }
         .task {
             await viewModel.refresh(characterID: selectedCharacterID)
@@ -134,7 +134,7 @@ struct MemoryView: View {
         }
         .onChange(of: viewModel.showError) { _, newValue in
             if newValue {
-                errorMessage = viewModel.errorMessage ?? "未知错误"
+                errorMessage = viewModel.errorMessage ?? loc("未知错误")
                 showError = true
                 viewModel.showError = false
             }
@@ -155,7 +155,7 @@ struct MemoryView: View {
 
     private func resultsList(_ results: [MemoryEntry]) -> some View {
         List {
-            Section("搜索结果（\(results.count)）") {
+            Section(loc("搜索结果（%lld）", results.count)) {
                 ForEach(results) { entry in
                     MemoryRow(entry: entry) {
                         editingEntry = entry
@@ -170,10 +170,10 @@ struct MemoryView: View {
             Image(systemName: "brain.head.profile")
                 .font(.system(size: 44))
                 .foregroundStyle(.tertiary)
-            Text("还没有记忆条目")
+            Text(loc("还没有记忆条目"))
                 .font(.title3)
                 .foregroundStyle(.secondary)
-            Text("点击右上角 + 新建，或确认 Core 已启动")
+            Text(loc("点击右上角 + 新建，或确认 Core 已启动"))
                 .font(.caption)
                 .foregroundStyle(.tertiary)
         }
@@ -201,12 +201,12 @@ struct MemoryRow: View {
                     .foregroundStyle(entry.type == "long" ? .orange : .blue)
 
                 if let importance = entry.importance {
-                    Text("重要度 \(String(format: "%.1f", importance))")
+                    Text(loc("重要度 %.1f", importance))
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
                 if let source = entry.source, !source.isEmpty {
-                    Text("来源：\(source)")
+                    Text(loc("来源：%@", source))
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -235,12 +235,12 @@ struct MemoryRow: View {
 
             HStack {
                 if let characterID = entry.character_id, !characterID.isEmpty {
-                    Text("角色：\(characterID)")
+                    Text(loc("角色：%@", characterID))
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                 }
                 Spacer()
-                Button("编辑") { onEdit() }
+                Button(loc("编辑")) { onEdit() }
                     .controlSize(.small)
             }
         }
@@ -273,14 +273,14 @@ struct MemoryEditSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(isCreate ? "新建记忆" : "编辑记忆")
+            Text(isCreate ? loc("新建记忆") : loc("编辑记忆"))
                 .font(.title2)
                 .bold()
 
             Form {
                 if !characters.isEmpty {
-                    Picker("关联角色", selection: $characterID) {
-                        Text("无").tag(String?.none)
+                    Picker(loc("关联角色"), selection: $characterID) {
+                        Text(loc("无")).tag(String?.none)
                         ForEach(characters) { character in
                             Text(character.displayName).tag(String?.some(character.id))
                         }
@@ -288,7 +288,7 @@ struct MemoryEditSheet: View {
                 }
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("内容")
+                    Text(loc("内容"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     TextEditor(text: $content)
@@ -305,26 +305,26 @@ struct MemoryEditSheet: View {
                 }
 
                 HStack {
-                    Text("重要度")
+                    Text(loc("重要度"))
                     Slider(value: $importance, in: 0...1, step: 0.1)
                     Text(String(format: "%.1f", importance))
                         .foregroundStyle(.secondary)
                         .frame(width: 32)
                 }
 
-                Picker("衰减策略", selection: $decay) {
+                Picker(loc("衰减策略"), selection: $decay) {
                     ForEach(decayOptions, id: \.self) { Text($0) }
                 }
 
-                TextField("来源分类", text: $category)
-                TextField("标签（逗号分隔）", text: $tagsText)
+                TextField(loc("来源分类"), text: $category)
+                TextField(loc("标签（逗号分隔）"), text: $tagsText)
             }
             .formStyle(.grouped)
 
             HStack {
                 Spacer()
-                Button("取消") { dismiss() }
-                Button(isCreate ? "创建" : "保存") {
+                Button(loc("取消")) { dismiss() }
+                Button(isCreate ? loc("创建") : loc("保存")) {
                     Task { await save() }
                 }
                 .buttonStyle(.borderedProminent)

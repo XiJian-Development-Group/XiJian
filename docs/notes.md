@@ -5,6 +5,40 @@
 
 ---
 
+## 2026-08-09 · macapp 全量本地化迁移（28 文件文案 → String Catalog，测试断言适配）
+
+### 任务来源
+本地化第二批：第一批基建（commit `9247dc3`：String Catalog 469 key + `Bundle.xiJian` + `loc()`/`Text(xj:)` 封装 + App.swift/StatusIndicatorView/LogEntry 试点迁移）之上，把 `macapp/Sources` 剩余所有含中文文案的文件全量迁到本地化调用，并修复受影响测试断言。
+
+### 已完成（实测一遍）
+
+#### 迁移范围（28 个文件）
+- **Views（16）**：SettingsView / WorldDetailView / CharacterDetailView / MemoryView / SafetySettingsView / BackupSettingsView / VoiceCallView / ChatView / PlotSettingsView / CharacterListView / WorldListView / ImportPackSheet / PackListView / CharacterStatRing / MessageBubbleView / ContentView。
+- **Services（3）**：CoreManager（启动/停止/错误/日志消息）、APIClient（APIError 错误消息）、WebSocketClient（连接/认证错误）；VoiceCallService（状态名 + 错误消息）。
+- **ViewModels（5）**：VoiceCallViewModel（通话状态名/系统提示行）、CharacterViewModel（互动结果文案）、ChatViewModel（默认会话标题/错误）、MemoryViewModel / WorldViewModel（创建错误）。
+- **Models / Theme**：Models.swift 展示属性（JSONValue 是/否/无、角色状态维度名、状态标签、来源名、记忆类型、PackInfo.displayKind、MessageRole 等）→ `loc()`；AppTheme 外观/气泡枚举与预设色名——rawValue 保持中文（UserDefaults 持久化兼容），新增 `displayName` 走 `loc()`。
+
+#### 用法约定（后续新增文案照此办理）
+- 非 UI 文案：`loc("设置")` / 带参数 `loc("网络错误：%@", detail)` / `loc("Core 运行中 · 端口 %lld", port)`——key 用占位符形式，不用 Swift 插值拼接。
+- SwiftUI：`Text(xj:)` 或直接 `Text(loc(...))`；控件标题（Button/Label/Section/Picker/Toggle/TextField/navigationTitle/alert/help 等）传 `loc(...)` 的 String（macOS 14 的 StringProtocol 重载），避免 LocalizedStringKey 走 main bundle 找不到。
+
+#### String Catalog 变更（469 → 482 key）
+- 新增 13 个 key：`已导入角色 %lld 个、世界观 %lld 个、记忆 %lld 条`、重置 Core 长确认文案、`%@（HTTP %lld）%@` + `：%@`（APIError 状态行）、`（%@）`、`TTS：%@`、`未知后端`、`%@ · %@ · %@`、`「%@」`、`、` / `：` / `；` 分隔符、`恢复成功`；重命名 4 个 key（`进程意外退出（%lld）` → `（%@）` 系 3 条，因 code 先本地化成「退出码 N / 信号 N」字符串再嵌入，以及 `正在导入 %@` → `正在导入 %@…`）。en/ja 翻译按第一批质量标准补齐。
+- 数值占位符统一 `%lld`；`Int32`（pid / terminationStatus）在传参处转 `Int` 再格式化（避免 varargs 长度不匹配）。
+
+#### 测试（157 tests, 0 failures）
+- 硬编码中文 UI 文案断言改 `loc(...)` 对照（LogEntryTests 级别名、ModelsTests 状态名/维度名/来源名/类型/是/混合、APIClientTests displayKind/错误消息、VoiceCallTests 系统提示行、WebSocketClientTests 连接中断、CoreManagerTests 错误消息前缀）。
+- 数据/夹具字符串（聊天内容「你好」、角色名、JSON 样例、日志原文）与断言消息（XCTFail 第二参数）保持原样——它们不是产品 UI 文案。
+- `xcodebuild build` BUILD SUCCEEDED；全量 `test` 157/157 通过。
+
+### 没做的 / 留的口子
+1. **README「语言支持：zh_CN, en_US」未改**——该行描述的是产品/Core 层面的语言能力（对话与 API locale），与 macapp UI 的 String Catalog 语言（zh-Hans/en/ja）是两层；Core 侧没有 ja，改了会误导。macapp UI 语言已由 docs/macapp.md §6 记录。
+2. `Models.swift` 解码错误 `debugDescription`（「无法解析 JSON 值」）与 `AppTheme` 预设色名 rawValue 等属开发者诊断/存储标识，未本地化（展示处已 loc）。
+3. 部分 key 为纯分隔符（`、`/`：`/`；`）——为跨语言标点差异（en 用 `, `/`: `/`; `）而单独建 key。
+4. 未跑多语言真机验证（无 en/ja 系统环境）；逻辑上测试已按 `loc()` 对照保证任意系统语言下稳定。
+
+---
+
 ## 2026-08-09 · macapp A6 实时通话 UI（VoiceCallService + ViewModel + View + 入口 + 测试）
 
 ### 任务来源

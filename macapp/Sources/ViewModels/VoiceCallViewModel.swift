@@ -16,10 +16,10 @@ enum VoiceCallPhase: Equatable {
 
     var displayName: String {
         switch self {
-        case .idle: return "未通话"
-        case .ringing: return "响铃中"
-        case .active: return "通话中"
-        case .ended: return "通话结束"
+        case .idle: return loc("未通话")
+        case .ringing: return loc("响铃中")
+        case .active: return loc("通话中")
+        case .ended: return loc("通话结束")
         }
     }
 }
@@ -173,7 +173,7 @@ final class VoiceCallViewModel: ObservableObject {
         do {
             let record = try await service.reject(callId: callID)
             applyRecord(record)
-            appendSystemLine("已拒绝通话")
+            appendSystemLine(loc("已拒绝通话"))
         } catch {
             presentError(error)
         }
@@ -187,7 +187,7 @@ final class VoiceCallViewModel: ObservableObject {
         do {
             let record = try await service.end(callId: callID)
             applyRecord(record)
-            appendSystemLine("通话已结束")
+            appendSystemLine(loc("通话已结束"))
         } catch {
             presentError(error)
         }
@@ -211,7 +211,7 @@ final class VoiceCallViewModel: ObservableObject {
                 ingestSpeech(role: "assistant", text: reply, turn: result.turn, meta: nil, eventID: result.reply_event_id)
             } else if result.ok {
                 // 异步管线：回复稍后经 WS 送达
-                appendSystemLine("回复生成中…")
+                appendSystemLine(loc("回复生成中…"))
             }
         } catch {
             presentError(error)
@@ -241,9 +241,9 @@ final class VoiceCallViewModel: ObservableObject {
             let result = try await service.sing(callId: callID, lyrics: trimmed)
             let meta: String
             if result.ok {
-                meta = "已送出"
+                meta = loc("已送出")
             } else {
-                meta = [result.status, result.reason].compactMap { $0 }.joined(separator: "：")
+                meta = [result.status, result.reason].compactMap { $0 }.joined(separator: loc("："))
             }
             appendTranscript(item: VoiceCallTranscriptItem(
                 id: "song-\(UUID().uuidString)",
@@ -312,7 +312,7 @@ final class VoiceCallViewModel: ObservableObject {
             phase = .active
         case .ended:
             phase = .ended
-            appendSystemLine("通话已结束")
+            appendSystemLine(loc("通话已结束"))
         case .idle:
             break
         }
@@ -336,32 +336,32 @@ final class VoiceCallViewModel: ObservableObject {
             let turn = payload["turn"]?.doubleValue.map { Int($0) }
             var metaParts: [String] = []
             if payload["interrupted"]?.boolValue == true {
-                metaParts.append("被打断")
+                metaParts.append(loc("被打断"))
             }
             if let error = payload["error"]?.stringValue {
-                metaParts.append("错误：\(error)")
+                metaParts.append(loc("错误：%@", error))
             }
             if let ttsError = payload["tts_error"]?.stringValue {
-                metaParts.append("TTS：\(ttsError)")
+                metaParts.append(loc("TTS：%@", ttsError))
             }
             ingestSpeech(
                 role: role,
                 text: text,
                 turn: turn,
-                meta: metaParts.isEmpty ? nil : metaParts.joined(separator: "；"),
+                meta: metaParts.isEmpty ? nil : metaParts.joined(separator: loc("；")),
                 eventID: eventID
             )
         case "song":
             let lyrics = payload["lyrics"]?.stringValue ?? ""
             let status = payload["status"]?.stringValue ?? ""
             let reason = payload["reason"]?.stringValue ?? ""
-            let meta = [status.isEmpty ? nil : "状态：\(status)", reason.isEmpty ? nil : reason]
-                .compactMap { $0 }.joined(separator: "；")
+            let meta = [status.isEmpty ? nil : loc("状态：%@", status), reason.isEmpty ? nil : reason]
+                .compactMap { $0 }.joined(separator: loc("；"))
             appendTranscript(item: VoiceCallTranscriptItem(
                 id: eventID ?? "song-\(UUID().uuidString)",
                 kind: kind,
                 role: "assistant",
-                text: lyrics.isEmpty ? "🎵（歌曲事件）" : "🎵 \(lyrics)",
+                text: lyrics.isEmpty ? loc("🎵（歌曲事件）") : "🎵 \(lyrics)",
                 turn: nil,
                 timestamp: Date().timeIntervalSince1970,
                 meta: meta.isEmpty ? nil : meta
@@ -373,7 +373,7 @@ final class VoiceCallViewModel: ObservableObject {
                 id: eventID ?? "barge-\(UUID().uuidString)",
                 kind: kind,
                 role: "system",
-                text: active ? "已开启打断（barge-in）" : "已关闭打断",
+                text: active ? loc("已开启打断（barge-in）") : loc("已关闭打断"),
                 turn: nil,
                 timestamp: Date().timeIntervalSince1970,
                 meta: nil

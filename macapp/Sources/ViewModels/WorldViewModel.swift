@@ -38,7 +38,7 @@ final class WorldViewModel {
 
     func create(name: String) async {
         guard let client = core.makeClient() else {
-            presentError("Core 未运行，无法创建世界。")
+            presentError(loc("Core 未运行，无法创建世界。"))
             return
         }
         do {

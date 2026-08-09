@@ -22,9 +22,9 @@ public struct ContentView: View {
             detail
                 .frame(minWidth: 600, minHeight: 500)
         }
-        .navigationTitle("隙间 XiJian")
-        .alert("出错了", isPresented: $appVM.showError) {
-            Button("好", role: .cancel) {}
+        .navigationTitle(Text(xj: "隙间 XiJian"))
+        .alert(loc("出错了"), isPresented: $appVM.showError) {
+            Button(loc("好"), role: .cancel) {}
         } message: {
             Text(appVM.errorMessage ?? "")
         }
@@ -38,9 +38,9 @@ public struct ContentView: View {
 
     private var sidebar: some View {
         List(selection: $appVM.selectedTab) {
-            Section("功能") {
+            Section(loc("功能")) {
                 ForEach(AppViewModel.Tab.allCases) { tab in
-                    Label(tab.rawValue, systemImage: tab.icon)
+                    Label(tab.displayName, systemImage: tab.icon)
                         .tag(tab)
                 }
             }

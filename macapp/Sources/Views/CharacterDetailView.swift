@@ -36,7 +36,7 @@ struct CharacterDetailView: View {
                     .padding(16)
                 }
             } else {
-                ProgressView("加载中...")
+                ProgressView(loc("加载中..."))
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
@@ -59,16 +59,16 @@ struct CharacterDetailView: View {
                 dimension: statSliderDimension
             )
         }
-        .alert("出错了", isPresented: $showError) {
-            Button("好", role: .cancel) {}
+        .alert(loc("出错了"), isPresented: $showError) {
+            Button(loc("好"), role: .cancel) {}
         } message: {
             Text(errorMessage)
         }
-        .alert("互动结果", isPresented: Binding(
+        .alert(loc("互动结果"), isPresented: Binding(
             get: { interactResult != nil },
             set: { if !$0 { interactResult = nil } }
         )) {
-            Button("好", role: .cancel) {}
+            Button(loc("好"), role: .cancel) {}
         } message: {
             Text(interactResult ?? "")
         }
@@ -78,7 +78,7 @@ struct CharacterDetailView: View {
         }
         .onChange(of: viewModel.showError) { _, newValue in
             if newValue {
-                errorMessage = viewModel.errorMessage ?? "未知错误"
+                errorMessage = viewModel.errorMessage ?? loc("未知错误")
                 showError = true
                 viewModel.showError = false
             }
@@ -98,11 +98,11 @@ struct CharacterDetailView: View {
                     .foregroundStyle(theme.accentColor)
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(viewModel.detail?.displayName ?? "角色")
+                Text(viewModel.detail?.displayName ?? loc("角色"))
                     .font(.title2)
                     .bold()
                 if let emotion = viewModel.detail?.default_emotion {
-                    Text("情绪基线：\(emotion)")
+                    Text(loc("情绪基线：%@", emotion))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -112,14 +112,14 @@ struct CharacterDetailView: View {
                 Task { await viewModel.toggleLoaded(characterID) }
             } label: {
                 Label(
-                    viewModel.detail?.isLoaded == true ? "卸载" : "加载",
+                    viewModel.detail?.isLoaded == true ? loc("卸载") : loc("加载"),
                     systemImage: viewModel.detail?.isLoaded == true ? "eject.fill" : "play.fill"
                 )
             }
             .buttonStyle(.bordered)
-            Button("编辑") { showEdit = true }
+            Button(loc("编辑")) { showEdit = true }
                 .buttonStyle(.bordered)
-            Button("关闭") { dismiss() }
+            Button(loc("关闭")) { dismiss() }
                 .buttonStyle(.bordered)
         }
         .padding(14)
@@ -129,9 +129,9 @@ struct CharacterDetailView: View {
 
     private func personaSection(_ detail: CharacterInfo) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("人设文档", systemImage: "doc.text")
+            Label(loc("人设文档"), systemImage: "doc.text")
                 .font(.headline)
-            Text(detail.persona_doc?.isEmpty == false ? detail.persona_doc! : "（未填写人设）")
+            Text(detail.persona_doc?.isEmpty == false ? detail.persona_doc! : loc("（未填写人设）"))
                 .font(.body)
                 .foregroundStyle(detail.persona_doc?.isEmpty == false ? .primary : .tertiary)
                 .textSelection(.enabled)
@@ -157,17 +157,17 @@ struct CharacterDetailView: View {
     private var characterStatusSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Label("角色状态", systemImage: "gauge")
+                Label(loc("角色状态"), systemImage: "gauge")
                     .font(.headline)
                 Spacer()
                 if let summary = viewModel.state?.summary {
                     statusChip(summary)
                 }
-                Button("刷新") {
+                Button(loc("刷新")) {
                     Task { await viewModel.refreshState() }
                 }
                 .controlSize(.small)
-                Button("编辑状态") { showStateEditor = true }
+                Button(loc("编辑状态")) { showStateEditor = true }
                     .controlSize(.small)
             }
 
@@ -176,7 +176,7 @@ struct CharacterDetailView: View {
                 HStack(spacing: 8) {
                     ProgressView()
                         .controlSize(.small)
-                    Text("状态加载中...")
+                    Text(loc("状态加载中..."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -189,17 +189,17 @@ struct CharacterDetailView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .foregroundStyle(.orange)
-                    Text("状态加载失败")
+                    Text(loc("状态加载失败"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Button("重试") {
+                    Button(loc("重试")) {
                         Task { await viewModel.refreshState() }
                     }
                     .controlSize(.small)
                 }
             } else {
                 // 空态：角色刚创建 / 从未被状态系统触碰
-                Text("角色尚未初始化状态（无状态记录）")
+                Text(loc("角色尚未初始化状态（无状态记录）"))
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
@@ -216,7 +216,7 @@ struct CharacterDetailView: View {
                 .padding(.vertical, 2)
                 .background(Capsule().fill(Color.red.opacity(0.2)))
                 .foregroundStyle(.red)
-                .help("健康 ≤ 0：角色已不可对话，仅能通过恢复操作解除")
+                .help(loc("健康 ≤ 0：角色已不可对话，仅能通过恢复操作解除"))
         } else {
             Text(summary.statusDisplayName)
                 .font(.caption2)
@@ -250,12 +250,12 @@ struct CharacterDetailView: View {
     @ViewBuilder
     private var stateEventsSection: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("状态变更记录（最近 \(min(viewModel.stateEvents.count, 10)) 条）")
+            Text(loc("状态变更记录（最近 %lld 条）", min(viewModel.stateEvents.count, 10)))
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
             if viewModel.stateEvents.isEmpty {
-                Text("暂无状态变更记录")
+                Text(loc("暂无状态变更记录"))
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             } else {
@@ -310,7 +310,7 @@ struct CharacterDetailView: View {
         if let state = viewModel.state {
             DisclosureGroup {
                 if state.values.isEmpty {
-                    Text("（暂无状态数据）")
+                    Text(loc("（暂无状态数据）"))
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 } else {
@@ -328,7 +328,7 @@ struct CharacterDetailView: View {
                     }
                 }
             } label: {
-                Text("原始字段")
+                Text(loc("原始字段"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -340,11 +340,11 @@ struct CharacterDetailView: View {
 
     private func actionsSection(_ detail: CharacterInfo) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Label("互动", systemImage: "sparkles")
+            Label(loc("互动"), systemImage: "sparkles")
                 .font(.headline)
 
             if viewModel.interactions.isEmpty {
-                Text("（暂无可用互动类型）")
+                Text(loc("（暂无可用互动类型）"))
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             } else {
@@ -356,7 +356,7 @@ struct CharacterDetailView: View {
                         }
                     }
                 } label: {
-                    Label("选择互动...", systemImage: "hand.tap")
+                    Label(loc("选择互动..."), systemImage: "hand.tap")
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
                         .background(
@@ -367,7 +367,7 @@ struct CharacterDetailView: View {
                 .menuStyle(.borderlessButton)
             }
 
-            Text("提示：互动需要先加载角色。")
+            Text(loc("提示：互动需要先加载角色。"))
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
         }
@@ -377,25 +377,25 @@ struct CharacterDetailView: View {
 
     private var interactSheet: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("触发互动")
+            Text(loc("触发互动"))
                 .font(.title3)
                 .bold()
 
             if let id = selectedInteractionID,
                let interaction = viewModel.interactions.first(where: { $0.id == id }) {
-                Text("互动：\(interaction.displayName)")
+                Text(loc("互动：%@", interaction.displayName))
                     .foregroundStyle(.secondary)
             }
 
-            TextField("上下文（如：location=home, time_of_day=evening）", text: $contextText)
+            TextField(loc("上下文（如：location=home, time_of_day=evening）"), text: $contextText)
                 .textFieldStyle(.roundedBorder)
 
-            Toggle("允许 NSFW 回应", isOn: $nsfwAllowed)
+            Toggle(loc("允许 NSFW 回应"), isOn: $nsfwAllowed)
 
             HStack {
                 Spacer()
-                Button("取消") { showInteract = false }
-                Button("触发") {
+                Button(loc("取消")) { showInteract = false }
+                Button(loc("触发")) {
                     Task {
                         let context = parseContext(contextText)
                         let result = await viewModel.trigger(
@@ -404,7 +404,7 @@ struct CharacterDetailView: View {
                             context: context.isEmpty ? nil : context,
                             nsfwAllowed: nsfwAllowed
                         )
-                        interactResult = result ?? "互动触发失败"
+                        interactResult = result ?? loc("互动触发失败")
                         showInteract = false
                     }
                 }
@@ -454,10 +454,10 @@ struct StateEditorSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("编辑角色状态")
+            Text(loc("编辑角色状态"))
                 .font(.title3)
                 .bold()
-            Text("填写要更新的状态字段（如 intimacy、mood、energy），留空则不改动。")
+            Text(loc("填写要更新的状态字段（如 intimacy、mood、energy），留空则不改动。"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -470,9 +470,9 @@ struct StateEditorSheet: View {
                 }
 
                 HStack {
-                    TextField("新字段名", text: $newKey)
+                    TextField(loc("新字段名"), text: $newKey)
                         .textFieldStyle(.roundedBorder)
-                    Button("添加字段") {
+                    Button(loc("添加字段")) {
                         let trimmed = newKey.trimmingCharacters(in: .whitespaces)
                         if !trimmed.isEmpty && fields[trimmed] == nil {
                             fields[trimmed] = ""
@@ -485,8 +485,8 @@ struct StateEditorSheet: View {
 
             HStack {
                 Spacer()
-                Button("取消") { dismiss() }
-                Button("保存") {
+                Button(loc("取消")) { dismiss() }
+                Button(loc("保存")) {
                     Task { await save() }
                 }
                 .buttonStyle(.borderedProminent)

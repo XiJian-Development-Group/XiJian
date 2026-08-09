@@ -199,7 +199,8 @@ final class CoreManagerTests: XCTestCase {
             XCTFail("不可执行的核心应进入 error 状态，实际：\(core.state)")
             return
         }
-        XCTAssertTrue(message.contains("不可执行") || message.contains("xijian-api"),
+        let localizedPrefix = loc("Core 可执行文件不存在或不可执行：%@").replacingOccurrences(of: "%@", with: "")
+        XCTAssertTrue(message.contains(localizedPrefix),
                       "错误信息应指向可执行文件问题，实际：\(message)")
 
         // 清理

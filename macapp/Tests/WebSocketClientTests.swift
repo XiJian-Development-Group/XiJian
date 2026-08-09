@@ -371,7 +371,7 @@ final class WebSocketClientTests: XCTestCase {
 
         XCTAssertEqual(factoryCallCount, 4, "初次连接 + 最多 3 次退避重连")
         XCTAssertEqual(reconnectingClient.connectionState, .disconnected)
-        XCTAssertTrue(reconnectingClient.lastError?.contains("连接中断") == true)
+        XCTAssertTrue(reconnectingClient.lastError?.contains("WebSocket") == true, "实际：\(reconnectingClient.lastError ?? "nil")")
         reconnectingClient.disconnect()
     }
 

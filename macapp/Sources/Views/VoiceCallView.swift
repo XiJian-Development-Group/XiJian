@@ -29,14 +29,14 @@ struct VoiceCallView: View {
         .sheet(isPresented: $showSongSheet) {
             songSheet
         }
-        .alert("出错了", isPresented: $showError) {
-            Button("好", role: .cancel) {}
+        .alert(loc("出错了"), isPresented: $showError) {
+            Button(loc("好"), role: .cancel) {}
         } message: {
             Text(errorMessage)
         }
         .onChange(of: viewModel.showError) { _, newValue in
             if newValue {
-                errorMessage = viewModel.errorMessage ?? "未知错误"
+                errorMessage = viewModel.errorMessage ?? loc("未知错误")
                 showError = true
                 viewModel.showError = false
             }
@@ -61,7 +61,7 @@ struct VoiceCallView: View {
             }
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(viewModel.characterName ?? "通话")
+                Text(viewModel.characterName ?? loc("通话"))
                     .font(.headline)
                 HStack(spacing: 6) {
                     phaseDot
@@ -69,7 +69,7 @@ struct VoiceCallView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     if viewModel.isWSConnected {
-                        Text("· WS 已连接")
+                        Text(loc("· WS 已连接"))
                             .font(.caption2)
                             .foregroundStyle(.tertiary)
                     }
@@ -114,7 +114,7 @@ struct VoiceCallView: View {
     private var phaseText: String {
         switch viewModel.phase {
         case .ringing:
-            return viewModel.direction == .characterInitiated ? "来电响铃…" : "等待接通…"
+            return viewModel.direction == .characterInitiated ? loc("来电响铃…") : loc("等待接通…")
         default:
             return viewModel.phase.displayName
         }
@@ -159,11 +159,11 @@ struct VoiceCallView: View {
             Image(systemName: "waveform")
                 .font(.system(size: 40))
                 .foregroundStyle(.tertiary)
-            Text("通话接通后即可开始对话")
+            Text(loc("通话接通后即可开始对话"))
                 .font(.caption)
                 .foregroundStyle(.tertiary)
             if viewModel.phase == .ringing {
-                Text("对方接通前，你可以先准备要说的话")
+                Text(loc("对方接通前，你可以先准备要说的话"))
                     .font(.caption2)
                     .foregroundStyle(.quaternary)
             }
@@ -224,7 +224,7 @@ struct VoiceCallView: View {
         case .idle:
             HStack {
                 Spacer()
-                Button("关闭") { dismiss() }
+                Button(loc("关闭")) { dismiss() }
                     .buttonStyle(.borderedProminent)
                 Spacer()
             }
@@ -235,7 +235,7 @@ struct VoiceCallView: View {
                     Button {
                         Task { await viewModel.accept() }
                     } label: {
-                        Label("接听", systemImage: "phone.fill")
+                        Label(loc("接听"), systemImage: "phone.fill")
                             .frame(width: 100)
                     }
                     .buttonStyle(.borderedProminent)
@@ -245,7 +245,7 @@ struct VoiceCallView: View {
                 Button(role: .destructive) {
                     Task { await viewModel.reject() }
                 } label: {
-                    Label("挂断", systemImage: "phone.down.fill")
+                    Label(loc("挂断"), systemImage: "phone.down.fill")
                         .frame(width: 100)
                 }
                 .buttonStyle(.borderedProminent)
@@ -257,18 +257,18 @@ struct VoiceCallView: View {
             VStack(spacing: 8) {
                 HStack(spacing: 10) {
                     Toggle(isOn: bargeInBinding) {
-                        Label("打断", systemImage: "bolt.fill")
+                        Label(loc("打断"), systemImage: "bolt.fill")
                             .font(.caption)
                     }
                     .toggleStyle(.switch)
                     .controlSize(.small)
                     .disabled(viewModel.isBusy)
-                    .help("barge-in：新语音输入到达时中断当前 TTS 播放")
+                    .help(loc("barge-in：新语音输入到达时中断当前 TTS 播放"))
 
                     Button {
                         showSongSheet = true
                     } label: {
-                        Label("唱歌", systemImage: "music.note")
+                        Label(loc("唱歌"), systemImage: "music.note")
                             .font(.caption)
                     }
                     .buttonStyle(.bordered)
@@ -280,7 +280,7 @@ struct VoiceCallView: View {
                     Button(role: .destructive) {
                         Task { await viewModel.end() }
                     } label: {
-                        Label("挂断", systemImage: "phone.down.fill")
+                        Label(loc("挂断"), systemImage: "phone.down.fill")
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(.red)
@@ -288,7 +288,7 @@ struct VoiceCallView: View {
                 }
 
                 HStack(alignment: .bottom, spacing: 8) {
-                    TextField("说点什么…（文本路径，音频采集后续接入）", text: $inputText)
+                    TextField(loc("说点什么…（文本路径，音频采集后续接入）"), text: $inputText)
                         .textFieldStyle(.plain)
                         .font(.system(size: max(theme.fontSize, 13)))
                         .padding(8)
@@ -314,13 +314,13 @@ struct VoiceCallView: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || viewModel.isBusy)
-                    .help("发送")
+                    .help(loc("发送"))
                 }
             }
             .padding(12)
         case .ended:
             HStack(spacing: 16) {
-                Button("重新拨打") {
+                Button(loc("重新拨打")) {
                     if let id = viewModel.characterID {
                         let name = viewModel.characterName
                         Task {
@@ -329,7 +329,7 @@ struct VoiceCallView: View {
                     }
                 }
                 .buttonStyle(.borderedProminent)
-                Button("关闭") { dismiss() }
+                Button(loc("关闭")) { dismiss() }
                 .buttonStyle(.bordered)
             }
             .padding(12)
@@ -356,10 +356,10 @@ struct VoiceCallView: View {
 
     private var songSheet: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Label("让角色唱首歌", systemImage: "music.note")
+            Label(loc("让角色唱首歌"), systemImage: "music.note")
                 .font(.headline)
 
-            Text("输入歌词，角色将以歌声回应（DiffSinger 引擎接入前返回不可用提示）")
+            Text(loc("输入歌词，角色将以歌声回应（DiffSinger 引擎接入前返回不可用提示）"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -378,8 +378,8 @@ struct VoiceCallView: View {
 
             HStack {
                 Spacer()
-                Button("取消") { showSongSheet = false }
-                Button("开唱") {
+                Button(loc("取消")) { showSongSheet = false }
+                Button(loc("开唱")) {
                     let lyrics = songLyrics
                     songLyrics = ""
                     showSongSheet = false
@@ -409,7 +409,7 @@ struct VoiceCallCharacterPicker: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("选择要通话的角色")
+            Text(loc("选择要通话的角色"))
                 .font(.headline)
 
             if isLoading {
@@ -420,12 +420,12 @@ struct VoiceCallCharacterPicker: View {
                     Image(systemName: "person.crop.circle.badge.questionmark")
                         .font(.system(size: 28))
                         .foregroundStyle(.tertiary)
-                    Text(loadFailed ? "角色加载失败，请确认 Core 已启动" : "暂无角色，请先在角色页导入资源包")
+                    Text(loadFailed ? loc("角色加载失败，请确认 Core 已启动") : loc("暂无角色，请先在角色页导入资源包"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                     if loadFailed {
-                        Button("重试") {
+                        Button(loc("重试")) {
                             Task { await load() }
                         }
                         .controlSize(.small)
@@ -453,7 +453,7 @@ struct VoiceCallCharacterPicker: View {
                                             .font(.body)
                                             .foregroundStyle(.primary)
                                         if character.isLoaded {
-                                            Text("已加载")
+                                            Text(loc("已加载"))
                                                 .font(.caption2)
                                                 .foregroundStyle(.green)
                                         }

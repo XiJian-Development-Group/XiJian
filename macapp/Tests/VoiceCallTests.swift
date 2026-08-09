@@ -450,7 +450,7 @@ final class VoiceCallViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.phase, .ended)
         XCTAssertEqual(mockService.rejectCalls, ["call_1"])
-        XCTAssertEqual(viewModel.transcript.last?.text, "已拒绝通话")
+        XCTAssertEqual(viewModel.transcript.last?.text, loc("已拒绝通话"))
     }
 
     func testEndMovesToEnded() async {
@@ -460,7 +460,7 @@ final class VoiceCallViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.phase, .ended)
         XCTAssertEqual(mockService.endCalls, ["call_1"])
-        XCTAssertEqual(viewModel.transcript.last?.text, "通话已结束")
+        XCTAssertEqual(viewModel.transcript.last?.text, loc("通话已结束"))
     }
 
     func testSendTextAppendsUserAndReply() async {
@@ -490,7 +490,7 @@ final class VoiceCallViewModelTests: XCTestCase {
 
         XCTAssertEqual(viewModel.transcript.count, 2)
         XCTAssertTrue(viewModel.transcript[1].isSystem)
-        XCTAssertEqual(viewModel.transcript[1].text, "回复生成中…")
+        XCTAssertEqual(viewModel.transcript[1].text, loc("回复生成中…"))
     }
 
     func testSendTextIgnoredWhenNotActive() async {
@@ -549,7 +549,7 @@ final class VoiceCallViewModelTests: XCTestCase {
         await waitUntil(viewModel.phase == .ended)
 
         XCTAssertEqual(viewModel.phase, .ended)
-        XCTAssertEqual(viewModel.transcript.last?.text, "通话已结束")
+        XCTAssertEqual(viewModel.transcript.last?.text, loc("通话已结束"))
     }
 
     func testWSStateChangedForOtherCallIsIgnored() async {

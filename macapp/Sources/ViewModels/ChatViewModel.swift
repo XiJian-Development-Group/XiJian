@@ -27,7 +27,7 @@ final class ChatViewModel {
     private(set) var isLoadingModels = false
 
     /// 会话标题（用于创建会话）
-    var sessionTitle: String = "新会话"
+    var sessionTitle: String = loc("新会话")
 
     private var streamingTask: Task<Void, Never>?
     private let core = CoreManager.shared
@@ -104,12 +104,12 @@ final class ChatViewModel {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, !isStreaming else { return }
         guard let client = core.makeClient() else {
-            presentError("Core 未运行，无法发送消息。请先在设置中启动 Core。")
+            presentError(loc("Core 未运行，无法发送消息。请先在设置中启动 Core。"))
             return
         }
         if models.isEmpty { await loadModels() }
         guard let model = selectedModel else {
-            presentError("没有可用模型，无法发送消息。")
+            presentError(loc("没有可用模型，无法发送消息。"))
             return
         }
 

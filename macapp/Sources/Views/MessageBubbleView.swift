@@ -131,7 +131,7 @@ struct ChatInputBar: View {
             }
             .buttonStyle(.plain)
             .disabled(!isStreaming && text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            .help(isStreaming ? "停止生成" : "发送消息")
+            .help(isStreaming ? loc("停止生成") : loc("发送消息"))
         }
         .padding(10)
         .background(.bar)

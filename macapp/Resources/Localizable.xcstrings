@@ -1,6 +1,22 @@
 {
   "sourceLanguage": "zh-Hans",
   "strings": {
+    "%@ · %@ · %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · %@ · %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ · %@ · %@"
+          }
+        }
+      }
+    },
     "%@ · %lld 节点 / %lld 边": {
       "localizations": {
         "en": {
@@ -13,6 +29,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "%@ · %lld ノード / %lld エッジ"
+          }
+        }
+      }
+    },
+    "%@（HTTP %lld）%@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ (HTTP %lld)%@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@（HTTP %lld）%@"
           }
         }
       }
@@ -49,18 +81,18 @@
         }
       }
     },
-    "Core 启动失败（%lld）。请查看日志。": {
+    "Core 启动失败（%@）。请查看日志。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Core failed to start (%lld). Check the logs."
+            "value": "Core failed to start (%@). Check the logs."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Core の起動に失敗しました（%lld）。ログを確認してください。"
+            "value": "Core の起動に失敗しました（%@）。ログを確認してください。"
           }
         }
       }
@@ -305,18 +337,18 @@
         }
       }
     },
-    "Core 进程意外退出（%lld）。可在设置中查看日志或重启 Core。": {
+    "Core 进程意外退出（%@）。可在设置中查看日志或重启 Core。": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Core process exited unexpectedly (%lld). View logs or restart Core in Settings."
+            "value": "Core exited unexpectedly (%@). Check the logs in Settings or restart Core."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Core プロセスが予期せず終了しました（%lld）。設定でログを確認するか Core を再起動してください。"
+            "value": "Core が予期せず終了しました（%@）。設定でログを確認するか、Core を再起動してください。"
           }
         }
       }
@@ -333,6 +365,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "NPC 上限"
+          }
+        }
+      }
+    },
+    "TTS：%@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TTS: %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TTS：%@"
           }
         }
       }
@@ -417,18 +465,18 @@
         }
       }
     },
-    "[XiJian] Core 进程意外退出（%lld）": {
+    "[XiJian] Core 进程意外退出（%@）": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "[XiJian] Core process exited unexpectedly (%lld)"
+            "value": "[XiJian] Core process exited unexpectedly (%@)"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "[XiJian] Core プロセスが予期せず終了しました（%lld）"
+            "value": "[XiJian] Core プロセスが予期せず終了しました（%@）"
           }
         }
       }
@@ -557,6 +605,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "· WS 接続済み"
+          }
+        }
+      }
+    },
+    "、": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": ", "
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "、"
+          }
+        }
+      }
+    },
+    "「%@」": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@”"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「%@」"
           }
         }
       }
@@ -3009,6 +3089,22 @@
         }
       }
     },
+    "将停止 Core 并删除 Core 数据目录（仅 ~/Library/Application Support/XiJian/Core，含复制出的 Core 程序、日志与数据）。不会影响 XiJian 目录下的其他应用数据。重新启动时会自动从 App 内置资源重新复制。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This will stop Core and delete the Core data directory (~/Library/Application Support/XiJian/Core, including the copied Core program, logs and data). Other app data in the XiJian directory will not be affected. Core will be re-copied from the bundled resources on next launch."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Core を停止し、Core データディレクトリ（~/Library/Application Support/XiJian/Core、コピーされた Core プログラム・ログ・データを含む）を削除します。XiJian ディレクトリ内の他のアプリデータには影響しません。次回起動時にアプリ内蔵リソースから自動的に再コピーされます。"
+          }
+        }
+      }
+    },
     "将当前筛选后的全部日志导出为文本文件": {
       "localizations": {
         "en": {
@@ -3149,6 +3245,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "クリップボードにコピーしました"
+          }
+        }
+      }
+    },
+    "已导入角色 %lld 个、世界观 %lld 个、记忆 %lld 条": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Imported %lld characters, %lld worlds, %lld memories"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "キャラクター %lld 体、世界観 %lld 個、記憶 %lld 件をインポートしました"
           }
         }
       }
@@ -3485,6 +3597,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "復元完了"
+          }
+        }
+      }
+    },
+    "恢复成功": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Restore succeeded"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "復元に成功しました"
           }
         }
       }
@@ -4625,6 +4753,22 @@
         }
       }
     },
+    "未知后端": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unknown backend"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不明なバックエンド"
+          }
+        }
+      }
+    },
     "未知错误": {
       "localizations": {
         "en": {
@@ -4849,18 +4993,18 @@
         }
       }
     },
-    "正在导入 %@": {
+    "正在导入 %@…": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Importing %@"
+            "value": "Importing %@…"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ をインポート中"
+            "value": "インポート中 %@…"
           }
         }
       }
@@ -7441,6 +7585,22 @@
         }
       }
     },
+    "（%@）": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "(%@)"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "（%@）"
+          }
+        }
+      }
+    },
     "（暂无可用互动类型）": {
       "localizations": {
         "en": {
@@ -7485,6 +7645,54 @@
           "stringUnit": {
             "state": "translated",
             "value": "（キャラクター設定書は未入力）"
+          }
+        }
+      }
+    },
+    "：": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": ": "
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "："
+          }
+        }
+      }
+    },
+    "：%@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": ": %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "：%@"
+          }
+        }
+      }
+    },
+    "；": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "; "
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "；"
           }
         }
       }

@@ -229,7 +229,7 @@ final class WebSocketClient: ObservableObject {
         failureHandled = false
 
         guard let url = Self.makeWebSocketURL(from: baseURL) else {
-            lastError = "无法从 baseURL 构造 WebSocket 地址：\(baseURL.absoluteString)"
+            lastError = loc("无法从 baseURL 构造 WebSocket 地址：%@", baseURL.absoluteString)
             connectionState = .disconnected
             return
         }
@@ -294,8 +294,8 @@ final class WebSocketClient: ObservableObject {
         case "auth.failed":
             isAuthenticated = false
             authFailed = true
-            let reason = event.dataObject?["reason"]?.stringValue ?? "未知原因"
-            lastError = "WebSocket 认证失败：\(reason)"
+            let reason = event.dataObject?["reason"]?.stringValue ?? loc("未知原因")
+            lastError = loc("WebSocket 认证失败：%@", reason)
             closeAfterAuthFailure()
         case "ping":
             // 自动回 pong，data 原样回传
@@ -319,7 +319,7 @@ final class WebSocketClient: ObservableObject {
     private func handleTransportFailure(_ error: Error) {
         guard !failureHandled else { return }
         failureHandled = true
-        lastError = "WebSocket 连接中断：\(error.localizedDescription)"
+        lastError = loc("WebSocket 连接中断：%@", error.localizedDescription)
         teardownTransport()
         connectionState = .disconnected
         isAuthenticated = false

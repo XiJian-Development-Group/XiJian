@@ -20,31 +20,31 @@ enum APIError: LocalizedError, Equatable {
     var message: String {
         switch self {
         case .coreNotRunning:
-            return "Core 未运行，无法访问 API。请在设置中启动 Core。"
+            return loc("Core 未运行，无法访问 API。请在设置中启动 Core。")
         case .invalidResponse:
-            return "服务器返回了无法识别的响应。"
+            return loc("服务器返回了无法识别的响应。")
         case .httpStatus(let code, let detail):
             let statusText: String
             switch code {
-            case 400: statusText = "请求参数错误"
-            case 401: statusText = "鉴权失败（token 无效）"
-            case 403: statusText = "权限不足，操作被拒绝"
-            case 404: statusText = "资源不存在"
-            case 409: statusText = "资源冲突"
-            case 422: statusText = "语义错误"
-            case 429: statusText = "请求过于频繁"
-            case 500: statusText = "服务器内部错误"
-            case 503: statusText = "服务不可用（模型未加载或后端未就绪）"
-            default: statusText = "请求失败"
+            case 400: statusText = loc("请求参数错误")
+            case 401: statusText = loc("鉴权失败（token 无效）")
+            case 403: statusText = loc("权限不足，操作被拒绝")
+            case 404: statusText = loc("资源不存在")
+            case 409: statusText = loc("资源冲突")
+            case 422: statusText = loc("语义错误")
+            case 429: statusText = loc("请求过于频繁")
+            case 500: statusText = loc("服务器内部错误")
+            case 503: statusText = loc("服务不可用（模型未加载或后端未就绪）")
+            default: statusText = loc("请求失败")
             }
-            let detailText = detail.isEmpty ? "" : "：\(detail)"
-            return "\(statusText)（HTTP \(code)）\(detailText)"
+            let detailText = detail.isEmpty ? "" : loc("：%@", detail)
+            return loc("%@（HTTP %lld）%@", statusText, code, detailText)
         case .decoding(let detail):
-            return "响应解析失败：\(detail)"
+            return loc("响应解析失败：%@", detail)
         case .network(let detail):
-            return "网络错误：\(detail)"
+            return loc("网络错误：%@", detail)
         case .streamEnded:
-            return "流式响应意外中断。"
+            return loc("流式响应意外中断。")
         }
     }
 }
@@ -92,7 +92,7 @@ struct APIClient {
             do {
                 request.httpBody = try encoder.encode(AnyEncodable(body))
             } catch {
-                throw APIError.network("请求体编码失败：\(error.localizedDescription)")
+                throw APIError.network(loc("请求体编码失败：%@", error.localizedDescription))
             }
         }
         return request
@@ -106,7 +106,7 @@ struct APIClient {
             (data, response) = try await session.data(for: request)
         } catch let error as URLError {
             if error.code == .cancelled {
-                throw APIError.network("请求已取消")
+                throw APIError.network(loc("请求已取消"))
             }
             throw APIError.network(error.localizedDescription)
         } catch {

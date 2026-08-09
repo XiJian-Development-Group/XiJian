@@ -18,7 +18,7 @@ struct WorldListView: View {
         NavigationStack {
             Group {
                 if viewModel.isLoading && viewModel.worlds.isEmpty {
-                    ProgressView("加载世界中...")
+                    ProgressView(loc("加载世界中..."))
                 } else if viewModel.worlds.isEmpty {
                     emptyState
                 } else {
@@ -37,13 +37,13 @@ struct WorldListView: View {
                     }
                 }
             }
-            .navigationTitle("世界")
+            .navigationTitle(loc("世界"))
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         showImportSheet = true
                     } label: {
-                        Label("导入资源包", systemImage: "square.and.arrow.down")
+                        Label(loc("导入资源包"), systemImage: "square.and.arrow.down")
                     }
                     .disabled(!coreIsRunning)
                 }
@@ -51,14 +51,14 @@ struct WorldListView: View {
                     Button {
                         showCreateSheet = true
                     } label: {
-                        Label("新建世界", systemImage: "plus")
+                        Label(loc("新建世界"), systemImage: "plus")
                     }
                 }
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         Task { await viewModel.refresh() }
                     } label: {
-                        Label("刷新", systemImage: "arrow.clockwise")
+                        Label(loc("刷新"), systemImage: "arrow.clockwise")
                     }
                 }
             }
@@ -76,22 +76,22 @@ struct WorldListView: View {
                 WorldDetailView(viewModel: viewModel, worldID: id)
             }
         }
-        .alert("删除世界", isPresented: Binding(
+        .alert(loc("删除世界"), isPresented: Binding(
             get: { pendingDelete != nil },
             set: { if !$0 { pendingDelete = nil } }
         )) {
-            Button("删除", role: .destructive) {
+            Button(loc("删除"), role: .destructive) {
                 if let world = pendingDelete {
                     Task { await viewModel.delete(world.worldID) }
                 }
                 pendingDelete = nil
             }
-            Button("取消", role: .cancel) { pendingDelete = nil }
+            Button(loc("取消"), role: .cancel) { pendingDelete = nil }
         } message: {
-            Text("确定要删除世界「\(pendingDelete?.name ?? "")」吗？此操作不可撤销。")
+            Text(loc("确定要删除世界「%@」吗？此操作不可撤销。", pendingDelete?.name ?? ""))
         }
-        .alert("出错了", isPresented: $showError) {
-            Button("好", role: .cancel) {}
+        .alert(loc("出错了"), isPresented: $showError) {
+            Button(loc("好"), role: .cancel) {}
         } message: {
             Text(errorMessage)
         }
@@ -100,7 +100,7 @@ struct WorldListView: View {
         }
         .onChange(of: viewModel.showError) { _, newValue in
             if newValue {
-                errorMessage = viewModel.errorMessage ?? "未知错误"
+                errorMessage = viewModel.errorMessage ?? loc("未知错误")
                 showError = true
                 viewModel.showError = false
             }
@@ -112,10 +112,10 @@ struct WorldListView: View {
             Image(systemName: "globe.asia.australia")
                 .font(.system(size: 44))
                 .foregroundStyle(.tertiary)
-            Text("还没有世界")
+            Text(loc("还没有世界"))
                 .font(.title3)
                 .foregroundStyle(.secondary)
-            Text("点击右上角新建世界或导入资源包，或确认 Core 已启动")
+            Text(loc("点击右上角新建世界或导入资源包，或确认 Core 已启动"))
                 .font(.caption)
                 .foregroundStyle(.tertiary)
                 .multilineTextAlignment(.center)
@@ -130,15 +130,15 @@ struct WorldListView: View {
 
     private var createSheet: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("新建世界")
+            Text(loc("新建世界"))
                 .font(.title3)
                 .bold()
-            TextField("世界名称", text: $newWorldName)
+            TextField(loc("世界名称"), text: $newWorldName)
                 .textFieldStyle(.roundedBorder)
             HStack {
                 Spacer()
-                Button("取消") { showCreateSheet = false }
-                Button("创建") {
+                Button(loc("取消")) { showCreateSheet = false }
+                Button(loc("创建")) {
                     let name = newWorldName.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !name.isEmpty else { return }
                     Task {
@@ -178,7 +178,7 @@ struct WorldRow: View {
                     Text(world.name ?? world.worldID)
                         .font(.headline)
                     if world.isActive {
-                        Text("当前")
+                        Text(loc("当前"))
                             .font(.caption2)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 1)
@@ -186,13 +186,13 @@ struct WorldRow: View {
                             .foregroundStyle(.blue)
                     }
                     if world.isFromPack {
-                        Text("资源包")
+                        Text(loc("资源包"))
                             .font(.caption2)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 1)
                             .background(Capsule().fill(Color.purple.opacity(0.2)))
                             .foregroundStyle(.purple)
-                            .help("来自资源包：\(world.packID ?? "")")
+                            .help(loc("来自资源包：%@", world.packID ?? ""))
                     }
                 }
                 Text(world.worldID)
@@ -207,7 +207,7 @@ struct WorldRow: View {
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
-            .help("删除世界")
+            .help(loc("删除世界"))
         }
         .padding(.vertical, 4)
     }

@@ -15,7 +15,7 @@ struct CharacterListView: View {
         NavigationStack {
             Group {
                 if viewModel.isLoading && viewModel.characters.isEmpty {
-                    ProgressView("加载角色中...")
+                    ProgressView(loc("加载角色中..."))
                 } else if viewModel.characters.isEmpty {
                     emptyState
                 } else {
@@ -34,13 +34,13 @@ struct CharacterListView: View {
                     }
                 }
             }
-            .navigationTitle("角色")
+            .navigationTitle(loc("角色"))
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
                         showImportSheet = true
                     } label: {
-                        Label("导入角色", systemImage: "square.and.arrow.down")
+                        Label(loc("导入角色"), systemImage: "square.and.arrow.down")
                     }
                     .disabled(!coreIsRunning)
                 }
@@ -48,7 +48,7 @@ struct CharacterListView: View {
                     Button {
                         Task { await viewModel.refresh() }
                     } label: {
-                        Label("刷新", systemImage: "arrow.clockwise")
+                        Label(loc("刷新"), systemImage: "arrow.clockwise")
                     }
                 }
             }
@@ -63,8 +63,8 @@ struct CharacterListView: View {
                 CharacterDetailView(viewModel: viewModel, characterID: id)
             }
         }
-        .alert("出错了", isPresented: $showError) {
-            Button("好", role: .cancel) {}
+        .alert(loc("出错了"), isPresented: $showError) {
+            Button(loc("好"), role: .cancel) {}
         } message: {
             Text(errorMessage)
         }
@@ -73,7 +73,7 @@ struct CharacterListView: View {
         }
         .onChange(of: viewModel.showError) { _, newValue in
             if newValue {
-                errorMessage = viewModel.errorMessage ?? "未知错误"
+                errorMessage = viewModel.errorMessage ?? loc("未知错误")
                 showError = true
                 viewModel.showError = false
             }
@@ -85,15 +85,15 @@ struct CharacterListView: View {
             Image(systemName: "person.crop.circle.badge.plus")
                 .font(.system(size: 44))
                 .foregroundStyle(.tertiary)
-            Text("还没有角色")
+            Text(loc("还没有角色"))
                 .font(.title3)
                 .foregroundStyle(.secondary)
-            Text("点击右上角「导入角色」选择资源包（.7z/.zip），或确认 Core 已启动")
+            Text(loc("点击右上角「导入角色」选择资源包（.7z/.zip），或确认 Core 已启动"))
                 .font(.caption)
                 .foregroundStyle(.tertiary)
                 .multilineTextAlignment(.center)
             if !coreIsRunning {
-                Button("启动 Core") {
+                Button(loc("启动 Core")) {
                     Task { await core.startCore() }
                 }
                 .buttonStyle(.borderedProminent)
@@ -131,7 +131,7 @@ struct CharacterRow: View {
                     Text(character.displayName)
                         .font(.headline)
                     if character.isLoaded {
-                        Text("已加载")
+                        Text(loc("已加载"))
                             .font(.caption2)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 1)
@@ -139,13 +139,13 @@ struct CharacterRow: View {
                             .foregroundStyle(.green)
                     }
                     if character.isFromPack {
-                        Text("资源包")
+                        Text(loc("资源包"))
                             .font(.caption2)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 1)
                             .background(Capsule().fill(Color.purple.opacity(0.2)))
                             .foregroundStyle(.purple)
-                            .help("来自资源包：\(character.packID ?? "")")
+                            .help(loc("来自资源包：%@", character.packID ?? ""))
                     }
                 }
                 if !character.tagList.isEmpty {
@@ -164,7 +164,7 @@ struct CharacterRow: View {
                     .foregroundStyle(character.isLoaded ? Color.orange : Color.green)
             }
             .buttonStyle(.plain)
-            .help(character.isLoaded ? "卸载角色" : "加载角色")
+            .help(character.isLoaded ? loc("卸载角色") : loc("加载角色"))
         }
         .padding(.vertical, 4)
     }
@@ -199,23 +199,23 @@ struct CharacterEditSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(mode.isCreate ? "新建角色" : "编辑角色")
+            Text(mode.isCreate ? loc("新建角色") : loc("编辑角色"))
                 .font(.title2)
                 .bold()
 
             Form {
-                TextField("名称（必填）", text: $name)
-                TextField("显示名（可选）", text: $displayName)
-                TextField("语音档案（可选）", text: $voiceProfile)
+                TextField(loc("名称（必填）"), text: $name)
+                TextField(loc("显示名（可选）"), text: $displayName)
+                TextField(loc("语音档案（可选）"), text: $voiceProfile)
 
-                Picker("默认情绪", selection: $defaultEmotion) {
+                Picker(loc("默认情绪"), selection: $defaultEmotion) {
                     ForEach(emotions, id: \.self) { Text($0) }
                 }
 
-                TextField("标签（逗号分隔）", text: $tagsText)
+                TextField(loc("标签（逗号分隔）"), text: $tagsText)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("人设文档")
+                    Text(loc("人设文档"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     TextEditor(text: $personaDoc)
@@ -236,8 +236,8 @@ struct CharacterEditSheet: View {
 
             HStack {
                 Spacer()
-                Button("取消") { dismiss() }
-                Button(mode.isCreate ? "创建" : "保存") {
+                Button(loc("取消")) { dismiss() }
+                Button(mode.isCreate ? loc("创建") : loc("保存")) {
                     Task { await save() }
                 }
                 .buttonStyle(.borderedProminent)

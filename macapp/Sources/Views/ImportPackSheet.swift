@@ -49,16 +49,16 @@ struct ImportPackSheet: View {
 
     private var selectingView: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("导入资源包")
+            Text(loc("导入资源包"))
                 .font(.title2)
                 .bold()
-            Text("支持 .7z/.zip 资源包，可包含角色与世界观。导入完成后可在对应页面查看。")
+            Text(loc("支持 .7z/.zip 资源包，可包含角色与世界观。导入完成后可在对应页面查看。"))
                 .font(.body)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()
-                Button("选择资源包…") { chooseFile() }
+                Button(loc("选择资源包…")) { chooseFile() }
                     .buttonStyle(.borderedProminent)
             }
         }
@@ -66,7 +66,7 @@ struct ImportPackSheet: View {
 
     private func readyView(_ url: URL) -> some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("导入资源包")
+            Text(loc("导入资源包"))
                 .font(.title2)
                 .bold()
             VStack(alignment: .leading, spacing: 6) {
@@ -89,9 +89,9 @@ struct ImportPackSheet: View {
             )
             HStack {
                 Spacer()
-                Button("取消") { dismiss() }
-                Button("重新选择") { phase = .selecting }
-                Button("开始导入") {
+                Button(loc("取消")) { dismiss() }
+                Button(loc("重新选择")) { phase = .selecting }
+                Button(loc("开始导入")) {
                     Task { await startImport() }
                 }
                 .buttonStyle(.borderedProminent)
@@ -101,20 +101,20 @@ struct ImportPackSheet: View {
 
     private var importingView: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("导入资源包")
+            Text(loc("导入资源包"))
                 .font(.title2)
                 .bold()
             HStack(spacing: 10) {
                 ProgressView()
-                Text("正在导入 \(selectedURL?.lastPathComponent ?? "资源包")…")
+                Text(loc("正在导入 %@…", selectedURL?.lastPathComponent ?? loc("资源包")))
                     .foregroundStyle(.secondary)
             }
             .padding(.vertical, 8)
             HStack {
                 Spacer()
-                Button("取消") { dismiss() }
+                Button(loc("取消")) { dismiss() }
             }
-            Text("关闭后导入仍在后台继续，完成后可在对应列表查看")
+            Text(loc("关闭后导入仍在后台继续，完成后可在对应列表查看"))
                 .font(.caption)
                 .foregroundStyle(.tertiary)
         }
@@ -125,20 +125,20 @@ struct ImportPackSheet: View {
             HStack(spacing: 8) {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(.green)
-                Text("导入完成")
+                Text(loc("导入完成"))
                     .font(.title2)
                     .bold()
             }
-            Text("已导入角色 \(job.result?.loaded_characters ?? 0) 个、世界观 \(job.result?.loaded_worlds ?? 0) 个、记忆 \(job.result?.loaded_memories ?? 0) 条")
+            Text(loc("已导入角色 %lld 个、世界观 %lld 个、记忆 %lld 条", job.result?.loaded_characters ?? 0, job.result?.loaded_worlds ?? 0, job.result?.loaded_memories ?? 0))
                 .foregroundStyle(.secondary)
             if let packageID = job.package_id, !packageID.isEmpty {
-                Text("包 ID：\(packageID)")
+                Text(loc("包 ID：%@", packageID))
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
             HStack {
                 Spacer()
-                Button("完成") {
+                Button(loc("完成")) {
                     dismiss()
                     Task { await onImported() }
                 }
@@ -152,7 +152,7 @@ struct ImportPackSheet: View {
             HStack(spacing: 8) {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red)
-                Text("导入失败")
+                Text(loc("导入失败"))
                     .font(.title2)
                     .bold()
             }
@@ -162,7 +162,7 @@ struct ImportPackSheet: View {
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()
-                Button("关闭") { dismiss() }
+                Button(loc("关闭")) { dismiss() }
             }
         }
     }
@@ -175,7 +175,7 @@ struct ImportPackSheet: View {
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
-        panel.message = "选择要导入的资源包（.7z/.zip）"
+        panel.message = loc("选择要导入的资源包（.7z/.zip）")
         if panel.runModal() == .OK, let url = panel.url {
             selectedURL = url
             phase = .ready(url)
@@ -185,7 +185,7 @@ struct ImportPackSheet: View {
     private func startImport() async {
         guard let url = selectedURL else { return }
         guard let client = core.makeClient() else {
-            phase = .failed("Core 未运行，无法导入资源包。")
+            phase = .failed(loc("Core 未运行，无法导入资源包。"))
             return
         }
         phase = .importing
@@ -195,9 +195,9 @@ struct ImportPackSheet: View {
             if final.isCompleted {
                 phase = .done(final)
             } else if final.isFailed {
-                phase = .failed(final.error ?? "导入失败")
+                phase = .failed(final.error ?? loc("导入失败"))
             } else {
-                phase = .failed("导入超时，请稍后在资源包页查看状态。")
+                phase = .failed(loc("导入超时，请稍后在资源包页查看状态。"))
             }
         } catch {
             let message = (error as? APIError)?.message ?? error.localizedDescription
@@ -208,7 +208,7 @@ struct ImportPackSheet: View {
     /// 文件大小文本（KB/MB）
     private func fileSizeText(_ url: URL) -> String {
         guard let size = (try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize else {
-            return "大小未知"
+            return loc("大小未知")
         }
         return ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file)
     }

@@ -18,10 +18,10 @@ enum VoiceCallStatus: String, Codable, Equatable {
     /// 中文展示
     var displayName: String {
         switch self {
-        case .idle: return "待接通"
-        case .ringing: return "响铃中"
-        case .active: return "通话中"
-        case .ended: return "已结束"
+        case .idle: return loc("待接通")
+        case .ringing: return loc("响铃中")
+        case .active: return loc("通话中")
+        case .ended: return loc("已结束")
         }
     }
 }
@@ -174,7 +174,7 @@ struct VoiceCallService: VoiceCallServicing {
             do {
                 request.httpBody = try JSONEncoder().encode(AnyEncodable(body))
             } catch {
-                throw APIError.network("请求体编码失败：\(error.localizedDescription)")
+                throw APIError.network(loc("请求体编码失败：%@", error.localizedDescription))
             }
         }
         return request
@@ -188,7 +188,7 @@ struct VoiceCallService: VoiceCallServicing {
             (data, response) = try await session.data(for: request)
         } catch let error as URLError {
             if error.code == .cancelled {
-                throw APIError.network("请求已取消")
+                throw APIError.network(loc("请求已取消"))
             }
             throw APIError.network(error.localizedDescription)
         } catch {

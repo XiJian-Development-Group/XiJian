@@ -23,12 +23,12 @@ struct PlotSettingsView: View {
 
     var body: some View {
         Form {
-            Section("剧情设计") {
+            Section(loc("剧情设计")) {
                 if designs.isEmpty {
                     if isLoading {
-                        ProgressView("加载中...")
+                        ProgressView(loc("加载中..."))
                     } else {
-                        Text("暂无剧情设计（DevKit 工作目录为空）。")
+                        Text(loc("暂无剧情设计（DevKit 工作目录为空）。"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -40,7 +40,7 @@ struct PlotSettingsView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(design.title ?? design.plot_id)
                                     .font(.subheadline)
-                                Text("\(design.plot_id) · \(design.node_count ?? 0) 节点 / \(design.edge_count ?? 0) 边")
+                                Text(loc("%@ · %lld 节点 / %lld 边", design.plot_id, design.node_count ?? 0, design.edge_count ?? 0))
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                             }
@@ -49,13 +49,13 @@ struct PlotSettingsView: View {
                 }
             }
 
-            Section("创建剧情运行时") {
+            Section(loc("创建剧情运行时")) {
                 if designs.isEmpty {
-                    Text("请先准备剧情设计。")
+                    Text(loc("请先准备剧情设计。"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
-                    Picker("剧情设计", selection: $selectedDesignID) {
+                    Picker(loc("剧情设计"), selection: $selectedDesignID) {
                         ForEach(designs) { design in
                             Text(design.title ?? design.plot_id).tag(String?.some(design.plot_id))
                         }
@@ -65,11 +65,11 @@ struct PlotSettingsView: View {
                     }
 
                     if worlds.isEmpty {
-                        Text("无可用世界。")
+                        Text(loc("无可用世界。"))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     } else {
-                        Picker("目标世界", selection: $selectedWorldID) {
+                        Picker(loc("目标世界"), selection: $selectedWorldID) {
                             ForEach(worlds) { world in
                                 Text(world.name ?? world.worldID).tag(String?.some(world.worldID))
                             }
@@ -79,10 +79,10 @@ struct PlotSettingsView: View {
                         }
                     }
 
-                    TextField("初始变量（k=v, k2=v2）", text: $initialVariablesText)
+                    TextField(loc("初始变量（k=v, k2=v2）"), text: $initialVariablesText)
                         .textFieldStyle(.roundedBorder)
 
-                    Button("创建并启动") {
+                    Button(loc("创建并启动")) {
                         Task { await createRuntime() }
                     }
                     .buttonStyle(.borderedProminent)
@@ -90,9 +90,9 @@ struct PlotSettingsView: View {
                 }
             }
 
-            Section("运行时实例") {
+            Section(loc("运行时实例")) {
                 if runtimes.isEmpty {
-                    Text("暂无运行时。")
+                    Text(loc("暂无运行时。"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
@@ -112,30 +112,30 @@ struct PlotSettingsView: View {
                                     .foregroundStyle(statusColor(runtime.status ?? ""))
                             }
                             if let node = runtime.current_node_id {
-                                Text("当前节点：\(node)")
+                                Text(loc("当前节点：%@", node))
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                             }
                             HStack(spacing: 10) {
-                                Button("推进剧情") {
+                                Button(loc("推进剧情")) {
                                     Task { await advance(runtime) }
                                 }
                                 .controlSize(.small)
                                 .disabled(runtime.status == "completed" || runtime.status == "failed")
 
                                 if runtime.status == "paused" {
-                                    Button("恢复") {
+                                    Button(loc("恢复")) {
                                         Task { await resume(runtime) }
                                     }
                                     .controlSize(.small)
                                 } else if runtime.status == "running" {
-                                    Button("暂停") {
+                                    Button(loc("暂停")) {
                                         Task { await pause(runtime) }
                                     }
                                     .controlSize(.small)
                                 }
 
-                                Button("删除", role: .destructive) {
+                                Button(loc("删除"), role: .destructive) {
                                     Task { await delete(runtime) }
                                 }
                                 .controlSize(.small)
@@ -147,7 +147,7 @@ struct PlotSettingsView: View {
             }
 
             if let result = runtimeResult {
-                Section("结果") {
+                Section(loc("结果")) {
                     Text(result)
                         .font(.caption)
                         .textSelection(.enabled)
@@ -155,9 +155,9 @@ struct PlotSettingsView: View {
             }
         }
         .formStyle(.grouped)
-        .navigationTitle("剧情系统")
-        .alert("出错了", isPresented: $showError) {
-            Button("好", role: .cancel) {}
+        .navigationTitle(loc("剧情系统"))
+        .alert(loc("出错了"), isPresented: $showError) {
+            Button(loc("好"), role: .cancel) {}
         } message: {
             Text(errorMessage)
         }
@@ -188,7 +188,7 @@ struct PlotSettingsView: View {
         do {
             let variables = parseVariables(initialVariablesText)
             let runtime = try await client.createPlotRuntime(plotID: plotID, worldID: worldID, initialVariables: variables.isEmpty ? nil : variables)
-            runtimeResult = "运行时已创建：\(runtime.runtime_id)"
+            runtimeResult = loc("运行时已创建：%@", runtime.runtime_id)
             await load()
         } catch {
             presentError(error)
@@ -200,7 +200,7 @@ struct PlotSettingsView: View {
         do {
             let result = try await client.advancePlotRuntime(runtime.runtime_id, chooseEdgeID: nil)
             let node = result["current_node_id"]?.stringValue ?? result["message"]?.stringValue ?? ""
-            runtimeResult = "剧情已推进。\(node.isEmpty ? "" : "当前节点：\(node)")"
+            runtimeResult = node.isEmpty ? loc("剧情已推进。") : loc("剧情已推进。%@", loc("当前节点：%@", node))
             await load()
         } catch {
             presentError(error)
@@ -211,7 +211,7 @@ struct PlotSettingsView: View {
         guard let client = core.makeClient() else { return }
         do {
             _ = try await client.pausePlotRuntime(runtime.runtime_id)
-            runtimeResult = "已暂停：\(runtime.runtime_id)"
+            runtimeResult = loc("已暂停：%@", runtime.runtime_id)
             await load()
         } catch {
             presentError(error)
@@ -222,7 +222,7 @@ struct PlotSettingsView: View {
         guard let client = core.makeClient() else { return }
         do {
             _ = try await client.resumePlotRuntime(runtime.runtime_id)
-            runtimeResult = "已恢复：\(runtime.runtime_id)"
+            runtimeResult = loc("已恢复：%@", runtime.runtime_id)
             await load()
         } catch {
             presentError(error)
@@ -234,7 +234,7 @@ struct PlotSettingsView: View {
         do {
             try await client.deletePlotRuntime(runtime.runtime_id)
             runtimes.removeAll { $0.runtime_id == runtime.runtime_id }
-            runtimeResult = "已删除：\(runtime.runtime_id)"
+            runtimeResult = loc("已删除：%@", runtime.runtime_id)
         } catch {
             presentError(error)
         }

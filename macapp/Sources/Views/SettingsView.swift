@@ -15,12 +15,12 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("Core 服务") {
+                Section(loc("Core 服务")) {
                     NavigationLink {
                         ServerSettingsSection()
                     } label: {
                         Label {
-                            Text("服务器与进程")
+                            Text(loc("服务器与进程"))
                         } icon: {
                             Image(systemName: "server.rack")
                                 .foregroundStyle(theme.accentColor)
@@ -29,17 +29,17 @@ struct SettingsView: View {
                     NavigationLink {
                         LogViewerSection()
                     } label: {
-                        Label("查看 Core 日志", systemImage: "doc.text.magnifyingglass")
+                        Label(loc("查看 Core 日志"), systemImage: "doc.text.magnifyingglass")
                             .foregroundStyle(theme.accentColor)
                     }
                 }
 
-                Section("个性化") {
+                Section(loc("个性化")) {
                     NavigationLink {
                         ThemeSettingsSection()
                     } label: {
                         Label {
-                            Text("主题与外观")
+                            Text(loc("主题与外观"))
                         } icon: {
                             Image(systemName: "paintpalette")
                                 .foregroundStyle(theme.accentColor)
@@ -47,52 +47,52 @@ struct SettingsView: View {
                     }
                 }
 
-                Section("数据管理") {
+                Section(loc("数据管理")) {
                     NavigationLink {
                         BackupSettingsView()
                     } label: {
-                        Label("备份与受保护模块", systemImage: "externaldrive.badge.timemachine")
+                        Label(loc("备份与受保护模块"), systemImage: "externaldrive.badge.timemachine")
                             .foregroundStyle(theme.accentColor)
                     }
                     Button(role: .destructive) {
                         showResetConfirm = true
                     } label: {
-                        Label("重置 Core 数据", systemImage: "trash")
+                        Label(loc("重置 Core 数据"), systemImage: "trash")
                     }
                 }
 
-                Section("安全与剧情") {
+                Section(loc("安全与剧情")) {
                     NavigationLink {
                         SafetySettingsView()
                     } label: {
-                        Label("安全模块", systemImage: "shield.checkered")
+                        Label(loc("安全模块"), systemImage: "shield.checkered")
                             .foregroundStyle(theme.accentColor)
                     }
                     NavigationLink {
                         PlotSettingsView()
                     } label: {
-                        Label("剧情系统", systemImage: "film.stack")
+                        Label(loc("剧情系统"), systemImage: "film.stack")
                             .foregroundStyle(theme.accentColor)
                     }
                 }
 
-                Section("关于") {
-                    LabeledContent("版本", value: "1.0.0")
-                    LabeledContent("协议", value: "本地 API · Bearer Token")
+                Section(loc("关于")) {
+                    LabeledContent(loc("版本"), value: "1.0.0")
+                    LabeledContent(loc("协议"), value: loc("本地 API · Bearer Token"))
                 }
             }
-            .navigationTitle("设置")
+            .navigationTitle(loc("设置"))
         }
-        .confirmationDialog("重置 Core 数据", isPresented: $showResetConfirm, titleVisibility: .visible) {
-            Button("删除 Core 数据", role: .destructive) {
+        .confirmationDialog(loc("重置 Core 数据"), isPresented: $showResetConfirm, titleVisibility: .visible) {
+            Button(loc("删除 Core 数据"), role: .destructive) {
                 Task { await core.resetCoreData() }
             }
-            Button("取消", role: .cancel) {}
+            Button(loc("取消"), role: .cancel) {}
         } message: {
-            Text("将停止 Core 并删除 Core 数据目录（仅 ~/Library/Application Support/XiJian/Core，含复制出的 Core 程序、日志与数据）。不会影响 XiJian 目录下的其他应用数据。重新启动时会自动从 App 内置资源重新复制。")
+            Text(loc("将停止 Core 并删除 Core 数据目录（仅 ~/Library/Application Support/XiJian/Core，含复制出的 Core 程序、日志与数据）。不会影响 XiJian 目录下的其他应用数据。重新启动时会自动从 App 内置资源重新复制。"))
         }
-        .alert("出错了", isPresented: $showError) {
-            Button("好", role: .cancel) {}
+        .alert(loc("出错了"), isPresented: $showError) {
+            Button(loc("好"), role: .cancel) {}
         } message: {
             Text(errorMessage)
         }
@@ -114,7 +114,7 @@ struct ServerSettingsSection: View {
 
     var body: some View {
         Form {
-            Section("运行状态") {
+            Section(loc("运行状态")) {
                 HStack {
                     StatusIndicatorView()
                 }
@@ -131,29 +131,29 @@ struct ServerSettingsSection: View {
                     Button {
                         Task { await core.startCore() }
                     } label: {
-                        Label("启动", systemImage: "play.fill")
+                        Label(loc("启动"), systemImage: "play.fill")
                     }
                     .disabled(isRunningOrBusy)
 
                     Button {
                         Task { await core.stopCore() }
                     } label: {
-                        Label("停止", systemImage: "stop.fill")
+                        Label(loc("停止"), systemImage: "stop.fill")
                     }
                     .disabled(!isRunningOrBusy)
 
                     Button {
                         Task { await core.restartCore() }
                     } label: {
-                        Label("重启", systemImage: "arrow.clockwise")
+                        Label(loc("重启"), systemImage: "arrow.clockwise")
                     }
                     .disabled(isWorking)
                 }
                 .disabled(isWorking)
             }
 
-            Section("连接设置") {
-                Toggle("使用自定义服务器", isOn: $useCustom)
+            Section(loc("连接设置")) {
+                Toggle(loc("使用自定义服务器"), isOn: $useCustom)
                     .onChange(of: useCustom) { _, newValue in
                         core.useCustomServer = newValue
                         if !newValue { useCustom = false }
@@ -164,7 +164,7 @@ struct ServerSettingsSection: View {
 
                 if !useCustom {
                     HStack {
-                        Text("端口")
+                        Text(loc("端口"))
                         TextField("18500", text: $portText)
                             .textFieldStyle(.roundedBorder)
                             .frame(width: 120)
@@ -175,7 +175,7 @@ struct ServerSettingsSection: View {
                                 }
                             }
                     }
-                    Text("默认 18500，修改后需重启 Core 生效。")
+                    Text(loc("默认 18500，修改后需重启 Core 生效。"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
@@ -185,23 +185,23 @@ struct ServerSettingsSection: View {
                         .onChange(of: customURLText) { _, newValue in
                             core.customBaseURL = newValue
                         }
-                    TextField("访问令牌（可选）", text: $customTokenText)
+                    TextField(loc("访问令牌（可选）"), text: $customTokenText)
                         .textFieldStyle(.roundedBorder)
                         .onAppear { customTokenText = core.customToken }
                         .onChange(of: customTokenText) { _, newValue in
                             core.customToken = newValue
                         }
-                    Text("使用外部地址时，App 将不再管理本机 Core 进程；若服务器要求鉴权，请在此填写访问令牌。")
+                    Text(loc("使用外部地址时，App 将不再管理本机 Core 进程；若服务器要求鉴权，请在此填写访问令牌。"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
 
-            Section("工具") {
-                Button("打开日志目录") {
+            Section(loc("工具")) {
+                Button(loc("打开日志目录")) {
                     core.openLogDirectory()
                 }
-                Button("复制 Token") {
+                Button(loc("复制 Token")) {
                     let value = core.useCustomServer ? core.customToken : (core.token ?? "")
                     guard !value.isEmpty else { return }
                     NSPasteboard.general.clearContents()
@@ -211,17 +211,17 @@ struct ServerSettingsSection: View {
                 .disabled(core.useCustomServer ? core.customToken.isEmpty : core.token == nil)
 
                 if copiedToken {
-                    Text("已复制到剪贴板")
+                    Text(loc("已复制到剪贴板"))
                         .font(.caption)
                         .foregroundStyle(.green)
                 }
 
-                LabeledContent("Core 目录", value: core.coreDirectory?.path ?? "—")
+                LabeledContent(loc("Core 目录"), value: core.coreDirectory?.path ?? "—")
                     .font(.caption)
             }
         }
         .formStyle(.grouped)
-        .navigationTitle("服务器与进程")
+        .navigationTitle(loc("服务器与进程"))
     }
 
     private var isRunningOrBusy: Bool {
@@ -250,12 +250,12 @@ private enum LogFilter: Int, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .all: return "全部"
-        case .debug: return "调试"
-        case .info: return "信息"
-        case .warning: return "警告"
-        case .error: return "错误"
-        case .critical: return "严重"
+        case .all: return loc("全部")
+        case .debug: return loc("调试")
+        case .info: return loc("信息")
+        case .warning: return loc("警告")
+        case .error: return loc("错误")
+        case .critical: return loc("严重")
         }
     }
 
@@ -293,7 +293,7 @@ struct LogViewerSection: View {
             toolbar
             Divider()
             if !core.logFileExists && !allEntries.isEmpty {
-                Text("未找到 Core 日志文件（logs/xijian-api.log），以下为 App 捕获的进程输出。")
+                Text(loc("未找到 Core 日志文件（logs/xijian-api.log），以下为 App 捕获的进程输出。"))
                     .font(.caption)
                     .foregroundStyle(.orange)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -306,7 +306,7 @@ struct LogViewerSection: View {
                 logList
             }
         }
-        .navigationTitle("Core 日志")
+        .navigationTitle(loc("Core 日志"))
         .onAppear {
             core.refreshLogs()
         }
@@ -317,7 +317,7 @@ struct LogViewerSection: View {
             core.refreshLogs()
         }
         .alert(alertTitle, isPresented: $showAlert) {
-            Button("好", role: .cancel) {}
+            Button(loc("好"), role: .cancel) {}
         } message: {
             Text(alertMessage)
         }
@@ -328,7 +328,7 @@ struct LogViewerSection: View {
     private var toolbar: some View {
         VStack(spacing: 8) {
             HStack(spacing: 10) {
-                Picker("级别筛选", selection: $filter) {
+                Picker(loc("级别筛选"), selection: $filter) {
                     ForEach(LogFilter.allCases) { option in
                         Text(option.title).tag(option)
                     }
@@ -346,14 +346,14 @@ struct LogViewerSection: View {
                 Button {
                     core.refreshLogs()
                 } label: {
-                    Label("刷新", systemImage: "arrow.clockwise")
+                    Label(loc("刷新"), systemImage: "arrow.clockwise")
                 }
                 .controlSize(.small)
 
                 Button {
                     copyFilteredLogs()
                 } label: {
-                    Label(copied ? "已复制" : "复制", systemImage: copied ? "checkmark" : "doc.on.doc")
+                    Label(copied ? loc("已复制") : loc("复制"), systemImage: copied ? "checkmark" : "doc.on.doc")
                 }
                 .controlSize(.small)
                 .disabled(filteredEntries.isEmpty)
@@ -361,12 +361,12 @@ struct LogViewerSection: View {
                 Button {
                     exportFilteredLogs()
                 } label: {
-                    Label("导出", systemImage: "square.and.arrow.up")
+                    Label(loc("导出"), systemImage: "square.and.arrow.up")
                 }
                 .controlSize(.small)
                 .disabled(filteredEntries.isEmpty)
 
-                Button("打开日志目录") {
+                Button(loc("打开日志目录")) {
                     core.openLogDirectory()
                 }
                 .controlSize(.small)
@@ -380,9 +380,9 @@ struct LogViewerSection: View {
     /// 条数说明：有筛选时显示「共 N 条（筛选自 M 条）」
     private var countText: String {
         if filter.minimumLevel != nil {
-            return "共 \(filteredEntries.count) 条（筛选自 \(allEntries.count) 条）"
+            return loc("共 %lld 条（筛选自 %lld 条）", filteredEntries.count, allEntries.count)
         }
-        return "共 \(allEntries.count) 条"
+        return loc("共 %lld 条", allEntries.count)
     }
 
     // MARK: 列表 / 空态
@@ -419,9 +419,9 @@ struct LogViewerSection: View {
                 Image(systemName: "doc.text.magnifyingglass")
                     .font(.largeTitle)
                     .foregroundStyle(.tertiary)
-                Text("暂无日志")
+                Text(loc("暂无日志"))
                     .foregroundStyle(.secondary)
-                Text("未找到 Core 日志文件：\n\(core.coreLogFileURL?.path ?? "—")\n启动 Core 后日志会自动生成。")
+                Text(loc("未找到 Core 日志文件：\n%@\n启动 Core 后日志会自动生成。", core.coreLogFileURL?.path ?? "—"))
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                     .multilineTextAlignment(.center)
@@ -429,9 +429,9 @@ struct LogViewerSection: View {
                 Image(systemName: "doc.text")
                     .font(.largeTitle)
                     .foregroundStyle(.tertiary)
-                Text("暂无日志")
+                Text(loc("暂无日志"))
                     .foregroundStyle(.secondary)
-                Text(core.logFileLoadError ?? "Core 日志文件为空，暂无进程输出。")
+                Text(core.logFileLoadError ?? loc("Core 日志文件为空，暂无进程输出。"))
                     .font(.caption)
                     .foregroundStyle(.tertiary)
                     .multilineTextAlignment(.center)
@@ -439,7 +439,7 @@ struct LogViewerSection: View {
                 Image(systemName: "line.3.horizontal.decrease.circle")
                     .font(.largeTitle)
                     .foregroundStyle(.tertiary)
-                Text("没有符合当前筛选条件的日志")
+                Text(loc("没有符合当前筛选条件的日志"))
                     .foregroundStyle(.secondary)
             }
         }
@@ -466,8 +466,8 @@ struct LogViewerSection: View {
         let text = logText(for: filteredEntries)
         guard !text.isEmpty else { return }
         let panel = NSSavePanel()
-        panel.title = "导出日志"
-        panel.message = "将当前筛选后的全部日志导出为文本文件"
+        panel.title = loc("导出日志")
+        panel.message = loc("将当前筛选后的全部日志导出为文本文件")
         panel.nameFieldStringValue = Self.exportFileName()
         panel.allowedContentTypes = [.plainText]
         panel.directoryURL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
@@ -476,12 +476,12 @@ struct LogViewerSection: View {
                 guard response == .OK, let url = panel.url else { return }
                 do {
                     try text.write(to: url, atomically: true, encoding: .utf8)
-                    self.alertTitle = "导出成功"
-                    self.alertMessage = "日志已导出到：\n\(url.path)"
+                    self.alertTitle = loc("导出成功")
+                    self.alertMessage = loc("日志已导出到：\n%@", url.path)
                     self.showAlert = true
                 } catch {
-                    self.alertTitle = "导出失败"
-                    self.alertMessage = "写入文件失败：\(error.localizedDescription)"
+                    self.alertTitle = loc("导出失败")
+                    self.alertMessage = loc("写入文件失败：%@", error.localizedDescription)
                     self.showAlert = true
                 }
             }
@@ -564,7 +564,7 @@ struct ThemeSettingsSection: View {
 
     var body: some View {
         Form {
-            Section("主题色") {
+            Section(loc("主题色")) {
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 4), spacing: 10) {
                     ForEach(ThemeSettings.presets) { preset in
                         let isSelected = !theme.useCustomAccent && theme.accentHex.lowercased() == preset.hex.lowercased()
@@ -585,7 +585,7 @@ struct ThemeSettingsSection: View {
                                             .foregroundStyle(.white)
                                             .opacity(isSelected ? 1 : 0)
                                     )
-                                Text(preset.name)
+                                Text(Bundle.xiJian.localizedString(forKey: preset.name, value: preset.name, table: nil))
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                             }
@@ -611,7 +611,7 @@ struct ThemeSettingsSection: View {
                                         .foregroundStyle(.white)
                                         .opacity(theme.useCustomAccent ? 1 : 0)
                                 )
-                            Text("自定义")
+                            Text(loc("自定义"))
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }
@@ -621,25 +621,25 @@ struct ThemeSettingsSection: View {
                 .padding(.vertical, 4)
             }
 
-            Section("外观") {
-                Picker("外观模式", selection: Bindable(theme).appearanceMode) {
+            Section(loc("外观")) {
+                Picker(loc("外观模式"), selection: Bindable(theme).appearanceMode) {
                     ForEach(ThemeSettings.AppearanceMode.allCases) { mode in
-                        Text(mode.rawValue).tag(mode)
+                        Text(mode.displayName).tag(mode)
                     }
                 }
                 .pickerStyle(.segmented)
             }
 
-            Section("气泡") {
-                Picker("气泡样式", selection: Bindable(theme).bubbleStyle) {
+            Section(loc("气泡")) {
+                Picker(loc("气泡样式"), selection: Bindable(theme).bubbleStyle) {
                     ForEach(ThemeSettings.BubbleStyle.allCases) { style in
-                        Text(style.rawValue).tag(style)
+                        Text(style.displayName).tag(style)
                     }
                 }
                 .pickerStyle(.segmented)
 
                 HStack {
-                    Text("圆角")
+                    Text(loc("圆角"))
                     Slider(value: Bindable(theme).cornerRadius, in: 0...24, step: 1)
                     Text("\(Int(theme.cornerRadius))")
                         .foregroundStyle(.secondary)
@@ -647,19 +647,19 @@ struct ThemeSettingsSection: View {
                 }
 
                 HStack {
-                    Text("气泡不透明度")
+                    Text(loc("气泡不透明度"))
                     Slider(value: Bindable(theme).bubbleOpacity, in: 0.4...1.0, step: 0.05)
                     Text(String(format: "%.0f%%", theme.bubbleOpacity * 100))
                         .foregroundStyle(.secondary)
                         .frame(width: 44)
                 }
 
-                Toggle("显示时间戳", isOn: Bindable(theme).showTimestamps)
+                Toggle(loc("显示时间戳"), isOn: Bindable(theme).showTimestamps)
             }
 
-            Section("文字") {
+            Section(loc("文字")) {
                 HStack {
-                    Text("基础字号")
+                    Text(loc("基础字号"))
                     Slider(value: Bindable(theme).fontSize, in: 10...28, step: 1)
                     Text("\(Int(theme.fontSize))")
                         .foregroundStyle(.secondary)
@@ -668,17 +668,17 @@ struct ThemeSettingsSection: View {
 
                 // 预览
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("预览")
+                    Text(loc("预览"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    MessageBubbleView(message: ChatMessage(role: "user", content: "这是一条用户消息的预览。"))
-                    MessageBubbleView(message: ChatMessage(role: "assistant", content: "这是 **助手** 消息的预览，支持 *Markdown* 渲染。"))
+                    MessageBubbleView(message: ChatMessage(role: "user", content: loc("这是一条用户消息的预览。")))
+                    MessageBubbleView(message: ChatMessage(role: "assistant", content: loc("这是 **助手** 消息的预览，支持 *Markdown* 渲染。")))
                 }
                 .padding(.vertical, 4)
             }
         }
         .formStyle(.grouped)
-        .navigationTitle("主题与外观")
+        .navigationTitle(loc("主题与外观"))
         .sheet(isPresented: $showColorPicker) {
             ColorPickerSheet(
                 color: $customColor,
@@ -702,11 +702,11 @@ struct ColorPickerSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("自定义主题色")
+            Text(loc("自定义主题色"))
                 .font(.title3)
                 .bold()
 
-            ColorPicker("选择颜色", selection: $color, supportsOpacity: false)
+            ColorPicker(loc("选择颜色"), selection: $color, supportsOpacity: false)
 
             HStack {
                 Text("HEX")
@@ -717,8 +717,8 @@ struct ColorPickerSheet: View {
 
             HStack {
                 Spacer()
-                Button("取消") { dismiss() }
-                Button("应用") {
+                Button(loc("取消")) { dismiss() }
+                Button(loc("应用")) {
                     onConfirm(color)
                     dismiss()
                 }

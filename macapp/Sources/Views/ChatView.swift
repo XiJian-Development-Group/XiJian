@@ -32,14 +32,14 @@ struct ChatView: View {
             )
         }
         .background(theme.appearanceMode == .dark ? Color.black.opacity(0.2) : Color(nsColor: .windowBackgroundColor))
-        .alert("出错了", isPresented: $showError) {
-            Button("好", role: .cancel) {}
+        .alert(loc("出错了"), isPresented: $showError) {
+            Button(loc("好"), role: .cancel) {}
         } message: {
             Text(errorMessage)
         }
         .onChange(of: viewModel.showError) { _, newValue in
             if newValue {
-                errorMessage = viewModel.errorMessage ?? "未知错误"
+                errorMessage = viewModel.errorMessage ?? loc("未知错误")
                 showError = true
                 viewModel.showError = false
             }
@@ -63,7 +63,7 @@ struct ChatView: View {
             // 模型选择
             Menu {
                 if viewModel.models.isEmpty {
-                    Text("暂无可用模型")
+                    Text(loc("暂无可用模型"))
                 }
                 ForEach(viewModel.models) { model in
                     Button {
@@ -77,13 +77,13 @@ struct ChatView: View {
                     }
                 }
                 Divider()
-                Button("刷新模型列表") {
+                Button(loc("刷新模型列表")) {
                     Task { await viewModel.loadModels() }
                 }
             } label: {
                 HStack(spacing: 6) {
                     Image(systemName: "cpu")
-                    Text(viewModel.selectedModel ?? "选择模型")
+                    Text(viewModel.selectedModel ?? loc("选择模型"))
                         .lineLimit(1)
                     Image(systemName: "chevron.down")
                         .font(.caption2)
@@ -104,7 +104,7 @@ struct ChatView: View {
 
             if let model = viewModel.models.first(where: { $0.id == viewModel.selectedModelID }),
                let xijian = model.xijian {
-                Text("\(xijian.backend ?? "未知后端") · \(xijian.quant ?? "") · \(xijian.context_length.map { "\($0) ctx" } ?? "")")
+                Text(loc("%@ · %@ · %@", xijian.backend ?? loc("未知后端"), xijian.quant ?? "", xijian.context_length.map { "\($0) ctx" } ?? ""))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -115,10 +115,10 @@ struct ChatView: View {
             Button {
                 showCallPicker.toggle()
             } label: {
-                Label("通话", systemImage: "phone")
+                Label(loc("通话"), systemImage: "phone")
             }
             .disabled(!coreIsRunning)
-            .help(coreIsRunning ? "实时语音通话（A6）" : "Core 未运行，无法通话")
+            .help(coreIsRunning ? loc("实时语音通话（A6）") : loc("Core 未运行，无法通话"))
             .popover(isPresented: $showCallPicker) {
                 VoiceCallCharacterPicker { character in
                     let vm = VoiceCallViewModel()
@@ -135,16 +135,16 @@ struct ChatView: View {
             Button {
                 Task { await viewModel.newSession() }
             } label: {
-                Label("新会话", systemImage: "plus.bubble")
+                Label(loc("新会话"), systemImage: "plus.bubble")
             }
-            .help("新建会话")
+            .help(loc("新建会话"))
 
             Button {
                 Task { await viewModel.clearChat() }
             } label: {
-                Label("清空", systemImage: "trash")
+                Label(loc("清空"), systemImage: "trash")
             }
-            .help("清空当前会话")
+            .help(loc("清空当前会话"))
 
             // 参数弹窗
             Button {
@@ -152,7 +152,7 @@ struct ChatView: View {
             } label: {
                 Image(systemName: "slider.horizontal.3")
             }
-            .help("聊天参数")
+            .help(loc("聊天参数"))
             .popover(isPresented: $showModelPicker) {
                 ChatParameterPanel(viewModel: viewModel)
             }
@@ -200,10 +200,10 @@ struct ChatView: View {
             Image(systemName: "bubble.left.and.bubble.right")
                 .font(.system(size: 44))
                 .foregroundStyle(.tertiary)
-            Text("开始与隙间对话")
+            Text(loc("开始与隙间对话"))
                 .font(.title3)
                 .foregroundStyle(.secondary)
-            Text("在下方输入消息，或先选择一个模型")
+            Text(loc("在下方输入消息，或先选择一个模型"))
                 .font(.caption)
                 .foregroundStyle(.tertiary)
         }
@@ -215,11 +215,11 @@ struct ChatView: View {
         HStack(spacing: 8) {
             ProgressView()
                 .controlSize(.small)
-            Text("正在生成...")
+            Text(loc("正在生成..."))
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Spacer()
-            Button("停止生成") {
+            Button(loc("停止生成")) {
                 viewModel.stopStreaming()
             }
             .buttonStyle(.bordered)
@@ -248,12 +248,12 @@ struct ChatParameterPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Label("聊天参数", systemImage: "slider.horizontal.3")
+            Label(loc("聊天参数"), systemImage: "slider.horizontal.3")
                 .font(.headline)
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    Text("温度")
+                    Text(loc("温度"))
                     Spacer()
                     Text(String(format: "%.2f", appVM.temperature))
                         .foregroundStyle(.secondary)
@@ -263,7 +263,7 @@ struct ChatParameterPanel: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    Text("最大 Token")
+                    Text(loc("最大 Token"))
                     Spacer()
                     Text("\(appVM.maxTokens)")
                         .foregroundStyle(.secondary)
@@ -274,12 +274,12 @@ struct ChatParameterPanel: View {
                 ), in: 64...8192, step: 64)
             }
 
-            Toggle("启用记忆召回", isOn: Bindable(appVM).recallEnabled)
-            Toggle("显示时间戳", isOn: Bindable(theme).showTimestamps)
+            Toggle(loc("启用记忆召回"), isOn: Bindable(appVM).recallEnabled)
+            Toggle(loc("显示时间戳"), isOn: Bindable(theme).showTimestamps)
 
             Divider()
 
-            Text("角色与世界（注入聊天请求）")
+            Text(loc("角色与世界（注入聊天请求）"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
@@ -300,16 +300,16 @@ struct CharacterWorldPicker: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Picker("角色", selection: $characterID) {
-                Text("无").tag(String?.none)
+            Picker(loc("角色"), selection: $characterID) {
+                Text(loc("无")).tag(String?.none)
                 ForEach(characters) { character in
                     Text(character.displayName).tag(String?.some(character.id))
                 }
             }
             .onAppear { Task { await load() } }
 
-            Picker("世界", selection: $worldID) {
-                Text("无").tag(String?.none)
+            Picker(loc("世界"), selection: $worldID) {
+                Text(loc("无")).tag(String?.none)
                 ForEach(worlds) { world in
                     Text(world.name ?? world.worldID).tag(String?.some(world.worldID))
                 }
