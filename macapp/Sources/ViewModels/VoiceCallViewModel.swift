@@ -1,3 +1,4 @@
+import AVFoundation
 import Combine
 import Foundation
 
@@ -78,6 +79,10 @@ final class VoiceCallViewModel: ObservableObject {
     @Published private(set) var currentTurn = 0
     /// 是否有请求在途（界面禁用并发操作）
     @Published private(set) var isBusy = false
+    /// 是否正在录音（麦克风采集）
+    @Published private(set) var isRecording = false
+    /// 是否正在播放 assistant 语音
+    @Published private(set) var isPlayingAudio = false
     /// WebSocket 是否已连接（UI 提示用）
     @Published private(set) var isWSConnected = false
     /// 错误提示
@@ -88,6 +93,13 @@ final class VoiceCallViewModel: ObservableObject {
 
     private let service: VoiceCallServicing
     private let ws: WebSocketClient
+
+    /// 麦克风录音器（@MainActor；录音本身不参与网络请求）
+    private let audioRecorder = AudioRecorder()
+    /// assistant 语音播放器
+    private var audioPlayer: AVAudioPlayer?
+    /// 播放完成回调桥接（避免 @MainActor 类直接实现非隔离的 AVAudioPlayerDelegate）
+    private let playbackDelegate = VoiceCallAudioPlaybackDelegate()
 
     private var cancellables = Set<AnyCancellable>()
 
@@ -125,6 +137,13 @@ final class VoiceCallViewModel: ObservableObject {
                 self?.isWSConnected = (state == .connected)
             }
             .store(in: &cancellables)
+        // 播放完成（或被新播放替换）后复位状态；闭包为非隔离上下文，显式跳回主线程
+        playbackDelegate.onFinish = { [weak self] in
+            Task { @MainActor in
+                self?.audioPlayer = nil
+                self?.isPlayingAudio = false
+            }
+        }
     }
 
     // MARK: 动作
@@ -212,6 +231,62 @@ final class VoiceCallViewModel: ObservableObject {
             } else if result.ok {
                 // 异步管线：回复稍后经 WS 送达
                 appendSystemLine(loc("回复生成中…"))
+            }
+        } catch {
+            presentError(error)
+        }
+    }
+
+    /// 开始录音：barge-in 语义先停止正在播放的 assistant 语音 → 请求权限 → 启动录音。
+    /// 失败（无权限 / 启动失败）时复位录音态并展示错误。
+    func startRecording() {
+        guard phase == .active, !isBusy, !isRecording else { return }
+        stopPlayback()  // 用户开口时中断 assistant 播放（barge-in）
+        isRecording = true
+        Task {
+            let granted = await audioRecorder.requestPermission()
+            guard granted else {
+                isRecording = false
+                presentError(AudioRecorder.RecordingError.permissionDenied)
+                return
+            }
+            do {
+                try audioRecorder.start()
+            } catch {
+                isRecording = false
+                presentError(error)
+            }
+        }
+    }
+
+    /// 停止录音并上传语音（audio_base64 → 服务端 STT→AI→TTS）：
+    /// 成功按 STT 回显用户语音文本并置回复生成中；失败展示错误（通话继续）。
+    func stopRecordingAndSend() async {
+        guard isRecording else { return }
+        isRecording = false
+        guard let callID, phase == .active, !isBusy else {
+            audioRecorder.cancel()
+            return
+        }
+        guard let audioData = audioRecorder.stop() else {
+            presentError(AudioRecorder.RecordingError.readFailed)
+            return
+        }
+        isBusy = true
+        defer { isBusy = false }
+        do {
+            let result = try await service.sendAudio(callId: callID, audioData: audioData, language: "zh")
+            if let turn = result.turn { currentTurn = turn }
+            if let userText = result.user_text, !userText.isEmpty {
+                ingestSpeech(role: "user", text: userText, turn: result.turn, meta: nil, eventID: result.user_event_id)
+            }
+            if let reply = result.reply, !reply.isEmpty {
+                ingestSpeech(role: "assistant", text: reply, turn: result.turn, meta: nil, eventID: result.reply_event_id)
+            } else if result.ok {
+                // 异步管线：回复稍后经 WS 送达（speech/assistant，含 audio_base64）
+                appendSystemLine(loc("回复生成中…"))
+            } else if let error = result.error, !error.isEmpty {
+                presentError(error)
             }
         } catch {
             presentError(error)
@@ -349,7 +424,8 @@ final class VoiceCallViewModel: ObservableObject {
                 text: text,
                 turn: turn,
                 meta: metaParts.isEmpty ? nil : metaParts.joined(separator: loc("；")),
-                eventID: eventID
+                eventID: eventID,
+                audioData: VoiceCallAudioPayload.audioData(from: payload)
             )
         case "song":
             let lyrics = payload["lyrics"]?.stringValue ?? ""
@@ -383,15 +459,26 @@ final class VoiceCallViewModel: ObservableObject {
         }
     }
 
-    /// speech 条目：按 (role, turn) 去重（REST 回显与 WS 推送可能重复）
-    private func ingestSpeech(role: String, text: String, turn: Int?, meta: String?, eventID: String?) {
-        guard !text.isEmpty else { return }
+    /// speech 条目：先按 (role, turn) / event_id 去重（占住去重键，防止重复记录与重复播放），
+    /// 再写入对话记录；assistant 且携带 audio_base64 时播放语音。
+    private func ingestSpeech(role: String, text: String, turn: Int?, meta: String?, eventID: String?, audioData: Data? = nil) {
+        let dedupeKey: String?
         if let turn {
             let key = "\(role)-\(turn)"
             guard !seenSpeechKeys.contains(key) else { return }
             seenSpeechKeys.insert(key)
+            dedupeKey = key
+        } else if let eventID {
+            guard !seenEventIDs.contains(eventID) else { return }
+            seenEventIDs.insert(eventID)
+            dedupeKey = eventID
+        } else {
+            dedupeKey = nil
+        }
+
+        if !text.isEmpty {
             appendTranscript(item: VoiceCallTranscriptItem(
-                id: eventID ?? key,
+                id: eventID ?? dedupeKey ?? "speech-\(UUID().uuidString)",
                 kind: "speech",
                 role: role,
                 text: text,
@@ -399,19 +486,11 @@ final class VoiceCallViewModel: ObservableObject {
                 timestamp: Date().timeIntervalSince1970,
                 meta: meta
             ))
-        } else {
-            // 无轮次的 speech（如错误事件）：按 event_id 去重
-            if let eventID, seenEventIDs.contains(eventID) { return }
-            if let eventID { seenEventIDs.insert(eventID) }
-            appendTranscript(item: VoiceCallTranscriptItem(
-                id: eventID ?? "speech-\(UUID().uuidString)",
-                kind: "speech",
-                role: role,
-                text: text,
-                turn: nil,
-                timestamp: Date().timeIntervalSince1970,
-                meta: meta
-            ))
+        }
+
+        // assistant 语音播放（barge-in 语义：用户开始录音时已 stop；播放前再防一次）
+        if role == "assistant", let audioData, !audioData.isEmpty {
+            playAssistantAudio(data: audioData)
         }
     }
 
@@ -471,9 +550,36 @@ final class VoiceCallViewModel: ObservableObject {
         )
     }
 
+    // MARK: assistant 语音播放
+
+    /// 播放 assistant 音频（AVAudioPlayer 播放内存 Data；@MainActor 线程安全）
+    private func playAssistantAudio(data: Data) {
+        // 用户正在录音时不播（barge-in 语义：用户声音优先）
+        guard !isRecording else { return }
+        stopPlayback()
+        do {
+            let player = try AVAudioPlayer(data: data)
+            player.delegate = playbackDelegate
+            audioPlayer = player
+            isPlayingAudio = true
+            player.play()
+        } catch {
+            presentError(loc("音频播放失败"))
+        }
+    }
+
+    /// 停止当前播放（barge-in / 新播放替换 / 通话清理时调用）
+    private func stopPlayback() {
+        audioPlayer?.stop()
+        audioPlayer = nil
+        isPlayingAudio = false
+    }
+
     // MARK: 辅助
 
     private func reset() {
+        audioRecorder.cancel()
+        stopPlayback()
         callID = nil
         characterID = nil
         characterName = nil
@@ -482,6 +588,7 @@ final class VoiceCallViewModel: ObservableObject {
         transcript = []
         bargeInActive = false
         currentTurn = 0
+        isRecording = false
         seenSpeechKeys.removeAll()
         seenEventIDs.removeAll()
         phase = .idle
@@ -498,5 +605,17 @@ final class VoiceCallViewModel: ObservableObject {
         } else {
             presentError(error.localizedDescription)
         }
+    }
+}
+
+// MARK: - 播放完成回调桥接
+
+/// AVAudioPlayerDelegate 回调桥接：`audioPlayerDidFinishPlaying` 由 AVFoundation
+/// 在主线程回调，但协议本身非隔离；用普通 NSObject 承接后经闭包跳回 @MainActor。
+private final class VoiceCallAudioPlaybackDelegate: NSObject, AVAudioPlayerDelegate {
+    var onFinish: (() -> Void)?
+
+    func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        onFinish?()
     }
 }
