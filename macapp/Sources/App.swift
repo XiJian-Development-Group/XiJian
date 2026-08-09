@@ -57,23 +57,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let menu = NSMenu()
 
-        let openItem = NSMenuItem(title: "打开 XiJian", action: #selector(openMainWindow), keyEquivalent: "o")
+        let openItem = NSMenuItem(title: loc("打开 XiJian"), action: #selector(openMainWindow), keyEquivalent: "o")
         openItem.target = self
         menu.addItem(openItem)
 
         menu.addItem(NSMenuItem.separator())
 
-        let restartCoreItem = NSMenuItem(title: "重启 Core", action: #selector(restartCore), keyEquivalent: "r")
+        let restartCoreItem = NSMenuItem(title: loc("重启 Core"), action: #selector(restartCore), keyEquivalent: "r")
         restartCoreItem.target = self
         menu.addItem(restartCoreItem)
 
-        let showLogsItem = NSMenuItem(title: "查看日志", action: #selector(showLogs), keyEquivalent: "l")
+        let showLogsItem = NSMenuItem(title: loc("查看日志"), action: #selector(showLogs), keyEquivalent: "l")
         showLogsItem.target = self
         menu.addItem(showLogsItem)
 
         menu.addItem(NSMenuItem.separator())
 
-        let quitItem = NSMenuItem(title: "退出 XiJian", action: #selector(quitApp), keyEquivalent: "q")
+        let quitItem = NSMenuItem(title: loc("退出 XiJian"), action: #selector(quitApp), keyEquivalent: "q")
         quitItem.target = self
         menu.addItem(quitItem)
 

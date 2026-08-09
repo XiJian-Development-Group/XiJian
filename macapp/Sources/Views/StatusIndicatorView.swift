@@ -50,12 +50,12 @@ struct StatusIndicatorView: View {
 
     private var statusText: String {
         switch core.state {
-        case .stopped: return "Core 未运行"
-        case .extracting: return "正在复制 Core 组件..."
-        case .starting: return "Core 启动中..."
-        case .running(let port): return "Core 运行中 · 端口 \(port)"
-        case .customServer: return "使用自定义服务器"
-        case .error(let message): return "Core 异常：\(message)"
+        case .stopped: return loc("Core 未运行")
+        case .extracting: return loc("正在复制 Core 组件...")
+        case .starting: return loc("Core 启动中...")
+        case .running(let port): return loc("Core 运行中 · 端口 %lld", port)
+        case .customServer: return loc("使用自定义服务器")
+        case .error(let message): return loc("Core 异常：%@", message)
         }
     }
 }

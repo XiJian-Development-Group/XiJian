@@ -7,7 +7,7 @@ options:
   xcodeVersion: "16.0"
   createIntermediateGroups: true
   renderEmptyGroups: false
-  developmentRegion: en
+  developmentLanguage: zh-Hans
   usesTabs: false
   indentWidth: 2
   tabWidth: 2
@@ -16,6 +16,9 @@ settings:
   base:
     SWIFT_VERSION: "5.10"
     MACOSX_DEPLOYMENT_TARGET: "14.0"
+    # 项目已知本地化区域（zh-Hans/en/ja；XcodeGen 2.46 不支持 options.knownRegions，
+    # 改用 KNOWN_REGIONS 构建设置声明，与 String Catalog 保持一致）
+    KNOWN_REGIONS: ["zh-Hans", "en", "ja"]
     CURRENT_PROJECT_VERSION: "1"
     MARKETING_VERSION: "1.0.0"
     INFOPLIST_KEY_NSHumanReadableCopyright: "Copyright © 2024 XiJian. All rights reserved."
@@ -70,6 +73,11 @@ targets:
       - path: Sources/Theme
       - path: Sources/ViewModels
       - path: Sources/Views
+      # 本地化基建：Bundle 定位 + loc()/Text(xj:) 封装（编译进 XiJianKit，
+      # 供全项目复用）；String Catalog 作为框架资源打包。
+      - path: Sources/BundleSupport.swift
+      - path: Sources/Localization.swift
+      - path: Resources/Localizable.xcstrings
     dependencies:
       - package: MarkdownUI
     settings:

@@ -20,15 +20,15 @@ enum LogLevel: Int, CaseIterable, Comparable, Identifiable {
 
     var id: Int { rawValue }
 
-    /// 中文显示名
+    /// 本地化显示名
     var displayName: String {
         switch self {
-        case .debug: return "调试"
-        case .info: return "信息"
-        case .warning: return "警告"
-        case .error: return "错误"
-        case .critical: return "严重"
-        case .unknown: return "未知"
+        case .debug: return loc("调试")
+        case .info: return loc("信息")
+        case .warning: return loc("警告")
+        case .error: return loc("错误")
+        case .critical: return loc("严重")
+        case .unknown: return loc("未知")
         }
     }
 
@@ -74,8 +74,8 @@ struct LogEntry: Identifiable, Equatable {
 
         var displayName: String {
             switch self {
-            case .appProcess: return "进程输出"
-            case .coreFile: return "日志文件"
+            case .appProcess: return loc("进程输出")
+            case .coreFile: return loc("日志文件")
             }
         }
     }
