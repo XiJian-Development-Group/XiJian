@@ -18,6 +18,12 @@ final class CharacterViewModel {
     private(set) var detail: CharacterInfo?
     /// 角色状态
     private(set) var state: CharacterStateInfo?
+    /// 最近状态变更日志（最新在前，最多 10 条）
+    private(set) var stateEvents: [CharacterStateLogEntry] = []
+    /// 状态是否加载中（首屏 / 手动刷新）
+    private(set) var isRefreshingState = false
+    /// 最近一次状态加载/调整是否失败（供视图展示重试）
+    private(set) var stateLoadFailed = false
     /// 互动列表
     private(set) var interactions: [InteractionInfo] = []
 
@@ -43,22 +49,49 @@ final class CharacterViewModel {
 
     func loadDetail(_ id: String) async {
         guard let client = core.makeClient() else { return }
+        isRefreshingState = true
+        defer { isRefreshingState = false }
         do {
             detail = try await client.getCharacter(id)
             if let detail {
                 state = try? await client.getCharacterState(detail.id)
+                stateEvents = (try? await client.getCharacterStateLog(detail.id, limit: 10)) ?? []
+                stateLoadFailed = state == nil
             }
         } catch {
             presentError(error)
         }
     }
 
+    /// 刷新角色状态与变更日志（幂等；失败置 stateLoadFailed 供视图重试）
     func refreshState() async {
         guard let id = detail?.id, let client = core.makeClient() else { return }
+        isRefreshingState = true
+        defer { isRefreshingState = false }
         do {
             state = try await client.getCharacterState(id)
+            stateEvents = try await client.getCharacterStateLog(id, limit: 10)
+            stateLoadFailed = false
         } catch {
+            stateLoadFailed = true
             presentError(error)
+        }
+    }
+
+    /// 调节单个状态维度并提交（Core 端点用 POST；失败时已触发错误提示）。
+    /// 返回是否成功，供调用方决定是否关闭弹窗。
+    @discardableResult
+    func adjustState(_ dimension: CharacterStatusDimension, to value: Double) async -> Bool {
+        guard let id = detail?.id, let client = core.makeClient() else { return false }
+        do {
+            state = try await client.updateCharacterState(id, patch: [dimension.rawValue: .number(value)])
+            stateEvents = (try? await client.getCharacterStateLog(id, limit: 10)) ?? stateEvents
+            stateLoadFailed = false
+            return true
+        } catch {
+            stateLoadFailed = true
+            presentError(error)
+            return false
         }
     }
 

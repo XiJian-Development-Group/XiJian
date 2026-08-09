@@ -410,6 +410,18 @@ struct APIClient {
         try await get("/v1/xijian/characters/\(id)/state")
     }
 
+    /// 角色状态变更日志（最新在前；Core 返回 {"entries": [...]} 包装对象）
+    func getCharacterStateLog(_ id: String, limit: Int = 10) async throws -> [CharacterStateLogEntry] {
+        struct LogEnvelope: Decodable {
+            let entries: [CharacterStateLogEntry]
+        }
+        let envelope: LogEnvelope = try await get(
+            "/v1/xijian/characters/\(id)/state/log",
+            query: [URLQueryItem(name: "limit", value: "\(limit)")]
+        )
+        return envelope.entries
+    }
+
     func updateCharacterState(_ id: String, patch: [String: JSONValue]) async throws -> CharacterStateInfo {
         try await post("/v1/xijian/characters/\(id)/state", body: patch)
     }

@@ -216,6 +216,194 @@ struct CharacterStateInfo: Codable, Hashable {
     /// 常用字段快捷读取
     var intimacy: Double? { values["intimacy"]?.doubleValue }
     var mood: Double? { values["mood"]?.doubleValue }
+
+    /// A3.2 数值状态摘要（顶层含 values/max 块时可用；角色从未被状态系统
+    /// 触碰时返回 nil，此时响应仅含 v1 文本字段）
+    var summary: CharacterStateSummary? {
+        CharacterStateSummary(from: self)
+    }
+}
+
+/// 角色状态维度 — A3.2 四个标准数值字段
+enum CharacterStatusDimension: String, CaseIterable, Identifiable {
+    case hunger
+    case thirst
+    case health
+    case mood
+
+    var id: String { rawValue }
+
+    /// 中文名
+    var displayName: String {
+        switch self {
+        case .hunger: return "饱食"
+        case .thirst: return "饮水"
+        case .health: return "健康"
+        case .mood: return "心情"
+        }
+    }
+
+    /// SF Symbol（不依赖 SwiftUI，仅返回名称）
+    var iconName: String {
+        switch self {
+        case .hunger: return "fork.knife"
+        case .thirst: return "drop.fill"
+        case .health: return "heart.fill"
+        case .mood: return "face.smiling"
+        }
+    }
+
+    /// 从 Core 字段名解析维度（未知字段返回 nil，供日志等自由字段展示兜底）
+    init?(fieldName: String) {
+        self.init(rawValue: fieldName)
+    }
+}
+
+/// 角色状态摘要 — GET /v1/xijian/characters/{id}/state 的 A3.2 数值块。
+/// Core 契约：``values`` / ``max`` 为 {hunger, thirst, health, mood, stamina} 数值字典。
+struct CharacterStateSummary: Equatable {
+    let values: [String: Double]
+    let max: [String: Double]
+    /// 状态机标签（healthy / hungry / thirsty / sick / recovering / critical）
+    let status: String?
+    let statusChangedAt: Double?
+    let lastUpdated: Double?
+    /// Critical 状态下角色不可对话
+    let canDialogue: Bool?
+    let activeBehavior: [JSONValue]?
+    let modifiers: [String: JSONValue]?
+
+    init(
+        values: [String: Double],
+        max: [String: Double] = [:],
+        status: String? = nil,
+        statusChangedAt: Double? = nil,
+        lastUpdated: Double? = nil,
+        canDialogue: Bool? = nil,
+        activeBehavior: [JSONValue]? = nil,
+        modifiers: [String: JSONValue]? = nil
+    ) {
+        self.values = values
+        self.max = max
+        self.status = status
+        self.statusChangedAt = statusChangedAt
+        self.lastUpdated = lastUpdated
+        self.canDialogue = canDialogue
+        self.activeBehavior = activeBehavior
+        self.modifiers = modifiers
+    }
+
+    /// 从状态响应顶层字典构建；缺少 ``values`` 块时返回 nil
+    init?(from state: CharacterStateInfo) {
+        guard case .object(let valuesObj) = state.values["values"] else { return nil }
+        var values: [String: Double] = [:]
+        for (key, value) in valuesObj {
+            if let number = value.doubleValue { values[key] = number }
+        }
+        var maxes: [String: Double] = [:]
+        if case .object(let maxObj) = state.values["max"] {
+            for (key, value) in maxObj {
+                if let number = value.doubleValue { maxes[key] = number }
+            }
+        }
+        self.init(
+            values: values,
+            max: maxes,
+            status: state.values["status"]?.stringValue,
+            statusChangedAt: state.values["status_changed_at"]?.doubleValue,
+            lastUpdated: state.values["last_updated"]?.doubleValue,
+            canDialogue: state.values["can_dialogue"]?.boolValue,
+            activeBehavior: state.values["active_behavior"]?.arrayValue,
+            modifiers: state.values["modifiers"]?.objectValue
+        )
+    }
+
+    /// 维度当前值（缺失时 0）
+    func value(for dimension: CharacterStatusDimension) -> Double {
+        values[dimension.rawValue] ?? 0
+    }
+
+    /// 维度上限（缺失时默认 100）
+    func max(for dimension: CharacterStatusDimension) -> Double {
+        max[dimension.rawValue] ?? 100.0
+    }
+
+    /// 是否处于 Critical（健康 ≤ 0，不可对话）
+    var isCritical: Bool { status == "critical" }
+
+    /// 状态中文名
+    var statusDisplayName: String {
+        switch status {
+        case "healthy": return "健康"
+        case "hungry": return "饥饿"
+        case "thirsty": return "口渴"
+        case "sick": return "生病"
+        case "recovering": return "恢复中"
+        case "critical": return "危殆"
+        default: return status ?? "未知"
+        }
+    }
+}
+
+/// 角色状态变更日志条目 — GET /v1/xijian/characters/{id}/state/log 返回
+/// ``{"entries": [...]}``，最新在前
+struct CharacterStateLogEntry: Codable, Hashable {
+    let id: String?
+    let character_id: String?
+    /// 变更维度（hunger / thirst / health / mood / stamina）
+    let field: String?
+    let old_value: Double?
+    let new_value: Double?
+    /// 来源：tick / dialogue / world_event / manual / admin_recover
+    let reason: String?
+    let ref_id: String?
+    let created_at: Double?
+
+    /// 维度中文名（未知字段回退原文）
+    var fieldDisplayName: String {
+        CharacterStatusDimension(fieldName: field ?? "")?.displayName ?? field ?? "未知"
+    }
+
+    /// 来源中文名
+    var reasonDisplayName: String {
+        switch reason {
+        case "tick": return "自然衰减"
+        case "dialogue": return "对话"
+        case "world_event": return "世界事件"
+        case "manual": return "手动调整"
+        case "admin_recover": return "强制恢复"
+        default: return reason ?? "未知"
+        }
+    }
+
+    /// 数值变化文本（"+12" / "-3"；缺失时为空）
+    var deltaText: String {
+        guard let oldValue = old_value, let newValue = new_value else { return "" }
+        let delta = newValue - oldValue
+        return delta > 0 ? String(format: "+%.0f", delta) : String(format: "%.0f", delta)
+    }
+
+    /// 变化方向（用于着色：正 / 负 / 无变化）
+    var deltaSign: Int {
+        guard let oldValue = old_value, let newValue = new_value else { return 0 }
+        return newValue > oldValue ? 1 : (newValue < oldValue ? -1 : 0)
+    }
+}
+
+// MARK: - JSONValue 便捷访问
+
+extension JSONValue {
+    /// 数组值（供 active_behavior 等字段使用）
+    var arrayValue: [JSONValue]? {
+        if case .array(let arr) = self { return arr }
+        return nil
+    }
+
+    /// 对象值（供 modifiers 等字段使用）
+    var objectValue: [String: JSONValue]? {
+        if case .object(let obj) = self { return obj }
+        return nil
+    }
 }
 
 // MARK: - 世界

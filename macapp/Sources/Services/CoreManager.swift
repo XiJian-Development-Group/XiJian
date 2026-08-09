@@ -85,6 +85,8 @@ public final class CoreManager {
     var bundleCoreOverride: URL?
     /// 测试用：覆盖 Core 运行目录（隔离测试数据）
     var isolatedCoreDirectoryOverride: URL?
+    /// 测试用：覆盖 makeClient 注入的 URLSession（默认 .shared，测试注入 MockURLProtocol）
+    var clientSessionOverride: URLSession?
     /// 健康检查超时（秒）
     var healthTimeout: TimeInterval = 60
     /// 健康检查轮询间隔（秒）
@@ -401,10 +403,10 @@ public final class CoreManager {
     func makeClient() -> APIClient? {
         if useCustomServer {
             // 自定义服务器模式：始终可生成客户端，token 使用用户配置的访问令牌（可为空）
-            return APIClient(baseURL: baseURL, token: customToken)
+            return APIClient(baseURL: baseURL, token: customToken, session: clientSessionOverride ?? .shared)
         }
         guard case .running = state, let token = token, !token.isEmpty else { return nil }
-        return APIClient(baseURL: baseURL, token: token)
+        return APIClient(baseURL: baseURL, token: token, session: clientSessionOverride ?? .shared)
     }
 
     /// 是否需要合并复制：目标可执行文件缺失，或 bundle 内可执行文件比已安装的更新，
@@ -708,6 +710,7 @@ public final class CoreManager {
         pid = nil
         token = nil
         activePort = nil
+        clientSessionOverride = nil
         recentLogs.removeAll()
         logEntries.removeAll()
         fileRawLines.removeAll()

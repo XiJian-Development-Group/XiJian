@@ -67,6 +67,75 @@ final class ModelsTests: XCTestCase {
         XCTAssertEqual(state.sortedEntries.count, 5)
     }
 
+    // MARK: - 角色状态摘要（A3.2）
+
+    func testCharacterStateSummaryDecodes() throws {
+        // 完整 A3.2 形状：顶层 values/max/status/can_dialogue
+        let json = """
+        {"character_id":"char_yuki","affection":50,"mood":"neutral","recent_memory_summary":"最近的互动：...","updated_at":1718000000,
+         "values":{"hunger":72.0,"thirst":45.0,"health":100.0,"mood":88.0,"stamina":60.0},
+         "max":{"hunger":100.0,"thirst":100.0,"health":100.0,"mood":100.0,"stamina":100.0},
+         "status":"healthy","status_changed_at":1718000000,"last_updated":1718000001,
+         "can_dialogue":true,"active_behavior":[],"modifiers":{"time_modifier":1.0}}
+        """
+        let state = try decoder.decode(CharacterStateInfo.self, from: Data(json.utf8))
+        let summary = try XCTUnwrap(state.summary, "应解析出状态摘要")
+        XCTAssertEqual(summary.value(for: .hunger), 72.0)
+        XCTAssertEqual(summary.value(for: .thirst), 45.0)
+        XCTAssertEqual(summary.max(for: .mood), 100.0)
+        XCTAssertEqual(summary.status, "healthy")
+        XCTAssertEqual(summary.statusDisplayName, "健康")
+        XCTAssertTrue(summary.canDialogue == true)
+        XCTAssertFalse(summary.isCritical)
+    }
+
+    func testCharacterStateSummaryMissingValuesIsNil() throws {
+        // v1 形状（角色从未被状态系统触碰）：无 values 块 → 摘要为 nil
+        let json = """
+        {"character_id":"char_new","affection":50,"mood":"neutral","recent_memory_summary":"新角色","updated_at":1718000000}
+        """
+        let state = try decoder.decode(CharacterStateInfo.self, from: Data(json.utf8))
+        XCTAssertNil(state.summary)
+    }
+
+    func testCharacterStateSummaryCritical() throws {
+        let json = """
+        {"values":{"hunger":0,"thirst":0,"health":0,"mood":10},"max":{"health":100},"status":"critical","can_dialogue":false}
+        """
+        let state = try decoder.decode(CharacterStateInfo.self, from: Data(json.utf8))
+        let summary = try XCTUnwrap(state.summary)
+        XCTAssertTrue(summary.isCritical)
+        XCTAssertEqual(summary.statusDisplayName, "危殆")
+        XCTAssertFalse(summary.canDialogue == true)
+        // 缺失 max 的维度回退默认 100
+        XCTAssertEqual(summary.max(for: .hunger), 100.0)
+    }
+
+    func testCharacterStateLogEntryDecodes() throws {
+        let json = """
+        [{"id":"log_1","character_id":"char_yuki","field":"hunger","old_value":80.0,"new_value":72.0,
+          "reason":"tick","ref_id":null,"created_at":1718000000}]
+        """
+        let entries = try decoder.decode([CharacterStateLogEntry].self, from: Data(json.utf8))
+        XCTAssertEqual(entries.count, 1)
+        let entry = try XCTUnwrap(entries.first)
+        XCTAssertEqual(entry.field, "hunger")
+        XCTAssertEqual(entry.fieldDisplayName, "饱食")
+        XCTAssertEqual(entry.reasonDisplayName, "自然衰减")
+        XCTAssertEqual(entry.deltaText, "-8")
+        XCTAssertEqual(entry.deltaSign, -1)
+    }
+
+    func testCharacterStateLogEntryPositiveDelta() throws {
+        let json = """
+        {"id":"log_2","field":"health","old_value":60.0,"new_value":75.0,"reason":"manual","created_at":1}
+        """
+        let entry = try decoder.decode(CharacterStateLogEntry.self, from: Data(json.utf8))
+        XCTAssertEqual(entry.deltaText, "+15")
+        XCTAssertEqual(entry.deltaSign, 1)
+        XCTAssertEqual(entry.reasonDisplayName, "手动调整")
+    }
+
     // MARK: - 世界
 
     func testWorldInfoDecodes() throws {

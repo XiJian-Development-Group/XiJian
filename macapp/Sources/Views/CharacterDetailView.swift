@@ -17,6 +17,8 @@ struct CharacterDetailView: View {
     @State private var nsfwAllowed = false
     @State private var contextText = ""
     @State private var selectedInteractionID: String?
+    @State private var showStatSlider = false
+    @State private var statSliderDimension: CharacterStatusDimension = .hunger
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -26,7 +28,8 @@ struct CharacterDetailView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
                         personaSection(detail)
-                        stateSection
+                        characterStatusSection
+                        rawStateSection
                         Divider()
                         actionsSection(detail)
                     }
@@ -48,6 +51,13 @@ struct CharacterDetailView: View {
         }
         .sheet(isPresented: $showStateEditor) {
             stateEditorSheet
+        }
+        .sheet(isPresented: $showStatSlider) {
+            CharacterStatSliderSheet(
+                viewModel: viewModel,
+                characterID: characterID,
+                dimension: statSliderDimension
+            )
         }
         .alert("出错了", isPresented: $showError) {
             Button("好", role: .cancel) {}
@@ -141,15 +151,18 @@ struct CharacterDetailView: View {
         }
     }
 
-    // MARK: 状态
+    // MARK: 角色状态面板（A3.2 四维环形 + 变更日志）
 
     @ViewBuilder
-    private var stateSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+    private var characterStatusSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Label("角色状态", systemImage: "gauge")
                     .font(.headline)
                 Spacer()
+                if let summary = viewModel.state?.summary {
+                    statusChip(summary)
+                }
                 Button("刷新") {
                     Task { await viewModel.refreshState() }
                 }
@@ -157,7 +170,145 @@ struct CharacterDetailView: View {
                 Button("编辑状态") { showStateEditor = true }
                     .controlSize(.small)
             }
-            if let state = viewModel.state {
+
+            if viewModel.isRefreshingState && viewModel.state == nil {
+                // 加载态
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("状态加载中...")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } else if let summary = viewModel.state?.summary {
+                // 正常态：四维环形 + 变更日志
+                statRings(summary)
+                stateEventsSection
+            } else if viewModel.stateLoadFailed {
+                // 加载失败：显式提示 + 重试
+                HStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    Text("状态加载失败")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Button("重试") {
+                        Task { await viewModel.refreshState() }
+                    }
+                    .controlSize(.small)
+                }
+            } else {
+                // 空态：角色刚创建 / 从未被状态系统触碰
+                Text("角色尚未初始化状态（无状态记录）")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+    }
+
+    /// 状态徽标（Critical 红色告警，其余普通胶囊）
+    @ViewBuilder
+    private func statusChip(_ summary: CharacterStateSummary) -> some View {
+        if summary.isCritical {
+            Label(summary.statusDisplayName, systemImage: "exclamationmark.triangle.fill")
+                .font(.caption2)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 2)
+                .background(Capsule().fill(Color.red.opacity(0.2)))
+                .foregroundStyle(.red)
+                .help("健康 ≤ 0：角色已不可对话，仅能通过恢复操作解除")
+        } else {
+            Text(summary.statusDisplayName)
+                .font(.caption2)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 2)
+                .background(Capsule().fill(Color.secondary.opacity(0.15)))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// 四维环形进度条（饱食 / 饮水 / 健康 / 心情）
+    private func statRings(_ summary: CharacterStateSummary) -> some View {
+        HStack(spacing: 12) {
+            ForEach(CharacterStatusDimension.allCases) { dimension in
+                CharacterStatRing(
+                    title: dimension.displayName,
+                    icon: dimension.iconName,
+                    value: summary.value(for: dimension),
+                    max: summary.max(for: dimension),
+                    color: statColor(dimension)
+                ) {
+                    statSliderDimension = dimension
+                    showStatSlider = true
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+    }
+
+    /// 状态变更日志（最近 10 条：时间 / 维度 / 来源 / 数值变化）
+    @ViewBuilder
+    private var stateEventsSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("状态变更记录（最近 \(min(viewModel.stateEvents.count, 10)) 条）")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            if viewModel.stateEvents.isEmpty {
+                Text("暂无状态变更记录")
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            } else {
+                VStack(spacing: 3) {
+                    ForEach(viewModel.stateEvents.prefix(10), id: \.self) { entry in
+                        stateEventRow(entry)
+                    }
+                }
+            }
+        }
+    }
+
+    private func stateEventRow(_ entry: CharacterStateLogEntry) -> some View {
+        HStack(spacing: 8) {
+            Text(entry.created_at.map { $0.xijianDate.xijianTimeText } ?? "--")
+                .font(.caption2)
+                .monospacedDigit()
+                .foregroundStyle(.secondary)
+                .frame(width: 88, alignment: .leading)
+            Text(entry.fieldDisplayName)
+                .font(.caption2)
+                .frame(width: 40, alignment: .leading)
+            Text(entry.reasonDisplayName)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Spacer()
+            Text(entry.deltaText.isEmpty ? "—" : entry.deltaText)
+                .font(.caption2)
+                .monospacedDigit()
+                .foregroundStyle(
+                    entry.deltaSign > 0 ? .green : (entry.deltaSign < 0 ? .red : .secondary)
+                )
+        }
+        .padding(.vertical, 2)
+        .background(Color(.textBackgroundColor).opacity(0.4), in: RoundedRectangle(cornerRadius: 4))
+    }
+
+    /// 维度主题色
+    private func statColor(_ dimension: CharacterStatusDimension) -> Color {
+        switch dimension {
+        case .hunger: return .orange
+        case .thirst: return .blue
+        case .health: return .red
+        case .mood: return .purple
+        }
+    }
+
+    // MARK: 原始字段（v1 文本字段 + A3.2 原始值，折叠展示）
+
+    @ViewBuilder
+    private var rawStateSection: some View {
+        if let state = viewModel.state {
+            DisclosureGroup {
                 if state.values.isEmpty {
                     Text("（暂无状态数据）")
                         .font(.caption)
@@ -176,11 +327,12 @@ struct CharacterDetailView: View {
                         }
                     }
                 }
-            } else {
-                Text("（状态加载中或不可用）")
+            } label: {
+                Text("原始字段")
                     .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
             }
+            .tint(.secondary)
         }
     }
 
