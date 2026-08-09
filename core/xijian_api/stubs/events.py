@@ -1108,6 +1108,34 @@ def list_disabled_categories(world_id: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
+def _evaluate_plot_triggers_safely(world_id: str) -> list[dict]:
+    """Best-effort C3 plot trigger pass for ``world_id``; never raises.
+
+    C3 剧情调度挂接：``plot_runtime.evaluate_plot_triggers`` 的 docstring
+    约定由 events scheduler 在每次 tick 时调用，此前未挂——本轮接入。
+    激活记录以 ``object: "plot.activation"`` 标记并入 tick 返回列表，
+    与事件实例（带 ``event_id``）区分，不改变两者的字段。
+
+    Plot 评估抛出的任何异常都被吞掉并记 warning，绝不拖垮整个 tick
+    （与 ``_evaluate_trigger`` 的异常隔离风格一致）。
+    """
+    try:
+        from xijian_api.stubs import plot_runtime as plot_stub
+        activated = plot_stub.evaluate_plot_triggers(world_id)
+    except Exception as exc:  # noqa: BLE001 — plot failures must not break the tick
+        _LOGGER.warning(
+            "plot trigger evaluation failed for %s: %s", world_id, exc
+        )
+        return []
+    out: list[dict] = []
+    for item in activated or []:
+        if isinstance(item, dict):
+            out.append({**item, "object": "plot.activation"})
+        else:
+            out.append(item)
+    return out
+
+
 def tick_world(world_id: str, *, now: float | None = None) -> list[dict]:
     """Run one scheduler pass for a single world; return fired instances.
 
@@ -1122,6 +1150,13 @@ def tick_world(world_id: str, *, now: float | None = None) -> list[dict]:
        priority events that match but lose the race are recorded with
        ``deferred=True`` so the UI can show why they didn't fire.
 
+    Additionally, the C3 plot trigger pass runs once per tick for this
+    world: :func:`_evaluate_plot_triggers_safely` activates any running
+    plot nodes whose conditions match, and the activation records
+    (marked ``object: "plot.activation"``) are appended to the
+    returned list.  Plot evaluation is best-effort and isolated — a
+    plot failure never affects event scheduling.
+
     The "one event per cooldown" semantic matches the spec [TODO];
     priorities break ties when multiple match in the same tick.
     冷却。
@@ -1131,6 +1166,8 @@ def tick_world(world_id: str, *, now: float | None = None) -> list[dict]:
     world_record = state.worlds.get(world_id)
     if world_record is None:
         return []
+
+    plot_activated = _evaluate_plot_triggers_safely(world_id)
 
     candidates: list[tuple[int, dict]] = []
     skipped: list[dict] = []
@@ -1184,7 +1221,7 @@ def tick_world(world_id: str, *, now: float | None = None) -> list[dict]:
                     len(fired),
                     len(skipped),
                 )
-            return fired
+            return fired + plot_activated
         # Storm throttle — only allow one event per window.  Highest
         # priority wins.  We do this *before* firing so losers don't
         # consume cooldown slots.
@@ -1209,13 +1246,21 @@ def tick_world(world_id: str, *, now: float | None = None) -> list[dict]:
         _LOGGER.debug(
             "tick_world(%s): %d fired, %d skipped", world_id, len(fired), len(skipped)
         )
-    return fired
+    return fired + plot_activated
 
 
 def tick_all(*, now: float | None = None) -> dict:
-    """Run a scheduler pass for every world that has at least one event."""
+    """Run a scheduler pass for every world that has events or plot runtimes.
+
+    The world set is the union of ``world_events`` worlds and
+    ``plot_runtime_states`` worlds, so C3 plot-only worlds (which may
+    have no event definitions at all) still get their plot triggers
+    evaluated every tick."""
     timestamp = _now_or(now)
-    worlds_touched = sorted({record.get("world_id") for record in state.world_events.values()})
+    worlds_touched = sorted(
+        {record.get("world_id") for record in state.world_events.values()}
+        | {rt.get("world_id") for rt in state.plot_runtime_states.values()}
+    )
     out: dict[str, list[dict]] = {}
     for world_id in worlds_touched:
         if world_id is None:

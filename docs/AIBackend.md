@@ -67,6 +67,11 @@
 
 - 优先使用 `mlx_embeddings` 原生路径
 - 回退到手写 forward pass（基于 `mlx_lm` 加载权重）
+- **记忆语义检索消费方（2026-08-09）**：`stubs/memory` 在 create/update 时通过
+  本后端为条目 content 生成向量（写入条目 `embedding` / `embedding_model` 字段，
+  后端不可用时静默降级为 `None`，绝不阻断记忆写入）；`recall_search` 将查询与
+  条目向量的余弦相似度与关键词分数取 max 融合排序（无向量/无后端时完整回退
+  关键词公式）。
 
 ### 2.3 TTS — `backends/mlx/tts.py`
 
@@ -127,6 +132,8 @@
 ### 3.2 Embedding — `backends/gguf/embedding.py`
 
 - 基于 `llama-cpp-python` 的 embedding 接口
+- **记忆语义检索消费方（2026-08-09）**：作为 MLX 的 GGUF 回退，同样服务
+  `stubs/memory` 的条目向量化与 `recall_search` 余弦相似度融合（见 §2.2）。
 
 ### 3.3 TTS — `backends/gguf/tts.py`
 

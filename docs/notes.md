@@ -5,6 +5,35 @@
 
 ---
 
+## 2026-08-09 · 记忆语义检索升级（A1.2 向量化）+ C3 剧情调度挂接（events tick 集成）
+
+### 任务来源
+两件事都是收既有口子：① 功能清单v2.md L215 `memory_entries.embedding` 标着 `[TODO: 决定使用本地模型还是接入外部 embedding]`，embedding stub 早已是真实后端（MLX→GGUF 回退，无后端抛 503），但 memory 条目没存向量、`recall_search` 只有纯关键词公式（`_text_match_score`）；② plot_runtime `evaluate_plot_triggers` 的 docstring 明确写"由 events scheduler 在每次 tick 时调用"，但 events 对 plot 零引用，实际没挂。
+
+### 已完成（实测一遍）
+
+#### A1.2 · 记忆语义检索升级（`stubs/memory.py`）
+- 条目新增 `embedding`（list[float]）与 `embedding_model`（str|None）字段：`_new_entry` 构建记录后经 `_try_embed` 尽力而为地调用 `embedding.embed([content])`（懒导入 + try/except，后端不可用/调用失败静默置 None，绝不阻断记忆写入）；payload 自带预计算 `embedding` 时原样写入不再调后端。
+- `update` 在 content 变更时重算向量（与 create 同一路径）；显式传入 `embedding`/`embedding_model` 也可覆盖。
+- `recall_search` 融合向量语义：查询与条目都有向量时算余弦相似度，`text_match = max(关键词分, 语义分)`，语义分低于 `_SEMANTIC_MATCH_FLOOR`（0.2）不计入——关键词命中的条目分数不变，语义相关但关键词不重叠的条目也能被召回；无向量/无后端时完整回退旧关键词公式，返回结构 `[{"entry":..., "score":...}]` 不变。
+- `memory.py` L20 注释由 "reserved for later (TODO)" 改为实际字段说明；功能清单v2.md L215 `[TODO]` 摘除并标注完成；AIBackend.md §2.2/§3.2 补充记忆消费方说明。
+- 新增 `tests/test_xijian_memory_semantic.py`（8 项）：向量命中排序优先 / 纯语义召回 / 后端不可用降级关键词不报错 / 真实环境默认路径结构不变 / create 写入 embedding 字段 / 预计算向量透传 / update 重算 / update 无后端置 None。
+
+#### C3 · 剧情调度挂接（`stubs/events.py`）
+- 挂点选 `tick_world`（每 world 一次、含 plot world），`tick_all` 的世界集合并上 `plot_runtime_states` 的 world_id（剧情 world 可能没有事件定义，此前不会被 tick）。
+- `_evaluate_plot_triggers_safely` 懒导入 plot_runtime 并 try/except 隔离（异常记 warning 返回 []，参照 `_evaluate_trigger` 风格），激活记录带 `object: "plot.activation"` 标记并入 tick 返回列表——`tick_world` 仍返回 list[dict]、`tick_all` 仍返回 dict[world_id]->list，既有测试断言（`== []`、`len(fired)==1`、按 world 取 key）不受影响；无剧情 world 的返回列表不含 plot 标记。
+- 新增 `tests/test_xijian_plot_scheduler.py`（6 项）：tick 激活运行中剧情节点并推进 / 条件不满足不激活 / tick_all 覆盖无事件的 plot-only world / 无剧情 world 不受影响 / plot 异常不阻断事件调度 / plot 异常不连累其他 world。
+
+### 没动的 / 留的口子
+1. `recall_search` 的语义分数只做"取 max"融合，未做加权混合——对旧公式侵入最小、测试全绿；若要精细调参（如关键词分 × 语义分加权）留给后续，接口不变。
+2. `_SEMANTIC_MATCH_FLOOR=0.2` 是模块常量（内部），真实向量分布下的阈值是否最优待真实 embedding 后端跑通后校准。
+3. `search()`（旧关键词接口）未动——任务只要求 `recall_search`；两接口并存，路由层 `POST /memory/search` 行为不变。
+4. 全量回归：core **2255 passed**（含新增 14 项），**0 回归**；另有 18 项失败（14 test_multimodal + 4 test_models）为**基线已存在**（stash 前后失败清单逐字节一致，环境相关：本机无 mlx/llama_cpp 依赖，后端报 `model_not_loaded` 而非 `backend_unavailable`），与本次改动无关。
+5. 剧情激活在过载恢复窗口内仍照常评估（未像事件那样 drop）——剧情奖励/效果与事件风暴是两套机制，暂不联动；若运营要求过载时也冻结剧情，属后续策略。
+6. api.md 的 `plot_scheduler_tick` 描述保持准确（仍是 XIJIAN_DEV=1 手动端点），无需改动。
+
+---
+
 ## 2026-08-04 · Q1 达标核心 5 项实装（T0-1/T0-2/T0-3/T0-4/T4-1）
 
 ### 任务来源

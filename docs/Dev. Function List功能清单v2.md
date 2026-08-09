@@ -212,7 +212,7 @@
     source          TEXT NOT NULL, -- 'dialogue' | 'manual' | 'world_event' | 'derived'
     source_ref_id   TEXT, -- 关联的对话/事件 ID
     tags            TEXT, -- JSON 数组
-    embedding       BLOB, -- [TODO: 决定使用本地模型还是接入外部 embedding]
+    embedding       BLOB, -- 已接入 embedding 后端，检索混合向量语义（2026-08-09）
     embedding_model TEXT,
     access_count    INTEGER NOT NULL DEFAULT 0,
     last_access_at  INTEGER,
@@ -1572,7 +1572,7 @@
 
 - US-C3-01：作为开发者，我可以定义剧情：节点、边、触发条件、奖励。
 - 验收标准
-  - AC-1：剧情必须可被模拟世界读取并执行
+  - AC-1：剧情必须可被模拟世界读取并执行（2026-08-09：已挂进 events 调度器——`tick_world` 每次 tick 评估运行中剧情的节点触发条件，激活记录以 `object: "plot.activation"` 并入 tick 返回列表；plot 评估异常不阻断事件调度）
   - AC-2：剧情节点可"绑定角色 / 世界 / 事件"
 - 数据：独立表 `plot_designs` + `plot_nodes` + `plot_edges`
 

@@ -17,7 +17,12 @@ Each entry carries:
 * ``source_ref_id``: optional link back to the originating conversation /
   event
 * ``tags``: JSON array
-* ``embedding`` / ``embedding_model``: reserved for later (TODO)
+* ``embedding``: ``list[float]`` — dense vector of ``content``, written
+  at create/update time when an embedding backend is available (see
+  :func:`_try_embed`); ``None`` when the backend is unavailable
+  (keyword-only fallback, never blocks memory writes)
+* ``embedding_model``: ``str | None`` — model tag that produced the
+  embedding (from the backend envelope's ``model`` field)
 
 Backward compatibility
 ----------------------
@@ -140,12 +145,41 @@ def _normalise_tags(raw: Any) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
+def _try_embed(content: Any) -> tuple[list[float] | None, str | None]:
+    """Best-effort embedding of ``content``; never raises.
+
+    Returns ``(embedding, embedding_model)``.  When no embedding
+    backend is available (or the call fails for any reason) both are
+    ``None`` so memory writes degrade gracefully to keyword-only
+    search — a vectorization failure must never block a memory write.
+    """
+    if not content or not isinstance(content, str):
+        return None, None
+    try:
+        from xijian_api.stubs import embedding as embedding_stub
+        payload = embedding_stub.embed([content])
+        data = payload.get("data") or []
+        if not data:
+            return None, None
+        vector = data[0].get("embedding")
+        if not isinstance(vector, list) or not vector:
+            return None, None
+        return [float(v) for v in vector], payload.get("model")
+    except Exception:  # noqa: BLE001 — embedding must never block memory writes
+        return None, None
+
+
 def _new_entry(payload: dict) -> dict:
     """Build a fully-typed memory record from a payload.
 
     The legacy ``attributes`` block (string ``importance`` / ``decay``)
     is preserved on the record for callers that still read it; new
     readers should prefer the typed fields.
+
+    Embedding: when the payload carries a precomputed ``embedding``
+    (list[float]) it is stored as-is; otherwise we attempt to embed
+    the content via the configured embedding backend (best-effort —
+    degrades to ``None`` when no backend is available).
     """
     legacy_attributes = (payload.get("attributes") or {}).copy()
     importance = payload.get("importance")
@@ -181,6 +215,8 @@ def _new_entry(payload: dict) -> dict:
         "created_at": now_ts(),
         "updated_at": now_ts(),
         "deleted_at": None,
+        "embedding": None,
+        "embedding_model": None,
         # Legacy compatibility — keep the old shape available so the
         # existing route layer (and any callers reading ``attributes``)
         # keep working without forcing an immediate migration.
@@ -198,6 +234,13 @@ def _new_entry(payload: dict) -> dict:
             "category": source,
         },
     }
+    embedding = payload.get("embedding")
+    embedding_model = payload.get("embedding_model")
+    if not isinstance(embedding, list) or not embedding:
+        # No precomputed vector → try the embedding backend (best-effort).
+        embedding, embedding_model = _try_embed(record["content"])
+    record["embedding"] = embedding
+    record["embedding_model"] = embedding_model
     return record
 
 
@@ -261,6 +304,17 @@ def update(entry_id: str, patch: dict) -> dict | None:
         return None
     if "content" in patch:
         record["content"] = patch["content"]
+        # Content changed → re-embed so the stored vector stays
+        # consistent with the text (best-effort; degrades to None).
+        embedding, embedding_model = _try_embed(record["content"])
+        record["embedding"] = embedding
+        record["embedding_model"] = embedding_model
+    if "embedding" in patch:
+        record["embedding"] = (
+            patch["embedding"] if isinstance(patch["embedding"], list) else None
+        )
+    if "embedding_model" in patch:
+        record["embedding_model"] = patch["embedding_model"]
     if "tags" in patch:
         record["tags"] = _normalise_tags(patch["tags"])
     if "attributes" in patch:
@@ -394,6 +448,30 @@ def promote_to_long(entry_id: str) -> dict | None:
 # ---------------------------------------------------------------------------
 
 
+#: Semantic scores below this cosine threshold don't count as a match.
+#: Guards against unrelated entries (whose cosine against the query is
+#: small-but-positive) flooding the recall result set.
+_SEMANTIC_MATCH_FLOOR = 0.2
+
+
+def _cosine_similarity(a: list[float], b: list[float]) -> float:
+    """Cosine similarity of two equal-length vectors, clamped to [-1, 1].
+
+    Zero-length / ragged inputs yield 0.0 (never raises)."""
+    if not a or not b or len(a) != len(b):
+        return 0.0
+    dot = 0.0
+    na = 0.0
+    nb = 0.0
+    for x, y in zip(a, b):
+        dot += x * y
+        na += x * x
+        nb += y * y
+    if na <= 0.0 or nb <= 0.0:
+        return 0.0
+    return max(-1.0, min(1.0, dot / (na**0.5 * nb**0.5)))
+
+
 def _text_match_score(query: str, entry: dict) -> float:
     q = (query or "").lower().strip()
     if not q:
@@ -481,8 +559,22 @@ def recall_search(
 
         text_match * importance * live_decay_score + recency_bonus
 
-    where ``live_decay_score`` is :func:`compute_decay_score` evaluated
-    at ``now`` (i.e. transient — we don't mutate the stored score here).
+    where ``text_match`` fuses the legacy keyword score
+    (:func:`_text_match_score`) with the vector-semantic score
+    (cosine similarity against the query embedding, when both the
+    query and the entry have embeddings):
+
+        text_match = max(keyword_score, semantic_score)
+
+    ``semantic_score`` is 0 unless the cosine similarity is at least
+    :data:`_SEMANTIC_MATCH_FLOOR`, so keyword hits keep their original
+    score and semantically-related-but-keyword-missing entries still
+    surface.  When no embedding backend is available (or the query /
+    entries have no vectors) the search falls back completely to the
+    legacy keyword formula.
+
+    ``live_decay_score`` is :func:`compute_decay_score` evaluated at
+    ``now`` (i.e. transient — we don't mutate the stored score here).
 
     Side effect: when ``bump_access`` is True (default), the top
     ``top_k`` hits get their ``access_count`` incremented and
@@ -496,15 +588,34 @@ def recall_search(
     if character_id:
         items = [it for it in items if it.get("character_id") == character_id]
 
+    # Query embedding — best-effort, never blocks the keyword path.
+    query_embedding: list[float] | None = None
+    try:
+        from xijian_api.stubs import embedding as embedding_stub
+        q_payload = embedding_stub.embed([query or ""])
+        q_data = q_payload.get("data") or []
+        if q_data and isinstance(q_data[0].get("embedding"), list):
+            query_embedding = [float(v) for v in q_data[0]["embedding"]]
+    except Exception:  # noqa: BLE001 — semantic path is optional
+        query_embedding = None
+
     hits: list[dict] = []
     for entry in items:
         text_score = _text_match_score(query, entry)
-        if text_score <= 0.0:
+        semantic_score = 0.0
+        if query_embedding:
+            entry_embedding = entry.get("embedding")
+            if isinstance(entry_embedding, list) and entry_embedding:
+                sim = _cosine_similarity(query_embedding, entry_embedding)
+                if sim >= _SEMANTIC_MATCH_FLOOR:
+                    semantic_score = sim
+        match_score = max(text_score, semantic_score)
+        if match_score <= 0.0:
             continue
         importance = float(entry.get("importance", 0.5) or 0.5)
         decay = compute_decay_score(entry, now=now, rate=decay_rate)
         recency = _recency_bonus(entry, now=now)
-        score = text_score * importance * decay + recency
+        score = match_score * importance * decay + recency
         hits.append({"entry": entry, "score": round(score, 4)})
 
     hits.sort(key=lambda h: h["score"], reverse=True)
