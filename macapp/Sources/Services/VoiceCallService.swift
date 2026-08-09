@@ -104,6 +104,17 @@ struct SpeechResult: Codable, Equatable {
     let error: String?
 }
 
+/// A6 语音事件 payload 解析（纯函数，供 ViewModel 播放接入与单元测试）。
+/// 服务端 `call.event`（kind=speech）的 payload 携带 assistant 音频：
+/// `{"role":"assistant","text":"...","audio_base64":"...","audio_size_bytes":N}`。
+enum VoiceCallAudioPayload {
+    /// 从 speech 事件 payload 提取音频 Data（`audio_base64` → 解码；缺失 / 空 / 非法时返回 nil）
+    static func audioData(from payload: [String: JSONValue]) -> Data? {
+        guard let base64 = payload["audio_base64"]?.stringValue, !base64.isEmpty else { return nil }
+        return Data(base64Encoded: base64)
+    }
+}
+
 /// `POST .../song` 的响应（DiffSinger 接口桩，默认 `unavailable`）
 struct SongResult: Codable, Equatable {
     let ok: Bool
@@ -123,6 +134,8 @@ protocol VoiceCallServicing {
     func reject(callId: String) async throws -> VoiceCallRecord
     func end(callId: String) async throws -> VoiceCallRecord
     func sendSpeech(callId: String, text: String) async throws -> SpeechResult
+    /// 上传用户语音（麦克风录音 → audio_base64，服务端 STT→AI→TTS 全流程）
+    func sendAudio(callId: String, audioData: Data, language: String?) async throws -> SpeechResult
     func setBargeIn(callId: String, active: Bool) async throws -> VoiceCallRecord
     func sing(callId: String, lyrics: String) async throws -> SongResult
     func listEvents(callId: String, limit: Int) async throws -> [VoiceCallEvent]
@@ -261,9 +274,20 @@ struct VoiceCallService: VoiceCallServicing {
 
     // MARK: 通话循环
 
-    /// 送入用户语音（本批走 text 路径；audio_base64 采集后续接入）
+    /// 送入用户语音（text 快捷路径：服务端按文本走 STT→AI→TTS 管线）
     func sendSpeech(callId: String, text: String) async throws -> SpeechResult {
         let body: [String: JSONValue] = ["text": .string(text)]
+        return try await send(makeRequest("POST", "/v1/xijian/voice-calls/\(callId)/speech", body: body))
+    }
+
+    /// 上传用户语音：body `{"audio_base64": "...", "language": "zh"}`（language 可选）。
+    /// 服务端 STT→AI→TTS 全流程；默认异步，回复经 WS `call.event`（speech/assistant，含 audio_base64）送达。
+    /// STT 后端不可用时服务端返回 503 `{"ok":false,"error":"..."}`，由 `send` 抛 `APIError.httpStatus`。
+    func sendAudio(callId: String, audioData: Data, language: String?) async throws -> SpeechResult {
+        var body: [String: JSONValue] = ["audio_base64": .string(audioData.base64EncodedString())]
+        if let language {
+            body["language"] = .string(language)
+        }
         return try await send(makeRequest("POST", "/v1/xijian/voice-calls/\(callId)/speech", body: body))
     }
 
