@@ -5,6 +5,36 @@
 
 ---
 
+## 2026-08-09 · A6 真实语音链路（麦克风录音 → audio_base64 → STT→AI→TTS → 播放）
+
+### 任务来源
+A6 通话 UI（VoiceCallService / ViewModel / View + 文本路径）已交付（commit `86d984c`）；本批补上真实语音：
+麦克风录音上传 + 服务端 STT→AI→TTS + 返回音频播放。上次尝试失败（只重排了 xcstrings 没写代码），
+本次按「小步提交」逐文件落地，每文件一个 commit。
+
+### 已完成（构建 + 162 测试全绿）
+
+#### 服务端契约（未改 core）
+- `POST /v1/xijian/voice-calls/<call_id>/speech` 接受 body `{"audio_base64": "...", "language": "zh"}`（STT→AI→TTS 全流程）。
+- STT 后端不可用时返回 503 `{"ok":false,"error":"..."}`；TTS 音频经 WS `call.event`（kind=speech，payload 含 `audio_base64`）推送，也可 REST 拉取。
+
+#### 代码变更（commit `af450b9` / `49b7644` / `0897e55` / `23ac2f4` / `5981ecf`）
+1. **VoiceCallService**：协议 + 实现新增 `sendAudio(callId:audioData:language:)`，body `audio_base64`（base64EncodedString）+ 可选 language；复用 makeRequest/send；SpeechResult 不加字段。新增 `VoiceCallAudioPayload.audioData(from:)` 纯函数（speech payload → 音频 Data）。
+2. **AudioRecorder.swift**（新建）：AVAudioRecorder 录 16kHz 单声道 16-bit PCM 到临时 WAV，`stop()` 返回 Data 并清理文件；`requestPermission()` 用 macOS 14+ `AVAudioApplication.requestRecordPermission`；无权限 / 启动失败 / 读文件失败抛 `RecordingError`（loc() 文案）。
+3. **VoiceCallViewModel**：`@Published isRecording` / `isPlayingAudio`；`startRecording()`（先 stopPlayback 再请求权限，失败置 errorMessage）；`stopRecordingAndSend()`（取 Data → sendAudio → 成功回显 STT 文本 / 失败展示错误，通话继续）；`ingestSpeech` 去重逻辑前置（占住 (role,turn)/event_id 去重键后再写入与播放，防止重复播放），assistant + audio_base64 → AVAudioPlayer 播放（播放完成经桥接 delegate 复位状态）；用户开始录音时 stop() 播放（barge-in 语义）。
+4. **VoiceCallView**：占位改 `loc("说点什么…")`；输入区新增麦克风按钮（mic.fill，录音中变红 + pulse + 「录音中…」指示，再点停止并发送，与文本发送并排）；isPlayingAudio 显示 speaker.wave.2.fill + 「播放中…」。
+5. **Info.plist**：新增 `NSMicrophoneUsageDescription`（中英双语描述）。
+6. **测试**（VoiceCallAudioTests.swift，5 个）：sendAudio body base64 往返 / language 可选省略 / STT 503 错误信封；payload 音频解析纯函数（缺失/空/非法/非字符串 → nil）。MockVoiceCallService 补 sendAudio 协议实现。录音器本身不单测（系统 API）。
+7. **String Catalog**：新增 9 个 key（说点什么… / 录音中… / 播放中… / 开始录音 / 停止并发送 / 麦克风权限被拒绝… / 录音失败：%@ / 无法读取录音数据 / 音频播放失败），en/ja 翻译已补，脚本精确追加未重排文件（+144 行）。
+
+### 没做的 / 留的口子
+1. **端到端出声依赖服务端 STT/TTS 后端**：本机 xijianBase 未装 mlx_whisper / mlx_audio，`.../speech` 返回 STT 不可用 503 —— 客户端链路完整（录音→上传→事件消费→播放），出声需服务端接 mlx_whisper/mlx_audio 或配 OpenAI 远程端点。
+2. `refresh()` 拉历史事件若含 audio_base64 会顺带播放（当前 refresh 无自动调用，仅手动）。
+3. 旧占位 key「说点什么…（文本路径，音频采集后续接入）」已无引用，保留在 catalog（无害，未删以保持 diff 最小）。
+4. 未做真人真机语音验证（无麦克风环境 / 无 STT 后端），逻辑经单测覆盖。
+
+---
+
 ## 2026-08-09 · macapp 全量本地化迁移（28 文件文案 → String Catalog，测试断言适配）
 
 ### 任务来源

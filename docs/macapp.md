@@ -108,21 +108,49 @@ A6 通话会话管理在 Core 侧为可运行 stub（状态机 idle → ringing 
   song / events），请求构造、Bearer 认证、错误信封解析（`APIError`）与 APIClient 同风格；
   baseURL / token 取自 `CoreManager.shared.baseURL` / `CoreManager.shared.token`，
   不依赖 APIClient / CoreManager 改动。`VoiceCallServicing` 协议供 ViewModel 测试注入。
+  `sendAudio(callId:audioData:language:)` 上传麦克风录音（body `{"audio_base64": "...",
+  "language": "zh"}`，language 可选）；`VoiceCallAudioPayload.audioData(from:)` 为
+  speech 事件 payload 的音频解析纯函数。
+- **AudioRecorder**（`Sources/Services/AudioRecorder.swift`）：`AVAudioRecorder` 录麦克风到
+  临时 WAV（16kHz 单声道 16-bit PCM，STT 标准输入格式），`stop()` 返回音频 Data 并清理临时
+  文件；录音前请求权限（macOS 14+ `AVAudioApplication.requestRecordPermission`），
+  无权限 / 启动失败 / 读文件失败均返回本地化错误文案。
 - **VoiceCallViewModel**（`Sources/ViewModels/VoiceCallViewModel.swift`）：客户端通话状态机
   （idle / ringing / active / ended），组合 VoiceCallService（REST 推进）与 WebSocketClient
   （`call.state_changed` / `call.event` 事件驱动）；暴露 startCall / accept / reject / end /
-  sendText / toggleBargeIn / sing / refresh / close；对话记录按 (role, turn) 与服务端 event_id
-  去重（REST 回显与 WS 推送可能重复）。
+  sendText / startRecording / stopRecordingAndSend / toggleBargeIn / sing / refresh / close；
+  对话记录按 (role, turn) 与服务端 event_id 去重（REST 回显与 WS 推送可能重复）。
+  录音中 `isRecording` / 播放中 `isPlayingAudio` 状态供 UI 指示；用户开始录音时停止正在
+  播放的 assistant 语音（barge-in 语义）。
 - **VoiceCallView**（`Sources/Views/VoiceCallView.swift`）：SwiftUI 通话界面 —— 状态头部
-  （响铃 / 通话时长）、对话记录气泡、拨出 / 挂断控制、文本输入发送、barge-in 开关、
-  歌唱输入 sheet；样式跟随 ThemeSettings（主题色 / 气泡 / 圆角 / 字号 / 深浅色）。
+  （响铃 / 通话时长）、对话记录气泡、拨出 / 挂断控制、文本输入发送、麦克风录音按钮
+  （mic.fill，点击开始录音、再点停止并发送，录音中变红 + 「录音中…」指示）、播放指示
+  （speaker.wave.2.fill）、barge-in 开关、歌唱输入 sheet；样式跟随 ThemeSettings
+  （主题色 / 气泡 / 圆角 / 字号 / 深浅色）。
+
+### 真实语音链路（麦克风 → STT → AI → TTS → 扬声器）
+
+1. 用户点击麦克风按钮开始录音（首次请求麦克风权限，`NSMicrophoneUsageDescription` 已在
+   `Sources/Info.plist` 声明）；再点一次停止，`AudioRecorder.stop()` 取出 WAV Data。
+2. `sendAudio` 以 `audio_base64`（+ `language: "zh"`）POST `.../speech`，服务端跑
+   STT→AI→TTS 全流程（默认异步）。
+3. AI 回复文字与 TTS 音频经 WS `call.event`（kind=speech，payload 含 `audio_base64`）
+   推回；`ingestSpeech` 按 (role, turn) 去重后写入对话记录，assistant 语音解码为 Data
+   用 `AVAudioPlayer` 播放（开始 / 结束更新 `isPlayingAudio`）。
+4. 错误处理：STT 后端不可用时服务端返回 503 `{"ok":false,"error":"..."}`，UI 弹错误
+   提示但通话继续；录音失败（无权限 / 启动失败 / 读文件失败）同样只提示不中断通话。
+
+> 说明：macapp 侧语音链路已完整（录音 → 上传 → 事件消费 → 播放）；端到端出声还需服务端
+> 接入真实 STT/TTS 后端（本机 Core 未装 mlx_whisper / mlx_audio 时，`.../speech` 返回
+> STT 不可用错误）。文本快捷路径（`sendSpeech`）仍可用作无后端时的替代输入。
 
 ### 依赖
 
 - **WebSocketClient**（commit e5b3e0f 基建）：每通通话按需建立 WS 连接（`startCall` 时
   `connect`，`close` 时 `disconnect`），服务端广播的事件经 `call_id` 过滤只消费本通话。
-- 通话音频采集（audio_base64 路径）与真实 STT/TTS 后端未接入；本批使用 `speech` 端点的
-  `text` 快捷路径（服务端异步管线，回复经 WS 事件送达）。
+- **AVFoundation**：`AudioRecorder`（AVAudioRecorder / 权限请求）与 `VoiceCallViewModel`
+  （AVAudioPlayer 播放）使用；App 需在 `Info.plist` 声明 `NSMicrophoneUsageDescription`
+  （已在 `Sources/Info.plist` 添加，中英双语描述）。
 
 ## 6. 本地化（String Catalog：zh-Hans / en / ja）
 

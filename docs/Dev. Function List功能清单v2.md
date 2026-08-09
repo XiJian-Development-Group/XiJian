@@ -1196,8 +1196,12 @@
 > 状态机/事件/barge-in 语义/WS 推送齐全，回复生成与 DiffSinger 为可插拔钩子）；
 > macapp 侧通话 UI 已交付（VoiceCallService / VoiceCallViewModel / VoiceCallView，
 > 入口在对话页「通话」按钮，文本快捷路径 + WS 事件驱动，详见 `docs/macapp.md` §5）。
-> 待接入：真实 STT/TTS 后端与音频采集（AC-1 延迟依赖后端）、DiffSinger 引擎钩子
-> （`set_sing_engine` 接 devkit.voice_cloner.generate_singing）、VRM 动作联动（US-A6-02）。
+> **真实语音链路已接入**（commit `af450b9`~`5981ecf`）：麦克风录音（AudioRecorder，16kHz WAV）→
+> `audio_base64` 上传 → 服务端 STT→AI→TTS → WS speech 事件音频经 AVAudioPlayer 播放，
+> barge-in 语义（录音时中断播放）；无后端时 STT 503 错误仅提示不中断通话。
+> 待接入：**服务端真实 STT/TTS 后端**（本机未装 mlx_whisper / mlx_audio，出声依赖其接入或
+> 配 OpenAI 远程端点；AC-1 延迟依赖后端）、DiffSinger 引擎钩子（`set_sing_engine` 接
+> devkit.voice_cloner.generate_singing）、VRM 动作联动（US-A6-02）。
 
 ---
 
