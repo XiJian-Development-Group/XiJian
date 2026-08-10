@@ -43,7 +43,7 @@ struct BackupSettingsView: View {
             }
 
             Section(loc("手动备份")) {
-                HStack(spacing: 10) {
+                HStack(spacing: XJSpacing.sm) {
                     Picker(loc("范围"), selection: $scope) {
                         ForEach(scopes, id: \.self) { Text(scopeDisplay($0)) }
                     }
@@ -84,7 +84,7 @@ struct BackupSettingsView: View {
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                             }
-                            HStack(spacing: 10) {
+                            HStack(spacing: XJSpacing.sm) {
                                 Button(loc("恢复")) {
                                     restoreTarget = backup
                                     restoreScope = "all"
@@ -166,10 +166,9 @@ struct BackupSettingsView: View {
     // MARK: 子视图
 
     private func restoreSheet(_ backup: BackupRecord) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: XJSpacing.md) {
             Text(loc("恢复备份"))
-                .font(.title3)
-                .bold()
+                .font(.title2.bold())
             Text(loc("备份 ID：%@", backup.backup_id))
                 .font(.caption)
                 .foregroundStyle(.secondary)

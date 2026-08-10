@@ -5,6 +5,7 @@ import XiJianKit
 struct WorldListView: View {
     @Bindable var viewModel: WorldViewModel
     @Environment(CoreManager.self) private var core
+    @Environment(ThemeSettings.self) private var theme
     @State private var showCreateSheet = false
     @State private var newWorldName = ""
     @State private var showError = false
@@ -108,19 +109,27 @@ struct WorldListView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "globe.asia.australia")
-                .font(.system(size: 44))
-                .foregroundStyle(.tertiary)
+        VStack(spacing: XJSpacing.md) {
+            // Apple 风格：毛玻璃圆形容器 + 主题色图标（与 ChatView 空态一致）
+            ZStack {
+                Circle()
+                    .fill(theme.accentColor.opacity(0.12))
+                    .frame(width: 88, height: 88)
+                Image(systemName: "globe.asia.australia")
+                    .font(.system(size: 38))
+                    .foregroundStyle(theme.accentColor)
+            }
+            .shadow(color: theme.accentColor.opacity(0.15), radius: 18, y: 8)
             Text(loc("还没有世界"))
-                .font(.title3)
-                .foregroundStyle(.secondary)
+                .font(.title2.bold())
+                .foregroundStyle(.primary)
             Text(loc("点击右上角新建世界或导入资源包，或确认 Core 已启动"))
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+                .font(.body)
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .xjFadeUp()
     }
 
     private var coreIsRunning: Bool {
@@ -129,10 +138,9 @@ struct WorldListView: View {
     }
 
     private var createSheet: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: XJSpacing.md) {
             Text(loc("新建世界"))
-                .font(.title3)
-                .bold()
+                .font(.title2.bold())
             TextField(loc("世界名称"), text: $newWorldName)
                 .textFieldStyle(.roundedBorder)
             HStack {
@@ -162,6 +170,7 @@ struct WorldRow: View {
     var onDelete: () -> Void
 
     @Environment(ThemeSettings.self) private var theme
+    @State private var isHovering = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -210,5 +219,14 @@ struct WorldRow: View {
             .help(loc("删除世界"))
         }
         .padding(.vertical, 4)
+        .background(
+            RoundedRectangle(cornerRadius: XJRadius.small, style: .continuous)
+                .fill(isHovering ? Color.primary.opacity(0.05) : Color.clear)
+        )
+        .onHover { hovering in
+            withAnimation(.spring(response: 0.4, dampingFraction: 1.0)) {
+                isHovering = hovering
+            }
+        }
     }
 }

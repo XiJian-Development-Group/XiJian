@@ -31,6 +31,12 @@ struct MessageBubbleView: View {
                         RoundedRectangle(cornerRadius: theme.cornerRadius, style: .continuous)
                             .strokeBorder(strokeColor, lineWidth: theme.bubbleStyle == .outlined ? 1 : 0)
                     )
+                    // Apple 风格：用户气泡带轻投影增加层次（助手气泡不投影，保持扁平）
+                    .shadow(color: isUser ? Color.black.opacity(0.08) : .clear, radius: 6, y: 3)
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .offset(y: 8)),
+                        removal: .opacity
+                    ))
             }
 
             if !isUser { Spacer(minLength: 60) }

@@ -22,7 +22,7 @@ struct CharacterStatRing: View {
                 ZStack {
                     // 底环
                     Circle()
-                        .stroke(color.opacity(0.15), lineWidth: 9)
+                        .stroke(color.opacity(0.15), lineWidth: 8)
                     // 进度环（从 12 点方向顺时针）
                     Circle()
                         .trim(from: 0, to: progress)
@@ -33,10 +33,11 @@ struct CharacterStatRing: View {
                                 startAngle: .degrees(0),
                                 endAngle: .degrees(360)
                             ),
-                            style: StrokeStyle(lineWidth: 9, lineCap: .round)
+                            style: StrokeStyle(lineWidth: 8, lineCap: .round)
                         )
                         .rotationEffect(.degrees(-90))
-                        .animation(.snappy(duration: 0.25), value: progress)
+                        .shadow(color: color.opacity(0.25), radius: 4, y: 2)
+                        .animation(.spring(response: 0.4, dampingFraction: 1.0), value: progress)
                     // 中央：图标 + 数值
                     VStack(spacing: 1) {
                         Image(systemName: icon)

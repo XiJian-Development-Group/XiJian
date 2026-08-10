@@ -92,8 +92,10 @@ struct VoiceCallView: View {
                     .symbolEffect(.pulse, options: .repeating)
             }
         }
-        .padding(.horizontal, 16)
+        .padding(.horizontal, XJSpacing.md)
         .padding(.vertical, 12)
+        // Apple 风格：毛玻璃工具栏（与 ChatView 顶部栏一致）
+        .background(.bar)
     }
 
     private var phaseDot: some View {
@@ -155,21 +157,29 @@ struct VoiceCallView: View {
     }
 
     private var emptyTranscript: some View {
-        VStack(spacing: 10) {
-            Image(systemName: "waveform")
-                .font(.system(size: 40))
-                .foregroundStyle(.tertiary)
+        VStack(spacing: XJSpacing.md) {
+            // Apple 风格：毛玻璃圆形容器 + 主题色图标（与 ChatView 空态一致）
+            ZStack {
+                Circle()
+                    .fill(theme.accentColor.opacity(0.12))
+                    .frame(width: 72, height: 72)
+                Image(systemName: "waveform")
+                    .font(.system(size: 30))
+                    .foregroundStyle(theme.accentColor)
+            }
+            .shadow(color: theme.accentColor.opacity(0.15), radius: 14, y: 6)
             Text(loc("通话接通后即可开始对话"))
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+                .font(.body)
+                .foregroundStyle(.secondary)
             if viewModel.phase == .ringing {
                 Text(loc("对方接通前，你可以先准备要说的话"))
-                    .font(.caption2)
-                    .foregroundStyle(.quaternary)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
             }
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 80)
+        .xjFadeUp()
     }
 
     @ViewBuilder
@@ -220,7 +230,8 @@ struct VoiceCallView: View {
 
     @ViewBuilder
     private var controlBar: some View {
-        switch viewModel.phase {
+        Group {
+            switch viewModel.phase {
         case .idle:
             HStack {
                 Spacer()
@@ -376,6 +387,9 @@ struct VoiceCallView: View {
             }
             .padding(12)
         }
+        }
+        // Apple 风格：底部控制区毛玻璃（与顶部栏材质一致）
+        .background(.bar)
     }
 
     private var bargeInBinding: Binding<Bool> {

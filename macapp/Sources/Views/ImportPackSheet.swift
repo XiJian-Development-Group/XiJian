@@ -48,10 +48,9 @@ struct ImportPackSheet: View {
     // MARK: 各阶段视图
 
     private var selectingView: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: XJSpacing.md) {
             Text(loc("导入资源包"))
-                .font(.title2)
-                .bold()
+                .font(.title2.bold())
             Text(loc("支持 .7z/.zip 资源包，可包含角色与世界观。导入完成后可在对应页面查看。"))
                 .font(.body)
                 .foregroundStyle(.secondary)
@@ -59,16 +58,16 @@ struct ImportPackSheet: View {
             HStack {
                 Spacer()
                 Button(loc("选择资源包…")) { chooseFile() }
-                    .buttonStyle(.borderedProminent)
+                    .xjPrimaryButton(prominent: true)
             }
         }
+        .xjFadeUp()
     }
 
     private func readyView(_ url: URL) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: XJSpacing.md) {
             Text(loc("导入资源包"))
-                .font(.title2)
-                .bold()
+                .font(.title2.bold())
             VStack(alignment: .leading, spacing: 6) {
                 Text(url.lastPathComponent)
                     .font(.headline)
@@ -77,16 +76,8 @@ struct ImportPackSheet: View {
                     .foregroundStyle(.secondary)
                     .textSelection(.enabled)
             }
-            .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color(.textBackgroundColor))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color.secondary.opacity(0.3), lineWidth: 1)
-            )
+            .xjCard(padding: 12)
             HStack {
                 Spacer()
                 Button(loc("取消")) { dismiss() }
@@ -94,16 +85,16 @@ struct ImportPackSheet: View {
                 Button(loc("开始导入")) {
                     Task { await startImport() }
                 }
-                .buttonStyle(.borderedProminent)
+                .xjPrimaryButton(prominent: true)
             }
         }
+        .xjFadeUp()
     }
 
     private var importingView: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: XJSpacing.md) {
             Text(loc("导入资源包"))
-                .font(.title2)
-                .bold()
+                .font(.title2.bold())
             HStack(spacing: 10) {
                 ProgressView()
                 Text(loc("正在导入 %@…", selectedURL?.lastPathComponent ?? loc("资源包")))
@@ -118,16 +109,16 @@ struct ImportPackSheet: View {
                 .font(.caption)
                 .foregroundStyle(.tertiary)
         }
+        .xjFadeUp()
     }
 
     private func doneView(_ job: ImportJobInfo) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: XJSpacing.md) {
+            HStack(spacing: XJSpacing.sm) {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(.green)
                 Text(loc("导入完成"))
-                    .font(.title2)
-                    .bold()
+                    .font(.title2.bold())
             }
             Text(loc("已导入角色 %lld 个、世界观 %lld 个、记忆 %lld 条", job.result?.loaded_characters ?? 0, job.result?.loaded_worlds ?? 0, job.result?.loaded_memories ?? 0))
                 .foregroundStyle(.secondary)
@@ -142,19 +133,19 @@ struct ImportPackSheet: View {
                     dismiss()
                     Task { await onImported() }
                 }
-                .buttonStyle(.borderedProminent)
+                .xjPrimaryButton(prominent: true)
             }
         }
+        .xjFadeUp()
     }
 
     private func failedView(_ message: String) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 8) {
+        VStack(alignment: .leading, spacing: XJSpacing.md) {
+            HStack(spacing: XJSpacing.sm) {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red)
                 Text(loc("导入失败"))
-                    .font(.title2)
-                    .bold()
+                    .font(.title2.bold())
             }
             Text(message)
                 .font(.body)
@@ -165,6 +156,7 @@ struct ImportPackSheet: View {
                 Button(loc("关闭")) { dismiss() }
             }
         }
+        .xjFadeUp()
     }
 
     // MARK: 逻辑

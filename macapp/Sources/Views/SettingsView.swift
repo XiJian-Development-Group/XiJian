@@ -45,6 +45,18 @@ struct SettingsView: View {
                                 .foregroundStyle(theme.accentColor)
                         }
                     }
+                    NavigationLink {
+                        BackgroundSettingsSection()
+                    } label: {
+                        Label(loc("界面背景"), systemImage: "photo.on.rectangle.angled")
+                            .foregroundStyle(theme.accentColor)
+                    }
+                    NavigationLink {
+                        ProfileSettingsSection()
+                    } label: {
+                        Label(loc("用户资料"), systemImage: "person.crop.circle")
+                            .foregroundStyle(theme.accentColor)
+                    }
                 }
 
                 Section(loc("数据管理")) {
@@ -79,6 +91,12 @@ struct SettingsView: View {
                 Section(loc("关于")) {
                     LabeledContent(loc("版本"), value: "1.0.0")
                     LabeledContent(loc("协议"), value: loc("本地 API · Bearer Token"))
+                    Button {
+                        // 再次查看新人引导：重置完成标记，主界面自动切回引导页
+                        UserProfileSettings.shared.onboardingCompleted = false
+                    } label: {
+                        Label(loc("再次查看新人引导"), systemImage: "sparkles")
+                    }
                 }
             }
             .navigationTitle(loc("设置"))

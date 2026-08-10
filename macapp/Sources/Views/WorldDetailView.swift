@@ -30,7 +30,7 @@ struct WorldDetailView: View {
                 Divider()
 
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
+                    VStack(alignment: .leading, spacing: XJSpacing.md) {
                         switch selectedSection {
                         case 0: stateOverview(state)
                         case 1: transitionSection
@@ -38,7 +38,7 @@ struct WorldDetailView: View {
                         default: stateEditSection
                         }
                     }
-                    .padding(16)
+                    .padding(XJSpacing.md)
                 }
             } else {
                 ProgressView(loc("加载世界状态中..."))
@@ -103,10 +103,10 @@ struct WorldDetailView: View {
     // MARK: 状态与环境
 
     private func stateOverview(_ state: WorldStateInfo) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: XJSpacing.md) {
             // 环境
             if let env = state.environment {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: XJSpacing.sm) {
                     Label(loc("环境"), systemImage: "cloud.sun")
                         .font(.headline)
                     Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 4) {
@@ -128,11 +128,12 @@ struct WorldDetailView: View {
                         }
                     }
                 }
+                .xjCard(padding: XJSpacing.md)
             }
 
             // 计算配置
             if let config = state.compute_config {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: XJSpacing.sm) {
                     Label(loc("计算配置"), systemImage: "cpu")
                         .font(.headline)
                     Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 4) {
@@ -154,11 +155,12 @@ struct WorldDetailView: View {
                         }
                     }
                 }
+                .xjCard(padding: XJSpacing.md)
             }
 
             // 自由状态字段（economy/health/diet/stamina/mentality）
             if !state.extra.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: XJSpacing.sm) {
                     Label(loc("状态维度"), systemImage: "gauge")
                         .font(.headline)
                     Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 4) {
@@ -170,9 +172,10 @@ struct WorldDetailView: View {
                         }
                     }
                 }
+                .xjCard(padding: XJSpacing.md)
             }
 
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: XJSpacing.sm) {
                 Label(loc("路径"), systemImage: "folder")
                     .font(.headline)
                 Text(state.world_doc_path ?? loc("未设置"))
@@ -181,6 +184,7 @@ struct WorldDetailView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            .xjCard(padding: XJSpacing.md)
         }
     }
 
@@ -235,6 +239,7 @@ struct WorldDetailView: View {
                     .foregroundStyle(.green)
             }
         }
+        .xjCard(padding: XJSpacing.md)
     }
 
     // MARK: 事件注入
@@ -281,6 +286,7 @@ struct WorldDetailView: View {
                     .foregroundStyle(.green)
             }
         }
+        .xjCard(padding: XJSpacing.md)
     }
 
     // MARK: 状态编辑

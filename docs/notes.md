@@ -5,6 +5,48 @@
 
 ---
 
+## 2026-08-10 · macapp 全面 UI 优化（Apple 设计语言）+ 新人引导三页 + UI 背景 / 权限 / 用户资料 / AI 来源
+
+### 任务来源
+用户指示：用 apple-ui-design / apple-design 两个技能对 macapp 全界面做 Apple 风格优化；随后新增首次启动新人引导页（设置中可再次查看），并落地背景/权限/用户资料/AI 来源等真实配置。用户确认 7 个决策点后开工。
+
+### 已完成（构建 + 191 测试全绿）
+
+#### 新增文件（XiJianKit）
+- `Sources/Theme/DesignSystem.swift`：间距节奏（4/8/16/24/48）、圆角、`xjCard` 毛玻璃卡片、`xjPrimaryButton` 胶囊按钮（按下 0.97 缩放）、`xjFadeUp` 进入动效、`XJSettingRow` 设置行容器。
+- `Sources/Models/UserProfileSettings.swift`：用户名/别称/身份描述、引导完成标记、AI 来源（本地/远程）、远程端点/Token/模型ID、通知权限状态、后台活动开关 —— @Observable + UserDefaults 持久化；`applyAISourceToCore()` 把来源写入 CoreManager（远程=自定义服务器）。
+- `Sources/Models/BackgroundSettings.swift`：背景类型（无/图片/GIF/视频）+ 文件路径 + 模糊开关；按扩展名推断类型。
+- `Sources/Views/BackgroundLayerView.swift`：全局背景层 —— 静态图（NSImageView）、GIF（animates 循环）、视频（AVQueuePlayer + AVPlayerLooper 静音无缝循环，VideoBackgroundNSView.layout 同步 frame），模糊用 SwiftUI blur；尊重减弱动态效果。
+- `Sources/Services/AppPermissions.swift`：通知权限请求/状态刷新/跳系统设置；后台活动 beginActivity（.userInitiatedAllowingIdleSystemSleep 防 App Nap 允许睡眠）；launchctl 守护安装/卸载（KeepAlive 仅异常退出重启，plist 落 ~/Library/LaunchAgents/com.xijian.background.plist）。
+- `Sources/Views/FireworksView.swift`：TimelineView + Canvas 烟花粒子（火箭升空→爆裂→火花重力下落+拖尾发光）；物理/爆裂逻辑收敛为 `FireworksEngine` 静态纯函数可单测；尊重减弱动态效果。
+- `Sources/Views/OnboardingView.swift`：三页引导（欢迎页 icon+标语+欢迎正文 / 基础配置页 / 烟花结束页），底部左右翻页键，完成时标记 + 应用 AI 来源 + 同步后台活动。
+- `Sources/Views/ConfigSections.swift`：五个配置块组件（背景/权限/用户名别称/身份描述/AI来源），引导页与设置页复用。
+- `Sources/Views/ProfileSettingsViews.swift`：设置页「界面背景」「用户资料」两个子页面（含 launchctl 守护管理）。
+
+#### 修改
+- `ContentView.swift`：首次启动（onboardingCompleted=false）展示 OnboardingView，完成后切主界面；主界面 ZStack 底层挂 BackgroundLayerView。
+- `App.swift`：环境注入 UserProfileSettings / BackgroundSettings。
+- `SettingsView.swift`：个性化区加「界面背景」「用户资料」入口；关于区加「再次查看新人引导」按钮（重置完成标记）。
+- `ChatView.swift` / `MessageBubbleView.swift`：Apple 风格视觉（顶部栏 .bar 材质、空态圆形主题图标、气泡轻投影与转场）。
+- `APIClient.swift` / `ChatViewModel.swift`：ChatRequest 增 `userName` / `userProfile`，流式请求注入 OAI `user` 字段与 `xijian.user_profile`（identity/aliases）。
+- `Localizable.xcstrings`：新增 49 个 key（zh-Hans 源 / en / ja 翻译），总计 540。
+- `Resources/Assets.xcassets/xijian_icon.imageset`：icon.png（512×512）作为引导页图标资源。
+- 测试：新增 FireworksEngineTests（12）、ProfileSettingsTests（UserProfile 10 + Background 5）、ChatUserProfileTests（7）；CoreManagerTests.setUp 补 custom server 字段清理（resetForTesting 不清这三字段，避免单例污染）。
+
+### 没做的 / 留的口子
+- 通知权限弹窗依赖 App 签名：未签名/签名无效的调试构建系统不弹窗（已知 macOS 限制），引导页与设置页仍真实调用 requestAuthorization，状态以系统返回为准。
+- 模型下载：本地 AI 来源的「模型下载」按用户要求暂时留空（文案提示即将开放），未实现下载链路。
+- launchctl 守护：KeepAlive 仅异常退出时重启（SuccessfulExit=false），不做登录自启（RunAtLoad=false）；安装/卸载均为用户手动触发。
+- 用户资料注入：本地 stub 后端透传不消费 user/user_profile（符合用户「不要展示说明」的决定），远程后端可读取；身份描述/别称对现有对话无可见副作用。
+- 引导页背景 opacity(0.5) 弱化：保证文字可读性，用户后续可在设置中调整背景本身。
+- GUI 点击验收（引导翻页、背景选择面板、通知弹窗）需人工在真实 App 内确认；HTTP/逻辑层已由 191 单测覆盖。
+
+### QA 整改
+- 测试初版 57 失败 → 修复：① FireworksEngine 颜色断言改用 sRGB 分量近似比较（Color == 对系统色不稳定）；② UserProfileSettings/BackgroundSettings 读写 UserDefaults.standard，测试 setUp 清理 `xijian.profile.` / `xijian.background.` 前缀键防污染；③ ChatUserProfileTests async 签名与 try 标记修正；④ 测试写入 CoreManager custom server 字段后手动还原 + CoreManagerTests.setUp 统一清理。
+- 最终 xcodebuild build + test 均 SUCCEEDED（191 tests）。
+
+---
+
 ## 2026-08-09 · A6 真实语音链路（麦克风录音 → audio_base64 → STT→AI→TTS → 播放）
 
 ### 任务来源

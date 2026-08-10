@@ -88,6 +88,21 @@ SIGKILL，并同步等待退出。Core 的日志（stdout/stderr）汇入 App �
 - **备份**：备份与恢复（BackupSettingsView）；
 - **设置**：Core 端口、自定义服务器与访问令牌、主题个性化、剧情与安全相关设置
   （SettingsView / PlotSettingsView / SafetySettingsView）。
+- **新人引导**：首次启动展示三页引导（欢迎 → 基础配置 → 烟花结束页），完成后进入主界面；
+  设置 → 关于 →「再次查看新人引导」可重新打开（重置完成标记）。
+  引导页无侧边栏，底部左右两键翻页（左=返回，右=下一页/开始使用）。
+- **UI 背景**：整窗口内容层之下的背景（图片 / GIF / 视频，可模糊），
+  引导页与设置 → 个性化 →「界面背景」均可配置；视频用 AVQueuePlayer 无缝循环静音播放，
+  GIF 用 NSImageView.animates 循环，均尊重系统「减弱动态效果」。
+- **用户资料**：用户名 / 多个别称 / 用户身份描述，持久化到 UserDefaults；
+  聊天请求注入 OAI `user` 字段（用户名）与 `xijian.user_profile` 扩展块
+  （identity / aliases），本地 stub 后端透传不消费，远程后端可读取。
+- **权限**：通知权限（引导页「允许」时真实请求 UNUserNotificationCenter，拒绝后可跳系统设置）、
+  后台活动权限（开启时 beginActivity 防 App Nap，允许空闲睡眠）；
+  设置 → 个性化 →「用户资料」可再次管理，含 launchctl 守护进程安装/卸载
+  （KeepAlive 仅异常退出时重启，登录自启）。
+- **AI 功能来源**：本地（内置 Core）或远程（自定义 API 端点 + Token + 模型 ID，
+  帮助链接跳转 https://xijian.wiki.skyc8266.uk）；远程切换即写入 CoreManager 自定义服务器配置。
 
 ## 5. A6 实时通话
 

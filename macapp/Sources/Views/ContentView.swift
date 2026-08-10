@@ -2,9 +2,11 @@ import SwiftUI
 import XiJianKit
 
 /// 主界面：NavigationSplitView，侧边栏包含 对话/角色/世界/记忆/设置
+/// 首次启动（未完成新人引导）时展示 OnboardingView，完成后进入主界面。
 public struct ContentView: View {
     @Environment(CoreManager.self) private var core
     @Environment(ThemeSettings.self) private var theme
+    @Environment(UserProfileSettings.self) private var profile
     @State private var appVM = AppViewModel.shared
     @State private var chatVM = ChatViewModel()
     @State private var characterVM = CharacterViewModel()
@@ -15,19 +17,38 @@ public struct ContentView: View {
     public init() {}
 
     public var body: some View {
-        NavigationSplitView {
-            sidebar
-                .navigationSplitViewColumnWidth(min: 200, ideal: 230, max: 300)
-        } detail: {
-            detail
-                .frame(minWidth: 600, minHeight: 500)
+        Group {
+            if !profile.onboardingCompleted {
+                OnboardingView()
+            } else {
+                mainInterface
+            }
         }
-        .navigationTitle(Text(xj: "隙间 XiJian"))
+        .animation(.spring(response: 0.4, dampingFraction: 1.0), value: profile.onboardingCompleted)
+        // 全局错误弹窗挂在最外层：引导页 / 主界面均可呈现
         .alert(loc("出错了"), isPresented: $appVM.showError) {
             Button(loc("好"), role: .cancel) {}
         } message: {
             Text(appVM.errorMessage ?? "")
         }
+    }
+
+    // MARK: 主界面
+
+    private var mainInterface: some View {
+        ZStack {
+            // 全局 UI 背景（图片 / GIF / 视频，可模糊）
+            BackgroundLayerView()
+
+            NavigationSplitView {
+                sidebar
+                    .navigationSplitViewColumnWidth(min: 200, ideal: 230, max: 300)
+            } detail: {
+                detail
+                    .frame(minWidth: 600, minHeight: 500)
+            }
+        }
+        .navigationTitle(Text(xj: "隙间 XiJian"))
         .task {
             // 首次出现时预加载模型
             await chatVM.loadModels()

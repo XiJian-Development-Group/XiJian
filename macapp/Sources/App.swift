@@ -11,6 +11,8 @@ struct XiJianApp: App {
                 .environment(CoreManager.shared)
                 .environment(ThemeSettings.shared)
                 .environment(AppViewModel.shared)
+                .environment(UserProfileSettings.shared)
+                .environment(BackgroundSettings.shared)
         }
         .windowStyle(.hiddenTitleBar)
         .windowToolbarStyle(.unified)
@@ -31,6 +33,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Set up menu bar item
         setupStatusItem()
 
+        // 恢复用户已开启的后台活动（防 App Nap）；引导完成时会同步一次，
+        // 这里兜底保证 App 重启后开关状态依然生效
+        AppPermissions.shared.syncBackgroundActivity(UserProfileSettings.shared.backgroundActivityEnabled)
+
         // Start Core on launch
         Task {
             await coreManager.startCore()
@@ -40,10 +46,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         // 应用退出时同步停止 Core 子进程（异步任务不会等待）
         coreManager.stopCoreSync()
+        AppPermissions.shared.stopBackgroundActivity()
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         coreManager.stopCoreSync()
+        AppPermissions.shared.stopBackgroundActivity()
         return .terminateNow
     }
 

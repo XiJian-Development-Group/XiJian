@@ -149,7 +149,7 @@ struct SafetySettingsView: View {
                     .padding(8)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(
-                        RoundedRectangle(cornerRadius: 8)
+                        RoundedRectangle(cornerRadius: XJRadius.small)
                             .fill(Color(.controlBackgroundColor))
                     )
                 }

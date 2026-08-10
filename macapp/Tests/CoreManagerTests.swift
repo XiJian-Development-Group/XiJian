@@ -8,10 +8,18 @@ final class CoreManagerTests: XCTestCase {
     override func setUp() {
         super.setUp()
         CoreManager.shared.resetForTesting()
+        // resetForTesting 不清 custom server 三字段（保留用户配置语义），
+        // 但测试间共享单例，先清掉避免并行/顺序执行时互相污染
+        CoreManager.shared.useCustomServer = false
+        CoreManager.shared.customBaseURL = ""
+        CoreManager.shared.customToken = ""
     }
 
     override func tearDown() {
         CoreManager.shared.resetForTesting()
+        CoreManager.shared.useCustomServer = false
+        CoreManager.shared.customBaseURL = ""
+        CoreManager.shared.customToken = ""
         super.tearDown()
     }
 

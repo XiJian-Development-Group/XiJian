@@ -26,14 +26,13 @@ struct CharacterDetailView: View {
             Divider()
             if let detail = viewModel.detail {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                        personaSection(detail)
-                        characterStatusSection
-                        rawStateSection
-                        Divider()
-                        actionsSection(detail)
+                    VStack(alignment: .leading, spacing: XJSpacing.md) {
+                        personaSection(detail).xjCard()
+                        characterStatusSection.xjCard()
+                        rawStateSection.xjCard()
+                        actionsSection(detail).xjCard()
                     }
-                    .padding(16)
+                    .padding(XJSpacing.md)
                 }
             } else {
                 ProgressView(loc("加载中..."))

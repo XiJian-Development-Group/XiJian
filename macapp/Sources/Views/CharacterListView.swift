@@ -5,6 +5,7 @@ import XiJianKit
 struct CharacterListView: View {
     @Bindable var viewModel: CharacterViewModel
     @Environment(CoreManager.self) private var core
+    @Environment(ThemeSettings.self) private var theme
     @State private var showError = false
     @State private var errorMessage = ""
     @State private var selectedID: String?
@@ -81,25 +82,34 @@ struct CharacterListView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "person.crop.circle.badge.plus")
-                .font(.system(size: 44))
-                .foregroundStyle(.tertiary)
+        VStack(spacing: XJSpacing.md) {
+            // Apple 风格：毛玻璃圆形容器 + 主题色图标（与 ChatView 空态一致）
+            ZStack {
+                Circle()
+                    .fill(theme.accentColor.opacity(0.12))
+                    .frame(width: 88, height: 88)
+                Image(systemName: "person.crop.circle.badge.plus")
+                    .font(.system(size: 38))
+                    .foregroundStyle(theme.accentColor)
+            }
+            .shadow(color: theme.accentColor.opacity(0.15), radius: 18, y: 8)
             Text(loc("还没有角色"))
-                .font(.title3)
-                .foregroundStyle(.secondary)
+                .font(.title2.bold())
+                .foregroundStyle(.primary)
             Text(loc("点击右上角「导入角色」选择资源包（.7z/.zip），或确认 Core 已启动"))
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+                .font(.body)
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
             if !coreIsRunning {
                 Button(loc("启动 Core")) {
                     Task { await core.startCore() }
                 }
-                .buttonStyle(.borderedProminent)
+                .xjPrimaryButton(prominent: true)
+                .padding(.top, XJSpacing.xs)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .xjFadeUp()
     }
 
     private var coreIsRunning: Bool {
@@ -114,6 +124,7 @@ struct CharacterRow: View {
     var onToggleLoaded: () -> Void
 
     @Environment(ThemeSettings.self) private var theme
+    @State private var isHovering = false
 
     var body: some View {
         HStack(spacing: 12) {
@@ -167,6 +178,15 @@ struct CharacterRow: View {
             .help(character.isLoaded ? loc("卸载角色") : loc("加载角色"))
         }
         .padding(.vertical, 4)
+        .background(
+            RoundedRectangle(cornerRadius: XJRadius.small, style: .continuous)
+                .fill(isHovering ? Color.primary.opacity(0.05) : Color.clear)
+        )
+        .onHover { hovering in
+            withAnimation(.spring(response: 0.4, dampingFraction: 1.0)) {
+                isHovering = hovering
+            }
+        }
     }
 }
 

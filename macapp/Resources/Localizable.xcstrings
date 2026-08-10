@@ -49,6 +49,38 @@
         }
       }
     },
+    "AI 功能来源": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI Source"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI 機能のソース"
+          }
+        }
+      }
+    },
+    "API 端点": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API Endpoint"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API エンドポイント"
+          }
+        }
+      }
+    },
     "Core 可执行文件不存在或不可执行：%@": {
       "localizations": {
         "en": {
@@ -385,6 +417,22 @@
         }
       }
     },
+    "Token": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "トークン"
+          }
+        }
+      }
+    },
     "Token 预算": {
       "localizations": {
         "en": {
@@ -397,6 +445,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Token 予算"
+          }
+        }
+      }
+    },
+    "UI 背景": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "UI Background"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "UI 背景"
           }
         }
       }
@@ -593,6 +657,22 @@
         }
       }
     },
+    "launchctl 守护进程": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "launchctl Agent"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "launchctl デーモン"
+          }
+        }
+      }
+    },
     "· WS 已连接": {
       "localizations": {
         "en": {
@@ -669,6 +749,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "上限 %.0f"
+          }
+        }
+      }
+    },
+    "下一页": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Next"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "次へ"
           }
         }
       }
@@ -1089,6 +1185,38 @@
         }
       }
     },
+    "你好，欢迎来到隙间，希望你能在这里找到一段故事～如果遇到问题，可以随时与我们联系：support@mail.skyc8266.uk": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Welcome to XiJian. We hope you find a story here～ If you run into any issues, feel free to reach us at: support@mail.skyc8266.uk"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "隙間へようこそ。ここで物語が見つかりますように～ 問題があれば、いつでもご連絡ください：support@mail.skyc8266.uk"
+          }
+        }
+      }
+    },
+    "你的名字": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your Name"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "あなたの名前"
+          }
+        }
+      }
+    },
     "使用外部地址时，App 将不再管理本机 Core 进程；若服务器要求鉴权，请在此填写访问令牌。": {
       "localizations": {
         "en": {
@@ -1101,6 +1229,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "外部アドレスを使用する場合、アプリはローカルの Core プロセスを管理しません。サーバーが認証を要求する場合は、ここにアクセストークンを入力してください。"
+          }
+        }
+      }
+    },
+    "使用本地 Core；模型下载功能即将开放": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Uses the local Core; model downloads coming soon."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ローカル Core を使用します。モデルダウンロードは近日公開予定です。"
           }
         }
       }
@@ -1233,6 +1377,22 @@
         }
       }
     },
+    "停止并发送": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stop & send"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "停止して送信"
+          }
+        }
+      }
+    },
     "停止生成": {
       "localizations": {
         "en": {
@@ -1277,6 +1437,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "健康 ≤ 0：キャラクターは会話できなくなります。回復操作でのみ解除できます"
+          }
+        }
+      }
+    },
+    "允许": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Allow"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "許可"
           }
         }
       }
@@ -1489,6 +1665,22 @@
         }
       }
     },
+    "再次查看新人引导": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "View Onboarding Again"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新規ガイドをもう一度見る"
+          }
+        }
+      }
+    },
     "写入文件失败：%@": {
       "localizations": {
         "en": {
@@ -1677,6 +1869,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "判定：%@"
+          }
+        }
+      }
+    },
+    "别称": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alias"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "別名"
+          }
+        }
+      }
+    },
+    "别称可多个，也可不填": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Multiple aliases are allowed; can be left empty."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "別名は複数可、空でも構いません。"
           }
         }
       }
@@ -2097,6 +2321,22 @@
         }
       }
     },
+    "卸载守护进程": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove Agent"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "デーモンをアンインストール"
+          }
+        }
+      }
+    },
     "卸载将删除包目录并移除其加载的角色/世界观/记忆记录，不可恢复。确定卸载「%@」吗？": {
       "localizations": {
         "en": {
@@ -2173,6 +2413,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "生のフィールド"
+          }
+        }
+      }
+    },
+    "去设置开启": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enable in Settings"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "設定で有効化"
           }
         }
       }
@@ -2289,6 +2545,22 @@
         }
       }
     },
+    "可以拒绝，拒绝不会影响基本功能": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "You can decline; declining won't affect core features."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拒否しても基本機能に影響はありません。"
+          }
+        }
+      }
+    },
     "可用 DevKit 导出资源包，或把 .7z/.zip 放入 Core 的 packs 目录后点击重新扫描": {
       "localizations": {
         "en": {
@@ -2317,6 +2589,70 @@
           "stringUnit": {
             "state": "translated",
             "value": "名前（必須）"
+          }
+        }
+      }
+    },
+    "后台守护": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Background Guardian"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "バックグラウンドガーディアン"
+          }
+        }
+      }
+    },
+    "后台活动": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Background Activity"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "バックグラウンド活動"
+          }
+        }
+      }
+    },
+    "后台活动开启时防止 App 被系统节能暂停；守护进程可在异常退出时自动重启。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Background activity prevents the system from suspending the app for energy saving; the guardian process can restart it automatically after an abnormal exit."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "バックグラウンド活動はシステムによる省エネ一時停止を防ぎます。ガーディアンプロセスは異常終了時に自動再起動できます。"
+          }
+        }
+      }
+    },
+    "后台活动权限": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Background Activity"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "バックグラウンド活動"
           }
         }
       }
@@ -2513,6 +2849,22 @@
         }
       }
     },
+    "图片、视频、GIF 均支持，可选择是否模糊": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supports images, videos and GIFs, with optional blur."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "画像・動画・GIF に対応し、ぼかしも選択できます。"
+          }
+        }
+      }
+    },
     "圆角": {
       "localizations": {
         "en": {
@@ -2545,6 +2897,22 @@
         }
       }
     },
+    "在开始之前，请完成下列设置，这样也许能让你获得更好的体验。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Before we start, please complete the following setup for a better experience."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "始める前に、以下の設定を完了すると、より良い体験が得られます。"
+          }
+        }
+      }
+    },
     "地点转换": {
       "localizations": {
         "en": {
@@ -2573,6 +2941,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "基本フォントサイズ"
+          }
+        }
+      }
+    },
+    "基础配置": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Basic Setup"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "基本設定"
           }
         }
       }
@@ -2845,6 +3229,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "セーフティモジュールはデフォルトで有効です。すべての安全エンドポイントはモジュール自身が監視し、安全システムを迂回しようとするリクエストはすべて監査ログに記録されます。"
+          }
+        }
+      }
+    },
+    "安装守护进程": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Install Agent"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "デーモンをインストール"
           }
         }
       }
@@ -3249,6 +3649,22 @@
         }
       }
     },
+    "已安装": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Installed"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "インストール済み"
+          }
+        }
+      }
+    },
     "已导入角色 %lld 个、世界观 %lld 个、记忆 %lld 条": {
       "localizations": {
         "en": {
@@ -3297,6 +3713,22 @@
         }
       }
     },
+    "已拒绝": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Denied"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拒否済み"
+          }
+        }
+      }
+    },
     "已拒绝通话": {
       "localizations": {
         "en": {
@@ -3309,6 +3741,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "通話を拒否しました"
+          }
+        }
+      }
+    },
+    "已授权": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Authorized"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "許可済み"
           }
         }
       }
@@ -3425,6 +3873,22 @@
         }
       }
     },
+    "开始使用": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Get Started"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "始める"
+          }
+        }
+      }
+    },
     "开始导入": {
       "localizations": {
         "en": {
@@ -3437,6 +3901,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "インポートを開始"
+          }
+        }
+      }
+    },
+    "开始录音": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start recording"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "録音を開始"
           }
         }
       }
@@ -3485,6 +3965,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "現在のノード：%@"
+          }
+        }
+      }
+    },
+    "录音中…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recording…"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "録音中…"
+          }
+        }
+      }
+    },
+    "录音失败：%@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Recording failed: %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "録音に失敗しました：%@"
           }
         }
       }
@@ -3757,6 +4269,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "ログディレクトリを開く"
+          }
+        }
+      }
+    },
+    "打开系统通知设置": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open Notification Settings"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "システム通知設定を開く"
           }
         }
       }
@@ -4049,6 +4577,22 @@
         }
       }
     },
+    "播放中…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Playing…"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "再生中…"
+          }
+        }
+      }
+    },
     "支持 .7z/.zip 资源包，可包含角色与世界观。导入完成后可在对应页面查看。": {
       "localizations": {
         "en": {
@@ -4077,6 +4621,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "economy、health、diet、stamina、mentality などのフィールドに対応。数値でもテキストでも入力できます。"
+          }
+        }
+      }
+    },
+    "支持图片、视频、GIF，可选择是否模糊。背景将显示在整个窗口的内容层之下。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supports images, videos and GIFs, with optional blur. The background is shown beneath the content layer of the entire window."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "画像・動画・GIF に対応し、ぼかしも選択できます。背景はウィンドウ全体のコンテンツ層の下に表示されます。"
           }
         }
       }
@@ -4141,6 +4701,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "文字"
+          }
+        }
+      }
+    },
+    "新人引导": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Onboarding"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新規ガイド"
           }
         }
       }
@@ -4333,6 +4909,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "JSON 値を解析できません"
+          }
+        }
+      }
+    },
+    "无法读取录音数据": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not read recorded audio data."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "録音データを読み取れませんでした。"
           }
         }
       }
@@ -4673,6 +5265,22 @@
         }
       }
     },
+    "未安装": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not installed"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未インストール"
+          }
+        }
+      }
+    },
     "未找到 Core 日志文件（logs/xijian-api.log），以下为 App 捕获的进程输出。": {
       "localizations": {
         "en": {
@@ -4801,6 +5409,22 @@
         }
       }
     },
+    "未请求": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not Requested"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未リクエスト"
+          }
+        }
+      }
+    },
     "未通话": {
       "localizations": {
         "en": {
@@ -4817,6 +5441,22 @@
         }
       }
     },
+    "本地": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Local"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ローカル"
+          }
+        }
+      }
+    },
     "本地 API · Bearer Token": {
       "localizations": {
         "en": {
@@ -4829,6 +5469,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "ローカル API · Bearer Token"
+          }
+        }
+      }
+    },
+    "本地使用内置 Core；远程使用自定义 API 端点与 Token。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Local uses the built-in Core; remote uses a custom API endpoint and token."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ローカルは内蔵 Core を使用し、リモートはカスタム API エンドポイントとトークンを使用します。"
+          }
+        }
+      }
+    },
+    "本字段用于向角色描述你的身份，但可能不在所有情况下生效。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This field describes your identity to characters, but may not apply in all cases."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このフィールドはキャラクターにあなたの身元を説明するために使われますが、すべての場合に反映されるとは限りません。"
           }
         }
       }
@@ -4929,6 +5601,22 @@
         }
       }
     },
+    "查看帮助文档": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "View Help"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ヘルプを表示"
+          }
+        }
+      }
+    },
     "查看日志": {
       "localizations": {
         "en": {
@@ -4957,6 +5645,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "タグ（カンマ区切り）"
+          }
+        }
+      }
+    },
+    "模型 ID（暂不指定）": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Model ID (not specified yet)"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "モデル ID（未指定）"
+          }
+        }
+      }
+    },
+    "模糊背景": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Blur Background"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "背景をぼかす"
           }
         }
       }
@@ -5261,6 +5981,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "追加"
+          }
+        }
+      }
+    },
+    "添加别称": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add Alias"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "別名を追加"
           }
         }
       }
@@ -5617,6 +6353,54 @@
         }
       }
     },
+    "用于主动发起通话": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Used for proactive voice calls."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自発的な通話に使用されます。"
+          }
+        }
+      }
+    },
+    "用于动态壁纸、主动通话、桌宠等功能": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "For dynamic wallpapers, proactive calls, desktop pets, etc."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "動的壁紙・自発的な通話・デスクトップペットなどに使用されます。"
+          }
+        }
+      }
+    },
+    "用于向角色描述你的身份，但可能不在所有情况下生效": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Used to describe your identity to characters; may not apply in all cases."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "キャラクターにあなたの身元を説明するために使われますが、すべての場合に反映されるとは限りません。"
+          }
+        }
+      }
+    },
     "用户": {
       "localizations": {
         "en": {
@@ -5629,6 +6413,70 @@
           "stringUnit": {
             "state": "translated",
             "value": "ユーザー"
+          }
+        }
+      }
+    },
+    "用户名与别称": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Name & Aliases"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "名前と別名"
+          }
+        }
+      }
+    },
+    "用户资料": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Profile"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ユーザープロフィール"
+          }
+        }
+      }
+    },
+    "用户身份描述": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Identity Description"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ユーザーアイデンティティ"
+          }
+        }
+      }
+    },
+    "界面背景": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Background"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "インターフェース背景"
           }
         }
       }
@@ -5773,6 +6621,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "確認に失敗しました：%@"
+          }
+        }
+      }
+    },
+    "移除": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "削除"
           }
         }
       }
@@ -6417,6 +7281,22 @@
         }
       }
     },
+    "说点什么…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Say something…"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "何か話してください…"
+          }
+        }
+      }
+    },
     "说点什么…（文本路径，音频采集后续接入）": {
       "localizations": {
         "en": {
@@ -6461,6 +7341,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "60 秒以内に以下のフレーズを入力して確認を完了してください："
+          }
+        }
+      }
+    },
+    "请求": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Requests"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リクエスト"
           }
         }
       }
@@ -6833,6 +7729,22 @@
         }
       }
     },
+    "返回": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Back"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "戻る"
+          }
+        }
+      }
+    },
     "还没有世界": {
       "localizations": {
         "en": {
@@ -6945,6 +7857,22 @@
         }
       }
     },
+    "远程": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remote"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リモート"
+          }
+        }
+      }
+    },
     "连接设置": {
       "localizations": {
         "en": {
@@ -7025,6 +7953,22 @@
         }
       }
     },
+    "选择背景文件": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose Background File"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "背景ファイルを選択"
+          }
+        }
+      }
+    },
     "选择要导入的资源包（.7z/.zip）": {
       "localizations": {
         "en": {
@@ -7085,6 +8029,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "色を選択"
+          }
+        }
+      }
+    },
+    "通知权限": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notifications"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "通知権限"
+          }
+        }
+      }
+    },
+    "通知权限用于主动发起通话；后台活动权限用于动态壁纸、主动通话、桌宠等功能。拒绝不会影响基本功能。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notifications are used for proactive voice calls; background activity is used for dynamic wallpapers, proactive calls, desktop pets, etc. Declining won't affect core features."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "通知権限は自発的な通話に使用され、バックグラウンド活動は動的壁紙・自発的な通話・デスクトップペットなどに使用されます。拒否しても基本機能に影響はありません。"
           }
         }
       }
@@ -7197,6 +8173,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "期限切れエントリを忘れる"
+          }
+        }
+      }
+    },
+    "那么，接下来，是属于你的故事啦～": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your story begins now～"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "さあ、ここからはあなたの物語です～"
           }
         }
       }
@@ -7473,6 +8465,22 @@
         }
       }
     },
+    "音频播放失败": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to play audio."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "音声の再生に失敗しました。"
+          }
+        }
+      }
+    },
     "预览": {
       "localizations": {
         "en": {
@@ -7549,6 +8557,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "満腹"
+          }
+        }
+      }
+    },
+    "麦克风权限被拒绝。请在「系统设置 → 隐私与安全性 → 麦克风」中允许访问。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Microphone access was denied. Please allow access in System Settings → Privacy & Security → Microphone."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "マイクへのアクセスが拒否されました。「システム設定 → プライバシーとセキュリティ → マイク」でアクセスを許可してください。"
           }
         }
       }
@@ -7693,150 +8717,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "；"
-          }
-        }
-      }
-    },
-    "说点什么…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Say something…"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "何か話してください…"
-          }
-        }
-      }
-    },
-    "录音中…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Recording…"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "録音中…"
-          }
-        }
-      }
-    },
-    "播放中…": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Playing…"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "再生中…"
-          }
-        }
-      }
-    },
-    "开始录音": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Start recording"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "録音を開始"
-          }
-        }
-      }
-    },
-    "停止并发送": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Stop & send"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "停止して送信"
-          }
-        }
-      }
-    },
-    "麦克风权限被拒绝。请在「系统设置 → 隐私与安全性 → 麦克风」中允许访问。": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Microphone access was denied. Please allow access in System Settings → Privacy & Security → Microphone."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "マイクへのアクセスが拒否されました。「システム設定 → プライバシーとセキュリティ → マイク」でアクセスを許可してください。"
-          }
-        }
-      }
-    },
-    "录音失败：%@": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Recording failed: %@"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "録音に失敗しました：%@"
-          }
-        }
-      }
-    },
-    "无法读取录音数据": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Could not read recorded audio data."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "録音データを読み取れませんでした。"
-          }
-        }
-      }
-    },
-    "音频播放失败": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Failed to play audio."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "音声の再生に失敗しました。"
           }
         }
       }

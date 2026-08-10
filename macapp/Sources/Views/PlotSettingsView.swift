@@ -116,7 +116,7 @@ struct PlotSettingsView: View {
                                     .font(.caption2)
                                     .foregroundStyle(.secondary)
                             }
-                            HStack(spacing: 10) {
+                            HStack(spacing: XJSpacing.sm) {
                                 Button(loc("推进剧情")) {
                                     Task { await advance(runtime) }
                                 }

@@ -217,6 +217,10 @@ struct APIClient {
         var worldID: String?
         var recallEnabled: Bool = true
         var requestID: String = UUID().uuidString
+        /// 用户标识（OAI `user` 字段；填入用户名，用于识别对话者）
+        var userName: String?
+        /// 用户资料（xijian.user_profile 扩展块：身份描述 / 别称等）
+        var userProfile: [String: JSONValue]?
     }
 
     /// 流式聊天。返回的流逐块产出 SSE 事件；取消流（task.cancel）会自动
@@ -228,7 +232,15 @@ struct APIClient {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
-                    let body: [String: JSONValue] = [
+                    var xijian: [String: JSONValue] = [
+                        "character_id": request.characterID.map { .string($0) } ?? .null,
+                        "world_id": request.worldID.map { .string($0) } ?? .null,
+                        "recall": .object(["enabled": .bool(request.recallEnabled)]),
+                    ]
+                    if let userProfile = request.userProfile, !userProfile.isEmpty {
+                        xijian["user_profile"] = .object(userProfile)
+                    }
+                    var body: [String: JSONValue] = [
                         "model": .string(request.model),
                         "messages": .array(request.messages.map { msg in
                             .object(["role": .string(msg.role), "content": .string(msg.content)])
@@ -237,12 +249,11 @@ struct APIClient {
                         "max_tokens": .number(Double(request.maxTokens)),
                         "stream": .bool(true),
                         "stream_options": .object(["include_usage": .bool(true)]),
-                        "xijian": .object([
-                            "character_id": request.characterID.map { .string($0) } ?? .null,
-                            "world_id": request.worldID.map { .string($0) } ?? .null,
-                            "recall": .object(["enabled": .bool(request.recallEnabled)]),
-                        ]),
+                        "xijian": .object(xijian),
                     ]
+                    if let userName = request.userName, !userName.isEmpty {
+                        body["user"] = .string(userName)
+                    }
                     let urlRequest = try makeRequest(
                         "POST", "/v1/chat/completions",
                         body: body,

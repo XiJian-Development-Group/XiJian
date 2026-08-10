@@ -159,6 +159,8 @@ struct ChatView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+        // Apple 风格：毛玻璃工具栏（内容在下方滚动时露出材质层次）
+        .background(.bar)
     }
 
     // MARK: 消息列表
@@ -197,18 +199,26 @@ struct ChatView: View {
 
     private var emptyState: some View {
         VStack(spacing: 12) {
-            Image(systemName: "bubble.left.and.bubble.right")
-                .font(.system(size: 44))
-                .foregroundStyle(.tertiary)
+            // Apple 风格：毛玻璃圆形容器 + 主题色图标
+            ZStack {
+                Circle()
+                    .fill(theme.accentColor.opacity(0.12))
+                    .frame(width: 88, height: 88)
+                Image(systemName: "bubble.left.and.bubble.right")
+                    .font(.system(size: 38))
+                    .foregroundStyle(theme.accentColor)
+            }
+            .shadow(color: theme.accentColor.opacity(0.15), radius: 18, y: 8)
             Text(loc("开始与隙间对话"))
-                .font(.title3)
-                .foregroundStyle(.secondary)
+                .font(.title2.bold())
+                .foregroundStyle(.primary)
             Text(loc("在下方输入消息，或先选择一个模型"))
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+                .font(.body)
+                .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(.top, 80)
+        .xjFadeUp()
     }
 
     private var streamingBar: some View {

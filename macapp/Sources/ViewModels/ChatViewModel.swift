@@ -131,6 +131,14 @@ final class ChatViewModel {
 
         // 构造流式请求（发送全部历史）
         isStreaming = true
+        let profile = UserProfileSettings.shared
+        var userProfile: [String: JSONValue] = [:]
+        if !profile.identityDescription.isEmpty {
+            userProfile["identity"] = .string(profile.identityDescription)
+        }
+        if !profile.aliases.isEmpty {
+            userProfile["aliases"] = .array(profile.aliases.map { .string($0) })
+        }
         let request = APIClient.ChatRequest(
             model: model,
             messages: messages,
@@ -139,7 +147,9 @@ final class ChatViewModel {
             characterID: app.selectedCharacterID,
             worldID: app.selectedWorldID,
             recallEnabled: app.recallEnabled,
-            requestID: UUID().uuidString
+            requestID: UUID().uuidString,
+            userName: profile.userName.isEmpty ? nil : profile.userName,
+            userProfile: userProfile.isEmpty ? nil : userProfile
         )
         streamRequestID = request.requestID
 

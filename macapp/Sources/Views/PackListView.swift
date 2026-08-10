@@ -5,6 +5,7 @@ import XiJianKit
 struct PackListView: View {
     @Bindable var viewModel: PackViewModel
     @Environment(CoreManager.self) private var core
+    @Environment(ThemeSettings.self) private var theme
     @State private var showImportSheet = false
     @State private var showError = false
     @State private var errorMessage = ""
@@ -91,19 +92,27 @@ struct PackListView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "shippingbox")
-                .font(.system(size: 44))
-                .foregroundStyle(.tertiary)
+        VStack(spacing: XJSpacing.md) {
+            // Apple 风格：毛玻璃圆形容器 + 主题色图标（与 ChatView 空态一致）
+            ZStack {
+                Circle()
+                    .fill(theme.accentColor.opacity(0.12))
+                    .frame(width: 88, height: 88)
+                Image(systemName: "shippingbox")
+                    .font(.system(size: 38))
+                    .foregroundStyle(theme.accentColor)
+            }
+            .shadow(color: theme.accentColor.opacity(0.15), radius: 18, y: 8)
             Text(loc("还没有资源包"))
-                .font(.title3)
-                .foregroundStyle(.secondary)
+                .font(.title2.bold())
+                .foregroundStyle(.primary)
             Text(loc("可用 DevKit 导出资源包，或把 .7z/.zip 放入 Core 的 packs 目录后点击重新扫描"))
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+                .font(.body)
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .xjFadeUp()
     }
 
     private var coreIsRunning: Bool {
@@ -116,6 +125,8 @@ struct PackListView: View {
 struct PackRow: View {
     let pack: PackInfo
     var onUninstall: () -> Void
+
+    @State private var isHovering = false
 
     private var kindColor: Color {
         switch pack.kind {
@@ -172,5 +183,14 @@ struct PackRow: View {
             .help(loc("卸载资源包"))
         }
         .padding(.vertical, 4)
+        .background(
+            RoundedRectangle(cornerRadius: XJRadius.small, style: .continuous)
+                .fill(isHovering ? Color.primary.opacity(0.05) : Color.clear)
+        )
+        .onHover { hovering in
+            withAnimation(.spring(response: 0.4, dampingFraction: 1.0)) {
+                isHovering = hovering
+            }
+        }
     }
 }
