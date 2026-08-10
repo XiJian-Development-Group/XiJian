@@ -19,16 +19,61 @@ public final class AppPermissions {
 
     // MARK: - 通知权限
 
-    /// 请求通知权限（options: .alert/.sound/.badge）。返回是否已授权。
-    /// 必须在用户触发场景调用（引导页点「允许」时）；App 未签名时系统不弹窗。
+    /// 通知权限请求结果
+    enum NotificationRequestResult {
+        /// 已授权
+        case authorized
+        /// 被拒绝
+        case denied
+        /// 系统未弹出授权窗口（未签名 / 签名无效 / 系统限制）
+        case systemUnavailable
+    }
+
+    /// 请求通知权限（options: .alert/.sound/.badge）。
+    /// 必须在用户触发场景调用（引导页点「允许」时）。
+    /// 返回详细结果：已授权 / 已拒绝 / 系统未弹窗。
     @discardableResult
-    func requestNotificationPermission() async -> Bool {
+    func requestNotificationPermission() async -> NotificationRequestResult {
         let center = UNUserNotificationCenter.current()
+
+        // 请求前先查状态：已授权 / 已拒绝则直接返回，避免重复弹窗
+        let before = await center.notificationSettings().authorizationStatus
+        switch before {
+        case .authorized, .provisional, .ephemeral:
+            UserProfileSettings.shared.notificationState = .authorized
+            return .authorized
+        case .denied:
+            UserProfileSettings.shared.notificationState = .denied
+            return .denied
+        case .notDetermined:
+            break
+        @unknown default:
+            break
+        }
+
+        // 请求授权（系统弹窗）。失败/抛错 → 系统未弹窗
         do {
             _ = try await center.requestAuthorization(options: [.alert, .sound, .badge])
-            return await notificationAuthorized()
         } catch {
-            return false
+            UserProfileSettings.shared.notificationState = .notDetermined
+            return .systemUnavailable
+        }
+
+        // 请求后回读真实状态
+        let after = await center.notificationSettings().authorizationStatus
+        switch after {
+        case .authorized, .provisional, .ephemeral:
+            UserProfileSettings.shared.notificationState = .authorized
+            return .authorized
+        case .denied:
+            UserProfileSettings.shared.notificationState = .denied
+            return .denied
+        case .notDetermined:
+            // 请求后仍为未确定 → 系统未弹窗（未签名构建等）
+            UserProfileSettings.shared.notificationState = .notDetermined
+            return .systemUnavailable
+        @unknown default:
+            return .systemUnavailable
         }
     }
 
@@ -48,14 +93,6 @@ public final class AppPermissions {
             state = .notDetermined
         }
         UserProfileSettings.shared.notificationState = state
-    }
-
-    /// 查询当前是否已授权（.authorized / .provisional / .ephemeral 视为已授权）
-    private func notificationAuthorized() async -> Bool {
-        let settings = await UNUserNotificationCenter.current().notificationSettings()
-        // 注意：.ephemeral 仅 iOS/tvOS 可用，macOS 无此状态
-        return settings.authorizationStatus == .authorized
-            || settings.authorizationStatus == .provisional
     }
 
     /// 打开系统「通知」设置面板（用户拒绝后的引导）

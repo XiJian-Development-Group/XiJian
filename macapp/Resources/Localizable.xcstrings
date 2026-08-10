@@ -5517,6 +5517,22 @@
         }
       }
     },
+    "未检测到系统弹窗": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No system prompt detected"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "システムのプロンプトが表示されませんでした"
+          }
+        }
+      }
+    },
     "未知": {
       "localizations": {
         "en": {

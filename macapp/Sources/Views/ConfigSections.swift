@@ -95,7 +95,11 @@ struct PermissionConfigSection: View {
         }
     }
 
-    /// 通知权限尾随控件：已授权 → 绿色状态；已拒绝 → 去设置开启；未请求 → 允许
+    /// 最近一次请求的结果（用于展示「系统未弹窗」提示）
+    @State private var lastRequestResult: AppPermissions.NotificationRequestResult?
+
+    /// 通知权限尾随控件：已授权 → 绿色状态；已拒绝 → 去设置开启；未请求 → 允许；
+    /// 请求后系统未弹窗 → 提示 + 去设置开启
     @ViewBuilder
     private var notificationTrailing: some View {
         switch profile.notificationState {
@@ -109,17 +113,31 @@ struct PermissionConfigSection: View {
             }
             .font(.caption)
         case .notDetermined:
-            Button(loc("允许")) {
-                requestNotification()
+            if lastRequestResult == .systemUnavailable {
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text(loc("未检测到系统弹窗"))
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                    Button(loc("去设置开启")) {
+                        AppPermissions.shared.openNotificationSystemSettings()
+                    }
+                    .font(.caption)
+                }
+            } else {
+                Button(loc("允许")) {
+                    requestNotification()
+                }
+                .font(.caption.weight(.medium))
             }
-            .font(.caption.weight(.medium))
         }
     }
 
-    /// 请求通知权限并刷新状态（拒绝后 UI 自动切换为「去设置开启」）
+    /// 请求通知权限并刷新状态（拒绝后 UI 自动切换为「去设置开启」；
+    /// 系统未弹窗时显示提示并提供手动路径）
     private func requestNotification() {
         Task {
-            _ = await AppPermissions.shared.requestNotificationPermission()
+            let result = await AppPermissions.shared.requestNotificationPermission()
+            lastRequestResult = result
             await AppPermissions.shared.refreshNotificationStatus()
         }
     }
