@@ -127,8 +127,17 @@ class AuthConfig:
     """Authentication configuration: bearer token file path template.
 
     认证配置：Bearer 令牌文件路径模板。
+
+    The default template points into the unified temporary directory
+    (``~/Library/Application Support/XiJian/tmp``); ``~`` is expanded
+    by :func:`token_file_path` via ``Path.expanduser``.
+
+    默认模板指向统一临时目录（``~/Library/Application Support/XiJian/tmp``）；
+    ``~`` 由 :func:`token_file_path` 通过 ``Path.expanduser`` 展开。
     """
-    token_file: str = "/tmp/xijian-{pid}.token"
+    # 开发模式与打包模式统一：token 一律写入统一临时目录（tmp/）。
+    # Dev and packaged modes are unified: tokens always live in the shared tmp/.
+    token_file: str = "~/Library/Application Support/XiJian/tmp/xijian-{pid}.token"
 
 
 @dataclass(frozen=True)
@@ -714,17 +723,23 @@ def token_file_path(pid: int | None = None, template: str | None = None) -> Path
     """Resolve the bearer token file path.
 
     解析 Bearer 令牌文件路径。
+
+    When ``template`` is given it wins (``~`` is expanded); otherwise
+    dev and packaged modes both fall back to
+    :func:`xijian_api.runtime.default_token_file` — the unified
+    temporary directory.
+
+    提供 ``template`` 时以其为准（展开 ``~``）；否则开发与打包模式统一回退到
+    :func:`xijian_api.runtime.default_token_file` —— 统一临时目录。
     """
     if pid is None:
         pid = os.getpid()
     if template:
-        return Path(template.format(pid=pid))
-    # 打包模式：使用可执行文件同级的 run/ 目录，避免 /tmp 被系统清理
-    # Packaged mode: use the run/ directory alongside the executable to avoid /tmp being cleaned
-    from xijian_api.runtime import is_frozen, default_token_file
-    if is_frozen():
-        return default_token_file(pid)
-    return Path(f"/tmp/xijian-{pid}.token")
+        return Path(template.format(pid=pid)).expanduser()
+    # 开发模式与打包模式统一：token 文件位于统一临时目录（tmp/）。
+    # Dev and packaged modes are unified: token files live in the shared tmp/.
+    from xijian_api.runtime import default_token_file
+    return default_token_file(pid)
 
 
 __all__ = [

@@ -29,10 +29,11 @@ set -euo pipefail
 MACAPP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${MACAPP_DIR}/.." && pwd)"
 CORE_DIR="${REPO_ROOT}/core"
-# 注意：必须用 macapp/scripts/xijian-api.spec 而非 core/scripts/xijian-api.spec。
-# core 侧的 spec 在 excludes 中排除了 sqlite3（旧版），而 store.py 需要 sqlite3，
-# 用 core 侧 spec 打出的包会因 `No module named 'sqlite3'` 无法启动。
-SPEC_FILE="${MACAPP_DIR}/scripts/xijian-api.spec"
+# 统一使用 core/scripts/xijian-api.spec（唯一 spec，已含 sqlite3 修复：
+# store.py 需要 sqlite3，不能排除）。
+# The single spec lives at core/scripts/xijian-api.spec (sqlite3 fix
+# included — store.py needs sqlite3, so it must not be excluded).
+SPEC_FILE="${REPO_ROOT}/core/scripts/xijian-api.spec"
 
 # conda 环境铁律：XiJian 项目必须用 xijianBase
 PY="/opt/anaconda3/envs/xijianBase/bin/python"
@@ -116,7 +117,7 @@ fi
 find "${RESOURCES_DIR}" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
 
 # 清除运行时生成物（token / 日志等），避免被 xcodegen 打进 .app bundle
-rm -rf "${RESOURCES_DIR}/run" "${RESOURCES_DIR}/logs"
+rm -rf "${RESOURCES_DIR}/tmp" "${RESOURCES_DIR}/logs"
 
 echo "==> done. embedded core:"
 du -sh "${RESOURCES_DIR}"

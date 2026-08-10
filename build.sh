@@ -16,7 +16,7 @@
 #   --skip-package   跳过打包 (只跑测试时用)
 #   --clean          先删 ./dist/ ./build/ 以及所有 *.egg-info 再构建
 #   --venv PATH      指定 venv 路径 (默认 core/.venv)
-#   --python BIN     指定 Python 解释器 (默认 python3)
+#   --python BIN     指定 Python 解释器 (默认 xijianBase)
 #   --help           显示帮助
 #
 # 退出码:
@@ -28,7 +28,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CORE_DIR="${SCRIPT_DIR}/core"
 VENV_PATH="${CORE_DIR}/.venv"
-PYTHON_BIN="${PYTHON_BIN:-python3}"
+PYTHON_BIN="${PYTHON_BIN:-/opt/anaconda3/envs/xijianBase/bin/python}"
 DIST_DIR="${SCRIPT_DIR}/dist"
 BUILD_DIR="${SCRIPT_DIR}/build"
 
@@ -79,7 +79,12 @@ done
 # ---- 1. 环境检查 ------------------------------------------------------
 log "检查 Python 解释器: ${PYTHON_BIN}"
 if ! command -v "${PYTHON_BIN}" >/dev/null 2>&1; then
-    err "找不到 ${PYTHON_BIN}; 装 Python 3.11+ 或用 --python 指定"
+    if [[ "${PYTHON_BIN}" == "/opt/anaconda3/envs/xijianBase/bin/python" ]]; then
+        err "xijianBase 环境不存在: ${PYTHON_BIN}"
+        err "请先创建: conda create -n xijianBase python=3.11"
+    else
+        err "找不到 ${PYTHON_BIN}; 装 Python 3.11+ 或用 --python 指定"
+    fi
     exit 1
 fi
 

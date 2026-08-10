@@ -360,7 +360,7 @@ def test_port_fallback_occupied_proceeds(monkeypatch, caplog):
 # ---------------------------------------------------------------------------
 
 
-def test_main_falls_back_to_free_port(tmp_path):
+def test_main_falls_back_to_free_port(tmp_path, monkeypatch):
     """Occupying the preferred port must make ``main`` bind a free port,
     report it, publish the pid-scoped port file, and serve /healthz there.
 
@@ -368,6 +368,10 @@ def test_main_falls_back_to_free_port(tmp_path):
     隔离的端口文件，并在该端口提供 /healthz。
     """
     import urllib.request
+
+    # 测试进程与子进程统一走隔离路径：default_tmp_dir 跟随 XIJIAN_DATA_DIR。
+    # 只给子进程 env 设置不够——本进程解析 default_port_file 时也要同源。
+    monkeypatch.setenv("XIJIAN_DATA_DIR", str(tmp_path))
 
     # Occupier on the preferred port.
     # 占用首选端口的监听器。
@@ -415,7 +419,10 @@ def test_main_falls_back_to_free_port(tmp_path):
         try:
             # Wait for the pid-scoped port file, then verify /healthz.
             # 等待按 pid 隔离的端口文件，然后验证 /healthz。
-            port_file = Path("/tmp") / f"xijian-{proc.pid}.port"
+            # 端口文件统一位于临时目录（跟随 XIJIAN_DATA_DIR 推导），
+            # 不再硬编码 /tmp。
+            from xijian_api.runtime import default_port_file
+            port_file = default_port_file(proc.pid)
             found = None
             deadline = time.time() + 30
             while time.time() < deadline:

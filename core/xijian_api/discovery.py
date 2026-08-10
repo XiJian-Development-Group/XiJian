@@ -24,7 +24,16 @@ File location
 文件位置
 -------------
 
-``~/.xijian/xijian_core.json``
+``~/Library/Application Support/XiJian/tmp/xijian_core.json``
+(derived from :func:`xijian_api.runtime.default_tmp_dir`; follows
+``XIJIAN_DATA_DIR`` in tests).  For compatibility with older DevKit
+builds, reads fall back to the legacy ``~/.xijian/xijian_core.json``
+(writes go to the new path only).
+
+``~/Library/Application Support/XiJian/tmp/xijian_core.json``
+（由 :func:`xijian_api.runtime.default_tmp_dir` 推导；测试时跟随
+``XIJIAN_DATA_DIR``）。为兼容旧版 DevKit，读取时回退到旧的
+``~/.xijian/xijian_core.json``（写入只写新路径）。
 
 Format
 ------
@@ -70,16 +79,24 @@ import time
 from pathlib import Path
 
 from xijian_api.handshake import HEALTHZ_BODY
+from xijian_api.runtime import default_tmp_dir
 
 _LOGGER = logging.getLogger(__name__)
 
 #: Well-known file path where the Core API writes its coordinates.
-#: The ``~/.xijian/`` directory is used as a general-purpose local
-#: IPC directory (not user data, not cache — just cross-process info).
+#: Lives in the unified temporary directory (``<storage_parent>/tmp``,
+#: i.e. ``~/Library/Application Support/XiJian/tmp`` by default) — the
+#: same place token/port files live, so every XiJian component shares
+#: one temp location.
 #: Core API 写入其坐标的已知文件路径。
-#: ``~/.xijian/`` 目录用作通用的本地 IPC 目录（不是用户数据，不是缓存——仅用于跨进程信息）。
-DISCOVERY_DIR = Path.home() / ".xijian"
-DISCOVERY_FILE = DISCOVERY_DIR / "xijian_core.json"
+#: 位于统一临时目录（``<storage_parent>/tmp``，默认即
+#: ``~/Library/Application Support/XiJian/tmp``）——与 token/port 文件
+#: 同处一地，所有 XiJian 组件共享同一临时位置。
+DISCOVERY_FILE = default_tmp_dir() / "xijian_core.json"
+
+#: Legacy read fallback (compat with old DevKit builds).
+#: 旧路径只读兜底（兼容旧版 DevKit）。
+LEGACY_DISCOVERY_FILE = Path.home() / ".xijian" / "xijian_core.json"
 
 #: The version string returned in the discovery file.
 #: 发现文件中返回的版本字符串。
@@ -97,11 +114,11 @@ def write_discovery(
 
     将 Core API 的坐标写入已知的发现文件。
 
-    Creates ``~/.xijian/`` with ``0700`` perms if it doesn't exist.
-    The file is written atomically via a temp file + rename to avoid
-    partial reads from other processes.
+    Creates the parent directory (``default_tmp_dir()``) if it doesn't
+    exist.  The file is written atomically via a temp file + rename to
+    avoid partial reads from other processes.
 
-    如果 ``~/.xijian/`` 不存在则以 ``0700`` 权限创建。
+    如果父目录（``default_tmp_dir()``）不存在则创建。
     通过临时文件 + 重命名原子性地写入文件，避免其他进程读取到不完整的内容。
 
     Parameters
@@ -120,7 +137,7 @@ def write_discovery(
         The PID of the Core API process.  Falls back to ``os.getpid()``.
         Core API 进程的 PID。回退到 ``os.getpid()``。
     """
-    DISCOVERY_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
+    DISCOVERY_FILE.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
 
     payload = {
         "pid": pid or os.getpid(),
@@ -168,6 +185,13 @@ def read_discovery() -> dict | None:
 
     从发现文件读取 Core API 的坐标。
 
+    The new path (unified tmp) is tried first; if absent, the legacy
+    ``~/.xijian/xijian_core.json`` is used as a read fallback so older
+    DevKit builds can still find a Core started by this version.
+
+    优先读取新路径（统一 tmp）；不存在时回退到旧路径
+    ``~/.xijian/xijian_core.json``，让旧版 DevKit 仍能发现本版本启动的 Core。
+
     Returns the payload dict (``port``, ``host``, ``auth_token``, …)
     or ``None`` if the file doesn't exist or is unreadable.
 
@@ -179,13 +203,15 @@ def read_discovery() -> dict | None:
 
     调用者应通过 :func:`verify_discovery` 验证文件仍然是最新的。
     """
-    try:
-        if not DISCOVERY_FILE.is_file():
-            return None
-        data = json.loads(DISCOVERY_FILE.read_text(encoding="utf-8"))
-        return data
-    except (json.JSONDecodeError, OSError):
-        return None
+    for candidate in (DISCOVERY_FILE, LEGACY_DISCOVERY_FILE):
+        try:
+            if not candidate.is_file():
+                continue
+            data = json.loads(candidate.read_text(encoding="utf-8"))
+            return data
+        except (json.JSONDecodeError, OSError):
+            continue
+    return None
 
 
 def verify_discovery(info: dict | None) -> bool:
@@ -229,5 +255,6 @@ __all__ = [
     "read_discovery",
     "verify_discovery",
     "DISCOVERY_FILE",
+    "LEGACY_DISCOVERY_FILE",
     "CORE_VERSION",
 ]

@@ -1,8 +1,9 @@
 """用于 DevKit 的 Core API 发现。
 
-读取 Core API 写入的发现文件（位于
-``~/.xijian/xijian_core.json``），并提供辅助函数以验证
-连接并推送数据用于预览/测试。
+读取 Core API 写入的发现文件（位于统一临时目录
+``~/Library/Application Support/XiJian/tmp/xijian_core.json``，
+不存在时回退到旧路径 ``~/.xijian/xijian_core.json``），并提供辅助函数
+以验证连接并推送数据用于预览/测试。
 """
 
 from __future__ import annotations
@@ -16,14 +17,26 @@ from typing import Any
 
 _LOGGER = logging.getLogger("devkit.discovery")
 
-DISCOVERY_FILE = Path.home() / ".xijian" / "xijian_core.json"
+#: 统一临时目录下的发现文件（与 core runtime.default_tmp_dir 一致：
+#: 默认 ~/Library/Application Support/XiJian/tmp，跟随 XIJIAN_DATA_DIR）。
+#: 旧路径只读兜底（兼容旧版 Core 写入）。
+#: Legacy read fallback (compat with older Core builds).
+def _unified_tmp_dir() -> Path:
+    env_dir = os.environ.get("XIJIAN_DATA_DIR")
+    if env_dir:
+        return Path(env_dir).expanduser().parent / "tmp"
+    return Path.home() / "Library" / "Application Support" / "XiJian" / "tmp"
+
+
+DISCOVERY_FILE = _unified_tmp_dir() / "xijian_core.json"
+LEGACY_DISCOVERY_FILE = Path.home() / ".xijian" / "xijian_core.json"
 
 
 def discover_core() -> dict[str, Any] | None:
     """定位正在运行的 Core API 实例。
 
-    读取众所周知的发现文件，通过 ``/healthz`` 验证实例
-    仍然存活，并返回连接信息。
+    读取众所周知的发现文件（新路径优先，旧路径兜底），通过
+    ``/healthz`` 验证实例仍然存活，并返回连接信息。
 
     返回
     -------
@@ -31,12 +44,13 @@ def discover_core() -> dict[str, Any] | None:
     ``version``、``healthy``、``started_at`` 的 dict；
     如果 Core API 不可用则返回 ``None``。
     """
-    if not DISCOVERY_FILE.is_file():
-        _LOGGER.debug("Core discovery file not found at %s", DISCOVERY_FILE)
+    target = DISCOVERY_FILE if DISCOVERY_FILE.is_file() else LEGACY_DISCOVERY_FILE
+    if not target.is_file():
+        _LOGGER.debug("Core discovery file not found at %s (fallback %s)", DISCOVERY_FILE, LEGACY_DISCOVERY_FILE)
         return None
 
     try:
-        data = json.loads(DISCOVERY_FILE.read_text(encoding="utf-8"))
+        data = json.loads(target.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         _LOGGER.warning("Core discovery file corrupted, ignoring")
         return None

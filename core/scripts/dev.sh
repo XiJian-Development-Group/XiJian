@@ -236,7 +236,7 @@ run_interactive() {
         local levels=("DEBUG" "INFO" "WARNING" "ERROR" "CRITICAL")
         SERVER_ARGS+=("--log-level" "${levels[$((ANSWER-1))]}")
         if prompt_yesno "  写入日志文件？" "N"; then
-            prompt_input "  日志文件路径" "/tmp/xijian.log"
+            prompt_input "  日志文件路径" "$HOME/Library/Application Support/XiJian/Core/logs/xijian-api.log"
             SERVER_ARGS+=("--log-file" "$ANSWER")
         fi
         if prompt_yesno "  指定自定义配置文件？" "N"; then
@@ -433,8 +433,8 @@ build_executable() {
     fi
 
     # 5. 创建空目录（运行时需要）
-    mkdir -p "$dist_dir/logs" "$dist_dir/run" "$dist_dir/data" "$dist_dir/external_libs"
-    log "  已创建运行时目录 (logs/ run/ data/ external_libs/)"
+    mkdir -p "$dist_dir/logs" "$dist_dir/tmp" "$dist_dir/data" "$dist_dir/external_libs"
+    log "  已创建运行时目录 (logs/ tmp/ data/ external_libs/)"
 
     # 6. 显示构建产物大小
     local size
@@ -492,7 +492,7 @@ if [[ $DO_RUN -eq 1 ]]; then
 elif [[ $DO_BUILD -eq 0 && $DO_INFO -eq 0 ]]; then
     ok "环境准备完成。常用命令:"
     log "  ./core/scripts/dev.sh --run --dev --port 18600"
-    log "  ./core/scripts/dev.sh --run --dev --log-level DEBUG --log-file /tmp/xijian.log"
+    log "  ./core/scripts/dev.sh --run --dev --log-level DEBUG --log-file \"$HOME/Library/Application Support/XiJian/Core/logs/xijian-api.log\""
     log "  ./core/scripts/dev.sh --build --zip          # 打包为可执行文件"
     log "  ./core/scripts/dev.sh --info                 # 显示环境信息"
     log "  ./core/scripts/dev.sh -i                     # 交互式向导"

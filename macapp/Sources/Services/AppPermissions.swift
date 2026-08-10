@@ -138,6 +138,12 @@ public final class AppPermissions {
             .appendingPathComponent("Library/LaunchAgents/com.xijian.background.plist")
     }
 
+    /// 守护进程日志：~/Library/Application Support/XiJian/tmp/xijian-agent.log
+    static var launchAgentLogURL: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/XiJian/tmp/xijian-agent.log")
+    }
+
     /// 注册 launchctl 守护（KeepAlive 仅异常退出时重启，登录自启）。
     /// 先 bootout 清理旧实例再 bootstrap；失败抛错（UI 显示错误，不影响主功能）。
     func installLaunchAgent() throws {
@@ -149,14 +155,16 @@ public final class AppPermissions {
             throw CocoaError(.fileNoSuchFile)
         }
 
+        // 守护日志写入统一临时目录（与 token/port 同处）
+        let logURL = Self.launchAgentLogURL
         let plist: [String: Any] = [
             "Label": "com.xijian.background",
             "ProgramArguments": [exeURL.path],
             "RunAtLoad": false,
             "KeepAlive": ["SuccessfulExit": false],
             "ProcessType": "Background",
-            "StandardOutPath": "/tmp/xijian-agent.log",
-            "StandardErrorPath": "/tmp/xijian-agent.log",
+            "StandardOutPath": logURL.path,
+            "StandardErrorPath": logURL.path,
         ]
         let data = try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
         try data.write(to: plistURL, options: .atomic)

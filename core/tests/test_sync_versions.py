@@ -147,7 +147,11 @@ def _make_repo(tmp_path: Path) -> dict[str, Path]:
     config.parent.mkdir(parents=True)
     config.write_text(
         json.dumps({
-            "Version": {"CoreApi": "v2.0.0-Beta", "DevKit": "v3.1.4"},
+            "Version": {
+                "CoreApi": "v2.0.0-Beta",
+                "DevKit": "v3.1.4",
+                "macOSUIApp": "v2.1.0",
+            },
         }),
         encoding="utf-8",
     )
@@ -159,6 +163,10 @@ def _make_repo(tmp_path: Path) -> dict[str, Path]:
         "devkit_spec": _write(
             tmp_path / "devkit" / "spec",
             '"CFBundleShortVersionString": "1.5.0",\n"CFBundleVersion": "1.5.0",\n',
+        ),
+        "macapp_project_yml": _write(
+            tmp_path / "macapp" / "project.yml",
+            'name: XiJian\noptions:\n  deploymentTarget:\n    macOS: "14.0"\nsettings:\n  base:\n    MARKETING_VERSION: "1.0.0"\n',
         ),
     }
     return {"config": config, "targets": targets}
@@ -173,6 +181,7 @@ def test_run_sync_writes_every_target(tmp_path):
     assert "CORE_VERSION = 'v2.0.0-Beta'" in repo["targets"]["core_version_module"].read_text()
     assert 'FALLBACK_VERSION = "v3.1.4"' in repo["targets"]["devkit_version_py"].read_text()
     assert '"CFBundleShortVersionString": "3.1.4"' in repo["targets"]["devkit_spec"].read_text()
+    assert 'MARKETING_VERSION: "2.1.0"' in repo["targets"]["macapp_project_yml"].read_text()
 
 
 def test_run_sync_dry_run_writes_nothing(tmp_path):

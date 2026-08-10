@@ -36,7 +36,9 @@ driver = "auto"
 # ---------------------------------------------------------------------------
 
 [auth]
-token_file = "/tmp/xijian-{pid}.token"
+# token 路径由 runtime 统一管理（开发/打包一致），不在此配置。
+# 实际位置：~/Library/Application Support/XiJian/tmp/xijian-{pid}.token
+# （跟随 XIJIAN_DATA_DIR 时位于 <data_dir>/../tmp）。
 
 # ---------------------------------------------------------------------------
 # Storage layout — single base directory, per-type subfolders.

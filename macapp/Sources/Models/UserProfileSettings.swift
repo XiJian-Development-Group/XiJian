@@ -44,59 +44,46 @@ public final class UserProfileSettings {
         }
     }
 
-    // MARK: 持久化键
-
-    private enum Key {
-        static let userName = "xijian.profile.userName"
-        static let aliases = "xijian.profile.aliases"
-        static let identity = "xijian.profile.identity"
-        static let onboardingCompleted = "xijian.profile.onboardingCompleted"
-        static let aiSource = "xijian.profile.aiSource"
-        static let remoteEndpoint = "xijian.profile.remoteEndpoint"
-        static let remoteToken = "xijian.profile.remoteToken"
-        static let remoteModelID = "xijian.profile.remoteModelID"
-        static let notificationState = "xijian.profile.notificationState"
-        static let backgroundActivity = "xijian.profile.backgroundActivity"
-    }
+    // MARK: 持久化键（统一见 XJDefaultsKey）
 
     // MARK: 属性（didSet 持久化）
 
     /// 用户名（可空）
-    var userName: String { didSet { UserDefaults.standard.set(userName, forKey: Key.userName) } }
+    var userName: String { didSet { UserDefaults.standard.set(userName, forKey: XJDefaultsKey.profileUserName) } }
     /// 别称（多个，可空数组）
-    var aliases: [String] { didSet { UserDefaults.standard.set(aliases, forKey: Key.aliases) } }
+    var aliases: [String] { didSet { UserDefaults.standard.set(aliases, forKey: XJDefaultsKey.profileAliases) } }
     /// 用户身份描述
-    var identityDescription: String { didSet { UserDefaults.standard.set(identityDescription, forKey: Key.identity) } }
+    var identityDescription: String { didSet { UserDefaults.standard.set(identityDescription, forKey: XJDefaultsKey.profileIdentity) } }
     /// 新人引导是否完成
-    public var onboardingCompleted: Bool { didSet { UserDefaults.standard.set(onboardingCompleted, forKey: Key.onboardingCompleted) } }
+    public var onboardingCompleted: Bool { didSet { UserDefaults.standard.set(onboardingCompleted, forKey: XJDefaultsKey.profileOnboardingCompleted) } }
     /// AI 功能来源
-    var aiSource: AISource { didSet { UserDefaults.standard.set(aiSource.rawValue, forKey: Key.aiSource) } }
+    var aiSource: AISource { didSet { UserDefaults.standard.set(aiSource.rawValue, forKey: XJDefaultsKey.profileAISource) } }
     /// 远程 API 端点
-    var remoteEndpoint: String { didSet { UserDefaults.standard.set(remoteEndpoint, forKey: Key.remoteEndpoint) } }
+    var remoteEndpoint: String { didSet { UserDefaults.standard.set(remoteEndpoint, forKey: XJDefaultsKey.profileRemoteEndpoint) } }
     /// 远程 Token
-    var remoteToken: String { didSet { UserDefaults.standard.set(remoteToken, forKey: Key.remoteToken) } }
+    var remoteToken: String { didSet { UserDefaults.standard.set(remoteToken, forKey: XJDefaultsKey.profileRemoteToken) } }
     /// 远程模型 ID（暂不指定，可空）
-    var remoteModelID: String { didSet { UserDefaults.standard.set(remoteModelID, forKey: Key.remoteModelID) } }
+    var remoteModelID: String { didSet { UserDefaults.standard.set(remoteModelID, forKey: XJDefaultsKey.profileRemoteModelID) } }
     /// 通知权限状态
-    var notificationState: NotificationState { didSet { UserDefaults.standard.set(notificationState.rawValue, forKey: Key.notificationState) } }
+    var notificationState: NotificationState { didSet { UserDefaults.standard.set(notificationState.rawValue, forKey: XJDefaultsKey.profileNotificationState) } }
     /// 后台活动权限（防 App Nap）
-    public var backgroundActivityEnabled: Bool { didSet { UserDefaults.standard.set(backgroundActivityEnabled, forKey: Key.backgroundActivity) } }
+    public var backgroundActivityEnabled: Bool { didSet { UserDefaults.standard.set(backgroundActivityEnabled, forKey: XJDefaultsKey.profileBackgroundActivity) } }
 
     // MARK: 初始化（从 UserDefaults 读取，带默认值）
 
     /// 初始化（internal：单例 shared 供 App 使用；测试可自行创建实例）
     init() {
         let d = UserDefaults.standard
-        userName = d.string(forKey: Key.userName) ?? ""
-        aliases = d.stringArray(forKey: Key.aliases) ?? []
-        identityDescription = d.string(forKey: Key.identity) ?? ""
-        onboardingCompleted = d.bool(forKey: Key.onboardingCompleted)
-        aiSource = AISource(rawValue: d.string(forKey: Key.aiSource) ?? "") ?? .local
-        remoteEndpoint = d.string(forKey: Key.remoteEndpoint) ?? ""
-        remoteToken = d.string(forKey: Key.remoteToken) ?? ""
-        remoteModelID = d.string(forKey: Key.remoteModelID) ?? ""
-        notificationState = NotificationState(rawValue: d.string(forKey: Key.notificationState) ?? "") ?? .notDetermined
-        backgroundActivityEnabled = d.bool(forKey: Key.backgroundActivity)
+        userName = d.string(forKey: XJDefaultsKey.profileUserName) ?? ""
+        aliases = d.stringArray(forKey: XJDefaultsKey.profileAliases) ?? []
+        identityDescription = d.string(forKey: XJDefaultsKey.profileIdentity) ?? ""
+        onboardingCompleted = d.bool(forKey: XJDefaultsKey.profileOnboardingCompleted)
+        aiSource = AISource(rawValue: d.string(forKey: XJDefaultsKey.profileAISource) ?? "") ?? .local
+        remoteEndpoint = d.string(forKey: XJDefaultsKey.profileRemoteEndpoint) ?? ""
+        remoteToken = d.string(forKey: XJDefaultsKey.profileRemoteToken) ?? ""
+        remoteModelID = d.string(forKey: XJDefaultsKey.profileRemoteModelID) ?? ""
+        notificationState = NotificationState(rawValue: d.string(forKey: XJDefaultsKey.profileNotificationState) ?? "") ?? .notDetermined
+        backgroundActivityEnabled = d.bool(forKey: XJDefaultsKey.profileBackgroundActivity)
     }
 
     // MARK: 操作

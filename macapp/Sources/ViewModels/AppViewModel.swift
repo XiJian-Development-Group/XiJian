@@ -53,7 +53,7 @@ public final class AppViewModel {
         didSet {
             let clamped = min(max(temperature, 0), 2)
             if temperature != clamped { temperature = clamped; return }
-            UserDefaults.standard.set(temperature, forKey: "xijian.chat.temperature")
+            UserDefaults.standard.set(temperature, forKey: XJDefaultsKey.chatTemperature)
         }
     }
 
@@ -61,23 +61,23 @@ public final class AppViewModel {
         didSet {
             let clamped = min(max(maxTokens, 64), 32768)
             if maxTokens != clamped { maxTokens = clamped; return }
-            UserDefaults.standard.set(maxTokens, forKey: "xijian.chat.maxTokens")
+            UserDefaults.standard.set(maxTokens, forKey: XJDefaultsKey.chatMaxTokens)
         }
     }
 
     /// 是否启用记忆召回
     var recallEnabled: Bool {
-        didSet { UserDefaults.standard.set(recallEnabled, forKey: "xijian.chat.recall") }
+        didSet { UserDefaults.standard.set(recallEnabled, forKey: XJDefaultsKey.chatRecall) }
     }
 
     /// 默认角色（发送聊天时注入 character_id）
     var selectedCharacterID: String? {
-        didSet { UserDefaults.standard.set(selectedCharacterID, forKey: "xijian.chat.character") }
+        didSet { UserDefaults.standard.set(selectedCharacterID, forKey: XJDefaultsKey.chatCharacter) }
     }
 
     /// 默认世界（发送聊天时注入 world_id）
     var selectedWorldID: String? {
-        didSet { UserDefaults.standard.set(selectedWorldID, forKey: "xijian.chat.world") }
+        didSet { UserDefaults.standard.set(selectedWorldID, forKey: XJDefaultsKey.chatWorld) }
     }
 
     // MARK: 全局错误
@@ -89,11 +89,11 @@ public final class AppViewModel {
 
     init() {
         let defaults = UserDefaults.standard
-        temperature = defaults.object(forKey: "xijian.chat.temperature") as? Double ?? 0.7
-        maxTokens = defaults.object(forKey: "xijian.chat.maxTokens") as? Int ?? 2048
-        recallEnabled = defaults.object(forKey: "xijian.chat.recall") as? Bool ?? true
-        selectedCharacterID = defaults.string(forKey: "xijian.chat.character")
-        selectedWorldID = defaults.string(forKey: "xijian.chat.world")
+        temperature = defaults.object(forKey: XJDefaultsKey.chatTemperature) as? Double ?? 0.7
+        maxTokens = defaults.object(forKey: XJDefaultsKey.chatMaxTokens) as? Int ?? 2048
+        recallEnabled = defaults.object(forKey: XJDefaultsKey.chatRecall) as? Bool ?? true
+        selectedCharacterID = defaults.string(forKey: XJDefaultsKey.chatCharacter)
+        selectedWorldID = defaults.string(forKey: XJDefaultsKey.chatWorld)
     }
 
     // MARK: 错误呈现

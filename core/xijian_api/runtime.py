@@ -151,12 +151,13 @@ def default_log_dir() -> Path:
     返回默认日志目录。
 
     * Packaged mode: ``<executable_dir>/logs/``
-    * Dev mode: ``/tmp/xijian-logs/`` (compatible with original behaviour)
-    * 开发模式：``/tmp/xijian-logs/``（保持与原行为兼容）
+    * Dev mode: ``<storage_root>/logs/`` (unified with packaged mode)
+    * 打包模式：``<executable_dir>/logs/``
+    * 开发模式：``<storage_root>/logs/``（与打包模式统一）
     """
     if _FROZEN:
         return executable_dir() / "logs"
-    return Path("/tmp/xijian-logs")
+    return default_storage_dir() / "logs"
 
 
 def default_log_file() -> Path:
@@ -167,19 +168,35 @@ def default_log_file() -> Path:
     return default_log_dir() / "xijian-api.log"
 
 
+def default_tmp_dir() -> Path:
+    """Return the unified temporary directory (token/port/discovery files).
+
+    返回统一临时目录（token / port / discovery 文件）。
+
+    Always ``<storage_parent>/tmp`` — i.e.
+    ``~/Library/Application Support/XiJian/tmp`` by default, and
+    follows ``XIJIAN_DATA_DIR`` when that override is set (tests).
+
+    始终为 ``<storage_parent>/tmp`` —— 默认即
+    ``~/Library/Application Support/XiJian/tmp``；设置
+    ``XIJIAN_DATA_DIR`` 时跟随（测试隔离用）。
+    """
+    return default_storage_dir().parent / "tmp"
+
+
 def default_token_dir() -> Path:
     """Return the default token file directory.
 
     返回默认 token 文件目录。
 
-    * Packaged mode: ``<executable_dir>/run/`` (avoid /tmp being cleaned)
-    * Dev mode: ``/tmp/`` (compatible with original behaviour)
-    * 打包模式：``<executable_dir>/run/``（避免 /tmp 被清理）
-    * 开发模式：``/tmp/``（保持与原行为兼容）
+    Dev and packaged modes both use the unified temporary directory
+    (``<storage_parent>/tmp``) so every XiJian component shares one
+    temp location.
+
+    开发模式与打包模式统一使用临时目录
+    （``<storage_parent>/tmp``），所有 XiJian 组件共享同一临时位置。
     """
-    if _FROZEN:
-        return executable_dir() / "run"
-    return Path("/tmp")
+    return default_tmp_dir()
 
 
 def default_token_file(pid: int | None = None) -> Path:
@@ -259,26 +276,25 @@ def setup_external_libs() -> None:
 
 
 def ensure_runtime_dirs() -> None:
-    """Ensure runtime directories exist (logs/, run/, storage root).
+    """Ensure runtime directories exist (logs/, tmp/, storage root).
 
-    确保运行时需要的目录存在（logs/、run/、存储根目录）。
+    确保运行时需要的目录存在（logs/、tmp/、存储根目录）。
 
-    Always creates the unified storage root (CORE_ROOT) plus its ``logs/``
-    and ``run/`` subdirectories so dev and packaged modes share the same
-    layout.  In packaged mode additionally creates the executable-side
-    ``logs/`` and ``run/`` directories.
+    Always creates the unified storage root (CORE_ROOT), its ``logs/``
+    subdirectory and the unified temporary directory (``tmp/``) so dev
+    and packaged modes share the same layout.  In packaged mode
+    additionally creates the executable-side ``logs/`` directory.
 
-    始终创建统一存储根目录 (CORE_ROOT) 及其 ``logs/``、``run/`` 子目录，
-    使开发模式与打包模式共享同一布局。打包模式下额外创建可执行文件侧的
-    ``logs/`` 与 ``run/`` 目录。
+    始终创建统一存储根目录 (CORE_ROOT)、其 ``logs/`` 子目录以及统一
+    临时目录（``tmp/``），使开发模式与打包模式共享同一布局。打包模式下
+    额外创建可执行文件侧的 ``logs/`` 目录。
     """
     storage = default_storage_dir()
     targets = [
         default_log_dir(),
-        default_token_dir(),
+        default_tmp_dir(),
         storage,
         storage / "logs",
-        storage / "run",
     ]
     for d in targets:
         try:
@@ -316,6 +332,7 @@ __all__ = [
     "default_config_path",
     "default_log_dir",
     "default_log_file",
+    "default_tmp_dir",
     "default_token_dir",
     "default_token_file",
     "default_port_file",

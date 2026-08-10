@@ -20,12 +20,15 @@ Not touched (deliberately):
 
     刻意不动的：
 
-* ``macapp/*`` — the macOS UI app is being rewritten; its ``Info.plist``
-  version stays out of this loop until the rewrite lands (see docs).
-  — macOS UI 应用正在重写；在重写落地前其 ``Info.plist`` 版本不参与同步（见文档）。
 * ``docs/api.md`` ``api_version`` — that is the **API protocol** version,
   a compatibility contract, not the server build version.
   — 那是 **API 协议** 版本，是兼容性契约，不是服务构建版本。
+
+``macapp/*`` is now synced too — ``macapp/project.yml``
+``MARKETING_VERSION`` follows ``Version.macOSUIApp`` (numeric form).
+
+``macapp/*`` 也已接入同步 — ``macapp/project.yml`` 的
+``MARKETING_VERSION`` 跟随 ``Version.macOSUIApp``（数值形式）。
 
 Usage
 -----
@@ -66,6 +69,7 @@ DEFAULT_TARGETS = {
     "core_version_module": REPO_ROOT / "core" / "xijian_api" / "_version.py",
     "devkit_version_py": REPO_ROOT / "devkit" / "version.py",
     "devkit_spec": REPO_ROOT / "devkit" / "xijian-devkit.spec",
+    "macapp_project_yml": REPO_ROOT / "macapp" / "project.yml",
 }
 
 #: Generated module header — keep the "generated" marker so humans know
@@ -232,6 +236,21 @@ def sync_devkit_spec(path: Path, numeric: str) -> tuple[bool, str]:
     return content != orig, content
 
 
+# -- macapp/project.yml -------------------------------------------------------
+
+
+def sync_macapp_project_yml(path: Path, numeric: str) -> tuple[bool, str]:
+    """Sync ``MARKETING_VERSION: "..."`` (numeric form from ``macOSUIApp``).
+
+    同步 ``MARKETING_VERSION: "..."``（数值形式，来自 ``macOSUIApp``）。
+    """
+    return _patch(
+        path,
+        r'^(\s*MARKETING_VERSION:\s*")[^"]*(")',
+        lambda m: f"{m.group(1)}{numeric}{m.group(2)}",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Orchestration
 # ---------------------------------------------------------------------------
@@ -242,6 +261,9 @@ _TARGETS = (
     ("core_version_module", "core/xijian_api/_version.py", "sync_core_version_module", "both"),
     ("devkit_version_py", "devkit/version.py", "sync_devkit_version_py", "raw"),
     ("devkit_spec", "devkit/xijian-devkit.spec", "sync_devkit_spec", "numeric"),
+    # macOSUIApp 的数值版本（与 DevKit 的 numeric 同构，但来源不同）。
+    # Numeric form of macOSUIApp (same shape as DevKit's numeric, different source).
+    ("macapp_project_yml", "macapp/project.yml", "sync_macapp_project_yml", "numeric"),
 )
 
 
@@ -254,11 +276,18 @@ def load_versions(config_path: Path) -> dict[str, str]:
     versions = data.get("Version", {})
     core = versions.get("CoreApi")
     devkit = versions.get("DevKit")
+    mac = versions.get("macOSUIApp")
     if not isinstance(core, str) or not core.strip():
         raise ValueError("Config/Config.json: Version.CoreApi missing or empty")
     if not isinstance(devkit, str) or not devkit.strip():
         raise ValueError("Config/Config.json: Version.DevKit missing or empty")
-    return {"CoreApi": core.strip(), "DevKit": devkit.strip()}
+    if not isinstance(mac, str) or not mac.strip():
+        raise ValueError("Config/Config.json: Version.macOSUIApp missing or empty")
+    return {
+        "CoreApi": core.strip(),
+        "DevKit": devkit.strip(),
+        "macOSUIApp": mac.strip(),
+    }
 
 
 def run_sync(config_path: Path, *, dry_run: bool, targets: dict[str, Path] | None = None) -> list[dict]:
@@ -278,6 +307,8 @@ def run_sync(config_path: Path, *, dry_run: bool, targets: dict[str, Path] | Non
     core_norm = normalize_pep440(core_raw)
     devkit_raw = versions["DevKit"]
     devkit_numeric = numeric_part(devkit_raw)
+    mac_raw = versions["macOSUIApp"]
+    mac_numeric = numeric_part(mac_raw)
 
     target_paths = dict(DEFAULT_TARGETS)
     if targets is not None:
@@ -287,11 +318,14 @@ def run_sync(config_path: Path, *, dry_run: bool, targets: dict[str, Path] | Non
     for target_key, target_label, fn_name, value_kind in _TARGETS:
         path = target_paths[target_key]
         fn = globals()[fn_name]
-        value = {"raw": core_raw, "normalized": core_norm}.get(value_kind, core_raw)
-        if value_kind == "numeric":
-            value = devkit_numeric
-        elif fn_name == "sync_devkit_version_py":
-            value = devkit_raw
+        if target_key == "macapp_project_yml":
+            value = mac_numeric
+        else:
+            value = {"raw": core_raw, "normalized": core_norm}.get(value_kind, core_raw)
+            if value_kind == "numeric":
+                value = devkit_numeric
+            elif fn_name == "sync_devkit_version_py":
+                value = devkit_raw
         if fn_name == "sync_core_version_module":
             changed, new_content = fn(path, core_raw, core_norm)
         else:

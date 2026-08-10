@@ -86,39 +86,28 @@ public final class ThemeSettings {
         AccentPreset(id: "gold", name: "鎏金", hex: "#D97706"),
     ]
 
-    // MARK: 持久化键
-
-    private enum Key {
-        static let accentHex = "xijian.theme.accentHex"
-        static let appearance = "xijian.theme.appearance"
-        static let bubbleStyle = "xijian.theme.bubbleStyle"
-        static let fontSize = "xijian.theme.fontSize"
-        static let cornerRadius = "xijian.theme.cornerRadius"
-        static let showTimestamps = "xijian.theme.showTimestamps"
-        static let bubbleOpacity = "xijian.theme.bubbleOpacity"
-        static let customAccent = "xijian.theme.customAccent"
-    }
+    // MARK: 持久化键（统一见 XJDefaultsKey）
 
     // MARK: 属性（didSet 持久化）
 
     /// 主题色（十六进制）
     var accentHex: String {
-        didSet { UserDefaults.standard.set(accentHex, forKey: Key.accentHex) }
+        didSet { UserDefaults.standard.set(accentHex, forKey: XJDefaultsKey.themeAccentHex) }
     }
 
     /// 是否使用自定义主题色（覆盖预设）
     var useCustomAccent: Bool {
-        didSet { UserDefaults.standard.set(useCustomAccent, forKey: Key.customAccent) }
+        didSet { UserDefaults.standard.set(useCustomAccent, forKey: XJDefaultsKey.themeCustomAccent) }
     }
 
     /// 外观模式
     var appearanceMode: AppearanceMode {
-        didSet { UserDefaults.standard.set(appearanceMode.rawValue, forKey: Key.appearance) }
+        didSet { UserDefaults.standard.set(appearanceMode.rawValue, forKey: XJDefaultsKey.themeAppearance) }
     }
 
     /// 气泡样式
     var bubbleStyle: BubbleStyle {
-        didSet { UserDefaults.standard.set(bubbleStyle.rawValue, forKey: Key.bubbleStyle) }
+        didSet { UserDefaults.standard.set(bubbleStyle.rawValue, forKey: XJDefaultsKey.themeBubbleStyle) }
     }
 
     /// 基础字号
@@ -126,7 +115,7 @@ public final class ThemeSettings {
         didSet {
             let clamped = min(max(fontSize, 10), 28)
             if fontSize != clamped { fontSize = clamped; return }
-            UserDefaults.standard.set(fontSize, forKey: Key.fontSize)
+            UserDefaults.standard.set(fontSize, forKey: XJDefaultsKey.themeFontSize)
         }
     }
 
@@ -135,7 +124,7 @@ public final class ThemeSettings {
         didSet {
             let clamped = min(max(cornerRadius, 0), 24)
             if cornerRadius != clamped { cornerRadius = clamped; return }
-            UserDefaults.standard.set(cornerRadius, forKey: Key.cornerRadius)
+            UserDefaults.standard.set(cornerRadius, forKey: XJDefaultsKey.themeCornerRadius)
         }
     }
 
@@ -144,27 +133,27 @@ public final class ThemeSettings {
         didSet {
             let clamped = min(max(bubbleOpacity, 0.4), 1.0)
             if bubbleOpacity != clamped { bubbleOpacity = clamped; return }
-            UserDefaults.standard.set(bubbleOpacity, forKey: Key.bubbleOpacity)
+            UserDefaults.standard.set(bubbleOpacity, forKey: XJDefaultsKey.themeBubbleOpacity)
         }
     }
 
     /// 是否显示时间戳
     var showTimestamps: Bool {
-        didSet { UserDefaults.standard.set(showTimestamps, forKey: Key.showTimestamps) }
+        didSet { UserDefaults.standard.set(showTimestamps, forKey: XJDefaultsKey.themeShowTimestamps) }
     }
 
     // MARK: 初始化
 
     private init() {
         let defaults = UserDefaults.standard
-        accentHex = defaults.string(forKey: Key.accentHex) ?? ThemeSettings.presets[0].hex
-        useCustomAccent = defaults.bool(forKey: Key.customAccent)
-        appearanceMode = AppearanceMode(rawValue: defaults.string(forKey: Key.appearance) ?? "") ?? .system
-        bubbleStyle = BubbleStyle(rawValue: defaults.string(forKey: Key.bubbleStyle) ?? "") ?? .rounded
-        fontSize = defaults.object(forKey: Key.fontSize) as? Double ?? 15
-        cornerRadius = defaults.object(forKey: Key.cornerRadius) as? Double ?? 14
-        bubbleOpacity = defaults.object(forKey: Key.bubbleOpacity) as? Double ?? 0.92
-        showTimestamps = defaults.object(forKey: Key.showTimestamps) as? Bool ?? false
+        accentHex = defaults.string(forKey: XJDefaultsKey.themeAccentHex) ?? ThemeSettings.presets[0].hex
+        useCustomAccent = defaults.bool(forKey: XJDefaultsKey.themeCustomAccent)
+        appearanceMode = AppearanceMode(rawValue: defaults.string(forKey: XJDefaultsKey.themeAppearance) ?? "") ?? .system
+        bubbleStyle = BubbleStyle(rawValue: defaults.string(forKey: XJDefaultsKey.themeBubbleStyle) ?? "") ?? .rounded
+        fontSize = defaults.object(forKey: XJDefaultsKey.themeFontSize) as? Double ?? 15
+        cornerRadius = defaults.object(forKey: XJDefaultsKey.themeCornerRadius) as? Double ?? 14
+        bubbleOpacity = defaults.object(forKey: XJDefaultsKey.themeBubbleOpacity) as? Double ?? 0.92
+        showTimestamps = defaults.object(forKey: XJDefaultsKey.themeShowTimestamps) as? Bool ?? false
     }
 
     // MARK: 计算属性

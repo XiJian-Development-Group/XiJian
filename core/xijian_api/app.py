@@ -395,11 +395,11 @@ def _with_dev(config: Config) -> Config:
 
 
 def _write_port_file(port: int) -> None:
-    """Write the actual listening port to ``run/xijian-<pid>.port`` so
+    """Write the actual listening port to ``tmp/xijian-<pid>.port`` so
     client processes (the macOS app) can discover it after automatic
     port fallback.
 
-    将实际监听端口写入 ``run/xijian-<pid>.port``，使客户端进程
+    将实际监听端口写入 ``tmp/xijian-<pid>.port``，使客户端进程
     （macOS App）在自动换端口后能够发现真实端口。
 
     Best-effort: a failure is logged but never blocks startup.

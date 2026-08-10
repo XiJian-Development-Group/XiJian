@@ -22,29 +22,25 @@ public final class BackgroundSettings {
         case video = "video"
     }
 
-    private enum Key {
-        static let kind = "xijian.background.kind"
-        static let path = "xijian.background.path"
-        static let blurred = "xijian.background.blurred"
-    }
+    // 持久化键统一见 XJDefaultsKey（Sources/Models/UserDefaultsKeys.swift）。
 
     // MARK: 属性（didSet 持久化）
 
     /// 背景类型
-    var kind: BackgroundKind { didSet { UserDefaults.standard.set(kind.rawValue, forKey: Key.kind) } }
+    var kind: BackgroundKind { didSet { UserDefaults.standard.set(kind.rawValue, forKey: XJDefaultsKey.backgroundKind) } }
     /// 背景文件绝对路径（非沙盒可直接访问；路径失效时上层回退到 none）
-    var filePath: String? { didSet { UserDefaults.standard.set(filePath, forKey: Key.path) } }
+    var filePath: String? { didSet { UserDefaults.standard.set(filePath, forKey: XJDefaultsKey.backgroundPath) } }
     /// 是否模糊
-    var isBlurred: Bool { didSet { UserDefaults.standard.set(isBlurred, forKey: Key.blurred) } }
+    var isBlurred: Bool { didSet { UserDefaults.standard.set(isBlurred, forKey: XJDefaultsKey.backgroundBlurred) } }
 
     // MARK: 初始化（从 UserDefaults 读取，带默认值）
 
     /// 初始化（internal：单例 shared 供 App 使用；测试可自行创建实例）
     init() {
         let d = UserDefaults.standard
-        kind = BackgroundKind(rawValue: d.string(forKey: Key.kind) ?? "") ?? .none
-        filePath = d.string(forKey: Key.path)
-        isBlurred = d.bool(forKey: Key.blurred)
+        kind = BackgroundKind(rawValue: d.string(forKey: XJDefaultsKey.backgroundKind) ?? "") ?? .none
+        filePath = d.string(forKey: XJDefaultsKey.backgroundPath)
+        isBlurred = d.bool(forKey: XJDefaultsKey.backgroundBlurred)
     }
 
     // MARK: 操作

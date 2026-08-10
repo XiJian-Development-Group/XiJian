@@ -1,0 +1,22 @@
+# 文本文件统一 LF 换行
+* text=auto eol=lf
+
+# 二进制 / 生成产物
+*.pdf binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.db binary
+*.db-wal binary
+*.db-shm binary
+*.pyc binary
+*.whl binary
+*.zip binary
+*.7z binary
+*.tar.gz binary
+
+# 生成产物（不参与 diff 的语言统计）
+*.xcstrings linguist-generated=true

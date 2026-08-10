@@ -9,9 +9,9 @@ import Observation
 /// 1. 检查 bundle 内 Resources/Core/xijian-api 是否存在
 /// 2. 若 `~/Library/Application Support/XiJian/Core/` 不存在则整目录复制
 /// 3. 以 `<dir>/xijian-api --port <port>` 启动子进程（不 zip 解压，避免首启慢）
-/// 4. 读取 `run/xijian-<pid>.port` 获取实际生效端口（端口被占用时 Core 自动换端口）
+/// 4. 读取 `tmp/xijian-<pid>.port` 获取实际生效端口（端口被占用时 Core 自动换端口）
 /// 5. 在真实端口上轮询 `GET /healthz` 直到 200（超时 60 秒）
-/// 6. 读取 `run/xijian-<pid>.token` 作为 Bearer token
+/// 6. 读取 `tmp/xijian-<pid>.token` 作为 Bearer token
 @Observable
 @MainActor
 public final class CoreManager {
@@ -37,11 +37,11 @@ public final class CoreManager {
     // MARK: - 可观察状态
 
     private(set) var state: State = .stopped
-    /// Bearer token（从 run/xijian-<pid>.token 读取）
+    /// Bearer token（从 tmp/xijian-<pid>.token 读取）
     private(set) var token: String?
     /// 子进程 PID
     private(set) var pid: Int32?
-    /// 实际生效端口（端口被占用时 Core 自动换端口后，从 run/xijian-<pid>.port 读取；
+    /// 实际生效端口（端口被占用时 Core 自动换端口后，从 tmp/xijian-<pid>.port 读取；
     /// nil 表示尚未确认，此时回落使用配置端口）
     private(set) var activePort: Int?
     /// 最近捕获的进程输出（环形缓冲，最多 1000 条，用于诊断与日志页）
@@ -54,23 +54,23 @@ public final class CoreManager {
         didSet {
             let clamped = min(max(port, 1), 65535)
             if port != clamped { port = clamped; return }
-            UserDefaults.standard.set(port, forKey: Self.portKey)
+            UserDefaults.standard.set(port, forKey: XJDefaultsKey.corePort)
         }
     }
 
     /// 是否使用自定义服务器（跳过本机 Core 进程管理）
     var useCustomServer: Bool {
-        didSet { UserDefaults.standard.set(useCustomServer, forKey: Self.customServerKey) }
+        didSet { UserDefaults.standard.set(useCustomServer, forKey: XJDefaultsKey.coreUseCustomServer) }
     }
 
     /// 自定义服务器地址（如 http://127.0.0.1:18500）
     var customBaseURL: String {
-        didSet { UserDefaults.standard.set(customBaseURL, forKey: Self.customURLKey) }
+        didSet { UserDefaults.standard.set(customBaseURL, forKey: XJDefaultsKey.coreCustomBaseURL) }
     }
 
     /// 自定义服务器访问令牌（可选，UserDefaults 持久化）
     var customToken: String {
-        didSet { UserDefaults.standard.set(customToken, forKey: Self.customTokenKey) }
+        didSet { UserDefaults.standard.set(customToken, forKey: XJDefaultsKey.coreCustomToken) }
     }
 
     // MARK: - 内部状态
@@ -98,18 +98,15 @@ public final class CoreManager {
 
     private init() {
         let defaults = UserDefaults.standard
-        port = defaults.object(forKey: Self.portKey) as? Int ?? 18500
-        useCustomServer = defaults.bool(forKey: Self.customServerKey)
-        customBaseURL = defaults.string(forKey: Self.customURLKey) ?? ""
-        customToken = defaults.string(forKey: Self.customTokenKey) ?? ""
+        port = defaults.object(forKey: XJDefaultsKey.corePort) as? Int ?? 18500
+        useCustomServer = defaults.bool(forKey: XJDefaultsKey.coreUseCustomServer)
+        customBaseURL = defaults.string(forKey: XJDefaultsKey.coreCustomBaseURL) ?? ""
+        customToken = defaults.string(forKey: XJDefaultsKey.coreCustomToken) ?? ""
     }
 
     // MARK: - 路径
 
-    private static let portKey = "xijian.core.port"
-    private static let customServerKey = "xijian.core.useCustomServer"
-    private static let customURLKey = "xijian.core.customBaseURL"
-    private static let customTokenKey = "xijian.core.customToken"
+    // UserDefaults 持久化键统一见 XJDefaultsKey（Sources/Models/UserDefaultsKeys.swift）。
 
     /// bundle 内的 Core 资源目录（Resources/Core）
     var bundleCoreURL: URL? {
@@ -135,9 +132,17 @@ public final class CoreManager {
         return appSupportDirectory.appendingPathComponent("Core", isDirectory: true)
     }
 
-    /// 数据存储根目录（Core 统一存储，见 runtime.default_storage_dir）
+    /// 数据存储根目录（Core 统一存储，见 runtime.default_storage_dir）。
+    /// 注意：macapp 不直接写数据，仅 Core 子进程按自身配置使用。
     var dataDirectory: URL {
         appSupportDirectory.appendingPathComponent("Data", isDirectory: true)
+    }
+
+    /// 统一临时目录：~/Library/Application Support/XiJian/tmp（token/port 文件）
+    /// 对应 runtime.default_tmp_dir()，所有 XiJian 组件共享；
+    /// 不属于 Core 目录，重置 Core 数据时保留。
+    var runtimeTmpDirectory: URL {
+        appSupportDirectory.appendingPathComponent("tmp", isDirectory: true)
     }
 
     /// 有效端口：自定义服务器时取自定义 URL 中的端口，否则取实际生效端口
@@ -228,7 +233,8 @@ public final class CoreManager {
         var env = ProcessInfo.processInfo.environment
         // 注意：不设置 XIJIAN_DATA_DIR —— 让 runtime.py 使用默认存储根
         //（即可执行文件同级目录 ~/Library/Application Support/XiJian/Core），
-        // 使 onedir 运行时、config.toml、logs/、run/ 与数据（xijian.db 等）保持同一目录。
+        // 使 onedir 运行时、config.toml、logs/ 与数据（xijian.db 等）保持同一目录。
+        //（token/port 等临时文件统一在 tmp/，由 runtime.default_tmp_dir 推导）
         proc.environment = env
 
         let outPipe = Pipe()
@@ -260,12 +266,12 @@ public final class CoreManager {
 
         // 4. 读取端口文件，确认实际生效端口
         //（配置端口被占用时 Core 会报告占用进程并自动换端口，真实端口通过
-        //  run/xijian-<pid>.port 下发，必须等它出现后再做健康检查，否则会轮询到错误端口）
+        //  tmp/xijian-<pid>.port 下发，必须等它出现后再做健康检查，否则会轮询到错误端口）
         let actualPort = await waitForPortFile(pid: proc.processIdentifier, id: myID)
         guard myID == operationID else { return }
         guard let actualPort else {
             if let p = process, p.isRunning { p.terminate() }
-            state = .error(loc("等待 Core 端口文件超时（%lld 秒内未生成 run/xijian-%lld.port）。请查看日志或尝试重启。", Int(tokenTimeout), Int(proc.processIdentifier)))
+            state = .error(loc("等待 Core 端口文件超时（%lld 秒内未生成 tmp/xijian-%lld.port）。请查看日志或尝试重启。", Int(tokenTimeout), Int(proc.processIdentifier)))
             return
         }
         activePort = actualPort
@@ -525,11 +531,10 @@ public final class CoreManager {
         return false
     }
 
-    /// 等待 run/xijian-<pid>.port 出现并读取实际生效端口
+    /// 等待 tmp/xijian-<pid>.port 出现并读取实际生效端口
     ///（端口被占用时 Core 会自动换端口，真实端口通过该文件下发）
     private func waitForPortFile(pid: Int32, id: Int) async -> Int? {
-        guard let coreDir = coreDirectory else { return nil }
-        let portFile = coreDir.appendingPathComponent("run").appendingPathComponent("xijian-\(pid).port")
+        let portFile = runtimeTmpDirectory.appendingPathComponent("xijian-\(pid).port")
         let deadline = Date().addingTimeInterval(tokenTimeout)
         while Date() < deadline {
             if id != operationID { return nil }
@@ -550,10 +555,9 @@ public final class CoreManager {
         return port
     }
 
-    /// 等待 run/xijian-<pid>.token 出现并读取
+    /// 等待 tmp/xijian-<pid>.token 出现并读取
     private func waitForToken(pid: Int32, id: Int) async -> String? {
-        guard let coreDir = coreDirectory else { return nil }
-        let tokenFile = coreDir.appendingPathComponent("run").appendingPathComponent("xijian-\(pid).token")
+        let tokenFile = runtimeTmpDirectory.appendingPathComponent("xijian-\(pid).token")
         let deadline = Date().addingTimeInterval(tokenTimeout)
         while Date() < deadline {
             if id != operationID { return nil }

@@ -2,15 +2,17 @@
 
 Bearer 令牌加载与验证。
 
-The token lives in a file under ``/tmp/xijian-<pid>.token``.  In
+The token lives in a file under the unified temporary directory
+(``~/Library/Application Support/XiJian/tmp/xijian-<pid>.token``).  In
 production the parent process writes the file before launching us and
 sets ``XIJIAN_DEV_TOKEN_FILE`` to a non-empty value if the file should
 be kept around; otherwise we ``unlink`` it after reading so it cannot
 leak.
 
-令牌保存在 ``/tmp/xijian-<pid>.token`` 文件中。生产环境下父进程在启动我们之前
-写入该文件，并设置 ``XIJIAN_DEV_TOKEN_FILE`` 为非空值以保留文件；
-否则我们在读取后 ``unlink`` 它以防止泄露。
+令牌保存在统一临时目录下的 ``xijian-<pid>.token`` 文件中
+（``~/Library/Application Support/XiJian/tmp/xijian-<pid>.token``）。
+生产环境下父进程在启动我们之前写入该文件，并设置 ``XIJIAN_DEV_TOKEN_FILE``
+为非空值以保留文件；否则我们在读取后 ``unlink`` 它以防止泄露。
 
 In dev mode (``XIJIAN_DEV=1``) we generate a fresh 32-byte hex token,
 write it to the canonical file with ``0600`` perms, and print it to
