@@ -19,8 +19,9 @@ XiJian Core API 使用 [PyInstaller](https://pyinstaller.org/) 将 Flask 应用
 | Python 解释器 | 系统/conda 提供 | 内嵌于 `_internal/` |
 | 依赖安装 | `pip install` | 已打包进可执行文件 |
 | 配置文件 | `core/config.toml` | `<exe_dir>/config.toml` |
-| 日志文件 | `/tmp/xijian.log` | `<exe_dir>/logs/xijian-api.log` |
-| Token 文件 | `/tmp/xijian-<pid>.token` | `<exe_dir>/run/xijian-<pid>.token` |
+| 日志文件 | `~/Library/Application Support/XiJian/Core/logs/xijian-api.log` | 同左（统一 CORE_ROOT/logs） |
+| Token 文件 | `~/Library/Application Support/XiJian/tmp/xijian-<pid>.token` | 同左（统一临时目录 tmp/） |
+| 端口文件 | `~/Library/Application Support/XiJian/tmp/xijian-<pid>.port` | 同左（统一临时目录 tmp/） |
 | 存储目录 | `~/Library/Application Support/XiJian/Core` | 同左（统一 CORE_ROOT，`XIJIAN_DATA_DIR` 可整体覆盖） |
 | 外部 AI 依赖 | conda/pip 安装 | `<exe_dir>/external_libs/` |
 
@@ -41,7 +42,7 @@ xijian-api/                    # 解压后的根目录
 ├── config.toml                # 默认配置（用户可编辑）
 ├── README.txt                 # 使用说明
 ├── logs/                      # 日志目录（自动创建）
-├── run/                       # Token 文件目录（自动创建）
+├── tmp/                       # 统一临时目录：token / port / discovery（自动创建）
 ├── data/                      # 存储根目录（自动创建）
 └── external_libs/             # 外部 AI 依赖（可选）
 ```
@@ -163,6 +164,10 @@ curl -H "Authorization: Bearer <token>" http://localhost:18600/v1/models
 
 ## 6. UI 程序集成
 
+> 本节描述 UI 程序（Electron / Tauri / 原生应用）集成 Core 的通用流程。
+> macOS 客户端（macapp）的落地实现——Core 复制/合并 → 启动 → 实际端口 → token 的
+> 完整 6 步见 [docs/macapp.md §3 运行方式](macapp.md#3-运行方式)。
+
 ### 6.1 工作流程
 
 UI 程序（如 Electron / Tauri / 原生应用）的工作流程：
@@ -186,7 +191,6 @@ UI 程序（如 Electron / Tauri / 原生应用）的工作流程：
 （或 config.toml `[server].driver = "waitress"`），则输出 `waitress 服务启动` 并带
 WARNING「waitress 不支持 WebSocket，/v1/ws 将不可用」。
 UI 程序可通过以下方式检测就绪：
-
 ```javascript
 // 轮询健康检查端点
 async function waitForReady(port, maxRetries = 30) {
@@ -203,11 +207,14 @@ async function waitForReady(port, maxRetries = 30) {
 
 ### 6.3 Token 获取
 
-打包模式下，服务自动生成 Bearer token 并写入 `<exe_dir>/run/xijian-<pid>.token`。
+服务自动生成 Bearer token 并写入统一临时目录
+`~/Library/Application Support/XiJian/tmp/xijian-<pid>.token`（开发与打包模式一致）。
 日志会输出 `dev token: <token>`。UI 程序可：
 
 1. 从日志输出中解析 token
-2. 或读取 `run/` 目录下的 `.token` 文件
+2. 或读取 `tmp/` 目录下的 `.token` 文件
+
+macapp 的具体读取时机见 [macapp.md §3](macapp.md#3-运行方式) 第 6 步。
 
 ### 6.4 跨平台路径
 

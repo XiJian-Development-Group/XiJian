@@ -1,6 +1,6 @@
 # 依据功能清单发现的未完成功能（Problems）
 
-> 本文档记录**实际代码实现**与 [Dev. Function List 功能清单 v2.2](../docs/Dev.%20Function%20List%E5%8A%9F%E8%83%BD%E6%B8%85%E5%8D%95v2.md) 之间的差距。
+> 本文档记录**实际代码实现**与 [Dev. Function List 功能清单 v2.2](Dev.%20Function%20List%E5%8A%9F%E8%83%BD%E6%B8%85%E5%8D%95v2.md) 之间的差距。
 > 仅列出**未实现 / 不完整 / 占位**的功能，不含普通 Bug 或代码质量问题。
 >
 > - 盘账日期：2026-07-11

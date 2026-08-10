@@ -3,7 +3,7 @@
 > 隙间（XiJian）开发组 · 内部文档
 >
 > 文档版本：v2.1
-> 上一版本：v1（`Dev. Function List功能清单.md`，Skyc8266 创建）
+> 上一版本：v1（`已弃置/Dev. Function List功能清单.md`，Skyc8266 创建，已归档）
 > 维护者：隙间开发组
 > 用途：本产品功能开发的唯一权威来源（Single Source of Truth），开发、测试、产品设计均以此为准。
 >

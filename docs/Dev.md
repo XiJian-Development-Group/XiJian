@@ -2,7 +2,7 @@
 
 > 本文档面向参与「隙间」项目代码与资源开发的贡献者。
 > 阅读对象：需要修改代码、提交 PR、参与架构设计的开发者。
-> 用户文档请见 [项目文档.md](已弃置/“隙间”项目文档.md)。
+> 用户文档请见 [README.md](../README.md)（docs/ 下的文档索引见 [docs/README.md](README.md)）。
 
 ---
 
@@ -10,7 +10,7 @@
 
 ### 1.1 一句话
 
-「隙间」是一款本地优先的二次元 AI 聊天 / 社交应用，强调角色沉浸感、长期记忆、Apple 生态深度集成、跨平台可用。
+「隙间」是一款本地优先的二次元 AI 聊天 / 社交应用，围绕角色沉浸感、长期记忆、Apple 生态深度集成、跨平台可用来设计。
 
 ### 1.2 目标平台
 
@@ -118,88 +118,56 @@
 
 ## 3. 仓库目录结构
 
-> **这是建议结构**，仓库正式建立后以 `README.md` 为准。
+实际结构如下（构建产物与缓存目录如 `build/`、`dist/`、`*.egg-info/`、`__pycache__/` 未列出）：
 
 ```
 XiJian/
-├── README.md                       # 用户向介绍
-├── “隙间”项目文档.md                  # 用户文档
-├── Dev.md                          # 本文件
+├── README.md                       # 用户向项目介绍（入口，指向 docs/）
 ├── LICENSE
-├── AGENTS.md                       # 给 AI 协作 Agent 的项目约定
-│
-├── core/                           # 跨平台共享核心（Python 业务 + AI）
-│   ├── api/                        # Flask API 网关
-│   │   ├── app.py                  # Flask 入口
-│   │   ├── handshake.py            # 端口握手逻辑
-│   │   ├── routes/                 # 各业务路由
-│   │   ├── sockets/                # WebSocket 事件
-│   │   └── auth.py                 # 进程间鉴权 token
-│   ├── services/                   # 业务服务层
-│   │   ├── character/              # 角色服务
-│   │   ├── interaction/            # 互动服务（NSFW 分级）
-│   │   ├── world/                  # 模拟世界（经济/健康/饮食/体力/心智）
-│   │   ├── memory/                 # 长期记忆 + 向量检索
-│   │   ├── protection/             # 保护模块（注入防御、OOC、数据版本回滚）
-│   │   └── notifier/               # 主动消息调度
-│   ├── ai/                         # AI 抽象层 + 实现
-│   │   ├── base.py                 # AI Backend ABC
-│   │   ├── backends/
-│   │   │   ├── mlx/                # macOS MLX 后端
-│   │   │   └── gguf/               # Win/Linux llama.cpp / Ollama 后端
-│   │   ├── prompt.py               # Prompt 模板 + 注入防御入口
-│   │   └── registry.py             # 根据平台自动选择 backend
-│   ├── resources/                  # 资源加载器（角色、世界、场景）
-│   ├── models/                     # ORM / 数据模型
-│   ├── store/                      # SQLite / FAISS 封装
-│   ├── i18n/                       # zh_CN, en_US
-│   ├── utils/                      # 通用工具、日志、错误处理
-│   ├── tests/
-│   └── pyproject.toml
-│
-├── ui/                             # UI 层
-│   ├── macos/                      # Swift 应用
-│   │   ├── Package.swift
-│   │   ├── XiJian.xcodeproj
-│   │   ├── Sources/
-│   │   │   ├── App/
-│   │   │   ├── Core/               # 网络客户端、进程管理
-│   │   │   ├── Live2D/             # Cubism SDK 渲染
-│   │   │   ├── DynamicIsland/      # 灵动岛自建
-│   │   │   ├── TouchBar/
-│   │   │   ├── DesktopPet/         # 桌宠 + 屏幕观察 + 操控
-│   │   │   ├── Wallpaper/          # 壁纸模式
-│   │   │   └── UI/                 # SwiftUI 视图
-│   │   └── Tests/
-│   │
-│   └── desktop/                    # Win/Linux 端（Python + Pywebview）
-│       ├── pyproject.toml
-│       ├── xijian_desktop/
-│       │   ├── main.py             # Pywebview 入口
-│       │   ├── process_manager.py  # 启动/监控 core API 进程
-│       │   ├── port_scanner.py     # 端口握手扫描
-│       │   ├── web/                # 前端资源（HTML/CSS/JS）
-│       │   │   ├── index.html
-│       │   │   ├── live2d/         # Live2D for Web（Cubism Web SDK）
-│       │   │   ├── three/          # 3D 模型（three.js）
-│       │   │   └── assets/
-│       │   └── tests/
-│       └── packaging/              # PyInstaller 配置（产出 .exe / AppImage）
-│
-├── resources/                      # 角色、世界、场景资源（不进 PR，邮件提交）
-│   ├── characters/
-│   └── worlds/
-│
-├── docs/
-│   ├── architecture.md             # 架构决策记录
-│   ├── api.md                      # API 协议规范
-│   ├── ai-backend.md               # AI backend 实现指南
-│   └── adr/                        # 架构决策记录
-│
-└── scripts/
-    ├── bootstrap.sh                # 本地一键启动
-    └── package.sh                  # 打安装包
+├── Config/
+│   └── Config.json                 # 项目元数据 + 版本号唯一事实源（人工编辑）
+├── core/                           # Core API（Flask 服务，运行时主进程）
+│   ├── config.toml                 # 服务配置（存储路径、模型、后端等）
+│   ├── pyproject.toml              # Python 包元数据（版本号由 sync-versions.py 同步）
+│   ├── scripts/
+│   │   ├── dev.sh / dev.ps1        # 开发/构建脚本
+│   │   ├── sync-versions.py        # 版本同步脚本（Config.json → 各目标）
+│   │   ├── xijian-api.spec         # PyInstaller 打包描述（独立分发包用）
+│   │   └── eval_safety.py / dist-readme.txt
+│   ├── tests/                      # pytest 测试（xijianBase 环境跑）
+│   └── xijian_api/                 # Core 源码包
+│       ├── app.py / launch.py      # Flask 入口 / 打包后入口点
+│       ├── runtime.py              # 运行时环境检测（frozen vs 开发模式）
+│       ├── config.py / auth.py / ports.py / discovery.py / handshake.py
+│       ├── ai/                     # AI 抽象层（base.py / registry.py / model_registry.py / backends/）
+│       ├── mcp/                    # MCP 服务端（protocol / registry / tools / resources / prompts）
+│       ├── routes/                 # HTTP 路由（xijian_*.py + OpenAI 兼容路由）
+│       ├── stubs/                  # 业务逻辑实现（state / memory / chat / npcs / packs …）
+│       └── utils/                  # 通用工具（log / ids / time / params）
+├── devkit/                         # 开发者工具（Pywebview 独立应用）
+│   ├── main.py / app.py / api.py   # Pywebview 入口与 DevKit 本地 API
+│   ├── character_editor.py / world_editor.py / memory_editor.py /
+│   │   plot_editor.py / motion_editor.py / model_viewer.py / dialog_editor.py …
+│   ├── ai/                         # DevKit 侧 AI 封装（base.py / registry.py / backends/）
+│   ├── ui/                         # 前端资源（index.html / devkit.css / devkit.js / vendor/）
+│   ├── tests/                      # pytest 测试
+│   ├── pyproject.toml / requirements.txt / xijian-devkit.spec / build-devkit.sh
+│   └── version.py                  # 运行时读 Config.json 的版本（脚本同步）
+├── macapp/                         # macOS 桌面客户端（SwiftUI，内嵌 Core 子进程）
+│   ├── Sources/                    # Swift 源码（App / Models / Services / ViewModels / Views / Theme）
+│   ├── Resources/                  # Assets.xcassets、Localizable.xcstrings、Core/（内嵌 Core 产物）
+│   ├── Tests/                      # 单元测试（XiJianKit framework，无宿主）
+│   ├── project.yml                 # XcodeGen 工程定义（PyInstaller spec 统一在 core/scripts/）
+│   ├── build-core.sh / build-macapp.sh
+│   └── Entitlements.entitlements
+├── website/                        # 纯静态落地页（index.html + assets/）
+├── devkit_data/                    # 仓库内空目录（plot 运行时回退工作目录）
+├── docs/                           # 全部文档（索引见 docs/README.md；行为变更必须同步文档）
+├── build.sh                        # core venv + 测试 + wheel/sdist 构建
+└── project.py                      # 项目管理器入口（占位）
 ```
+
+文档索引见 [docs/README.md](README.md)；macapp 的结构细节见 [docs/macapp.md](macapp.md) §1。
 
 ---
 
@@ -632,7 +600,8 @@ test(world): 覆盖经济系统边界值
 
 ## 12. 路线图（开发视角）
 
-> 以仓库 `docs/roadmap.md` 为准。
+> 里程碑进度以 [docs/notes.md](notes.md)（开发日志）与
+> [docs/Dev. Function List功能清单v2.md](Dev.%20Function%20List%E5%8A%9F%E8%83%BD%E6%B8%85%E5%8D%95v2.md) 为准。
 
 - **M0 — 架构定型**：API 网关 + AI 抽象层 + 保护模块骨架 + 端口握手
 - **M1 — 单角色可用**：macOS 实时对话 + Live2D + 基本记忆
@@ -742,7 +711,7 @@ A：不能。MLX 仅支持 Apple Silicon；Win/Linux 走 GGUF（llama.cpp / Olla
 A：不在路线图内。本项目核心理念之一就是本地优先。
 
 **Q：主 UI 进程如何获取 API 进程的端口？**
-A：推荐方式 —— Python 启动时把端口写入一个仅本进程可读的临时文件（`/tmp/xijian-<pid>.port`），主 UI 启动后读取该文件。stdout 传端口在 Windows 上不可靠。
+A：推荐方式 —— Python 启动时把端口写入统一临时目录（`~/Library/Application Support/XiJian/tmp/xijian-<pid>.port`），主 UI 启动后读取该文件。stdout 传端口在 Windows 上不可靠。
 
 **Q：为什么不用 gRPC / 直接 Swift 调 MLX？**
 A：跨平台 + 单代码库 + 快速迭代是当前优先级。gRPC 增加打包体积与复杂度；Swift 直调 MLX 会让 Win/Linux 端重复实现业务逻辑。

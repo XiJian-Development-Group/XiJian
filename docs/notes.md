@@ -5,6 +5,58 @@
 
 ---
 
+## 2026-08-10 · 架构统一：临时文件/数据路径收敛 + 文档去重去 AI 味 + 键收敛/版本接入
+
+### 任务来源
+用户指示：让项目架构更统一——统一文档路径、统一代码风格、统一用户数据持久存储位置；
+随后确认「低风险全做 + 中风险 M1-M5 全做」，并明确：**所有 XiJian 组件临时文件（discovery/token/port）、持久数据统一到 ~/Library/Application Support/XiJian，一个别漏**。
+
+### 已完成（构建 + core 2281 / macapp 191 / devkit 207 全绿）
+
+#### 路径统一（M1/M2，核心）
+- 统一临时目录 `~/Library/Application Support/XiJian/tmp`（代码经 `runtime.default_tmp_dir()` = `default_storage_dir().parent/"tmp"` 推导，测试跟随 XIJIAN_DATA_DIR 隔离）：
+  - token：`tmp/xijian-{pid}.token`（dev 与打包统一，不再有 /tmp 与 executable_dir/run 双路径）
+  - port：`tmp/xijian-{pid}.port`
+  - discovery：`tmp/xijian_core.json`（写入只走新路径；读取新路径优先、旧 `~/.xijian/xijian_core.json` 兜底，兼容旧版 DevKit）
+- 日志：dev 模式由 `/tmp/xijian-logs` 统一到 CORE_ROOT/logs（与打包一致）
+- 涉及文件：core runtime.py / config.py / auth.py / discovery.py / config.toml；devkit/discovery.py（跟随 XIJIAN_DATA_DIR）；macapp CoreManager.swift（`runtimeTmpDirectory` 读取 port/token）
+- macapp launchctl 守护日志也从 /tmp 迁到统一 tmp
+- **保留不动**：`~/.xijian` 旧目录物理清理（H1 高风险，用户未确认）；App Support 根下旧 xijian_core.json 副本（历史遗留，不删）
+
+#### 键收敛（L5）
+- 新建 `macapp/Sources/Models/UserDefaultsKeys.swift`：`XJDefaultsKey` 常量表，30 个键 ↔ 旧键字符串**逐一对应、值完全一致**（QA 脚本比对确认），5 个文件（ThemeSettings/AppViewModel/CoreManager/UserProfileSettings/BackgroundSettings）改引用；已存数据不受影响
+- M3 用户确认「重置忽略旧的」：不写迁移逻辑，新 bundle id 自然全新
+
+#### 版本接入（M4）
+- `Config/Config.json` `Version.macOSUIApp: "Unavailable" → "1.0.0"`；sync-versions.py 新增 macapp/project.yml 目标（MARKETING_VERSION），6 目标 dry-run 全 unchanged ✓；test_sync_versions 覆盖
+
+#### 构建/风格（L1/L2/L3/L6）
+- 新增 `.editorconfig`（py/swift 4 空格、yml/json 2 空格）+ `.gitattributes`（文本 LF、二进制标记）
+- spec 合并：唯一 spec = `core/scripts/xijian-api.spec`（excludes 移除 sqlite3，store.py 需要）；`git rm` macapp/scripts/xijian-api.spec；build-core.sh 指向 core 侧 spec
+- `git mv macapp/Project.yml macapp/project.yml`（大小写对齐）；project.yml indentWidth/tabWidth 2→4
+- `build.sh` 默认 Python：python3 → `/opt/anaconda3/envs/xijianBase/bin/python`（遵守 xijianBase 铁律）
+
+#### 文档（L4/M5）
+- `git mv devkit/Problems.md docs/Problems.md`；docs/ 新建 README.md 文档地图
+- 去重：BuildGuide §6 ↔ macapp.md §2/§3 划界互链；维护教程 ↔ CoreStartupGuide 划界；Dev.md §3 目录结构重写为实际结构；去掉对已弃置文档的引用
+- 全部活跃文档去 AI 味（humanizer-zh 标准：删夸大意义/宣传语/破折号滥用/三段式/AI 高频词等）
+- 文档路径残留修正：BuildGuide/维护教程/CoreStartupGuide 目录树 run/ → tmp/；token 示例改为统一 tmp（config.toml 的 [auth] token_file 是死配置——auth.py 实际走 runtime 默认值——已注释说明并移除误导性示例）
+
+#### QA 整改（丝柯克复核）
+- 补 `core/tests/test_discovery.py`（8 项：写入/读取/兼容读/损坏回退/删除幂等/verify）——discovery 模块此前无直接单测
+- dev.sh 打包流程 run/ → tmp/、日志示例 /tmp/xijian.log → 统一路径；build-core.sh 清理 run/ → tmp/
+- devkit/discovery.py 跟随 XIJIAN_DATA_DIR（与 core 推导一致）
+- CoreManager.dataDirectory 未使用项加注释说明；.gitattributes `linguist-generated=false → true`（修正注释语义）
+
+### 没做的 / 留的口子
+- `~/.xijian` 旧目录与 App Support 根下旧 xijian_core.json：H1 高风险暂缓，代码不再写入，读取保留兼容
+- devkit_data/ 仓库空目录（H2 高风险暂缓）：plot 回退工作目录仍依赖源码相对路径
+- 全仓强制 lint（H3）与 api.md 生成化（H4）：暂缓
+- macapp/scripts/ 空目录保留（git 不跟踪空目录，无影响）
+- 端到端验证：打包版 Core 在新路径写入 token/discovery/port 已验证；macapp 完整 GUI 启动链路待用户实机确认
+
+---
+
 ## 2026-08-10 · macapp 全面 UI 优化（Apple 设计语言）+ 新人引导三页 + UI 背景 / 权限 / 用户资料 / AI 来源
 
 ### 任务来源

@@ -36,9 +36,10 @@ ws://127.0.0.1:{port}/v1/ws
 
 端口解析顺序：命令行 `--port` > 环境变量 `XIJIAN_API_PORT` > `config.toml` > 默认 `18500`。
 配置端口被占用时 Core **不会退出**：检测到占用并报告占用进程后，自动向上扫描空闲端口
-（最多 100 个）并用新端口启动；实际生效端口通过 `run/xijian-<pid>.port` 文件下发
-（打包模式 `<执行目录>/run/xijian-<pid>.port`，开发模式 `/tmp/xijian-<pid>.port`），
-客户端等待该文件出现即可得知真实端口。需要「占用即退出」固定端口行为的场景可加 `--port-strict`。
+（最多 100 个）并用新端口启动；实际生效端口通过统一临时目录下的
+`xijian-<pid>.port` 文件下发（`~/Library/Application Support/XiJian/tmp/xijian-<pid>.port`，
+开发与打包模式一致），客户端等待该文件出现即可得知真实端口。需要「占用即退出」
+固定端口行为的场景可加 `--port-strict`。
 
 ---
 
@@ -1627,9 +1628,10 @@ Sec-WebSocket-Protocol: xijian.v1, bearer.<token>
 ## 9. 安全约束
 
 - **仅监听 `127.0.0.1`**，绝不允许 `0.0.0.0`。
-- **Token 通过临时文件传递**：`/tmp/xijian-<pid>.token`，文件权限 `0600`，API 进程启动时读取后立即 `unlink`。
-- **实际端口通过文件传递**：`run/xijian-<pid>.port`（打包模式）或 `/tmp/xijian-<pid>.port`（开发模式），
-  与 token 文件同目录；端口被占用自动换端口后，客户端以该文件为准。
+- **Token 通过临时文件传递**：统一临时目录 `~/Library/Application Support/XiJian/tmp/xijian-<pid>.token`，
+  文件权限 `0600`，API 进程启动时读取后立即 `unlink`。
+- **实际端口通过文件传递**：`~/Library/Application Support/XiJian/tmp/xijian-<pid>.port`，
+  与 token 文件同目录（开发与打包模式一致）；端口被占用自动换端口后，客户端以该文件为准。
 - **CORS 默认禁用**；如调试需要可临时开启（仅 `127.0.0.1`）。
 - **所有写操作走保护模块审计**。
 - **不缓存敏感响应**（NSFW 内容、保护日志等）。
@@ -1667,7 +1669,7 @@ wscat -c "ws://127.0.0.1:$PORT/v1/ws" \
 ### 10.3 日志位置
 
 - API 服务日志：默认仅输出到 stderr；设置 ``XIJIAN_LOG_FILE`` 后写入指定文件
-  （打包模式默认 ``<exe_dir>/logs/xijian-api.log``，开发模式 ``/tmp/xijian-logs/xijian-api.log``）
+  （开发与打包模式统一为 ``~/Library/Application Support/XiJian/Core/logs/xijian-api.log``）
 - 安全模块审计日志：进程内 ``state.safety_audit_log`` + ``state.audits``，经 ``/v1/xijian/safety/audit`` 查询
 - AI backend 日志：随 backend 子进程 stderr 输出（若设置 ``XIJIAN_LOG_FILE`` 则与其同文件）
 

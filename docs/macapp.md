@@ -26,8 +26,6 @@ macapp/
 │   ├── Localizable.xcstrings # String Catalog（zh-Hans / en / ja，UI 文案唯一来源）
 │   └── Core/                 # 内嵌 Core 产物（build-core.sh 生成，随 App 分发）
 ├── Tests/                    # 单元测试（逻辑层框架测试，无宿主）
-├── scripts/
-│   └── xijian-api.spec       # PyInstaller 打包 spec（macapp 侧专用）
 ├── project.yml               # XcodeGen 工程定义（含 DEVELOPMENT_TEAM 占位）
 ├── build-core.sh             # 打包 Core 并嵌入 Resources/Core/
 ├── build-macapp.sh           # 完整构建脚本（Core + 工程生成 + xcodebuild）
@@ -45,9 +43,12 @@ macapp/
 ```
 
 - **build-core.sh**：使用 conda 环境 `xijianBase`（`/opt/anaconda3/envs/xijianBase`）
-  中的 PyInstaller，按 `macapp/scripts/xijian-api.spec` 以 **onedir** 模式打包
-  Core（`build/dist/xijian-api/`），随后整体复制到 `macapp/Resources/Core/`
-  （含可执行文件 `xijian-api`、`_internal/` 运行时、`config.toml`、`README.txt`）。
+  中的 PyInstaller，按 `core/scripts/xijian-api.spec`（仓库唯一 spec，已含 sqlite3 修复）
+  以 **onedir** 模式打包 Core（`build/dist/xijian-api/`），随后整体复制到
+  `macapp/Resources/Core/`（含可执行文件 `xijian-api`、`_internal/` 运行时、
+  `config.toml`、`README.txt`）。
+  （PyInstaller 打包的通用流程见 [BuildGuide.md §4](BuildGuide.md#4-构建命令)；
+  spec 位于 core/scripts，macapp 与 core 共用一份）
 - **build-macapp.sh**：xcodegen 依据 `project.yml` 生成 `XiJian.xcodeproj`，
   再用 xcodebuild 编译。DerivedData 使用系统默认位置
   （`~/Library/Developer/Xcode/DerivedData/`），不落在项目目录内。
@@ -62,15 +63,19 @@ App 启动时（`CoreManager.startCore`）：
    已存在时按需合并（`shouldMergeCore` 比较可执行文件与 `_internal` 目录总大小，
    有差异才重新合并；`config.toml` 等用户数据保留）；
 3. 以 `<dir>/xijian-api --port <配置端口>` 启动 Core 子进程（默认 18500）；
-4. 读取 `run/xijian-<pid>.port` 获取**实际生效端口**——配置端口被占用时 Core 不会退出，
-   而是报告占用进程并自动切换到空闲端口（最多向上探测 100 个），真实端口通过该文件下发；
+4. 读取统一临时目录下的 `tmp/xijian-<pid>.port` 获取**实际生效端口**——配置端口被占用时
+   Core 不会退出，而是报告占用进程并自动切换到空闲端口（最多向上探测 100 个），
+   真实端口通过该文件下发；
 5. 在真实端口上轮询 `GET http://127.0.0.1:<实际端口>/healthz` 直到 200（默认超时 60 秒）；
-6. 读取 `run/xijian-<pid>.token` 作为后续请求的 Bearer token。
+6. 读取统一临时目录下的 `tmp/xijian-<pid>.token` 作为后续请求的 Bearer token。
 
 退出时（菜单栏「退出」或 Cmd+Q）向子进程发送 SIGTERM，超时后依次 SIGINT、
 SIGKILL，并同步等待退出。Core 的日志（stdout/stderr）汇入 App 内环形缓冲，
 可在设置中查看或打开日志目录。设置中也可切换为自定义服务器
 （不启动本机 Core，直接连接用户填写的地址与 token）。
+
+> 通用 UI 集成流程（解压/启动/就绪检测/token 机制）见 [BuildGuide.md §6](BuildGuide.md#6-ui-程序集成)；
+> 打包模式 vs 开发模式的行为差异见其 §1 对照表。
 
 ## 4. 功能范围
 
@@ -203,7 +208,8 @@ macapp 全部用户可见文案（视图、日志、错误消息、状态文本�
 ## 7. 已知限制
 
 - 默认端口 **18500**（与 Core 的 DEFAULT_PORT 一致，可在设置中修改）；配置端口被占用时
-  Core 自动换端口，实际生效端口以 `run/xijian-<pid>.port` 为准；
+  Core 自动换端口，实际生效端口以统一临时目录 `~/Library/Application Support/XiJian/tmp/`
+  下的 `xijian-<pid>.port` 为准；
 - 发布签名：`project.yml` 中 `DEVELOPMENT_TEAM` 留空，正式分发前需用户填入
   自己的 Team ID 并配置签名证书；Entitlements 为最小非沙盒集合
   （禁库校验、允许未签名可执行内存、JIT、网络客户端）。

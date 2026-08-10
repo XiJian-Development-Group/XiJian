@@ -169,8 +169,8 @@ port = 18500          # 文档默认，实际以 XIJIAN_API_PORT 为准
 dev = false           # 生产环境必须 false
 keep_token_file = false
 
-[auth]
-token_file = "/var/lib/xijian/xijian-{pid}.token"  # 建议持久化路径
+# token 路径由 runtime 统一管理，不在此配置；
+# 实际写入 ~/Library/Application Support/XiJian/tmp/xijian-{pid}.token
 
 [storage]
 base_dir = "/var/lib/xijian"  # 数据根目录（模型权重、上传、快照、审计）
@@ -196,7 +196,7 @@ seed_default_data = false
 dev_test_emit = false
 ```
 
-> **Windows 部署特别注意**：将所有 `[backends.*].default` 改为 `"gguf"`，`[overload] monitor = false`。详见 `docs/CoreWinSupport.md`。
+> **Windows 部署特别注意**：将所有 `[backends.*].default` 改为 `"gguf"`，`[overload] monitor = false`。
 
 ---
 
@@ -248,7 +248,7 @@ python -m xijian_api --version
 ### 5.3 开发/调试模式
 
 `--dev`（或 `XIJIAN_DEV=1`）启用开发模式：
-- Token 写入 `/tmp/xijian-{pid}.token` 并在日志/终端打印明文
+- Token 写入统一临时目录 `~/Library/Application Support/XiJian/tmp/xijian-{pid}.token` 并在日志/终端打印明文
 - 启用 `/v1/xijian/_test/emit` 等测试路由
 - 默认服务器驱动为 `werkzeug`（多线程，WebSocket 可用）；也可用 `--server waitress` 显式切换，但 waitress 不支持 WebSocket（/v1/ws 不可用）
 
@@ -353,8 +353,9 @@ curl -s http://localhost:18500/v1
 
 ### 6.3 认证 Token 获取
 ```bash
-# 生产环境：从配置的 token_file 读取
-TOKEN=$(cat /var/lib/xijian/xijian-*.token)
+# token 固定写入统一临时目录（开发/打包一致）：
+#   ~/Library/Application Support/XiJian/tmp/xijian-<pid>.token
+TOKEN=$(cat ~/Library/Application\ Support/XiJian/tmp/xijian-*.token)
 
 # 开发模式：日志中直接打印
 # [xijian-api] dev token: a3b5f1ef0343204f467091d5e275b74a4f438f050f33053e963c5af638a112de
@@ -442,8 +443,11 @@ tar -czf xijian-backup-$(date +%F).tar.gz /var/lib/xijian
 
 ## 9. 相关文档
 
-- `docs/CoreWinSupport.md` — Windows 平台不支持功能清单
+- `docs/维护教程.md` — 维护者总览（存储布局 / 版本号 / 文档同步规则）
+- `docs/BuildGuide.md` — Core 构建与打包指南（PyInstaller）
+- `docs/macapp.md` — macOS 客户端（内嵌 Core 的运行方式）
 - `docs/Dev. Function List功能清单v2.md` — 功能规格说明
+- `docs/notes.md` — 开发日志
 - `core/scripts/dev.sh` / `core/scripts/dev.ps1` — 构建/安装/运行一条龙脚本
 - `core/xijian_api/app.py` — CLI 参数与启动韧性实现
 - `core/xijian_api/utils/log.py` — 日志级别/文件控制
