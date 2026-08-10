@@ -38,44 +38,79 @@ struct BackgroundLayerView: View {
 
 // MARK: - 静态图片
 
-/// 静态图片背景（铺满，保持比例裁剪）
+/// 静态图片背景：`layer.contentsGravity = .resizeAspectFill` 缩放裁剪铺满整个窗口
+/// （不按比例留边，图片超出部分被裁剪）。
 private struct StaticImageView: NSViewRepresentable {
     let url: URL
 
-    func makeNSView(context: Context) -> NSImageView {
-        let view = NSImageView()
-        view.imageScaling = .scaleProportionallyUpOrDown
-        view.image = NSImage(contentsOf: url)
+    func makeNSView(context: Context) -> NSView {
+        let view = StaticBackgroundNSView()
+        view.wantsLayer = true
+        view.layer?.contents = NSImage(contentsOf: url)
+        // aspectFill：等比缩放填满，超出部分裁剪，不改变图片纵横比
+        view.layer?.contentsGravity = .resizeAspectFill
+        view.layer?.masksToBounds = true
         return view
     }
 
-    func updateNSView(_ nsView: NSImageView, context: Context) {}
+    func updateNSView(_ nsView: NSView, context: Context) {
+        nsView.layer?.contents = NSImage(contentsOf: url)
+    }
+}
+
+/// 承载静态背景图的 NSView：layout 时同步 contents 尺寸，窗口缩放后图片持续铺满。
+private final class StaticBackgroundNSView: NSView {
+    override func layout() {
+        super.layout()
+        layer?.frame = bounds
+        layer?.contentsCenter = CGRect(x: 0, y: 0, width: 1, height: 1)
+    }
 }
 
 // MARK: - GIF
 
-/// GIF 动画背景（NSImageView.animates = true 循环播放）。
-/// 尊重系统「减弱动态效果」：开启时静态显示（不播放动画）。
-private struct AnimatedGIFView: NSViewRepresentable {
+/// GIF 动画背景：NSImageView 循环播放；用 GeometryReader 按图片纵横比放大 frame
+/// 到覆盖容器后裁剪，达到 aspectFill 效果（NSImageView 自身无 aspect fill 选项）。
+private struct AnimatedGIFView: View {
     let url: URL
+    @State private var image: NSImage?
+
+    var body: some View {
+        GeometryReader { proxy in
+            if let image {
+                let imageSize = image.size
+                let scale = max(
+                    proxy.size.width / max(imageSize.width, 1),
+                    proxy.size.height / max(imageSize.height, 1)
+                )
+                GIFImageView(url: url, image: image)
+                    .frame(width: imageSize.width * scale, height: imageSize.height * scale)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity) // 居中
+            }
+        }
+        .clipped()
+        .onAppear {
+            if image == nil { image = NSImage(contentsOf: url) }
+        }
+    }
+}
+
+/// 实际承载 GIF 的 NSImageView（animates 循环播放，尊重减弱动态效果）
+private struct GIFImageView: NSViewRepresentable {
+    let url: URL
+    let image: NSImage
 
     func makeNSView(context: Context) -> NSImageView {
         let view = NSImageView()
         view.imageScaling = .scaleProportionallyUpOrDown
-        view.image = NSImage(contentsOf: url)
-        view.animates = !reduceMotionEnabled
+        view.image = image
+        view.animates = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         return view
     }
 
     func updateNSView(_ nsView: NSImageView, context: Context) {
-        nsView.animates = !reduceMotionEnabled
-    }
-
-    /// 系统「减弱动态效果」开关。
-    /// 直接读 NSWorkspace 而非 @Environment，避免 NSViewRepresentable
-    /// 的 nonisolated 上下文访问环境属性带来的隔离问题（Swift 5.10）。
-    private var reduceMotionEnabled: Bool {
-        NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        nsView.image = image
+        nsView.animates = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
     }
 }
 
