@@ -1,7 +1,7 @@
 # XiJian Core 启动指南
 
 > 文档版本：v1.1  
-> 适用版本：XiJian Core API v0.1.0+  
+> 适用版本：XiJian Core API v1.2.0-Alpha（PEP 440：`1.2.0a0`）及以上  
 > 维护者：隙间开发组
 
 ---
@@ -22,12 +22,12 @@ XiJian Core 是一个基于 Flask 的 OpenAI 兼容 API 服务端，提供：
 ## 2. 环境准备
 
 ### 2.1 系统要求
-| 平台 | 最低版本 | 推荐配置 [TODO: 补充详细的配置信息] |
+| 平台 | 最低版本 | 推荐配置 |
 |------|----------|----------|
-| macOS | 26.0 | **等待填写** |
-| Windows | Windows >= 24H2 | **等待填写** |
-| iOS | iOS >= 26.0 | 良好的网络连接 |
-| Android | Android >= 12.0 | 良好的网络连接 |
+| macOS | 26.0 | M 系列芯片必需；16 GB 内存（可用 ≥ 6 GB）；可用磁盘 ≥ 24 GB |
+| Windows | Windows >= 24H2 | 最低 20 GB 可用显存；建议固态硬盘；可用磁盘 ≥ 26 GB |
+| iOS | iOS >= 26.0 | 需连接运行隙间最新版本的计算机，远程使用全部功能 |
+| Android | Android >= 12.0 | 需连接运行隙间最新版本的计算机，远程使用全部功能 |
 
 ### 2.2 Python 环境
 
@@ -138,12 +138,14 @@ XiJian Core **没有任何必须设置的环境变量**——所有配置都有�
 |--------|--------|------|
 | `XIJIAN_API_PORT` | `18500` | 监听端口 (1-65535) |
 | `XIJIAN_HOST` | `127.0.0.1` | 监听地址（默认仅本地环回；如需外部访问请显式设为 `0.0.0.0`） |
-| `XIJIAN_DEV` | `false` | 开发模式：保留 token 文件、启用测试路由 |
-| `XIJIAN_DEV_TOKEN_FILE` | `false` | 开发模式下不删除 token 文件 |
+| `XIJIAN_DEV` | `false` | 开发模式：启用测试路由等开发能力 |
+| `XIJIAN_DEV_TOKEN_FILE` | `false` | dev token 保留开关（`keep_token_file`）：为真时开发模式下不删除 token 文件 |
 | `XIJIAN_LOG_LEVEL` | `INFO` | 日志级别：`DEBUG`/`INFO`/`WARNING`/`ERROR`/`CRITICAL` |
 | `XIJIAN_LOG_FILE` | *(无)* | 日志文件路径；设置后日志同时写入文件与 stderr |
 | `XIJIAN_CONFIG` | 自动搜索 | 自定义配置文件绝对路径 |
 | `XIJIAN_OVERLOAD_MONITOR` | `true` | 过载防护监控开关（Windows 建议 `false`） |
+| `XIJIAN_DATA_DIR` | `~/Library/Application Support/XiJian/Core` | 存储根整体覆盖（优先于 config.toml `[storage] base_dir`，测试与高级用户用它整体搬迁数据） |
+| `XIJIAN_DB_PATH` | `$(XIJIAN_DATA_DIR)/xijian.db` | SQLite 数据库路径（优先级高于 `XIJIAN_DATA_DIR` 推导的默认位置） |
 
 ### 4.3 命令行参数（最高优先级）
 
@@ -263,7 +265,7 @@ python -m xijian_api --version
 | 生产模式缺 token 文件 | 降级为开发模式、自动生成 token | WARNING（失败+恢复各一条） |
 | `waitress` 未安装 | 回退到 `werkzeug`（多线程，WebSocket 可用） | WARNING |
 | 端口越界 (1-65535) | 回退到默认端口 18500 | ERROR |
-| 端口被占用 | 明确提示并退出（需 `--port` 换端口） | ERROR |
+| 端口被占用 | 报告占用进程并自动向上探测空闲端口（最多 100 个），用新端口启动；实际端口写入 `tmp/xijian-<pid>.port`（`--port-strict` 可恢复占用即报错退出） | WARNING |
 | 路由模块导入失败 | 跳过该模块、其余正常注册 | WARNING |
 | 未捕获的启动异常 | 记录 CRITICAL 堆栈并退出码 1 | CRITICAL |
 
@@ -339,16 +341,16 @@ docker run -d --name xijian-api \
 ### 6.1 健康检查
 ```bash
 curl -s http://localhost:18500/healthz
-# {"status":"ok"}
+# XIJIAN_OK_v1（text/plain；前缀 `XIJIAN_OK_<version>`，见 docs/Dev.md 握手约定）
 ```
 
 ### 6.2 根路径与能力发现
 ```bash
 curl -s http://localhost:18500/
-# {"name":"xijian-api","server_version":"0.1.0","api_version":"1.0.0","status":"ok"}
+# {"name":"xijian-api","server_version":"1.2.0a0","api_version":"1.0.0","status":"ok"}
 
 curl -s http://localhost:18500/v1
-# {"api_version":"1.0.0","server_version":"0.1.0","capabilities":[...]}
+# {"api_version":"1.0.0","server_version":"1.2.0a0","capabilities":[...]}
 ```
 
 ### 6.3 认证 Token 获取
@@ -368,11 +370,13 @@ curl -s -X POST http://localhost:18500/v1/chat/completions \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "qwen2.5-7b-mlx-4bit",
+    "model": "stub-model",
     "messages": [{"role": "user", "content": "你好"}],
     "stream": false
   }'
 ```
+
+> 出厂仅注册 mock 模型（`stub-model`，测试/开发用）。正式使用前需先按 `docs/AIBackend.md` 配置模型后端（mlx / gguf / openai）并注册模型。
 
 ### 6.5 外部访问（需显式开启）
 
@@ -385,7 +389,7 @@ XIJIAN_HOST=0.0.0.0 python -m xijian_api
 # 或在 config.toml 中设置 [server] host = "0.0.0.0"
 # 随后在局域网另一台机器上执行
 curl -s http://<SERVER_IP>:18500/healthz
-# 应返回 {"status":"ok"}
+# 应返回 XIJIAN_OK_v1
 ```
 
 > **安全提示**：开放外部访问前请确认已配置 Token 鉴权、防火墙规则及网络环境可信。
@@ -396,7 +400,7 @@ curl -s http://<SERVER_IP>:18500/healthz
 
 | 现象 | 原因 | 解决 |
 |------|------|------|
-| 端口被占用、服务退出 | 端口已被其他进程占用 | `--port` 换端口，或释放该端口 |
+| 日志提示端口被占用 | 端口已被其他进程占用 | 已自动向上探测空闲端口（最多 100 个）并启动；实际端口见 `tmp/xijian-<pid>.port`。需要固定端口时可加 `--port-strict`（占用即报错退出），或释放被占用的端口 |
 | 日志出现「已降级为开发模式启动」 | 生产模式未预置 token 文件 | 已自动修正；正式部署请预置 token 文件或检查 `XIJIAN_DEV` |
 | 日志出现「waitress 不支持 WebSocket」 | 显式使用了 `--server waitress` | 如需 WebSocket（/v1/ws）请改回默认 werkzeug（去掉 `--server` 或 `driver = "auto"`）；纯 HTTP 场景可继续用 waitress |
 | 日志出现「waitress 未安装」 | 未安装 waitress | `pip install waitress`（已自动回退 werkzeug，WebSocket 可用） |

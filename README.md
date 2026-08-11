@@ -9,7 +9,7 @@
 - 名称：隙间
 - 类型：游戏/社交
 - 简介：二次元Ai聊天程序，拥有丰富强大的功能
-- 语言支持：zh_CN, en_US
+- 语言支持：zh-Hans / en / ja
 - 项目开源地址：（Github地址，暂未建立存储库，将在后续创建）
 - 目标平台：搭载M系列芯片的Mac与较新的Windows计算机（iOS适配有计划，但不是现在，我们现在需要专注于项目的核心内容）
 
@@ -82,19 +82,13 @@
 
 **本项目具有操控用户设备的功能（需要用户手动启用），生成文本图片音频和视频的能力，因使用本项目所造成的任何损失与任何后果均由使用者承担，与本项目的开发组无关。**
 
-请勿滥用开发者工具，开发者工具仅供提交**合法的创作内容**使用，不得用于任何其他行为。否则，后果自负
+开发者工具仅供提交合法的创作内容使用，详细规则见开发者文档。
 
-若要查看详细的创作规则，请前往"docs/Dev. 角色制作队列.md"查看更多信息
-
-如有疑问，请联系[项目组管理员](mailto:panmofan@icloud.com)
+如有疑问，请联系[项目组管理员](mailto:support@mail.skyc8266.uk)
 
 ---
 
 **本项目完全开源免费（使用MIT License），请不要售卖或付费购买本项目。**
-
-（如果您实在想要卖这个项目，请[点击了解详情](https://www.baidu.com/s?ie=utf-8&f=8&rsv_bp=1&rsv_idx=1&tn=baidu&wd=孤儿怎么办户口本)）
-
----
 
 本项目使用了一些开源项目，请前往"docs/Deps.md"查看我们使用了哪些开源项目，并用于何种用途。
 
@@ -130,7 +124,7 @@
 
 我们欢迎大家提出自己的想法与建议，我们会认真聆听并决定是否采纳。
 
-请将您的建议发送到[项目组管理员](mailto:panmofan@icloud.com)，并以这个格式作为邮件主题（Subject）：
+请将您的建议发送到[项目组管理员](mailto:support@mail.skyc8266.uk)，并以这个格式作为邮件主题（Subject）：
 ```plaintext
 Format 格式：
 [XiJian Project: Contact Us/suggestions] <您的邮件主题 Your email subject>
@@ -163,6 +157,6 @@ Example 示例：
 ---
 
 _如果喜欢这个项目的话，请点个Star吧，您的支持是我们最大的动力！_
-_README.md Document Version: v1.0.0(at 20260709)_
+_README.md Document Version: v1.0.0(at 20260811)_
 
 喵～

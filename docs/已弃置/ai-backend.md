@@ -1,3 +1,5 @@
+> 本文件已过时，以 docs/ 下活跃文档为准。
+
 # AI-Backend.md — AI Backend 实现指南
 
 > 本文档面向需要**实现或扩展** AI backend（MLX / GGUF / 未来可能的云端）的开发者。

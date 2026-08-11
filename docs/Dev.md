@@ -17,8 +17,8 @@
 | 平台       | 状态     | UI 实现          | AI 推理                | 备注                                                                                |
 | ---------- | -------- | ---------------- | ---------------------- | ----------------------------------------------------------------------------------- |
 | macOS      | 主目标   | Swift / SwiftUI  | MLX（mlx-swift）       | 最低 macOS 26.0（推荐 macOS 26 Tahoe）；推荐内存 64–128 GB；可用磁盘 ≥ 32 GB     |
-| iOS / iPad | 暂不支持 | —                | —                      | 目前项目无 iOS 上架计划                                                              |
-| Windows    | 副目标   | Python + Pywebview | GGUF（llama.cpp / Ollama） | 最低 Windows 11；推荐显存 128 GB；可用磁盘 ≥ 64 GB                                  |
+| iOS / iPad | 暂不支持 | —                | —                      | iOS 适配有计划，但不是现在（详见 README）                                                             |
+| Windows    | 副目标   | Python + Pywebview | GGUF（llama.cpp / Ollama） | 最低 Windows 11（建议 24H2 及以上）；最低 20GB 可用显存（参见 README.md）；可用磁盘 ≥ 64 GB                                  |
 | Linux      | 副目标   | Python + Pywebview | GGUF（llama.cpp / Ollama） | 同 Windows                                                                          |
 
 ### 1.3 关键约束
@@ -231,15 +231,15 @@ def get_backend() -> ChatBackend:
 
 **强制约束**：
 
-- `core/services/` 下的任何模块 **禁止** 直接 `from .ai.backends.mlx import ...` 或 `from .ai.backends.gguf import ...`，必须走 `get_backend()`。
+- `core/xijian_api/stubs/` 下的任何模块 **禁止** 直接 `from .ai.backends.mlx import ...` 或 `from .ai.backends.gguf import ...`，必须走 `get_backend()`。
 - 新增 backend（如未来支持远程 / 云端）必须实现 `ChatBackend`，并通过 `BACKEND_<NAME>` 环境变量选择。
 
-### 4.2 本地 API 网关（`core/api/`）
+### 4.2 本地 API 网关（`core/xijian_api/`）
 
 #### 4.2.1 启动流程
 
 ```python
-# core/api/app.py —— 简化示意
+# core/xijian_api/app.py —— 简化示意
 import os
 import socket
 from flask import Flask, jsonify
@@ -314,24 +314,26 @@ def wait_for_handshake(port: int, timeout: float = 15.0) -> bool:
 - 鉴权：进程启动时生成随机 token，写入 `127.0.0.1` 才能读取的临时文件；主 UI 进程读取后所有请求带上 `Authorization: Bearer <token>`。
 - 流式响应优先使用 **SSE**（`text/event-stream`）；双向推送用 WebSocket。
 - 业务路径示例：
-  - `POST /v1/chat` —— 单轮 / 多轮对话
-  - `POST /v1/chat/stream` —— 流式对话（SSE）
+  - `POST /v1/chat/completions` —— 单轮 / 多轮对话（OpenAI 兼容）
+  - `POST /v1/chat/completions`（`stream=true`）—— 流式对话（SSE / NDJSON）
   - `POST /v1/embeddings` —— 向量化
-  - `POST /v1/tts` —— 语音合成
-  - `POST /v1/memory/add` / `/list` / `/delete` / `/update` —— 长期记忆管理
-  - `POST /v1/world/state` / `/transition` —— 世界系统读写
-  - `POST /v1/interaction/trigger` —— 互动触发
-  - `POST /v1/protection/rollback` —— 保护模块数据回滚
+  - `POST /v1/audio/speech` —— 语音合成（TTS）
+  - `POST /v1/xijian/memory/entries` 及 `GET / PATCH / DELETE /v1/xijian/memory/entries/{entry_id}` —— 长期记忆管理
+  - `POST /v1/xijian/worlds/{world_id}/transition`、`GET / PATCH /v1/xijian/worlds/{world_id}/state` —— 世界系统读写
+  - `POST /v1/xijian/interactions/{interaction_id}/trigger` —— 互动触发
+  - `/v1/xijian/safety/*`（扫描 / 审计）与 `/v1/xijian/backups/*`（快照与回滚）—— 保护模块
   - `GET  /v1/models` —— 当前可用模型列表
 
-### 4.3 业务服务层（`core/services/`）
+  完整端点清单见 `docs/api.md`（核心端点约 141 个；机器可读全量见 `docs/openapi.yaml`，271 个 path）。
+
+### 4.3 业务服务层（`core/xijian_api/stubs/`）
 
 服务层只与 AI 抽象层对话，不关心具体 backend：
 
 ```python
-# core/services/character/service.py —— 简化示意
-from core.ai.base import get_backend, ChatMessage
-from core.services.protection import guard_input, guard_output
+# core/xijian_api/stubs/characters.py —— 简化示意（角色服务）
+from xijian_api.ai.base import get_backend, ChatMessage
+from xijian_api.stubs.safety import guard_input, guard_output  # 示意名，实际接口见 safety.py
 
 class CharacterService:
     def reply(self, character_id: str, user_input: str, history: list[ChatMessage]) -> str:
@@ -347,32 +349,32 @@ class CharacterService:
         return guard_output(raw, expected_role=character_id)
 ```
 
-#### 4.3.1 角色服务（`character/`）
+#### 4.3.1 角色服务（`stubs/characters.py`）
 
-- 加载角色人设、Live2D 模型引用、互动配置
+- 加载角色人设、模型引用、互动配置
 - 拼装 Prompt 时强制走保护模块
 - 维护角色级状态（心情、好感度等）
 
-#### 4.3.2 互动服务（`interaction/`）
+#### 4.3.2 互动服务（`stubs/scene_interactions.py`）
 
-- 互动 JSON 配置加载（`nsfwLevel` 字段）
+- 互动配置加载（`nsfwLevel` 字段）
 - 角色对互动可「同意 / 拒绝」
 - NSFW 内容默认隐藏，需用户在设置中开启
 
-#### 4.3.3 模拟世界（`world/`）
+#### 4.3.3 模拟世界（`stubs/npcs.py` 等）
 
 - 系统维度：经济、健康、饮食、体力、心智
 - 突发事件：基于状态值 + 概率表
 - 场景 / 交通：状态变更 + 场景切换
 
-#### 4.3.4 长期记忆（`memory/`）
+#### 4.3.4 长期记忆（`stubs/memory.py`）
 
 - 短期：会话窗口（可配置 token 上限）
 - 长期：摘要 + 向量检索，每次互动后异步写入
 - 用户可手动增删改记忆条目
 - 跨平台统一使用 FAISS 或 HNSW（Python 实现），向量 backend 不分平台
 
-#### 4.3.5 保护模块（`protection/`，**核心**）
+#### 4.3.5 保护模块（`stubs/safety.py` / `stubs/snapshots.py`，**核心**）
 
 项目最关键的安全模块，**不允许以「方便调试」为由绕过**。
 
@@ -421,7 +423,7 @@ class CharacterService:
 
 ### 5.1 强约束（CI 会检查）
 
-1. **业务代码不得直接依赖平台特定库**。`rg -l "from .ai.backends" core/services/` 应该为空。
+1. **业务代码不得直接依赖平台特定库**。`rg -l "from .ai.backends" core/xijian_api/stubs/` 应该为空。
 2. **平台特性封装在 UI 层**。`core/` 下不得出现 `import Cocoa` / `import win32gui` / `import Xlib`。
 3. **所有路径使用 `pathlib.Path`**，不得硬编码 `/` 或 `\`。
 4. **所有用户可见字符串走 i18n**，禁止硬编码（详见 §6）。
@@ -435,10 +437,10 @@ class CharacterService:
 
 ## 6. 国际化
 
-- 必须支持：`zh_CN`、`en_US`
-- 业务层（`core/`）通过 `core/i18n/` 提供的 `t("key")` 函数获取字符串，**禁止硬编码中文 / 英文**
+- 业务层（`core/`）国际化设施尚未建立（`core/i18n/` 词表未建），字符串管理现状见 `docs/维护教程.md` §6。
+- 目标语言：zh-Hans / en / ja（与 macapp String Catalog 一致）。
 - UI 层（macOS SwiftUI / 前端 JS）走各自的标准 i18n 方案
-- PR 中若新增字符串，必须同时提供中英文
+- PR 中若新增用户可见字符串，必须同时提供中英文
 
 ---
 
@@ -461,7 +463,7 @@ class CharacterService:
 ### 7.2 资源提交流程
 
 1. 资源附上 **完整可读的简体中文描述**
-2. 邮件发送至 [panmofan@icloud.com](mailto:panmofan@icloud.com)
+2. 邮件发送至 [support@mail.skyc8266.uk](mailto:support@mail.skyc8266.uk)
 3. 等待审核、打包、处理
 4. 管理员将资源合并到主分支
 5. **不要**通过 PR 提交资源
@@ -519,13 +521,13 @@ test(world): 覆盖经济系统边界值
 - 通常至少 1 名维护者通过
 - 涉及保护模块、记忆系统、AI backend 选择逻辑的改动需 **2 名维护者** 通过
 - 涉及 NSFW 相关逻辑的改动需 **全员** 审核
-- 涉及 `core/api/handshake.py`、`core/ai/registry.py` 等跨平台关键路径的改动需特别关注
+- 涉及 `core/xijian_api/handshake.py`、`core/ai/registry.py` 等跨平台关键路径的改动需特别关注
 
 ### 8.6 中国大陆地区开发者
 
 若无法访问 GitHub：
 
-1. 邮件联系管理员 [panmofan@icloud.com](mailto:panmofan@icloud.com)
+1. 邮件联系管理员 [support@mail.skyc8266.uk](mailto:support@mail.skyc8266.uk)
 2. 或在开发组群内联系
 3. 管理员可授予 contributor 权限或代为提交
 
@@ -594,7 +596,7 @@ test(world): 覆盖经济系统边界值
 - **保护模块误判**：开启详细日志，issue 附完整 prompt + 输出
 - **Pywebview 渲染异常**：先确认系统 WebView 版本（Win → WebView2、Linux → webkit2gtk）
 - **桌宠无响应**：检查辅助功能 / 屏幕录制权限
-- **跨平台差异**：在 `core/utils/platform.py` 中加入 `git rev-parse HEAD` 输出到日志，方便定位
+- **跨平台差异**：在 `core/xijian_api/utils/log.py`（或 `ids.py` / `params.py` / `time.py`）中加入 `git rev-parse HEAD` 输出到日志，方便定位
 
 ---
 
@@ -620,19 +622,20 @@ test(world): 覆盖经济系统边界值
 - 不要把未通过审核的资源合并进主分支
 - 不要绕过保护模块（即使是「临时调试」）
 - 不要在 `core/` 下写平台特定代码，所有跨平台差异收敛到 UI 层
+- **不要滥用开发者工具**：开发者工具仅供提交**合法的创作内容**使用，不得用于任何其他行为；违规内容将直接清除相关数据，并按情节处理提交者
 
 ---
 
 ## 14. 联系方式
 
-- 邮箱：[panmofan@icloud.com](mailto:panmofan@icloud.com)
+- 邮箱：[support@mail.skyc8266.uk](mailto:support@mail.skyc8266.uk)
 - QQ：2500693887
 
 ---
 
-## 11. DevKit 预览/测试环境（C0 循环）
+## 15. DevKit 预览/测试环境（C0 循环）
 
-### 11.1 架构
+### 15.1 架构
 
 DevKit 是独立 Pywebview 进程，Core API 是 Flask 服务器。预览/测试通过**共享文件系统**桥接：
 
@@ -652,7 +655,7 @@ DevKit 是独立 Pywebview 进程，Core API 是 Flask 服务器。预览/测试
 
 **零侵入**——Core 直接读取 DevKit 的保存目录，无需修改 DevKit 代码。
 
-### 11.2 端点清单
+### 15.2 端点清单
 
 所有端点位于 `/v1/xijian/devkit/`：
 
@@ -670,7 +673,7 @@ DevKit 是独立 Pywebview 进程，Core API 是 Flask 服务器。预览/测试
 | `GET` | `/loaded` | 当前已加载的 devkit 条目 |
 | `POST` | `/reload?kind=character|world` | 重新扫描并刷新 runtime |
 
-### 11.3 预览/测试流程（C0 循环）
+### 15.3 预览/测试流程（C0 循环）
 
 ```
 DevKit 编辑 → 保存
@@ -686,12 +689,12 @@ DevKit 编辑 → 保存
     └── 否 → DevKit 修改 → 保存 → 主程序「重新加载」→ 再测
 ```
 
-### 11.4 实现模块
+### 15.4 实现模块
 
 - `core/xijian_api/stubs/devkit.py` — 目录扫描、数据解析、runtime 加载/卸载
 - `core/xijian_api/routes/xijian_devkit.py` — HTTP 端点
 
-### 11.5 DevKit 路径
+### 15.5 DevKit 路径
 
 默认路径：`~/Library/Application Support/XiJian/DevKit/`
 
@@ -699,7 +702,7 @@ DevKit 编辑 → 保存
 
 ---
 
-## 12. 附录：常见问题（FAQ）
+## 16. 附录：常见问题（FAQ）
 
 **Q：业务逻辑写一次还是两次？**
 A：业务逻辑（角色、互动、世界、记忆、保护）一律写在 `core/`，跨平台共享。AI 推理由 backend 适配。

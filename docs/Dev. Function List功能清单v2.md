@@ -2,7 +2,7 @@
 
 > 隙间（XiJian）开发组 · 内部文档
 >
-> 文档版本：v2.1
+> 文档版本：v2.11
 > 上一版本：v1（`已弃置/Dev. Function List功能清单.md`，Skyc8266 创建，已归档）
 > 维护者：隙间开发组
 > 用途：本产品功能开发的唯一权威来源（Single Source of Truth），开发、测试、产品设计均以此为准。
@@ -35,7 +35,7 @@
   - [A4. 模拟世界系统](#a4-模拟世界系统)
   - [A5. 安全模块](#a5-安全模块)
   - [A6. 实时通话](#a6-实时通话)
-  - [A7. 主动发起聊天或通话](#a7-主动发起聊天或通话仅支持-macos-与-iosipados)
+  - [A7. 主动发起聊天或通话](#a7-主动发起聊天或通话当前仅支持-macosios-适配有计划但不是现在)
   - [A8. 桌宠 / 动态壁纸](#a8-将角色可多个作为桌宠或动态壁纸仅支持-macos)
 - [B. Apple TouchBar & Dynamic Island Support](#b-apple-touchbar--dynamic-island-supportonly-on-apple-devices)
 - [C. Development Kit](#c-development-kitonly-windowslinuxmacos)
@@ -99,7 +99,7 @@
 - **验收标准**
   - AC-1：受保护模块列表至少包含 `memory_entries / character_documents / world_documents / safety_snapshots`，新增需走版本流程。
   - AC-2：手动修改记忆条目后，下一轮对话必须可被读取（≤ 1s 内生效）。
-  - AC-3：备份文件命名遵循 `{character_id}_{ISO8601}_v{n}.bak`，单角色最多保留 N 个版本（M1 默认 10，[TODO: 用户可配置]）。
+  - AC-3：备份文件命名遵循 `{character_id}_{ISO8601}_v{n}.bak`，单角色最多保留 N 个版本（M1 默认 10，用户可配置能力暂未开放）。
 - **边界场景**
   - 用户删除正在被长期记忆引用的条目 → 必须级联或软删除（保留 7 天可恢复）。
   - 备份过程中发生断电 → 自动恢复机制保证不损坏现有数据。
@@ -323,7 +323,18 @@
     J --> K[记忆回写 A1.2]
   ```
 
-- **多模态支持矩阵** [TODO: 列出每个模型后端支持的模态]
+- **多模态支持矩阵**（以 docs/openapi.yaml 为准）：
+
+  | 模态 \ 后端 | mock（stub） | gguf | mlx | openai |
+  | --- | --- | --- | --- | --- |
+  | 文本（chat） | ✓ | ✓ | ✓ | ✓（视所配模型） |
+  | 图像理解 | ✓ | ✓ | ✓ | ✓（视所配模型） |
+  | 图像生成 | — | ✓ | ✓ | ✓（视所配模型） |
+  | 音频（TTS/STT） | — | ✓（视所装库） | ✓（视所装库） | ✓（视所配模型） |
+  | 视频生成 | — | ✓（视所装库） | ✓（视所装库） | ✓（视所配模型） |
+  | 视频理解 | ✓ | ✓ | ✓ | ✓（视所配模型） |
+
+  > 各后端实际可用性取决于是否安装对应依赖库（mlx_lm / llama_cpp / mlx_whisper / mlx_audio / mlx_video 等），未安装时 `is_available()=False` 返回 503。
 - **工具调用（MCP）**
   - 协议版本：跟随 MCP 最新 spec
   - 工具清单包括但不限于：桌面控制、文件操作、应用启动、浏览器自动化（仅 macOS 桌宠）
@@ -435,7 +446,7 @@
 
 - **加载策略**
   - 启动时：仅加载 `is_active=1` 的模型 + 默认声音 + 默认风格
-  - 对话中：按动作触发标签按需加载 motion（LRU 缓存上限 [TODO]）
+  - 对话中：按动作触发标签按需加载 motion（LRU 缓存上限待定）
   - 切换贴图/换装：异步预加载下一套资源
 - **跨模态一致性**
   - 图像生成：注入 `pose_image` 作为参考图
@@ -523,8 +534,8 @@
   ```
 
 - **衰减算法**
-  - 每 N 秒 tick 一次（[TODO: N 默认 60s]）
-  - 实际衰减 = 配置值 × 时间因子 × 世界/活动修饰因子（[TODO]）
+  - 每 60 秒 tick 一次（`DEFAULT_TICK_INTERVAL_SECONDS=60`，可用 `XIJIAN_STATE_TICK_SECONDS` 覆盖，已实装）
+  - 实际衰减 = 配置值 × 时间因子 × 世界/活动修饰因子（`cfg["modifiers"]` 三件套，已实装）
   - 状态改变同时写入 `character_state_log` 并触发 UI 推送
 
 ---
@@ -967,7 +978,7 @@
   - 实时监控：所有 MCP 工具调用进入前必须过"危险动作白名单/黑名单"
   - 黑名单：删除系统文件、关机、修改安全模块、对外发送敏感数据等
   - 白名单：明示允许的动作（如"打开浏览器"）
-  - 快捷键安全终止：全局监听指定组合键（[TODO: 默认 ⌃⌥⌘Q / Win+Alt+Shift+Q]）
+  - 快捷键安全终止：全局监听指定组合键（默认 ⌃⌥⌘Q / Win+Alt+Shift+Q，监听实现属桌宠客户端范畴，见 A5.2）
   - 终止后流程：冻结进程 → 备份上下文 → 弹出确认 → 用户确认后清理 → 重启 MCP → 重载 AI
 - **验收标准**
   - AC-1：黑名单动作 100% 拦截
@@ -1205,7 +1216,9 @@
 
 ---
 
-### A7. 主动发起聊天或通话（仅支持 macOS 与 iOS/iPadOS）
+### A7. 主动发起聊天或通话（当前仅支持 macOS；iOS 适配有计划，但不是现在）
+
+> 当前版本未支持 iOS，详见 README。
 
 **产品视角**
 
@@ -1214,7 +1227,7 @@
   - US-A7-02：作为用户，我可以通过系统通知中心接听/拒绝。
 - **功能清单**
   - 后台保活：隙间注册为后台常驻进程
-  - 角色主动决策：基于角色配置（[TODO: 主动频率上限]）与状态
+  - 角色主动决策：基于角色配置（主动频率上限待定）与状态
   - 系统通知：本地通知 + 来电接听 UI
   - 用户控制：可全局开关、可按角色关闭
 - **验收标准**
@@ -1301,9 +1314,9 @@
 
 ------
 
-## B. Apple TouchBar & Dynamic Island Support(Only on Apple devices)
+## B. Apple TouchBar 与 Dynamic Island 支持（仅限 Apple 设备）
 
-> [TODO: 本章待补，单独规划后写入]
+> 本章待补，单独规划后写入
 >
 > 占位说明：本节为后续 Apple 平台专属交互预留。当前文档仅占位，方便 v2 后续补全。
 >
@@ -1313,7 +1326,7 @@
 
 ---
 
-## C. Development Kit(Only Windows/Linux/macOS)
+## C. 开发工具套件（仅限 Windows/Linux/macOS）
 
 > **独立的 Pywebview 应用**——与主 API 服务器**完全隔离**，单独进程启动，通过 `pywebview` 的 JS API 直接调用本地 Python 模块。所有 C1/C2/C3 的产出物最终通过 C5 打包为 7Z 固实归档并通过 SMTP 邮件提交至开发者组邮箱，审核通过后正式上架。**不依赖任何私有服务器，也**不**依赖主 API**。
 
@@ -1357,7 +1370,7 @@
   - 事件类模板：定义"工厂"，运行时实例化
 - 验收标准
   - AC-1：事件定义必须通过 DSL 校验才能保存
-  - AC-2：单世界事件上限 [TODO: 默认 200 条]
+  - AC-2：单世界事件上限（默认 200 条）
 - 边界场景
   - 触发条件互相冲突 → 拒绝保存并提示
 
@@ -1478,7 +1491,7 @@
 
 **产品视角**
 
-- US-C2.5-01：作为开发者，我必须为新角色手动写入至少 N 条初始记忆（[TODO: 默认 10]）。
+- US-C2.5-01：作为开发者，我必须为新角色手动写入至少 N 条初始记忆（默认 10）。
 - 验收标准
   - AC-1：少于 N 条无法保存（保证角色基础人格）
 - 技术：写入 `memory_entries`，全部 `type='long', source='manual'`
@@ -1500,7 +1513,7 @@
 
 **技术视角**
 
-- 用于 fine-tune 或 prompt 模板蒸馏（[TODO: 决定具体微调策略]）
+- 用于 fine-tune 或 prompt 模板蒸馏（具体微调策略待定）
 - 数据：写入专表 `character_tuning_dialogs`
 
 #### C2.8 3D 模型设计【v2.1 重写·完全移除 Live2D】
@@ -1691,7 +1704,7 @@
   - AC-2：1 小时内重复提交必须返回 `429 rate_limited`
   - AC-3：附件大小 > 1200 MB 必须返回 `413 payload_too_large` 并附带实际体积
   - AC-4：SMTP 失败必须返回 `502 smtp_error` 并附带错误类别（auth / connection / tls / other）
-  - AC-5：SMTP 凭据、SMTP 服务器、目标邮箱全部为**硬编码常量**（参见 `xijian_api/devkit/__init__.py` 顶部），部署前替换
+  - AC-5：SMTP 凭据、SMTP 服务器、目标邮箱全部为**硬编码常量**（参见 `devkit/__init__.py` 顶部），部署前替换
 
 **技术视角**
 
@@ -1702,7 +1715,7 @@
       subgraph 独立 Pywebview 进程（与主 API 不在同一进程）
         UI[Webview UI HTML/JS]
         JSAPI[DevKitApi<br/>pywebview.js_api]
-        DK[xijian_api/devkit/<br/>纯逻辑子包]
+        DK[devkit/<br/>纯逻辑子包]
       end
       FS[本地文件系统]
       SMTP[SMTP 服务器]
@@ -1715,7 +1728,7 @@
       SMTP --> Mailbox
   ```
 
-  > **关键约束**：DevKit 不通过 HTTP 调用主 API server；UI 与 Python 之间通过 `pywebview.js_api` 直接桥接。打包 / SMTP / 限流 / 大小校验全部在 `xijian_api.devkit` 子包内完成（`__init__.py` 是核心，`api.py` 是 js_api 桥接，`state.py` 是进程内 JSON 状态）。
+  > **关键约束**：DevKit 不通过 HTTP 调用主 API server；UI 与 Python 之间通过 `pywebview.js_api` 直接桥接。打包 / SMTP / 限流 / 大小校验全部在 `devkit` 子包内完成（`__init__.py` 是核心，`api.py` 是 js_api 桥接，`state.py` 是进程内 JSON 状态）。
 
 - **提交流程**
 
@@ -1725,7 +1738,7 @@
       participant D as 开发者
       participant UI as DevKit UI (Pywebview)
       participant API as DevKitApi.js_api
-      participant DK as xijian_api/devkit
+      participant DK as devkit
       participant FS as 本地文件系统
       participant SMTP as SMTP 服务器
       participant Mailbox as 开发者组邮箱
@@ -1743,7 +1756,7 @@
       UI-->>D: 「提交成功，预计 X 个工作日内审核完毕」
   ```
 
-- **Pywebview JS API（`xijian_api.devkit.api.DevKitApi`）**
+- **Pywebview JS API（`devkit.api.DevKitApi`）**
 
   JS 通过 `window.pywebview.api.<method>(...)` 调用的方法集合：
 
@@ -1760,7 +1773,7 @@
 
   > 错误：限流返回 `{error: "rate_limited", retry_after_seconds: N}`；超限返回 `{error: "payload_too_large", size_bytes, max_bytes}`；SMTP 失败返回 `{error: "smtp_error", category, response}`。前端根据 `error` 字段决定是否弹窗。
 
-- **硬编码配置**（`xijian_api/devkit/__init__.py` 顶部常量）
+- **硬编码配置**（`devkit/__init__.py` 顶部常量）
 
   | 常量 | 含义 | 默认占位 |
   |---|---|---|
@@ -1943,7 +1956,7 @@ flowchart TB
 | **v2.1** | 2026-06-25 | **引擎选型锁定**：移除 Live2D（统一 3D/VRM）、TTS=**MeloTTS**、歌声=**DiffSinger**、嵌入=**bge-m3**、主对话=**Qwen2.5-7B Q4_K_M**。**配角算力**：单世界 50 角色上限、活跃档 `high_active`=3 / `low_active`=10 二选一、总预算 50k tokens/min。**过载档位**：移除宽松档，仅保留严格/适中两档（CPU 93/95%、SoC 95°C、内存 90%、GPU 75/80% 持续 45/80s，swap 不限制）。**对话延迟基线**：A2 流式 800ms→1200ms / 2s→3s；A6 语音 1s→1.5s（为多角色并发让出余量）。新增 `npc_scheduling_log`、`world_compute_config` 表。 |
 | **v2.2** | 2026-07-02 | **C5 重写为本地提交流程**：移除私有服务器 / TLS 双向证书 / 质量审核队列，改为本地 7Z 固实打包 + SMTP 邮件投递至开发者组硬编码邮箱。频次：每个开发者 ID 每小时至多 1 次；体积：单次 ≤ 1200 MB（macOS 单位制 1000 KB=1 MB / 1000 MB=1 GB，即 1 200 000 000 bytes）。移除表 `dev_uploads` / `dev_audit_results`，新增 `dev_submissions`（仅本地记录）。A3.2 `DEFAULT_TICK_INTERVAL_SECONDS=60` 与 `cfg["modifiers"]` 三件套已实装，原 `[TODO]` 摘除（详见 docs/notes.md）。 |
 | **v2.3** | 2026-07-04 | **C5 实现落地**：开发者工具作为独立子包 `xijian_api/devkit/`（不挂主路由），由 `xijian-devkit` CLI 启动独立 Pywebview 窗口；Pywebview 依赖 `py7zr>=0.21` + `pywebview>=5.0`（`pip install xijian-api[devkit]`）。JS API（`xijian_api.devkit.api.DevKitApi`）新增 `login` / `logout` / `preview_size`。`check_archive_size` 用严格 `>`（pure），UI 层 `preview_size_payload` 用 `>=`（含 manifest 余量）。本轮 82 个 devkit 测试通过、core 全套 388 测试通过 0 回归。实现细节、未做项与原因、跨章节联动见 `docs/notes.md` 2026-07-04 条目。 |
-| **v2.4** | 2026-07-10 | **A4.1 事件调度接入落地**：`stubs.events`（978 行）+ `routes.xijian_events`（302 行）早就实装但没接上——本轮接入到 `seed_all()` 与可选路由注册表，补 117 个测试覆盖（纯函数 / CRUD / 调度 / 分类 / HTTP / 鉴权 / WS 广播 / 过载联动）。`DEFAULT_GLOBAL_COOLDOWN_SECONDS=60` 锁定，原 `[TODO]` 摘除。新增跨章节联动：过载保护处于 recovery 窗口时调度器直接 drop 候选（不消费 cooldown 槽），触发时 WS 广播 `event.fired`。core 全套 423 测试通过、0 回归。实现细节、未做项与原因、跨章节联动见 `docs/notes.md` 2026-07-10 条目。 |
+| **v2.4** | 2026-07-10 | **A4.1 事件调度接入落地**：`stubs.events`（978 行）+ `routes.xijian_events`（302 行）早就实装但没接上——本轮接入到 `seed_all()` 与可选路由注册表，补 117 个测试覆盖（纯函数 / CRUD / 调度 / 分类 / HTTP / 鉴权 / WS 广播 / 过载联动）。`DEFAULT_GLOBAL_COOLDOWN_SECONDS=60` 锁定，原 `[TODO]` 摘除。新增跨章节联动：过载保护处于 recovery 窗口时调度器直接 drop 候选（不消费 cooldown 槽），触发时 WS 广播 `event.fired`。core 全套 423 测试通过、0 回归。实现细节、未做项与原因、跨章节联动见 `docs/notes.md` 2026-07-10 条目。另（2026-07-09 盘账并入）：**A5.4 系统过载防护**（commit `ffd73fb`，2026-06-29 已落代码）：`stubs/overload.py`（1077 行）+ `routes/xijian_overload.py`（207 行）+ `tests/test_xijian_overload.py`（86 个 case）全在；阈值按 v2.1 strict / medium 两档锁死，loose 已移除；AC-2 20s 等待计时器硬编码不可配置；AC-4 不可关闭；恢复双重握手状态机 + 425/409 错误码齐全；触发时自动落 `safety_snapshots(scope=overload)` + 写 audit + WS 广播。**未做**：4 个 action handler（suspend_idle_npcs / degrade_tts / compress_memory / emergency_dump）尚无外部调用方。core 全套 306 测试通过 0 回归（详见 notes 2026-07-09 条目）。 |
 | **v2.5** | 2026-07-11 | **A4.3 场景与互动实装**（从零起，无前置 stub/路由）：新增 `stubs/pois.py`（地图/区域/POI 三级 + 三级父子约束 + 树查询）、`stubs/travel_modes.py`（速度/体力/事件概率 + `estimate_trip` 预演）、`stubs/scene_interactions.py`（`POST .../trigger` + per-character cooldown + audit 联动 + A4.1 `fire_event` 联动），统一挂 `/v1/xijian/scenes/*` 命名空间。state.py 加 3 个新 bucket，`utils/ids.py` 加 `gen_poi_id` / `gen_travel_mode_id` / `gen_scene_interaction_id`（前缀 `poi_` / `tmode_` / `sint_`）。补 148 个测试覆盖（51 POI + 39 travel + 58 scene-interaction，含纯函数 / CRUD / 三级约束 / cooldown / 角色不可互动 gate / 死亡 NPC gate / audit 写入失败容错）。顺手修 A4.2 移交时残留的 4 个 flaky：`conftest` 顺序导致 `npcs.install_overload_handler` 被 `overload.reset_for_testing` 清掉，加 reinstall 兜底；`tick_world` 在非 suspended 路径补 `"suspended": False` 字段；events 的 `_evaluate_probability_trigger` 换 `hashlib.sha256` 去掉 `PYTHONHASHSEED` 依赖；`test_sweep_can_find_both_true_and_false` 扩到 120 个独立 bucket（默认 60s 间隔下原 50 个 sample 折叠到 1 个 bucket 必中）。`xijian_interactions` 路由保留 chat-level（拥抱/接吻），未重命名（详见 notes）。core 全套 762 测试通过、3/3 稳定 0 回归。实现细节、未做项与原因、跨章节联动见 `docs/notes.md` 2026-07-11 条目。 |
 | **v2.6** | 2026-07-15 | **A4.4 经济系统实装**（从零起，无前置 stub/路由）：新增 `stubs/world_currencies.py`（按 `(world_id, code)` 复合主键 + cascade delete + ensure_currency 懒物化）、`stubs/wallets.py`（按 `(owner_kind, owner_id, world_id, currency_code)` 复合主键 + deposit/withdraw/transfer + `allow_overdraft` 政策 + cascading delete_for_world/owner）、`stubs/transactions.py`（追加 only + 8 种 `kind` + FIFO `TXN_KEEP_PER_WORLD=5000` + per-world / per-owner / per-kind 列表 + summary 聚合 + cascading delete）、`stubs/world_economy_state.py`（每世界懒物化 + `inflation_rate ∈ [-0.5, +0.5]` + `liquidity_index ∈ [0.5, 2.0]` + `allow_illegal` / `allow_overdraft` 政策开关 + 通胀均值回归 tick）、`stubs/economy.py`（orchestrator 统一 trade/crime 入口 + `purchase` / `sale` / `reward` / `transfer_user_to_user` 4 个 trade verb + `attempt_theft` / `attempt_scam` 2 个 crime verb + 30s per-NPC cooldown + 确定性 hash 概率 + A5.4 overload 短路 + 每成功交易写一条 `txn_stub.record`）。路由全挂 `/v1/xijian/economy/*` + `/v1/xijian/currencies/*` + `/v1/xijian/wallets/*`。`utils/ids.py` 加 `gen_currency_id` / `gen_wallet_id` / `gen_transaction_id` / `gen_economy_state_id`（前缀 `curr_` / `wlt_` / `txn_` / `eco_`）。补 282 个测试覆盖（72 currency + 67 wallet + 43 transaction + 100 state+orchestrator，含纯函数 / CRUD / 复合主键 / 4 个 trade verb 全路径 / 2 个 crime verb 含 cooldown+overload+user_empty+failed_roll 全分支 / HTTP / 鉴权）。core 全套 **1044** 测试通过、0 回归。实现细节、未做项与原因、跨章节联动见 `docs/notes.md` 2026-07-15 条目。 |
 | **v2.7** | 2026-07-19 | **A5.1 输出审查实装**（从零起，无前置 stub/路由）：新增 `stubs/safety_rules.py`（3 种 `rule_kind`：`ooc_pattern` / `injection_pattern` / `forbidden_word` + `severity ∈ [1, 5]` + `is_active` A/B 开关 + broken-regex 静默跳过 + 热路径 `match_active_rules` 按 severity desc 排序）、`stubs/safety.py`（决策树：`scan_input` injection 必 block / forbidden word 按 severity 分 warn / block / `hard_block` / `scan_output` OOC 在 `world.is_dangerous` + `event_tags ⊇ {dangerous,...}` 时转 `allow_with_exception` 否则 block，**双信号必须同时满足**才放行；A5.4 overload recovery 窗口内短路放行；scan 自身崩 fallback 为 `hard_block` 而非 pass；audit log 每次 scan 一条，`_seq` 单调计数器保证同秒插入的稳定排序 + snippet 240 字符截断 + per-world `is_dangerous` / `threshold` 政策）。路由全挂 `/v1/xijian/safety/*`（scan input/output + rules CRUD + audit list/count + policy get/put/delete + dev crash 演练端点）。`utils/ids.py` 加 `gen_safety_audit_id` / `gen_safety_rule_id`（前缀 `saf_` / `rule_`）。**AC-1 评测集 (`< 1%`) 没接**——v2 spec 标 `[TODO]`，需要评测集定义后跑，stub 给的是 `count_for(verdict=...)` API 供评测工具调。补 150 个测试覆盖（71 safety_rules + 79 safety，含纯函数 / CRUD / 决策树全分支 / 双信号例外 / overload 短路 / scan 自身崩 fallback / per-world policy / HTTP / 鉴权）。core 全套 **1194** 测试通过、0 回归。实现细节、未做项与原因、跨章节联动见 `docs/notes.md` 2026-07-19 条目。 |
@@ -1951,7 +1964,6 @@ flowchart TB
 | **v2.9** | 2026-07-22 | **A5.3 自动世界/记忆上下文备份实装**（从零起，无前置 stub/路由）：新增 `stubs/snapshots.py`（核心 + 政策 + 容量 + 压缩 + 过期清理）：**核心** `create_snapshot` 深拷贝 payload + zlib 压缩（AC-3 真实落库时换 zstd，接口不变）+ module-level `_seq` 计数器 + `file_path` 服务端硬编码 + 单条 500 MiB 上限；**4 种 reason** `scheduled` / `overload` / `safety_stop` / `manual`，**4 种 scope** `world` / `memory` / `character` / `mixed`；**政策** `get_policy` / `set_policy` / `reset_policy` 单 row（id="default"）+ 4 个可变字段（`max_total_bytes` 默认 5 GiB / `auto_compress_enabled` 默认 True / `compression_target` 默认 0.7 / `backup_interval_seconds` 默认 3600s）；**容量** 超限 → `CapacityExceededError` 带 `prompt` body（`action="prompt"` + `current_total` + `ceiling` + `overage` + `incoming` + 3 个 oldest 候选 + `compress_available`），route 层 409 把 prompt 直返给客户端；操作者响应 `compress` / `drop` / `force` 走 `resolve_capacity` 三分支；`auto_compress_enabled=True` 且总占用 ≥ 80% ceiling 时 create 内自动触发 `_auto_compress_pass`（按 created_at asc 遍历压到 ≤ target ratio）；**清理** `prune_expired` 删 `expires_at` 已过的；**压缩** `compress_snapshot` 重压并记录 `compressed_at` + `compression_ratio`。路由全挂 `/v1/xijian/backups/*`（snapshots CRUD + 单条 compress + capacity get/resolve + prune + policy CRUD）。`utils/ids.py` 加 `gen_safety_snapshot_id` / `gen_backup_policy_id`（前缀 `sas_` / `bkpol_`）。**A5.4 overload 联动**：`stubs/overload.py` 触发时**也**写 A5.3 `reason=overload` entry，跨章 cross-link 落地（收 A5.2 notes 留的口子 "A5.2 snapshots 与 A5.3 safety_snapshots 同表不同写入路径"——决策：A5.3 独立 bucket，A5.4 / A5.2 关键事件双写）。补 105 个测试覆盖（纯函数 / scope+reason 验证 / 政策 CRUD 含全字段 / snapshot CRUD + deep-copy / 容量超限 409 + 3 分支 resolve + 强制 force / 过期清理 dry_run+real / zlib 真实压缩 / auto-compress pass / HTTP 全端点 / 鉴权）+ 1 个 A5.4 → A5.3 联动测试。core 全套 **1667** 测试通过、0 回归。实现细节、未做项与原因、跨章节联动见 `docs/notes.md` 2026-07-22 条目。 |
 | **v2.10** | 2026-08-04 | **§B 资源包系统 + 存储统一 + 版本同步**（B 章从占位转实装）：新增 `stubs/packs.py`（7z/zip 双格式解压 + 路径穿越防护 + manifest 校验（schema `xijian.pack/v1`，兼容 `xijian.devkit.submission/v1`）+ 运行时加载（角色/世界/记忆/侧车全标记 `_pack_source`/`_pack_id`）+ 扫描/卸载/预置（env `XIJIAN_PRELOAD_PACKS_DIR` → frozen `<exe_dir>/preload_packs` → dev `core/preload_packs`，幂等跳过同版本））、`routes/xijian_packs.py`（LIST/DETAIL/INSTALL multipart+path/DELETE/RESCAN，错误码 `pack_not_found`/`pack_validation_error`/`invalid_extension`）、`stubs/migration.py` + `routes/xijian_migration.py`（`~/.xijian` → CORE_ROOT 自动迁移：幂等 `.migrated_from_xijian` 标记、非破坏、冲突记录 + resolve 选择保留 legacy/new）。**存储统一**：`~/.xijian` → `~/Library/Application Support/XiJian/Core`（config/store/runtime/files 全链路，`XIJIAN_DATA_DIR` 可整体覆盖）。**资源导入真链路**：`stubs/resources.py` 从假 zip 占位改为真实安装（path/file_id 两入参、daemon 线程、job 状态 completed/failed + 结果摘要 + 归档落 files 存储）。**DevKit 导出即包**：`export_character_for_submit`/`export_world_for_submit`/`export_entries_for_submit` 改为资源包布局（`characters/<id>/`、`worlds/<id>/`、`memories/<id>/`），修复 world_config.json 被错标为 world.json 的 bug；`build_manifest` 增加包字段（name/version/kind/author/dependencies/package_id）保持 submission schema 不变。**版本单一事实源**：`Config/Config.json` + `core/scripts/sync-versions.py`（--dry-run/--check）同步 5 目标（pyproject PEP440 / __init__ / 生成 `_version.py` / devkit version.py / devkit spec）；`root.py` SERVER_VERSION 改读 `_version.py`。文档：api.md §3.8 重写 + 维护教程新建。core 全套 **2189** 测试通过、devkit **207** 通过、0 回归。实现细节、未做项与原因见 `docs/notes.md` 2026-08-04 条目。 |
 | **v2.11** | 2026-08-07 | **macapp 资源包导入与管理实装**（macapp 恢复维护，SwiftUI）：角色页「新建角色」入口移除，改为「导入角色」；世界页新增「导入资源包」；侧边栏新增「资源包」tab（已安装包列表 / 卸载（二次确认）/ 重新扫描 / 导入）；导入走 `POST /v1/xijian/resources/import` 异步任务 + 轮询，完成后按 manifest 实际类型加载角色/世界观/记忆并刷新列表；从资源包导入的角色/世界在列表中带「资源包」来源徽标（读 Core 透出的 `_pack_source`/`_pack_id`）；新增 `ImportPackSheet`/`PackListView`/`PackViewModel`，模型补 `PackManifest`/`PackInfo`/`ImportJobInfo`（含 POST /import 202 响应 `job_id` 兜底）。macapp 侧 91 个 Swift 测试通过（新增 11 个 packs 相关），xcodebuild BUILD/TEST SUCCEEDED；Core 资源包 API 端到端冒烟通过（安装/列表/详情/异步导入/卸载/幂等/错误码）。实现细节、未做项与原因见 `docs/notes.md` 2026-08-07 条目。 |
-| **v2.4** | 2026-07-09 | **A5.4 系统过载防护实现实装确认**（commit `ffd73fb` 2026-06-29 已落代码，本轮做盘账 + 写回 notes）。`stubs/overload.py`（1077 行）+ `routes/xijian_overload.py`（207 行）+ `tests/test_xijian_overload.py`（86 个 case）全在；阈值严格按 v2.1 的 strict / medium 两档数字锁死，loose 已彻底移除；AC-2 20s 等待计时器硬编码不可配置；AC-4 不可关闭（`set_tier` 只接受 strict / medium）；恢复双重握手状态机 + 425/409 错误码齐全；触发时自动落 `safety_snapshots(scope=overload)` + 写 audit + WS 广播。**未做的（待下游订阅）**：4 个 action handler（suspend_idle_npcs / degrade_tts / compress_memory / emergency_dump）目前**没有任何外部调用方**，等 A4.2 / A6 / A1.2 / A1.1 起来时调 `overload.register_action_handler(ACTION_*, hook)`。详见 `docs/notes.md` 2026-07-09 条目。core 全套 306 测试通过 0 回归。 |
 
 ---
 

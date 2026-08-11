@@ -54,7 +54,7 @@ xijian-api/                    # 解压后的根目录
 ### 3.1 环境要求
 
 - **macOS**: Apple Silicon (arm64)，macOS 26.0+
-- **Windows**: Windows 10/11 x64
+- **Windows**: Windows 10 22H2 及以上 / 11（建议 24H2 及以上）x64
 - **conda**: Anaconda/Miniconda/Miniforge
 - **Python**: 3.12（由 conda 环境提供）
 - **磁盘空间**: 至少 2GB（含 AI 依赖时约 3GB）
@@ -164,13 +164,13 @@ curl -H "Authorization: Bearer <token>" http://localhost:18600/v1/models
 
 ## 6. UI 程序集成
 
-> 本节描述 UI 程序（Electron / Tauri / 原生应用）集成 Core 的通用流程。
+> 本节描述 UI 程序（macapp SwiftUI / DevKit Pywebview）集成 Core 的通用流程。
 > macOS 客户端（macapp）的落地实现——Core 复制/合并 → 启动 → 实际端口 → token 的
 > 完整 6 步见 [docs/macapp.md §3 运行方式](macapp.md#3-运行方式)。
 
 ### 6.1 工作流程
 
-UI 程序（如 Electron / Tauri / 原生应用）的工作流程：
+UI 程序（macapp SwiftUI / DevKit Pywebview）的工作流程：
 
 ```
 1. 解压 xijian-core-<platform>-<arch>.zip 到 <app_data>/xijian-core/
@@ -178,8 +178,8 @@ UI 程序（如 Electron / Tauri / 原生应用）的工作流程：
 3. 启动子进程:
    <app_data>/xijian-core/xijian-api --port 18500 --config <path>/config.toml
 4. 等待服务就绪:
-   - 监听 stdout/stderr 出现 "werkzeug 服务启动"（或 "waitress 服务启动"，若显式 `--server waitress`）
-   - 或轮询 GET /healthz 直到返回 200
+   - 读取 `tmp/xijian-<pid>.port` 获取实际端口（配置端口被占用时 Core 会自动向上探测空闲端口并写入该文件），再轮询 GET /healthz 直到返回 200
+   - 或监听 stdout/stderr 出现 "werkzeug 服务启动"（或 "waitress 服务启动"，若显式 `--server waitress`）
 5. 使用 API
 6. 退出时发送 SIGTERM (Unix) / Ctrl+C (Windows) 或 kill 进程
 ```
@@ -335,7 +335,10 @@ PyInstaller。dev 脚本会自动拷贝 `config.toml`。
 
 **症状**: `端口 18500 已被占用`
 
-**解决**: 使用 `--port` 指定其他端口，或释放被占用的端口。
+**默认行为**: 不会退出——报告占用进程后自动向上探测空闲端口（最多 100 个）并启动，
+实际生效端口写入 `~/Library/Application Support/XiJian/tmp/xijian-<pid>.port`，客户端读取该文件即可得知真实端口。
+
+**需要固定端口时**: 加 `--port-strict`（占用即报错退出），或用 `--port` 指定其他端口，或释放被占用的端口。
 
 ---
 

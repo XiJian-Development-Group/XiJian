@@ -3,6 +3,7 @@
 > 本文档定义「隙间」跨平台本地 API 的完整协议。
 > 阅读对象：UI 端开发者、第三方集成者、API 后端实现者。
 > 整体架构与进程模型见 [Dev.md §2](./Dev.md)。
+> 本文件覆盖核心端点（约 141 个），完整端点清单以 openapi.yaml 为准（271 个 path）。
 
 ---
 
@@ -10,9 +11,9 @@
 
 ### 0.1 一句话
 
-隙间本地 API 是 **「OAI 兼容 + 隙间扩展」** 的双协议栈：
+隙间本地 API 是 **「OAI（OpenAI）兼容 + 隙间扩展」** 的双协议栈：
 
-- **OAI 兼容层**：完整实现 OpenAI 官方 API 表面（chat / embeddings / audio / images / video / models / files / fine-tuning 等），第三方客户端（openai-python、langchain、llama-index）可零修改接入。
+- **OAI（OpenAI）兼容层**：完整实现 OpenAI 官方 API 表面（chat / embeddings / audio / images / video / models / files / fine-tuning 等），第三方客户端（openai-python、langchain、llama-index）可零修改接入。
 - **隙间扩展层**：以 `/v1/xijian/*` 命名空间承载项目特有能力（角色、互动、世界、记忆、保护模块等）。
 
 ### 0.2 关键设计决策
@@ -584,7 +585,7 @@ multipart/form-data：`file`（必填）、`purpose`（必填：`assistants` / `
 
 #### `DELETE /v1/files/{file_id}`
 
-### 2.8 Batches
+### 2.9 Batches
 
 #### `POST /v1/batches`
 
@@ -605,7 +606,7 @@ multipart/form-data：`file`（必填）、`purpose`（必填：`assistants` / `
 
 #### `POST /v1/batches/{batch_id}/cancel`
 
-### 2.9 Fine-tuning
+### 2.10 Fine-tuning
 
 完整 OAI 兼容（用于本地小模型微调）。
 
@@ -617,7 +618,7 @@ multipart/form-data：`file`（必填）、`purpose`（必填：`assistants` / `
 - `GET /v1/fine_tuning/jobs/{job_id}/checkpoints`
 - `POST /v1/fine_tuning/jobs/{job_id}/checkpoints/permissions`
 
-### 2.10 Assistants / Threads / Runs
+### 2.11 Assistants / Threads / Runs
 
 **这是 OAI 兼容层中可选模块**。隙间的角色系统与 Assistants 在概念上重叠，提供是为了让第三方 RAG 工具能直接对接；隙间自有 UI 使用 `/v1/xijian/character/*`。
 
@@ -629,7 +630,7 @@ multipart/form-data：`file`（必填）、`purpose`（必填：`assistants` / `
 - `POST /v1/threads/{thread_id}/messages` / `GET /v1/threads/{thread_id}/messages` / `GET /v1/threads/{thread_id}/messages/{msg_id}`
 - `POST /v1/threads/{thread_id}/runs` / `GET /v1/threads/{thread_id}/runs` / `GET /v1/threads/{thread_id}/runs/{run_id}` / `POST /v1/threads/{thread_id}/runs/{run_id}` / `POST /v1/threads/{thread_id}/runs/{run_id}/cancel` / `POST /v1/threads/{thread_id}/runs/{run_id}/steps` / `GET /v1/threads/{thread_id}/runs/{run_id}/steps/{step_id}` / `POST /v1/threads/{thread_id}/runs/{run_id}/submit_tool_outputs`
 
-### 2.11 Completions（Legacy）
+### 2.12 Completions（Legacy）
 
 为兼容遗留客户端提供：
 
@@ -1677,7 +1678,7 @@ wscat -c "ws://127.0.0.1:$PORT/v1/ws" \
 
 ## 11. 后续扩展方向
 
-- **MCP 桥接**：通过 `/v1/xijian/mcp/*` 暴露 MCP 工具，让外部 MCP-aware Agent 调用隙间角色
+- **已支持：MCP 服务端**（协议 / 工具注册 / 门禁 / 待办入队），见 [docs/MCP.md](MCP.md)
 - **多用户**（理论上）：当前为单用户，多用户需要加会话隔离 + 资源配额
 - **远程调用**：未来如需开放远程访问，必须额外加 OAuth + TLS + 双向认证，**当前协议不允许**
 

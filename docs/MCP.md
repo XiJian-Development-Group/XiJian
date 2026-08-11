@@ -1,7 +1,7 @@
 # XiJian Core MCP 功能说明
 
 > 文档版本：v1.0
-> 适用版本：XiJian Core API v0.1.0+
+> 适用版本：XiJian Core API v1.2.0-Alpha（PEP 440：`1.2.0a0`）及以上
 > 对应功能清单：Dev. Function List功能清单v2.md §A2 / §A5.2
 
 ---
@@ -379,7 +379,7 @@ Core API 无法直接执行桌面级操作（启动应用、控制浏览器、�
 - `GET /v1/xijian/mcp/pending` — 桌面客户端拉取待办端点
 - WebSocket 推送 — 实时通知桌面客户端
 - `POST /v1/xijian/mcp/pending/<id>/result` — 结果回写端点
-- 桌面客户端集成（Electron / Tauri 侧）
+- 桌面客户端集成（macapp SwiftUI 侧）
 
 当前 Core 侧能力：工具注册、门禁、入队、查询待办（`desktop_pending_list` / `desktop_pending_get`）已完整实现。
 
