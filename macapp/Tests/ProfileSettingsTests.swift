@@ -11,12 +11,15 @@ final class UserProfileSettingsTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
+        // 隔离 Keychain：S7 后 remoteToken 走 Keychain，测试不得碰真实凭据
+        KeychainStore.shared = InMemoryKeychainStore()
         clearProfileDefaults()
         profile = UserProfileSettings()
     }
 
     override func tearDown() {
         clearProfileDefaults()
+        KeychainStore.shared = SystemKeychainStore()
         super.tearDown()
     }
 

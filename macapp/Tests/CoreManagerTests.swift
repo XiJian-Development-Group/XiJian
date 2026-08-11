@@ -7,6 +7,8 @@ final class CoreManagerTests: XCTestCase {
 
     override func setUp() {
         super.setUp()
+        // 隔离 Keychain：S7 后 customToken 走 Keychain，测试不得碰真实凭据
+        KeychainStore.shared = InMemoryKeychainStore()
         CoreManager.shared.resetForTesting()
         // resetForTesting 不清 custom server 三字段（保留用户配置语义），
         // 但测试间共享单例，先清掉避免并行/顺序执行时互相污染
@@ -20,6 +22,7 @@ final class CoreManagerTests: XCTestCase {
         CoreManager.shared.useCustomServer = false
         CoreManager.shared.customBaseURL = ""
         CoreManager.shared.customToken = ""
+        KeychainStore.shared = SystemKeychainStore()
         super.tearDown()
     }
 

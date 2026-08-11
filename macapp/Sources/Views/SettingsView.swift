@@ -89,8 +89,11 @@ struct SettingsView: View {
                 }
 
                 Section(loc("关于")) {
-                    LabeledContent(loc("版本"), value: "1.0.0")
-                    LabeledContent(loc("协议"), value: loc("本地 API · Bearer Token"))
+                    LabeledContent(loc("版本"), value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0.0")
+                    LabeledContent(loc("连接密钥"), value: loc("本地 API · 连接密钥"))
+                    Text(loc("连接密钥是访问本机 Core API 的凭据，可在“服务器与进程”中查看或复制。"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     Button {
                         // 再次查看新人引导：重置完成标记，主界面自动切回引导页
                         UserProfileSettings.shared.onboardingCompleted = false
@@ -107,7 +110,12 @@ struct SettingsView: View {
             }
             Button(loc("取消"), role: .cancel) {}
         } message: {
-            Text(loc("将停止 Core 并删除 Core 数据目录（仅 ~/Library/Application Support/XiJian/Core，含复制出的 Core 程序、日志与数据）。不会影响 XiJian 目录下的其他应用数据。重新启动时会自动从 App 内置资源重新复制。"))
+            VStack(alignment: .leading, spacing: 6) {
+                Text(loc("将删除本机全部角色、世界与聊天数据。"))
+                Text(loc("完整路径：%@", core.coreDirectory?.path ?? "—"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
         .alert(loc("出错了"), isPresented: $showError) {
             Button(loc("好"), role: .cancel) {}

@@ -8,6 +8,7 @@ from xijian_api import abort as abort_registry
 from xijian_api.errors import ApiError
 from xijian_api.stubs import chat as chat_stub
 from xijian_api.streaming import build_stream_response
+from xijian_api.utils.log import get_logger
 from xijian_api.utils.params import (
     parse_float,
     parse_int,
@@ -17,6 +18,70 @@ from xijian_api.utils.params import (
 
 
 bp = Blueprint("chat", __name__)
+
+_LOGGER = get_logger()
+
+
+# ---------------------------------------------------------------------------
+# E2 — numeric parameter clamping
+# E2 — 数值参数钳位
+# ---------------------------------------------------------------------------
+
+#: Accepted ranges for the core sampling parameters.  Values outside the
+#: range are silently clamped (never rejected) so a hostile or sloppy
+#: client cannot push the backend into an invalid sampling configuration.
+#: 核心采样参数的允许范围。范围外的值被静默钳位（绝不拒绝），
+#: 防止恶意或粗心的客户端把后端推入无效采样配置。
+_TEMPERATURE_MIN, _TEMPERATURE_MAX = 0.0, 2.0
+_TOP_P_MIN, _TOP_P_MAX = 0.0, 1.0
+_MAX_TOKENS_MIN, _MAX_TOKENS_MAX = 1, 32768
+
+
+def _clamp(value: float, lo: float, hi: float) -> float:
+    """Clamp ``value`` into ``[lo, hi]``.  将 ``value`` 钳位到 ``[lo, hi]``。"""
+    if value < lo:
+        return lo
+    if value > hi:
+        return hi
+    return value
+
+
+def _clamp_float(value: float, param: str, lo: float, hi: float) -> float:
+    """Clamp a parsed float, logging a warning when it changed.
+
+    钳位已解析的浮点数，发生变化时记录警告。
+    """
+    clamped = _clamp(value, lo, hi)
+    if clamped != value:
+        _LOGGER.warning(
+            "parameter `%s`=%r outside [%s, %s]; clamped to %r",
+            param,
+            value,
+            lo,
+            hi,
+            clamped,
+        )
+    return clamped
+
+
+def _clamp_optional_int(value: int | None, param: str, lo: int, hi: int) -> int | None:
+    """Clamp an optional parsed int (``None`` stays ``None``), logging when changed.
+
+    钳位可选已解析整数（``None`` 保持 ``None``），发生变化时记录日志。
+    """
+    if value is None:
+        return None
+    clamped = _clamp(value, lo, hi)
+    if clamped != value:
+        _LOGGER.warning(
+            "parameter `%s`=%r outside [%s, %s]; clamped to %r",
+            param,
+            value,
+            lo,
+            hi,
+            clamped,
+        )
+    return int(clamped)
 
 
 @bp.post("/v1/chat/completions")
@@ -49,9 +114,24 @@ def chat_completions():
             param="messages",
         )
     model = payload.get("model", "stub-model")
-    temperature = parse_float(payload.get("temperature"), "temperature", 0.7)
-    top_p = parse_float(payload.get("top_p"), "top_p", 1.0)
-    max_tokens = parse_int_optional(payload.get("max_tokens"), "max_tokens")
+    temperature = _clamp_float(
+        parse_float(payload.get("temperature"), "temperature", 0.7),
+        "temperature",
+        _TEMPERATURE_MIN,
+        _TEMPERATURE_MAX,
+    )
+    top_p = _clamp_float(
+        parse_float(payload.get("top_p"), "top_p", 1.0),
+        "top_p",
+        _TOP_P_MIN,
+        _TOP_P_MAX,
+    )
+    max_tokens = _clamp_optional_int(
+        parse_int_optional(payload.get("max_tokens"), "max_tokens"),
+        "max_tokens",
+        _MAX_TOKENS_MIN,
+        _MAX_TOKENS_MAX,
+    )
     stop = payload.get("stop")
     n = parse_int(payload.get("n"), "n", 1)
     user = payload.get("user")

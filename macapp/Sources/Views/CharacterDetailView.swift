@@ -15,7 +15,8 @@ struct CharacterDetailView: View {
     @State private var showError = false
     @State private var errorMessage = ""
     @State private var nsfwAllowed = false
-    @State private var contextText = ""
+    /// 结构化上下文行（U3）
+    @State private var contextRows: [KeyValueRow] = []
     @State private var selectedInteractionID: String?
     @State private var showStatSlider = false
     @State private var statSliderDimension: CharacterStatusDimension = .hunger
@@ -386,17 +387,16 @@ struct CharacterDetailView: View {
                     .foregroundStyle(.secondary)
             }
 
-            TextField(loc("上下文（如：location=home, time_of_day=evening）"), text: $contextText)
-                .textFieldStyle(.roundedBorder)
+            KeyValueListEditor(rows: $contextRows)
+                .frame(maxHeight: 160)
 
             Toggle(loc("允许 NSFW 回应"), isOn: $nsfwAllowed)
-
             HStack {
                 Spacer()
                 Button(loc("取消")) { showInteract = false }
                 Button(loc("触发")) {
                     Task {
-                        let context = parseContext(contextText)
+                        let context = KVListParser.toJSON(contextRows)
                         let result = await viewModel.trigger(
                             selectedInteractionID ?? "",
                             characterID: characterID,
@@ -415,27 +415,6 @@ struct CharacterDetailView: View {
         .frame(width: 420)
     }
 
-    /// 解析 "k=v, k2=v2" 形式的上下文
-    private func parseContext(_ text: String) -> [String: JSONValue] {
-        var result: [String: JSONValue] = [:]
-        for part in text.split(separator: ",") {
-            let kv = part.split(separator: "=", maxSplits: 1)
-            guard kv.count == 2 else { continue }
-            let key = kv[0].trimmingCharacters(in: .whitespaces)
-            let value = kv[1].trimmingCharacters(in: .whitespaces)
-            if let number = Double(value) {
-                result[key] = .number(number)
-            } else if value == "true" {
-                result[key] = .bool(true)
-            } else if value == "false" {
-                result[key] = .bool(false)
-            } else {
-                result[key] = .string(value)
-            }
-        }
-        return result
-    }
-
     // MARK: 状态编辑器
 
     private var stateEditorSheet: some View {
@@ -443,40 +422,56 @@ struct CharacterDetailView: View {
     }
 }
 
-/// 角色状态编辑器：按 key 输入数值
+/// 角色状态编辑器：Picker 选字段，按类型渲染输入控件（U2，不再手输英文字段名）
 struct StateEditorSheet: View {
     @Bindable var viewModel: CharacterViewModel
     let characterID: String
 
     @Environment(\.dismiss) private var dismiss
-    @State private var fields: [String: String] = [:]
+    /// 当前编辑的字段（key → 编辑中的值）
+    @State private var fields: [String: JSONValue] = [:]
+    /// 新字段选择器
+    @State private var selectedField = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text(loc("编辑角色状态"))
                 .font(.title3)
                 .bold()
-            Text(loc("填写要更新的状态字段（如 intimacy、mood、energy），留空则不改动。"))
+            Text(loc("选择要更新的状态字段，留空不改动。"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
+            // 添加字段：候选来自预定义维度 + 当前状态已有字段
+            HStack(spacing: 8) {
+                Picker(loc("选择字段"), selection: $selectedField) {
+                    ForEach(candidates, id: \.self) { key in
+                        Text(key).tag(key)
+                    }
+                }
+                .labelsHidden()
+                .frame(maxWidth: .infinity)
+
+                Button(loc("添加")) {
+                    addField()
+                }
+                .disabled(selectedField.isEmpty || fields[selectedField] != nil)
+            }
+
             Form {
                 ForEach(Array(fields.keys.sorted()), id: \.self) { key in
-                    TextField(key, text: Binding(
-                        get: { fields[key] ?? "" },
-                        set: { fields[key] = $0 }
-                    ))
-                }
-
-                HStack {
-                    TextField(loc("新字段名"), text: $newKey)
-                        .textFieldStyle(.roundedBorder)
-                    Button(loc("添加字段")) {
-                        let trimmed = newKey.trimmingCharacters(in: .whitespaces)
-                        if !trimmed.isEmpty && fields[trimmed] == nil {
-                            fields[trimmed] = ""
+                    HStack(alignment: .top, spacing: 8) {
+                        StateFieldRow(key: key, value: fields[key] ?? .string(""), maxValue: 100, edited: Binding(
+                            get: { fields[key] ?? .string("") },
+                            set: { fields[key] = $0 }
+                        ))
+                        Button {
+                            fields.removeValue(forKey: key)
+                        } label: {
+                            Image(systemName: "trash")
+                                .foregroundStyle(.secondary)
                         }
-                        newKey = ""
+                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -492,34 +487,37 @@ struct StateEditorSheet: View {
             }
         }
         .padding(20)
-        .frame(width: 440)
+        .frame(width: 460)
         .onAppear {
             if let state = viewModel.state {
                 for entry in state.sortedEntries {
-                    if let value = entry.value.stringValue {
-                        fields[entry.key] = value
-                    }
+                    fields[entry.key] = entry.value
                 }
             }
         }
     }
 
-    @State private var newKey = ""
+    /// 候选字段：预定义角色字段 + 已有字段
+    private var candidates: [String] {
+        let existing = viewModel.state?.sortedEntries.map(\.key) ?? []
+        return StateFieldCandidates.merged(existing: existing, predefined: StateFieldCandidates.character)
+    }
+
+    /// 添加选中的字段（默认值按字段名推断：常见数值维度给 0，其余给空串）
+    private func addField() {
+        guard !selectedField.isEmpty, fields[selectedField] == nil else { return }
+        let numericKeys = Set(StateFieldCandidates.character)
+        fields[selectedField] = numericKeys.contains(selectedField) ? .number(0) : .string("")
+    }
 
     private func save() async {
         var patch: [String: JSONValue] = [:]
         for (key, value) in fields {
-            let trimmed = value.trimmingCharacters(in: .whitespaces)
-            guard !trimmed.isEmpty else { continue }
-            if let number = Double(trimmed) {
-                patch[key] = .number(number)
-            } else if trimmed == "true" {
-                patch[key] = .bool(true)
-            } else if trimmed == "false" {
-                patch[key] = .bool(false)
-            } else {
-                patch[key] = .string(trimmed)
+            // 跳过空字符串（未填写的文本字段不改动）
+            if case .string(let s) = value, s.trimmingCharacters(in: .whitespaces).isEmpty {
+                continue
             }
+            patch[key] = value
         }
         guard !patch.isEmpty else {
             dismiss()

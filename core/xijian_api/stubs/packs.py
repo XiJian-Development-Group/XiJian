@@ -47,10 +47,31 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
-import py7zr
+try:
+    import py7zr as _py7zr  # noqa: E402 - guarded optional dependency
 
-from xijian_api.stubs import state
-from xijian_api.utils.time import now_ts
+    _HAS_PY7ZR = True
+except ImportError:  # pragma: no cover - depends on the install env
+    _py7zr = None  # type: ignore[assignment]
+    _HAS_PY7ZR = False
+
+py7zr = _py7zr  # type: ignore[assignment]
+
+#: Exception types treated as "corrupt archive" by :func:`extract_archive`.
+#: ``py7zr.exceptions.Bad7zFile`` is only available when py7zr is installed.
+#: :func:`extract_archive` 视为“归档损坏”的异常类型。仅当 py7zr
+#: 已安装时 ``py7zr.exceptions.Bad7zFile`` 才可用。
+if _HAS_PY7ZR:
+    _ARCHIVE_ERRORS: tuple[type[Exception], ...] = (
+        zipfile.BadZipFile,
+        py7zr.exceptions.Bad7zFile,  # type: ignore[union-attr]
+        OSError,
+    )
+else:
+    _ARCHIVE_ERRORS = (zipfile.BadZipFile, OSError)
+
+from xijian_api.stubs import state  # noqa: E402 - after optional dep guard
+from xijian_api.utils.time import now_ts  # noqa: E402
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -176,6 +197,11 @@ def extract_archive(archive_path: str | Path, dest_dir: Path) -> None:
 
     try:
         if suffix == ".7z":
+            if not _HAS_PY7ZR:
+                raise PackError(
+                    "处理 7z 包需要安装 py7zr：pip install py7zr",
+                    code="pack_py7zr_missing",
+                )
             with py7zr.SevenZipFile(archive_path, mode="r") as z:
                 for info in z.list():
                     name = info.filename
@@ -205,7 +231,7 @@ def extract_archive(archive_path: str | Path, dest_dir: Path) -> None:
     except PackValidationError:
         _cleanup()
         raise
-    except (zipfile.BadZipFile, py7zr.exceptions.Bad7zFile, OSError) as exc:
+    except _ARCHIVE_ERRORS as exc:
         _cleanup()
         raise PackValidationError(f"corrupt archive: {exc}") from exc
 

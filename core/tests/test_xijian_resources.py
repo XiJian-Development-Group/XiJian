@@ -77,9 +77,15 @@ def _zip_dir(src: Path, dest: Path) -> None:
 
 
 @pytest.fixture(autouse=True)
-def _isolate_imports(tmp_path):
-    """每个测试将资源包目录指向新的临时目录，并清除导入任务。"""
+def _isolate_imports(tmp_path, monkeypatch):
+    """每个测试将资源包目录指向新的临时目录，并清除导入任务。
+
+    同时将 ``XIJIAN_DATA_DIR`` 指向同一临时目录 (S5)：资源导入的
+    服务端路径白名单要求归档位于用户数据目录内，而测试归档都建在
+    ``tmp_path`` 下，因此数据根目录必须跟随。
+    """
     packs_stub._set_paths_for_test(tmp_path / "packs")
+    monkeypatch.setenv("XIJIAN_DATA_DIR", str(tmp_path))
     # 清除导入任务
     stubs_state.import_jobs.clear()
     yield
@@ -457,3 +463,98 @@ def test_import_world_pack(tmp_path):
     assert job["result"]["loaded_worlds"] == 1
     assert "world-test" in stubs_state.worlds
     assert stubs_state.worlds["world-test"][packs_stub._SOURCE_TAG] is True
+
+# ---------------------------------------------------------------------------
+# S5 — import path whitelist + size limit
+# S5 — 导入路径白名单 + 大小上限
+# ---------------------------------------------------------------------------
+
+
+def _wait_job(job_id, timeout=2.5):
+    import time
+    for _ in range(int(timeout / 0.05)):
+        job = resources_stub.get(job_id)
+        if job["status"] in ("completed", "failed"):
+            return job
+        time.sleep(0.05)
+    pytest.fail("import job did not finish")
+
+
+def test_import_path_outside_data_dir_fails(tmp_path, monkeypatch):
+    """A server-side path outside the user data dir is rejected (S5)."""
+    # XIJIAN_DATA_DIR is set by the autouse fixture to tmp_path; the
+    # archive lives in a sibling dir → outside the data root.
+    outside = tmp_path / ".." / "outside-imports"
+    outside.mkdir(parents=True, exist_ok=True)
+    archive = outside / "evil.zip"
+    archive.write_bytes(b"PK\x03\x04fake")
+
+    job_id = gen_import_job_id()
+    resources_stub.start_import({"name": "Evil", "path": str(archive)}, job_id)
+    job = _wait_job(job_id)
+    assert job["status"] == "failed"
+    assert "outside the user data directory" in job["error"]
+
+
+def test_import_path_traversal_rejected(tmp_path, monkeypatch):
+    """A ``..``-laden path that resolves outside the data dir is rejected (S5)."""
+    from xijian_api.runtime import default_storage_dir
+
+    data_root = default_storage_dir().resolve()
+    target = data_root / "files" / "innocent.txt"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("hi")
+
+    # A path that LOOKS inside the root but escapes via .. resolves outside.
+    escape = data_root / "files" / ".." / ".." / ".." / ".." / ".." / ".." / ".." / ".." / "tmp" / "evil.zip"
+    try:
+        job_id = gen_import_job_id()
+        resources_stub.start_import({"name": "Escape", "path": str(escape)}, job_id)
+        job = _wait_job(job_id)
+        assert job["status"] == "failed"
+        assert "outside the user data directory" in job["error"]
+    finally:
+        target.unlink(missing_ok=True)
+
+
+def test_import_path_inside_data_dir_ok(tmp_path):
+    """A path inside the data dir proceeds (S5) — valid zip completes."""
+    pack = _write_character_pack_dir(tmp_path, package_id="whitelist-char", name="WL")
+    archive = tmp_path / "wl.zip"
+    _zip_dir(pack, archive)
+
+    job_id = gen_import_job_id()
+    resources_stub.start_import({"name": "WL", "path": str(archive)}, job_id)
+    job = _wait_job(job_id)
+    assert job["status"] == "completed"
+    assert job["package_id"] == "whitelist-char"
+
+
+def test_import_path_too_large_fails(tmp_path, monkeypatch):
+    """Archives over the 512 MiB cap are rejected before reading (S5)."""
+    from xijian_api.stubs import resources as resources_module
+
+    monkeypatch.setattr(resources_module, "_MAX_IMPORT_BYTES", 1024)
+    big = tmp_path / "big.zip"
+    big.write_bytes(b"x" * 2048)
+
+    job_id = gen_import_job_id()
+    resources_stub.start_import({"name": "Big", "path": str(big)}, job_id)
+    job = _wait_job(job_id)
+    assert job["status"] == "failed"
+    assert "too large" in job["error"]
+
+
+def test_import_file_id_too_large_fails(tmp_path, monkeypatch):
+    """A stored file over the cap is rejected via its recorded size (S5)."""
+    from xijian_api.stubs import resources as resources_module
+
+    monkeypatch.setattr(resources_module, "_MAX_IMPORT_BYTES", 1024)
+    file_id = "test-file-oversize"
+    files_persist(file_id, b"y" * 2048, purpose="user_data", filename="big.zip")
+
+    job_id = gen_import_job_id()
+    resources_stub.start_import({"name": "Big File", "file_id": file_id}, job_id)
+    job = _wait_job(job_id)
+    assert job["status"] == "failed"
+    assert "too large" in job["error"]

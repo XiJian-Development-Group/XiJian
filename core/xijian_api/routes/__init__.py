@@ -10,12 +10,14 @@ independently without breaking the foundation build.
 其他每个路由模块都是可选的，以便下游任务
 (``oai-routes``, ``xijian-routes``, ``websocket``) 能独立落地而不破坏基础构建。
 
-A missing route module is logged as a warning — never raised —
-because the foundation deliverable must remain importable and
-runnable on its own.
+A missing route module is logged (as an error with traceback — never
+raised) because the foundation deliverable must remain importable and
+runnable on its own.  The severity was upgraded from WARNING to ERROR
+so a degraded startup is visible in production logs (E4).
 
-缺失的路由模块仅记录警告——绝不抛出异常——
-因为基础交付件必须保持可导入且可独立运行。
+缺失的路由模块记录日志（ERROR 级别并附 traceback——绝不抛出），
+因为基础交付件必须保持可导入且可独立运行。严重级别已从 WARNING
+升级为 ERROR，使降级启动在生产日志中可见 (E4)。
 """
 
 from __future__ import annotations
@@ -121,14 +123,20 @@ def register_routes(app: Flask, *, optional_modules: Iterable[str] | None = None
         try:
             module = importlib.import_module(module_name)
         except ImportError as exc:
-            _LOGGER.warning("optional route module %s unavailable: %s", module_name, exc)
+            _LOGGER.error(
+                "optional route module %s unavailable: %s",
+                module_name,
+                exc,
+                exc_info=True,
+            )
             continue
         except Exception as exc:  # noqa: BLE001 — broad catch is intentional
-            _LOGGER.warning(
+            _LOGGER.error(
                 "optional route module %s failed to import (%s): %s",
                 module_name,
                 type(exc).__name__,
                 exc,
+                exc_info=True,
             )
             continue
 

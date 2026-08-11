@@ -118,7 +118,7 @@ struct ChatView: View {
                 Label(loc("通话"), systemImage: "phone")
             }
             .disabled(!coreIsRunning)
-            .help(coreIsRunning ? loc("实时语音通话（A6）") : loc("Core 未运行，无法通话"))
+            .help(coreIsRunning ? loc("与角色实时语音通话") : loc("Core 未运行，无法通话"))
             .popover(isPresented: $showCallPicker) {
                 VoiceCallCharacterPicker { character in
                     let vm = VoiceCallViewModel()

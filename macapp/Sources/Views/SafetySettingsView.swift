@@ -66,10 +66,8 @@ struct SafetySettingsView: View {
                 Section(loc("关闭保护（两步确认）")) {
                     switch disablePhase {
                     case .awaitingChallenge:
-                        Text(loc("关闭保护前需要双重确认。请输入确认短语："))
+                        Text(loc("关闭保护前需要双重确认。点击下方按钮发起挑战，随后按提示输入服务端下发的挑战短语。"))
                             .font(.caption)
-                        TextField("I understand the risks", text: $confirmationText)
-                            .textFieldStyle(.roundedBorder)
                         HStack {
                             Button(loc("发起挑战")) {
                                 Task { await startChallenge() }
@@ -198,6 +196,7 @@ struct SafetySettingsView: View {
     private func startChallenge() async {
         guard let client = core.makeClient() else { return }
         do {
+            // 挑战短语由服务端下发（challenge_phrase），不再要求客户端预置英文固定短语（U6）
             let result = try await client.startDisableGate(confirmation: confirmationText)
             if let error = result.error, result.challenge_id == nil {
                 presentErrorMessage(loc("发起挑战失败：%@", error))

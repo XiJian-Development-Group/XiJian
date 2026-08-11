@@ -61,6 +61,8 @@ struct CharacterStatRing: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        // U14：无障碍标签（VoiceOver 朗读状态值，而非只读图标）
+        .accessibilityLabel(loc("状态 %@：%lld / %lld", title, Int(value), Int(max)))
     }
 }
 

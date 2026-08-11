@@ -71,3 +71,47 @@ def test_extra_whitespace_around_token_rejected(client, token):
         headers={"Authorization": f"Bearer {token}x"},
     )
     assert response.status_code == 401
+
+# ---------------------------------------------------------------------------
+# S2 — constant-time token comparison
+# S2 — 恒定时间令牌比较
+# ---------------------------------------------------------------------------
+
+
+def test_constant_time_eq_basic():
+    """Equal strings compare True; unequal / length-mismatched are False (S2)."""
+    from xijian_api.auth import constant_time_eq
+
+    assert constant_time_eq("abc", "abc") is True
+    assert constant_time_eq("abc", "abd") is False
+    assert constant_time_eq("abc", "abcd") is False
+
+
+def test_constant_time_eq_non_ascii_never_raises():
+    """Non-ASCII values (which would make hmac.compare_digest raise)
+    safely return False (S2).
+    (非 ASCII 值（会让 hmac.compare_digest 抛异常）安全返回 False (S2)。)
+    """
+    from xijian_api.auth import constant_time_eq
+
+    assert constant_time_eq("你好", "你好") is False  # same length, non-ASCII
+    assert constant_time_eq("abc", "你好") is False
+    assert constant_time_eq(None, "abc") is False
+    assert constant_time_eq(b"abc", "abc") is False
+
+
+def test_wrong_token_still_401_after_constant_time_compare(client):
+    """A wrong Bearer token is still rejected with 401 (S2 regression guard)."""
+    response = client.get(
+        "/v1",
+        headers={"Authorization": "Bearer definitely-not-the-token"},
+    )
+    assert response.status_code == 401
+    body = response.get_json()
+    assert body["error"]["code"] == "invalid_api_key"
+
+
+def test_correct_token_still_passes_after_constant_time_compare(client, auth_headers):
+    """A correct Bearer token still passes after the S2 change."""
+    response = client.get("/v1", headers=auth_headers)
+    assert response.status_code == 200

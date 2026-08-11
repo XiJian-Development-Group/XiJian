@@ -11,7 +11,7 @@ import Observation
 /// 3. 以 `<dir>/xijian-api --port <port>` 启动子进程（不 zip 解压，避免首启慢）
 /// 4. 读取 `tmp/xijian-<pid>.port` 获取实际生效端口（端口被占用时 Core 自动换端口）
 /// 5. 在真实端口上轮询 `GET /healthz` 直到 200（超时 60 秒）
-/// 6. 读取 `tmp/xijian-<pid>.token` 作为 Bearer token
+/// 6. 读取 ``tmp/xijian.token``（macapp 预置的稳定 token）作为 Bearer token
 @Observable
 @MainActor
 public final class CoreManager {
@@ -37,7 +37,8 @@ public final class CoreManager {
     // MARK: - 可观察状态
 
     private(set) var state: State = .stopped
-    /// Bearer token（从 tmp/xijian-<pid>.token 读取）
+    /// Bearer token（macapp 启动前预置到 tmp/xijian.token，Core 经
+    /// XIJIAN_TOKEN_FILE 环境变量读取）
     private(set) var token: String?
     /// 子进程 PID
     private(set) var pid: Int32?
@@ -68,10 +69,21 @@ public final class CoreManager {
         didSet { UserDefaults.standard.set(customBaseURL, forKey: XJDefaultsKey.coreCustomBaseURL) }
     }
 
-    /// 自定义服务器访问令牌（可选，UserDefaults 持久化）
+    /// 自定义服务器访问令牌（可选，Keychain 持久化；UserDefaults 仅存「已配置」标记，S7）
     var customToken: String {
-        didSet { UserDefaults.standard.set(customToken, forKey: XJDefaultsKey.coreCustomToken) }
+        didSet {
+            if customToken.isEmpty {
+                _ = KeychainStore.shared.delete(forKey: Self.customTokenKeychainAccount)
+                UserDefaults.standard.removeObject(forKey: XJDefaultsKey.coreCustomTokenConfigured)
+            } else {
+                _ = KeychainStore.shared.save(customToken, forKey: Self.customTokenKeychainAccount)
+                UserDefaults.standard.set(true, forKey: XJDefaultsKey.coreCustomTokenConfigured)
+            }
+        }
     }
+
+    /// Keychain 中自定义服务器 token 的 account 名
+    static let customTokenKeychainAccount = "xijian.core.customToken"
 
     // MARK: - 内部状态
 
@@ -101,7 +113,14 @@ public final class CoreManager {
         port = defaults.object(forKey: XJDefaultsKey.corePort) as? Int ?? 18500
         useCustomServer = defaults.bool(forKey: XJDefaultsKey.coreUseCustomServer)
         customBaseURL = defaults.string(forKey: XJDefaultsKey.coreCustomBaseURL) ?? ""
-        customToken = defaults.string(forKey: XJDefaultsKey.coreCustomToken) ?? ""
+        // S7 迁移：若 UserDefaults 仍留有旧版明文 token，搬入 Keychain 并删除明文。
+        // 新装用户直接读 Keychain（无则空串）。
+        if let legacy = defaults.string(forKey: "xijian.core.customToken"), !legacy.isEmpty {
+            _ = KeychainStore.shared.save(legacy, forKey: Self.customTokenKeychainAccount)
+            defaults.removeObject(forKey: "xijian.core.customToken")
+            defaults.set(true, forKey: XJDefaultsKey.coreCustomTokenConfigured)
+        }
+        customToken = KeychainStore.shared.load(forKey: Self.customTokenKeychainAccount) ?? ""
     }
 
     // MARK: - 路径
@@ -181,6 +200,9 @@ public final class CoreManager {
         let myID = operationID
         isStopping = false
 
+        // S3：启动前清理上次运行残留的 token/port 发现文件（仅清理 pid 已死的）
+        cleanupStaleDiscoveryFiles()
+
         // 1. bundle 内检查
         guard let bundleCore = bundleCoreURL else {
             state = .error(loc("未找到内置 Core 资源（Resources/Core/xijian-api）。请先运行 macapp/build-core.sh 构建 Core 后再启动。"))
@@ -226,6 +248,13 @@ public final class CoreManager {
         state = .starting
         let launchPort = effectivePort
 
+        // 预置稳定 token：Core 以生产模式启动（不再自动降级 dev）。
+        // 文件固定名 tmp/xijian.token，只在缺失时生成，避免每次启动换 token。
+        guard let tokenFile = provisionTokenFile() else {
+            state = .error(loc("无法创建 token 文件（%@）。请检查 tmp 目录权限。", runtimeTmpDirectory.path))
+            return
+        }
+
         let proc = Process()
         proc.executableURL = exeURL
         proc.arguments = ["--port", "\(launchPort)"]
@@ -235,6 +264,7 @@ public final class CoreManager {
         //（即可执行文件同级目录 ~/Library/Application Support/XiJian/Core），
         // 使 onedir 运行时、config.toml、logs/ 与数据（xijian.db 等）保持同一目录。
         //（token/port 等临时文件统一在 tmp/，由 runtime.default_tmp_dir 推导）
+        env["XIJIAN_TOKEN_FILE"] = tokenFile.path
         proc.environment = env
 
         let outPipe = Pipe()
@@ -249,6 +279,13 @@ public final class CoreManager {
         do {
             try proc.run()
             pid = proc.processIdentifier
+            // S1：立即预置 token 文件（tmp/xijian-<pid>.token，0600）。
+            // Core 以生产模式启动，缺少 token 文件会直接报错退出（不再静默降级），
+            // 因此必须在 Core 的 setup_token 执行前把文件写进去。
+            // proc.run() 返回后 Python 解释器仍在初始化（数百毫秒级），
+            // 这里同步写文件（毫秒级），竞态窗口极小；即使偶发失败，
+            // Core 会明确报错退出，macapp 也能在日志里看到原因，不会静默降级。
+            provisionTokenFile(pid: proc.processIdentifier)
         } catch {
             process = nil
             pid = nil
@@ -531,6 +568,61 @@ public final class CoreManager {
         return false
     }
 
+    /// 预置 token 文件：tmp/xijian-<pid>.token（0600）。
+    /// token 值固定（首次生成后存 Keychain，后续复用），避免每次启动换 token
+    /// 导致旧客户端（已缓存的 Bearer）失联。
+    private func provisionTokenFile(pid: Int32) {
+        let token = Self.provisionedLocalToken()
+        let dir = runtimeTmpDirectory
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let file = dir.appendingPathComponent("xijian-\(pid).token")
+        do {
+            try Data(token.utf8).write(to: file, options: .atomic)
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
+        } catch {
+            appendLog(loc("[XiJian] 预置 token 文件失败：%@（Core 可能因此拒绝启动）", error.localizedDescription))
+        }
+    }
+
+    /// 读取/生成固定本机 token（Keychain 持久化；Keychain 不可用时每次重新生成）。
+    nonisolated static func provisionedLocalToken() -> String {
+        let account = "xijian.core.localToken"
+        if let existing = KeychainStore.shared.load(forKey: account), !existing.isEmpty {
+            return existing
+        }
+        var bytes = [UInt8](repeating: 0, count: 32)
+        let status = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        let token: String
+        if status == errSecSuccess {
+            token = bytes.map { String(format: "%02x", $0) }.joined()
+        } else {
+            token = UUID().uuidString.replacingOccurrences(of: "-", with: "")
+        }
+        _ = KeychainStore.shared.save(token, forKey: account)
+        return token
+    }
+
+    /// 清理本机 tmp 目录下残留的 token/port 发现文件（S3）：
+    /// 匹配 xijian-<pid>.token / xijian-<pid>.port 且 pid 已不在运行的文件。
+    /// 启动时调用一次，避免多次启动后 tmp 累积旧文件。
+    private func cleanupStaleDiscoveryFiles() {
+        let dir = runtimeTmpDirectory
+        guard let files = try? FileManager.default.contentsOfDirectory(atPath: dir.path) else { return }
+        for name in files {
+            guard name.hasPrefix("xijian-"),
+                  name.hasSuffix(".token") || name.hasSuffix(".port") else { continue }
+            let pidPart = name
+                .replacingOccurrences(of: "xijian-", with: "")
+                .replacingOccurrences(of: ".token", with: "")
+                .replacingOccurrences(of: ".port", with: "")
+            guard let oldPid = Int32(pidPart), oldPid > 0 else { continue }
+            // kill(pid, 0) 探测进程是否存活；ESRCH = 不存在，可清理
+            if kill(oldPid, 0) != 0 && errno == ESRCH {
+                try? FileManager.default.removeItem(at: dir.appendingPathComponent(name))
+            }
+        }
+    }
+
     /// 等待 tmp/xijian-<pid>.port 出现并读取实际生效端口
     ///（端口被占用时 Core 会自动换端口，真实端口通过该文件下发）
     private func waitForPortFile(pid: Int32, id: Int) async -> Int? {
@@ -555,9 +647,11 @@ public final class CoreManager {
         return port
     }
 
-    /// 等待 tmp/xijian-<pid>.token 出现并读取
+    /// 等待 tmp/xijian.token（macapp 预置的稳定 token 文件）出现并读取。
+    /// 兼容旧逻辑：若设置了固定文件则读固定文件，否则回退 pid 派生文件。
     private func waitForToken(pid: Int32, id: Int) async -> String? {
-        let tokenFile = runtimeTmpDirectory.appendingPathComponent("xijian-\(pid).token")
+        let tokenFile = runtimeTmpDirectory.appendingPathComponent("xijian.token")
+        let fallbackFile = runtimeTmpDirectory.appendingPathComponent("xijian-\(pid).token")
         let deadline = Date().addingTimeInterval(tokenTimeout)
         while Date() < deadline {
             if id != operationID { return nil }
@@ -566,9 +660,37 @@ public final class CoreManager {
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 if let value, !value.isEmpty { return value }
             }
+            if let data = try? Data(contentsOf: fallbackFile) {
+                let value = String(data: data, encoding: .utf8)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                if let value, !value.isEmpty { return value }
+            }
             try? await Task.sleep(nanoseconds: 200_000_000)
         }
         return nil
+    }
+
+    /// 生成并写入稳定 token 文件（tmp/xijian.token，0600）。文件已存在时直接复用。
+    private func provisionTokenFile() -> URL? {
+        let dir = runtimeTmpDirectory
+        do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        } catch {
+            return nil
+        }
+        let file = dir.appendingPathComponent("xijian.token")
+        if FileManager.default.fileExists(atPath: file.path) {
+            return file
+        }
+        // 64 个十六进制字符（32 字节），与 Core dev 分支的 secrets.token_hex(32) 同长度。
+        let token = (0..<32).map { _ in String(format: "%02x", Int.random(in: 0...255)) }.joined()
+        do {
+            try Data(token.utf8).write(to: file, options: .atomic)
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
+            return file
+        } catch {
+            return nil
+        }
     }
 
     /// 读取进程输出（stdout/stderr 合并），维护环形日志缓冲

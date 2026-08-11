@@ -336,6 +336,26 @@ def register_error_handlers(app) -> None:
             )
         )
 
+    @app.errorhandler(413)
+    def _handle_413(_err):  # type: ignore[no-redef]
+        # S6 — MAX_CONTENT_LENGTH overflow surfaces as a 413
+        # RequestEntityTooLarge (an HTTPException).  Without an
+        # explicit handler the generic ``Exception`` handler below
+        # would swallow it into a 500; register a dedicated handler
+        # so oversized bodies get a clean JSON 413.
+        # S6 — MAX_CONTENT_LENGTH 超限会以 413 RequestEntityTooLarge
+        # （一个 HTTPException）形式出现。若没有显式处理器，下方的
+        # 通用 ``Exception`` 处理器会把它吞成 500；注册专用处理器
+        # 使超大体返回干净的 JSON 413。
+        return render_error(
+            ApiError(
+                status=413,
+                message="request body too large",
+                type_="invalid_request_error",
+                code="request_entity_too_large",
+            )
+        )
+
     @app.errorhandler(Exception)
     def _handle_unexpected(err: Exception):  # type: ignore[no-redef]
         if isinstance(err, ApiError):

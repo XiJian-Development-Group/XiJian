@@ -29,7 +29,9 @@ The verification function is :func:`verify_bearer`.  Per ``DESIGN.md``
 
 from __future__ import annotations
 
+import atexit
 import functools
+import hmac
 import os
 import secrets
 from pathlib import Path
@@ -54,6 +56,33 @@ def get_token() -> str | None:
     返回当前加载的 Bearer 令牌，或 ``None``。
     """
     return _TOKEN
+
+
+def constant_time_eq(a: str, b: str) -> bool:
+    """Compare two strings in constant time (S2).
+
+    恒定时间比较两个字符串 (S2)。
+
+    Guarded so non-ASCII ``str`` values (which make
+    :func:`hmac.compare_digest` raise ``TypeError``) and type/length
+    mismatches safely fall back to ``False`` instead of crashing the
+    request.  Length is compared first — comparing different-length
+    secrets leaks nothing of value beyond the length, which is already
+    public for a token over the wire.
+
+    带保护逻辑，使非 ASCII ``str``（会让 :func:`hmac.compare_digest`
+    抛出 ``TypeError``）以及类型/长度不匹配安全地回退为 ``False``
+    而不是让请求崩溃。先比较长度——比较不同长度的密钥不会泄露
+    除长度以外的任何有价值信息，而令牌长度在网络上本就是公开的。
+    """
+    if not isinstance(a, str) or not isinstance(b, str):
+        return False
+    if len(a) != len(b):
+        return False
+    try:
+        return hmac.compare_digest(a, b)
+    except TypeError:  # pragma: no cover - non-ASCII guard
+        return False
 
 
 def setup_token(config: Config, *, pid: int | None = None) -> str:
@@ -132,10 +161,33 @@ def setup_token(config: Config, *, pid: int | None = None) -> str:
         raise
 
     _TOKEN = token
-    # Print to stderr — never include in any HTTP response.
-    # 输出到 stderr——绝不会包含在任何 HTTP 响应中。
+    # Log the *path* only — never the token value itself.  The dev
+    # token used to be printed to stderr in plaintext; that line was
+    # removed (S1) so tokens never leak into process logs.
+    # 只记录*路径*——绝不记录令牌值本身。开发令牌以前会以明文打印到
+    # stderr；该行已被删除 (S1)，使令牌永远不会泄露到进程日志中。
     _LOGGER.info("dev token written to %s", path)
-    print(f"[xijian-api] dev token: {token}", flush=True)
+
+    def _cleanup_dev_token() -> None:
+        """Remove the dev token file at process exit if it still holds
+        the token this call generated (S1).
+
+        进程退出时删除开发令牌文件（若仍持有本次调用生成的令牌）(S1)。
+
+        The file must stay on disk while the server runs because the
+        macOS app reads it to authenticate; at exit we best-effort
+        unlink it so no token lingers on disk.
+
+        服务器运行期间文件必须保留（macOS App 读取它来认证）；
+        退出时尽力删除，避免令牌残留磁盘。
+        """
+        try:
+            if path.exists() and path.read_text(encoding="utf-8").strip() == token:
+                path.unlink()
+        except OSError:
+            pass
+
+    atexit.register(_cleanup_dev_token)
     return _TOKEN
 
 
@@ -207,7 +259,7 @@ def verify_bearer() -> str:
     if not header.startswith("Bearer "):
         raise AuthError("missing bearer token")
     presented = header[len("Bearer ") :].strip()
-    if presented != _TOKEN:
+    if not constant_time_eq(presented, _TOKEN):
         raise AuthError("invalid bearer token")
     # Stash the token on ``g`` so downstream code can reuse it.
     # 将令牌存储在 ``g`` 上，以便下游代码可以重复使用。
@@ -239,6 +291,7 @@ def require_bearer(view: Callable) -> Callable:
 
 __all__ = [
     "get_token",
+    "constant_time_eq",
     "setup_token",
     "reset_for_testing",
     "verify_bearer",

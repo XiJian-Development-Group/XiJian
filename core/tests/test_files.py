@@ -70,3 +70,68 @@ def test_file_upload_invalid_purpose_returns_400(client, auth_headers):
     )
     assert response.status_code == 400
     assert response.get_json()["error"]["code"] == "invalid_purpose"
+
+
+# ---------------------------------------------------------------------------
+# S6 — request body size limit (413)
+# S6 — 请求体大小限制 (413)
+# ---------------------------------------------------------------------------
+
+
+def test_upload_exceeding_max_content_length_returns_413(app, auth_headers):
+    """Oversized uploads get a clean JSON 413, not a 500 (S6)."""
+    # Build a throwaway app with a tiny cap; the module-level token is
+    # already set by the session fixture, so setup_token short-circuits
+    # and the new app shares the same Bearer token.
+    from xijian_api.app import create_app
+
+    tiny = create_app(testing=True)
+    try:
+        tiny.config["MAX_CONTENT_LENGTH"] = 16 * 1024
+        client = tiny.test_client()
+
+        resp = client.post(
+            "/v1/files",
+            headers=auth_headers,
+            data=b"x" * (32 * 1024),
+            content_type="application/octet-stream",
+        )
+        assert resp.status_code == 413
+        err = resp.get_json()["error"]
+        assert err["code"] == "request_entity_too_large"
+        assert err["type"] == "invalid_request_error"
+    finally:
+        tiny.config.pop("MAX_CONTENT_LENGTH", None)
+
+
+def test_upload_within_limit_still_works(client, auth_headers):
+    """A normal-size upload is unaffected by MAX_CONTENT_LENGTH (S6)."""
+    resp = client.post(
+        "/v1/files",
+        headers=auth_headers,
+        data=b"hello world",
+        content_type="application/octet-stream",
+    )
+    assert resp.status_code == 201
+    body = resp.get_json()
+    assert body["bytes"] == 11
+    assert body["object"] == "file"
+
+
+def test_multipart_upload_streams_via_temp_file(client, auth_headers):
+    """Multipart upload still lands correctly via the streaming path (S6)."""
+    import io
+
+    resp = client.post(
+        "/v1/files",
+        headers=auth_headers,
+        data={"file": (io.BytesIO(b"streamed-bytes"), "clip.bin"), "purpose": "user_data"},
+        content_type="multipart/form-data",
+    )
+    assert resp.status_code == 201
+    file_id = resp.get_json()["id"]
+    assert resp.get_json()["filename"] == "clip.bin"
+
+    content = client.get(f"/v1/files/{file_id}/content", headers=auth_headers)
+    assert content.status_code == 200
+    assert content.data == b"streamed-bytes"

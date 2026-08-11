@@ -18,7 +18,8 @@ struct PlotSettingsView: View {
     @State private var selectedWorldID: String?
     @State private var showCreateRuntime = false
     @State private var runtimeResult: String?
-    @State private var initialVariablesText = ""
+    /// 结构化初始变量行（U3）
+    @State private var initialVariablesRows: [KeyValueRow] = []
     @State private var advanceResult: String?
 
     var body: some View {
@@ -79,8 +80,8 @@ struct PlotSettingsView: View {
                         }
                     }
 
-                    TextField(loc("初始变量（k=v, k2=v2）"), text: $initialVariablesText)
-                        .textFieldStyle(.roundedBorder)
+                    KeyValueListEditor(rows: $initialVariablesRows)
+                        .frame(maxHeight: 160)
 
                     Button(loc("创建并启动")) {
                         Task { await createRuntime() }
@@ -186,7 +187,7 @@ struct PlotSettingsView: View {
     private func createRuntime() async {
         guard let client = core.makeClient(), let plotID = selectedDesignID, let worldID = selectedWorldID else { return }
         do {
-            let variables = parseVariables(initialVariablesText)
+            let variables = KVListParser.toJSON(initialVariablesRows)
             let runtime = try await client.createPlotRuntime(plotID: plotID, worldID: worldID, initialVariables: variables.isEmpty ? nil : variables)
             runtimeResult = loc("运行时已创建：%@", runtime.runtime_id)
             await load()
@@ -241,26 +242,6 @@ struct PlotSettingsView: View {
     }
 
     // MARK: 辅助
-
-    private func parseVariables(_ text: String) -> [String: JSONValue] {
-        var result: [String: JSONValue] = [:]
-        for part in text.split(separator: ",") {
-            let kv = part.split(separator: "=", maxSplits: 1)
-            guard kv.count == 2 else { continue }
-            let key = kv[0].trimmingCharacters(in: .whitespaces)
-            let value = kv[1].trimmingCharacters(in: .whitespaces)
-            if let number = Double(value) {
-                result[key] = .number(number)
-            } else if value == "true" {
-                result[key] = .bool(true)
-            } else if value == "false" {
-                result[key] = .bool(false)
-            } else {
-                result[key] = .string(value)
-            }
-        }
-        return result
-    }
 
     private func statusColor(_ status: String) -> Color {
         switch status {

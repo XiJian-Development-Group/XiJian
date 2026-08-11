@@ -24,6 +24,7 @@ from flask import Blueprint, current_app, jsonify, request
 from flask_sock import Sock
 
 from xijian_api import auth
+from xijian_api._version import CORE_VERSION_NORMALIZED
 from xijian_api.errors import ApiError
 from xijian_api.utils.ids import gen_id
 from xijian_api.utils.time import now_ts
@@ -127,7 +128,7 @@ def _check_bearer_header() -> bool:
             presented = proto[len("bearer-"):]
         elif proto.startswith("bearer."):
             presented = proto[len("bearer."):]
-        if presented and presented == expected:
+        if presented and auth.constant_time_eq(presented, expected):
             return True
     return False
 
@@ -170,12 +171,12 @@ def ws_endpoint(ws):
 
         if not has_xijian_v1:
             # 拒绝升级：缺少必需的子协议。
-            _send(ws, _envelope("hello", {"server_version": "0.1.0"}))
+            _send(ws, _envelope("hello", {"server_version": CORE_VERSION_NORMALIZED}))
             _send(ws, _envelope("auth.failed", {"reason": "missing_subprotocol"}))
             return
 
         # 打招呼。
-        _send(ws, _envelope("hello", {"server_version": "0.1.0"}))
+        _send(ws, _envelope("hello", {"server_version": CORE_VERSION_NORMALIZED}))
 
         # 先尝试基于子协议的认证。
         if _check_bearer_header():
@@ -193,7 +194,8 @@ def ws_endpoint(ws):
                     msg = json.loads(first)
                 except json.JSONDecodeError:
                     msg = {}
-                if msg.get("type") == "auth" and msg.get("token") == auth.get_token():
+                if msg.get("type") == "auth" and msg.get("token") is not None \
+                        and auth.constant_time_eq(str(msg.get("token")), auth.get_token() or ""):
                     sub.authed = True
                     _send(ws, _envelope("auth.ok"))
 

@@ -724,14 +724,18 @@ def token_file_path(pid: int | None = None, template: str | None = None) -> Path
 
     解析 Bearer 令牌文件路径。
 
-    When ``template`` is given it wins (``~`` is expanded); otherwise
-    dev and packaged modes both fall back to
-    :func:`xijian_api.runtime.default_token_file` — the unified
-    temporary directory.
+    Priority: ``XIJIAN_TOKEN_FILE`` env var (fixed path, no pid) >
+    ``template`` > default unified temporary directory.  The env-var
+    path is how the macOS app provisions a stable token before
+    launching the Core process (no race on the pid-derived name).
 
-    提供 ``template`` 时以其为准（展开 ``~``）；否则开发与打包模式统一回退到
-    :func:`xijian_api.runtime.default_token_file` —— 统一临时目录。
+    优先级：``XIJIAN_TOKEN_FILE`` 环境变量（固定路径，不含 pid）>
+    ``template`` > 默认统一临时目录。macOS 应用正是通过环境变量路径
+    在启动 Core 进程前预置稳定 token（避免 pid 派生文件名带来的竞态）。
     """
+    env_token = os.environ.get("XIJIAN_TOKEN_FILE")
+    if env_token:
+        return Path(env_token).expanduser()
     if pid is None:
         pid = os.getpid()
     if template:

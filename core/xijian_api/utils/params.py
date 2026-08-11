@@ -108,6 +108,44 @@ def parse_int_optional(value: Any, param: str) -> int | None:
     return parse_int(value, param, default=0)
 
 
+def parse_int_range(
+    value: Any,
+    param: str,
+    default: int,
+    min_value: int,
+    max_value: int,
+) -> int:
+    """Parse an integer field and enforce a ``[min_value, max_value]`` range.
+
+    解析整数字段并强制 ``[min_value, max_value]`` 范围。
+
+    Missing/empty values resolve to ``default`` (which must itself be
+    inside the range).  Out-of-range values raise a clean 400
+    ``invalid_request_error`` with the ``param`` field set, matching
+    the existing error format::
+
+        ApiError(400, "`fps` must be between 1 and 120",
+                 "invalid_request_error", code="invalid_numeric_value",
+                 param="fps")
+
+    缺失/空值解析为 ``default``（其自身必须在范围内）。越界值抛出
+    干净的 400 ``invalid_request_error`` 并携带 ``param`` 字段，
+    与现有错误格式一致。
+    """
+    if value is None or value == "":
+        value = default
+    parsed = parse_int(value, param, default)
+    if parsed < min_value or parsed > max_value:
+        raise ApiError(
+            400,
+            f"`{param}` must be between {min_value} and {max_value}",
+            "invalid_request_error",
+            code="invalid_numeric_value",
+            param=param,
+        )
+    return parsed
+
+
 def safe_header_value(value: Any) -> str:
     """Strip CR/LF and control characters from a response-header value.
 

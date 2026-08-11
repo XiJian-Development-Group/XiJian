@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import json
 
+from xijian_api.middleware import reset_idempotency_cache_for_testing
+
 ECHO_URL = "/v1/__test__/echo"
 
 
@@ -103,3 +105,53 @@ def test_idempotency_only_applies_to_post(client, auth_headers):
     )
     assert response.status_code == 200
     assert response.headers.get("Idempotency-Replayed") is None
+
+
+# ---------------------------------------------------------------------------
+# S8 — LRU-bounded idempotency cache
+# S8 — 有 LRU 上限的幂等性缓存
+# ---------------------------------------------------------------------------
+
+
+def test_idempotency_cache_is_lru_bounded(monkeypatch):
+    """When the cache exceeds its cap, the oldest entry is evicted (S8)."""
+    from xijian_api import middleware as mw
+
+    monkeypatch.setattr(mw, "_IDEM_CACHE_MAX", 3)
+    with mw._idem_lock:
+        mw._idem_cache.clear()
+
+    # Fill the cache past the cap with unique keys.
+    for i in range(5):
+        mw._cache_put(f"lru-key-{i}", f"hash-{i}", 200, {}, {"n": i})
+
+    with mw._idem_lock:
+        keys = list(mw._idem_cache.keys())
+        size = len(mw._idem_cache)
+    assert size == 3
+    # Oldest two entries were evicted; the newest three survive.
+    assert "lru-key-0" not in keys and "lru-key-1" not in keys
+    assert keys == ["lru-key-2", "lru-key-3", "lru-key-4"]
+
+
+def test_idempotency_replay_after_eviction_is_fresh(client, auth_headers, monkeypatch):
+    """An evicted key replays as a fresh request, not a cache hit (S8)."""
+    from xijian_api import middleware as mw
+
+    monkeypatch.setattr(mw, "_IDEM_CACHE_MAX", 3)
+    reset_idempotency_cache_for_testing()
+
+    body = {"messages": [{"role": "user", "content": "hello"}]}
+
+    # 4 unique keys → the first is evicted.
+    for i in range(4):
+        r = _post(client, auth_headers, f"lru-api-{i}", body)
+        assert r.status_code == 200
+
+    # Replaying the evicted key must NOT be flagged as a replay.
+    r_evicted = _post(client, auth_headers, "lru-api-0", body)
+    assert r_evicted.headers.get("Idempotency-Replayed") is None
+
+    # Replaying a still-cached key IS flagged.
+    r_cached = _post(client, auth_headers, "lru-api-3", body)
+    assert r_cached.headers.get("Idempotency-Replayed") == "true"

@@ -135,7 +135,7 @@ private struct WelcomePageView: View {
                     .shadow(color: .black.opacity(0.18), radius: 24, y: 12)
                     .xjFadeUp()
             }
-            Text("XiJian by XiJian Development Group")
+            Text(loc("XiJian by XiJian Development Group"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .xjFadeUp(delay: 0.1)
@@ -152,46 +152,21 @@ private struct WelcomePageView: View {
 
 // MARK: - 第二页：基础配置
 
-/// 基础配置页：UI 背景 / 请求权限 / 用户名与别称 / 身份描述 / AI 来源
-/// 五个配置块来自 ConfigSections.swift（设置页复用同一套组件）
+/// 基础配置页：AI 功能来源二选一（U7：端点/Token/模型 ID 等详细配置收进设置页）
+/// 设置页的“用户资料”里保留了完整配置块（背景、请求、身份、AI 来源详情）
 private struct ConfigPageView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: XJSpacing.md) {
             Text(loc("基础配置"))
                 .font(.title2.bold())
-            Text(loc("在开始之前，请完成下列设置，这样也许能让你获得更好的体验。"))
+            Text(loc("选择 AI 功能来源：本地 Core 或远程 API。其他偏好可在设置中随时调整。"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: XJSpacing.md) {
-                    XJSettingRow(title: loc("UI 背景"), subtitle: loc("图片、视频、GIF 均支持，可选择是否模糊")) {
-                        BackgroundConfigSection()
-                    }
-                    .xjCard()
-
-                    XJSettingRow(title: loc("请求"), subtitle: loc("可以拒绝，拒绝不会影响基本功能")) {
-                        PermissionConfigSection()
-                    }
-                    .xjCard()
-
-                    XJSettingRow(title: loc("用户名与别称"), subtitle: loc("别称可多个，也可不填")) {
-                        IdentityConfigSection()
-                    }
-                    .xjCard()
-
-                    XJSettingRow(title: loc("用户身份描述"), subtitle: loc("用于向角色描述你的身份，但可能不在所有情况下生效")) {
-                        IdentityDescriptionSection()
-                    }
-                    .xjCard()
-
-                    XJSettingRow(title: loc("AI 功能来源")) {
-                        AISourceConfigSection()
-                    }
-                    .xjCard()
-                }
+            XJSettingRow(title: loc("AI 功能来源")) {
+                AISourceConfigSection(showsDetails: false)
             }
-            .frame(maxHeight: 380)
+            .xjCard()
         }
         .frame(maxWidth: 640)
     }

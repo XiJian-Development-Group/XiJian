@@ -8,10 +8,21 @@ from xijian_api.errors import ApiError
 from xijian_api.pagination import paginate
 from xijian_api.stubs import state, video as video_stub
 from xijian_api.utils.ids import gen_video_id
+from xijian_api.utils.params import parse_int_range
 from xijian_api.utils.time import now_ts
 
 
 bp = Blueprint("videos", __name__)
+
+
+#: Allowed ranges for numeric video parameters (E1). Out-of-range values
+#: are rejected with a 400 ``invalid_numeric_value`` error instead of
+#: being passed through to the stub layer.
+#: 视频数值参数的允许范围 (E1)。越界值以 400 ``invalid_numeric_value``
+#: 拒绝，而不是透传给存根层。
+_FPS_MIN, _FPS_MAX = 1, 120
+_MAX_FRAMES_MIN, _MAX_FRAMES_MAX = 1, 10000
+_SECONDS_MIN, _SECONDS_MAX = 1, 3600
 
 
 @bp.post("/v1/videos/understanding")
@@ -43,8 +54,10 @@ def video_understanding():
         video_bytes = uploaded.read()
         prompt = request.form.get("prompt", "Describe what is happening in this video.")
         model = request.form.get("model", "stub-video-understanding")
-        fps = int(request.form.get("fps", 1) or 1)
-        max_frames = int(request.form.get("max_frames", 10) or 10)
+        fps = parse_int_range(request.form.get("fps"), "fps", 1, _FPS_MIN, _FPS_MAX)
+        max_frames = parse_int_range(
+            request.form.get("max_frames"), "max_frames", 10, _MAX_FRAMES_MIN, _MAX_FRAMES_MAX
+        )
     elif payload:
         video = payload.get("video") or payload.get("url", "")
         if not video:
@@ -58,8 +71,10 @@ def video_understanding():
         video_bytes = None
         prompt = payload.get("prompt", "Describe what is happening in this video.")
         model = payload.get("model", "stub-video-understanding")
-        fps = int(payload.get("fps", 1) or 1)
-        max_frames = int(payload.get("max_frames", 10) or 10)
+        fps = parse_int_range(payload.get("fps"), "fps", 1, _FPS_MIN, _FPS_MAX)
+        max_frames = parse_int_range(
+            payload.get("max_frames"), "max_frames", 10, _MAX_FRAMES_MIN, _MAX_FRAMES_MAX
+        )
     else:
         raise ApiError(
             400,
@@ -115,8 +130,8 @@ def submit_generation():
         "prompt": payload["prompt"],
         "model": payload.get("model", "stub-video"),
         "size": payload.get("size", "1280x720"),
-        "seconds": int(payload.get("seconds", 4)),
-        "fps": int(payload.get("fps", 24)),
+        "seconds": parse_int_range(payload.get("seconds"), "seconds", 4, _SECONDS_MIN, _SECONDS_MAX),
+        "fps": parse_int_range(payload.get("fps"), "fps", 24, _FPS_MIN, _FPS_MAX),
         "xijian": payload.get("xijian", {}),
     }
     state.videos[video_id] = record
@@ -166,8 +181,12 @@ def remix_video(video_id: str):
         "prompt": payload.get("prompt", parent.get("prompt", "")),
         "model": payload.get("model", parent.get("model")),
         "size": payload.get("size", parent.get("size")),
-        "seconds": int(payload.get("seconds", parent.get("seconds", 4))),
-        "fps": int(payload.get("fps", parent.get("fps", 24))),
+        "seconds": parse_int_range(
+            payload.get("seconds"), "seconds", parent.get("seconds", 4), _SECONDS_MIN, _SECONDS_MAX
+        ),
+        "fps": parse_int_range(
+            payload.get("fps"), "fps", parent.get("fps", 24), _FPS_MIN, _FPS_MAX
+        ),
     }
     state.videos[new_id] = record
     video_stub.submit(record["prompt"], video_id=new_id)

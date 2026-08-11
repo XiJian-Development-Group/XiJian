@@ -46,6 +46,7 @@ import logging
 import os
 import sqlite3
 import threading
+import time
 from collections.abc import Iterator, MutableMapping
 from pathlib import Path
 from typing import Any
@@ -60,6 +61,82 @@ DEFAULT_DB_DIR = Path("~/Library/Application Support/XiJian/Core").expanduser()
 DEFAULT_DB_PATH = DEFAULT_DB_DIR / "xijian.db"
 ENV_DB_PATH = "XIJIAN_DB_PATH"
 ENV_DATA_DIR = "XIJIAN_DATA_DIR"
+
+#: Legacy pre-unification database location (B2/S4).  The old layout
+#: stored the DB directly under the app-data dir; the unified layout
+#: moved it into ``CORE_ROOT``.  We only *detect* a recently-touched
+#: legacy file and warn — we never migrate or read it here.
+#: 存储统一前的旧版数据库位置 (B2/S4)。旧布局把 DB 直接放在应用数据
+#: 目录下；统一后移入 ``CORE_ROOT``。这里只*检测*最近被触碰过的
+#: 旧文件并警告——绝不迁移或读取它。
+LEGACY_DB_PATH = Path("~/Library/Application Support/XiJian/xijian.db").expanduser()
+_LEGACY_DETECTED = False
+
+#: Detection window: a legacy DB is only worth flagging if it was
+#: modified within the last 24 hours.
+#: 检测窗口：旧版 DB 仅在最近 24 小时内被修改过才值得标记。
+_LEGACY_DETECTION_WINDOW_SECONDS = 24 * 60 * 60
+
+
+def detect_legacy_db() -> Path | None:
+    """Check once for a recently-active legacy DB and warn (B2/S4).
+
+    检查一次是否存在最近活跃的旧版 DB 并警告 (B2/S4)。
+
+    Returns the legacy path when one exists with an mtime within the
+    last 24 hours, else ``None``.  The check runs at most once per
+    process (module-level flag) so per-connection ``stat`` overhead is
+    avoided.  Failures (permissions, races) are swallowed — detection
+    is advisory only.
+
+    当存在 mtime 在最近 24 小时内的旧文件时返回其路径，否则返回
+    ``None``。检查每个进程最多执行一次（模块级标志），避免每次
+    连接都 ``stat``。失败（权限、竞态）被吞掉——检测仅作参考。
+    """
+    global _LEGACY_DETECTED  # noqa: PLW0603
+    if _LEGACY_DETECTED:
+        return None
+    _LEGACY_DETECTED = True
+    try:
+        if not LEGACY_DB_PATH.is_file():
+            return None
+        mtime = LEGACY_DB_PATH.stat().st_mtime
+        if time.time() - mtime > _LEGACY_DETECTION_WINDOW_SECONDS:
+            return None
+        _LOGGER.warning(
+            "legacy database detected at %s (mtime=%s) — the active store is %s; "
+            "consider consolidating old data",
+            LEGACY_DB_PATH,
+            mtime,
+            _db_path(),
+        )
+        return LEGACY_DB_PATH
+    except OSError:
+        return None
+
+
+def reset_legacy_detection_for_testing() -> None:
+    """Re-arm the once-per-process legacy check (test-only).
+
+    重新武装每进程一次的旧版检测（仅测试用）。
+    """
+    global _LEGACY_DETECTED  # noqa: PLW0603
+    _LEGACY_DETECTED = False
+
+
+#: Legacy DB detection runs at most once per process (B2/S4).  The
+#: check is advisory — it never blocks or migrates — so it is wired
+#: into the connection factory where every DB user passes through.
+#: 旧版 DB 检测每进程最多运行一次 (B2/S4)。检测仅作参考——绝不阻塞
+#: 或迁移——因此挂在连接工厂里，所有 DB 用户都会经过这里。
+
+
+def _warn_legacy_db_once() -> None:
+    """Call :func:`detect_legacy_db` at most once (module flag).
+
+    调用 :func:`detect_legacy_db` 至多一次（模块标志）。
+    """
+    detect_legacy_db()
 
 
 def _db_path() -> str:
@@ -99,11 +176,24 @@ def _connection() -> sqlite3.Connection:
     conn = getattr(_tl, "conn", None)
     if conn is None:
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
+        # B2/S4 — flag a recently-active legacy DB once per process.
+        # B2/S4 — 每进程一次，标记最近活跃的旧版 DB。
+        detect_legacy_db()
         conn = sqlite3.connect(db_path, check_same_thread=False)
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA synchronous=NORMAL")
         conn.row_factory = sqlite3.Row
         _tl.conn = conn
+        # S4 — restrict the DB file to the owning user.  Best-effort:
+        # on platforms without POSIX semantics (Windows) ``chmod`` may
+        # raise; that is fine — the DB dir is already user-scoped.
+        # S4 — 将 DB 文件权限收紧为属主用户。尽力而为：在不具备
+        # POSIX 语义的平台（Windows）上 ``chmod`` 可能抛异常，
+        # 无妨——DB 目录本身已是用户作用域。
+        try:
+            os.chmod(db_path, 0o600)
+        except OSError:  # pragma: no cover - platform-dependent
+            pass
     return conn
 
 
@@ -164,18 +254,72 @@ class DictDB(MutableMapping[str, Any]):
             ")"
         )
 
+    def _execute(self, sql: str, params: tuple = ()) -> sqlite3.Cursor:
+        """Run a write statement, creating the table first if it is missing.
+
+        执行写语句，若表不存在则先建表。
+
+        Connections are thread-local and a fresh thread may open a
+        brand-new database file (e.g. an env-overridden path) that has
+        none of the ``store_*`` tables yet — the table is normally
+        created in :meth:`DictDB.__init__` on whichever thread created
+        the bucket.  Retrying once after :meth:`_ensure_table` makes
+        writes from any thread self-sufficient.
+
+        连接是线程本地的，新线程可能打开一个全新的数据库文件
+        （例如被环境变量覆盖的路径），其中还没有任何 ``store_*`` 表
+        ——表通常在创建桶的线程的 :meth:`DictDB.__init__` 中创建。
+        在 :meth:`_ensure_table` 后重试一次，使任何线程的写入都自足。
+        """
+        try:
+            return self._connection().execute(sql, params)
+        except sqlite3.OperationalError as exc:
+            if "no such table" in str(exc).lower():
+                self._ensure_table()
+                return self._connection().execute(sql, params)
+            raise
+
     def _load_all(self) -> None:
         """Load all key-value pairs from SQLite into the cache.
 
         从 SQLite 将所有键值对加载到缓存中。
+
+        Corrupt rows are logged, not fatal: a single bad JSON value
+        must not prevent the rest of the bucket from loading.  We
+        deliberately do **not** rename/delete the database file on
+        corruption (E5) — this is a SQLite store, and a row-level JSON
+        parse failure is data corruption in one row, not a broken
+        whole-file; renaming the entire DB would destroy unrelated
+        healthy data.  Logging the offending key gives operators the
+        exact location to repair.
+
+        损坏的行只记日志，不致命：单个坏 JSON 值不能阻止桶内其余
+        数据加载。损坏时我们刻意**不**重命名/删除数据库文件 (E5)
+        ——这是 SQLite 存储，行级 JSON 解析失败只是单行数据损坏，
+        不是整个文件损坏；重命名整个 DB 会毁掉无关的健康数据。
+        记录出错的 key 让运维能精确定位修复。
         """
         for row in self._connection().execute(
             f"SELECT key, value FROM {self._table}"
         ):
+            key = row["key"]
             try:
-                self._cache[row["key"]] = json.loads(row["value"])
-            except (json.JSONDecodeError, Exception):
-                pass
+                self._cache[key] = json.loads(row["value"])
+            except json.JSONDecodeError as exc:
+                _LOGGER.warning(
+                    "corrupt JSON value in store %s key %r: %s",
+                    self._table,
+                    key,
+                    exc,
+                )
+            except Exception as exc:  # noqa: BLE001 - keep loading
+                _LOGGER.error(
+                    "unexpected error loading store %s key %r: %s",
+                    self._table,
+                    key,
+                    exc,
+                    exc_info=True,
+                )
 
     @staticmethod
     def _normalise_key(key: object) -> str:
@@ -215,7 +359,7 @@ class DictDB(MutableMapping[str, Any]):
         now = int(__import__("time").time())
         with self._lock:
             self._cache[nk] = value
-        self._connection().execute(
+        self._execute(
             f"INSERT INTO {self._table} (key, value, created_at, updated_at) "
             "VALUES (?, ?, ?, ?) "
             "ON CONFLICT(key) DO UPDATE SET value=excluded.value, "
@@ -228,7 +372,7 @@ class DictDB(MutableMapping[str, Any]):
         nk = self._normalise_key(key)
         with self._lock:
             self._cache.pop(nk, None)
-        cur = self._connection().execute(
+        cur = self._execute(
             f"DELETE FROM {self._table} WHERE key = ?", (nk,)
         )
         self._connection().commit()
@@ -263,7 +407,7 @@ class DictDB(MutableMapping[str, Any]):
         with self._lock:
             cached = self._cache.pop(nk, None)
             if cached is not None:
-                self._connection().execute(
+                self._execute(
                     f"DELETE FROM {self._table} WHERE key = ?", (nk,)
                 )
                 self._connection().commit()
@@ -283,7 +427,7 @@ class DictDB(MutableMapping[str, Any]):
     def clear(self) -> None:
         with self._lock:
             self._cache.clear()
-        self._connection().execute(f"DELETE FROM {self._table}")
+        self._execute(f"DELETE FROM {self._table}")
         self._connection().commit()
 
     def update(self, other: dict[str, Any]) -> None:
@@ -367,4 +511,7 @@ __all__ = [
     "DEFAULT_DB_PATH",
     "ENV_DB_PATH",
     "ENV_DATA_DIR",
+    "LEGACY_DB_PATH",
+    "detect_legacy_db",
+    "reset_legacy_detection_for_testing",
 ]

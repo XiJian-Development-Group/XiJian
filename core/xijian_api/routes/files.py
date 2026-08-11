@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+import shutil
+import tempfile
 from pathlib import Path
 
 from flask import Blueprint, Response, jsonify, request
@@ -16,6 +19,31 @@ from xijian_api.utils.time import now_ts
 
 
 bp = Blueprint("files", __name__)
+
+
+def _stream_to_bytes(source) -> bytes:
+    """Stream ``source`` into a temp file, then read it back (S6).
+
+    将 ``source`` 流式写入临时文件，再读回内存 (S6)。
+
+    Avoids buffering the whole upload in memory: the bytes are copied
+    to a temp file with :func:`shutil.copyfileobj` (bounded chunks),
+    then read back.  The temp file is always removed, even on error.
+
+    避免把整个上传缓冲在内存中：字节通过 :func:`shutil.copyfileobj`
+    （有界块）拷贝到临时文件后再读回。临时文件无论是否出错都会删除。
+    """
+    fd, tmp_path = tempfile.mkstemp(prefix="xijian_upload_")
+    os.close(fd)
+    try:
+        with open(tmp_path, "wb") as out:
+            shutil.copyfileobj(source, out)
+        return Path(tmp_path).read_bytes()
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
 
 
 @bp.post("/v1/files")
@@ -43,10 +71,21 @@ def upload_file():
                 "invalid_request_error",
                 code="missing_file",
             )
-        payload = uploaded.read()
+        # S6 — stream the multipart file through a temp file instead of
+        # ``uploaded.read()`` so a large upload never fully lands in
+        # memory at once.  (``uploaded.stream`` is the underlying
+        # file-like object of the FileStorage.)
+        # S6 — 将 multipart 文件经临时文件流式落盘，而不是
+        # ``uploaded.read()`` 一次性读入内存。
+        # （``uploaded.stream`` 是 FileStorage 底层的文件对象。）
+        payload = _stream_to_bytes(uploaded.stream)
         filename = uploaded.filename or filename
         purpose = request.form.get("purpose", purpose)
     else:
+        # Raw-body upload: ``get_data`` enforces MAX_CONTENT_LENGTH
+        # (413 on overflow) and caches the bytes for reuse.
+        # 原始 body 上传：``get_data`` 会执行 MAX_CONTENT_LENGTH
+        # （超限 413）并缓存字节供复用。
         payload = request.get_data(cache=True) or b""
         if not payload:
             raise ApiError(

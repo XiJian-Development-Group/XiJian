@@ -449,7 +449,7 @@ final class VoiceCallViewModel: ObservableObject {
                 id: eventID ?? "barge-\(UUID().uuidString)",
                 kind: kind,
                 role: "system",
-                text: active ? loc("已开启打断（barge-in）") : loc("已关闭打断"),
+                text: active ? loc("已开启打断") : loc("已关闭打断"),
                 turn: nil,
                 timestamp: Date().timeIntervalSince1970,
                 meta: nil

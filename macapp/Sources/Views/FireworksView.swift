@@ -5,6 +5,7 @@ import SwiftUI
 /// 物理与爆裂逻辑全部收敛在 `FireworksEngine` 静态纯函数中，便于单元测试。
 struct FireworksView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var systemColorScheme
     @State private var particles: [Particle] = []
     @State private var lastUpdate: Date = .now
     @State private var nextLaunchAt: Date = .now
@@ -46,7 +47,10 @@ struct FireworksView: View {
             if newValue { particles = [] }
         }
         .drawingGroup()
-        .background(Color.black.opacity(0.35))
+        // U12：遮罩色跟随主题（浅色下用浅色遮罩，避免深色块突兀）
+        .background(
+            (systemColorScheme == .light ? Color.white : Color.black).opacity(0.35)
+        )
     }
 
     // MARK: - 帧推进

@@ -60,8 +60,20 @@ public final class UserProfileSettings {
     var aiSource: AISource { didSet { UserDefaults.standard.set(aiSource.rawValue, forKey: XJDefaultsKey.profileAISource) } }
     /// 远程 API 端点
     var remoteEndpoint: String { didSet { UserDefaults.standard.set(remoteEndpoint, forKey: XJDefaultsKey.profileRemoteEndpoint) } }
-    /// 远程 Token
-    var remoteToken: String { didSet { UserDefaults.standard.set(remoteToken, forKey: XJDefaultsKey.profileRemoteToken) } }
+    /// 远程 Token（Keychain 持久化，UserDefaults 仅存「已配置」标记，S7）
+    var remoteToken: String {
+        didSet {
+            if remoteToken.isEmpty {
+                _ = KeychainStore.shared.delete(forKey: Self.remoteTokenKeychainAccount)
+                UserDefaults.standard.removeObject(forKey: XJDefaultsKey.profileRemoteTokenConfigured)
+            } else {
+                _ = KeychainStore.shared.save(remoteToken, forKey: Self.remoteTokenKeychainAccount)
+                UserDefaults.standard.set(true, forKey: XJDefaultsKey.profileRemoteTokenConfigured)
+            }
+        }
+    }
+    /// Keychain 中远程 token 的 account 名
+    static let remoteTokenKeychainAccount = "xijian.profile.remoteToken"
     /// 远程模型 ID（暂不指定，可空）
     var remoteModelID: String { didSet { UserDefaults.standard.set(remoteModelID, forKey: XJDefaultsKey.profileRemoteModelID) } }
     /// 通知权限状态
@@ -80,7 +92,13 @@ public final class UserProfileSettings {
         onboardingCompleted = d.bool(forKey: XJDefaultsKey.profileOnboardingCompleted)
         aiSource = AISource(rawValue: d.string(forKey: XJDefaultsKey.profileAISource) ?? "") ?? .local
         remoteEndpoint = d.string(forKey: XJDefaultsKey.profileRemoteEndpoint) ?? ""
-        remoteToken = d.string(forKey: XJDefaultsKey.profileRemoteToken) ?? ""
+        // S7 迁移：UserDefaults 旧版明文 token 搬入 Keychain 并删除明文。
+        if let legacy = d.string(forKey: "xijian.profile.remoteToken"), !legacy.isEmpty {
+            _ = KeychainStore.shared.save(legacy, forKey: Self.remoteTokenKeychainAccount)
+            d.removeObject(forKey: "xijian.profile.remoteToken")
+            d.set(true, forKey: XJDefaultsKey.profileRemoteTokenConfigured)
+        }
+        remoteToken = KeychainStore.shared.load(forKey: Self.remoteTokenKeychainAccount) ?? ""
         remoteModelID = d.string(forKey: XJDefaultsKey.profileRemoteModelID) ?? ""
         notificationState = NotificationState(rawValue: d.string(forKey: XJDefaultsKey.profileNotificationState) ?? "") ?? .notDetermined
         backgroundActivityEnabled = d.bool(forKey: XJDefaultsKey.profileBackgroundActivity)

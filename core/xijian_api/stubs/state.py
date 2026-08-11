@@ -9,13 +9,127 @@ existing stubs work unchanged.
 下面的每个属性都是一个 :class:`xijian_api.store.DictDB` 实例，
 将资源 id → 记录映射，持久化到 ``~/.xijian/xijian.db``。
 API 与之前的内存字典接口相同，因此现有存根无需修改即可工作。
+
+The shared in-memory buckets (``safety_state`` / ``overload`` /
+``audits`` / ``packs_index``) are wrapped in lock-guarded containers
+(E3) so concurrent stub writes (e.g. the overload monitor thread
+mutating ``overload`` while a request reads it) cannot corrupt the
+structures; the DictDB buckets are already internally locked in
+:mod:`xijian_api.store`.
+
+共享内存桶（``safety_state`` / ``overload`` / ``audits`` /
+``packs_index``）被包裹在带锁容器中 (E3)，使并发存根写入
+（例如过载监控线程写入 ``overload`` 时请求正在读取）不会破坏
+结构；DictDB 桶在 :mod:`xijian_api.store` 中已有内部锁。
 """
 
 from __future__ import annotations
 
+import threading
 from typing import Any
 
 from xijian_api.store import DictDB, bucket
+
+
+# ---------------------------------------------------------------------------
+# Lock-guarded container wrappers (E3)
+# 带锁容器包装 (E3)
+# ---------------------------------------------------------------------------
+
+
+class _ThreadSafeDict(dict):
+    """A dict whose mutating operations are serialised by an RLock.
+
+    所有变更操作由 RLock 串行化的字典。
+
+    Reads stay lock-free for hot paths; every write goes through the
+    same lock so compound read-modify-write sequences (``d["k"] += 1``)
+    at least never interleave two writers mid-update, and iterating
+    while another thread writes cannot raise ``RuntimeError``.
+
+    读保持无锁以支持热路径；所有写走同一把锁，使复合
+    读-改-写序列（``d["k"] += 1``）至少不会让两个写者中途交错，
+    且遍历时其他线程写入不会抛 ``RuntimeError``。
+    """
+
+    def __init__(self, *args, **kwargs) -> None:
+        self._lock = threading.RLock()
+        super().__init__(*args, **kwargs)
+
+    def __setitem__(self, key, value) -> None:
+        with self._lock:
+            super().__setitem__(key, value)
+
+    def __delitem__(self, key) -> None:
+        with self._lock:
+            super().__delitem__(key)
+
+    def clear(self) -> None:
+        with self._lock:
+            super().clear()
+
+    def update(self, *args, **kwargs) -> None:
+        with self._lock:
+            super().update(*args, **kwargs)
+
+    def setdefault(self, key, default=None):
+        with self._lock:
+            return super().setdefault(key, default)
+
+    def pop(self, key, *args):
+        with self._lock:
+            return super().pop(key, *args)
+
+    def popitem(self):
+        with self._lock:
+            return super().popitem()
+
+
+class _ThreadSafeList(list):
+    """A list whose mutating operations are serialised by an RLock.
+
+    所有变更操作由 RLock 串行化的列表。
+    """
+
+    def __init__(self, *args, **kwargs) -> None:
+        self._lock = threading.RLock()
+        super().__init__(*args, **kwargs)
+
+    def append(self, x) -> None:
+        with self._lock:
+            super().append(x)
+
+    def extend(self, iterable) -> None:
+        with self._lock:
+            super().extend(iterable)
+
+    def insert(self, index, x) -> None:
+        with self._lock:
+            super().insert(index, x)
+
+    def remove(self, x) -> None:
+        with self._lock:
+            super().remove(x)
+
+    def pop(self, *args):
+        with self._lock:
+            return super().pop(*args)
+
+    def clear(self) -> None:
+        with self._lock:
+            super().clear()
+
+    def __setitem__(self, index, value) -> None:
+        with self._lock:
+            super().__setitem__(index, value)
+
+    def __iadd__(self, iterable):
+        with self._lock:
+            return super().__iadd__(iterable)
+
+    def sort(self, *args, **kwargs) -> None:
+        with self._lock:
+            super().sort(*args, **kwargs)
 
 
 # Persisted key-value buckets (one SQLite table per bucket)
@@ -107,16 +221,22 @@ mcp_pending_actions: DictDB = bucket("mcp_pending_actions")
 
 # In-memory special buckets (not suited for key-value SQL)
 # 内存特殊桶（不适合键值 SQL）
-safety_state: dict[str, Any] = {}
-overload: dict[str, Any] = {}
-audits: list[dict[str, Any]] = []
+#
+# E3 — wrapped in lock-guarded containers: the overload monitor,
+# safety state handlers and citations audit all mutate these from
+# background threads while request handlers read them.
+# E3 — 包裹在带锁容器中：过载监控、安全状态处理器和引文审计
+# 都会在后台线程中修改它们，而请求处理器在读它们。
+safety_state: dict[str, Any] = _ThreadSafeDict()
+overload: dict[str, Any] = _ThreadSafeDict()
+audits: list[dict[str, Any]] = _ThreadSafeList()
 
 # Resource pack index — package_id → {kind, target_ids, path, manifest}.
 # Rebuilt at startup from scan_packs(); package directories are the
 # source of truth for what is installed.
 # 资源包索引 — package_id → {kind, target_ids, path, manifest}。
 # 启动时由 scan_packs() 重建；包目录是已安装状态的唯一事实源。
-packs_index: dict[str, Any] = {}
+packs_index: dict[str, Any] = _ThreadSafeDict()
 
 # world_event_categories_disabled uses set values — stored via a
 # dedicated DictDB bucket with list↔set conversion.

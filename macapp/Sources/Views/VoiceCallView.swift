@@ -274,7 +274,7 @@ struct VoiceCallView: View {
                     .toggleStyle(.switch)
                     .controlSize(.small)
                     .disabled(viewModel.isBusy)
-                    .help(loc("barge-in：新语音输入到达时中断当前 TTS 播放"))
+                    .help(loc("打断：新语音输入到达时中断当前播放"))
 
                     Button {
                         showSongSheet = true

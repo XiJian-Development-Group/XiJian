@@ -33,6 +33,7 @@ import tempfile
 import threading
 from pathlib import Path
 
+from xijian_api.runtime import default_storage_dir
 from xijian_api.stubs import packs as packs_stub
 from xijian_api.stubs import state
 from xijian_api.stubs.files import content as files_content
@@ -43,6 +44,44 @@ from xijian_api.utils.time import now_ts
 #: 7z magic bytes — ``7z¼¯'`` (7-Zip signature).
 #: 7z 魔数 — ``7z¼¯'`` (7-Zip 签名)。
 _7Z_MAGIC = b"7z\xbc\xaf\x27\x1c"
+
+#: Hard cap for a single import archive (S5).  Anything larger is
+#: rejected before bytes are read into memory.
+#: 单个导入归档的硬上限 (S5)。更大的文件在读取进内存前就被拒绝。
+_MAX_IMPORT_BYTES = 512 * 1024 * 1024  # 512 MiB
+
+
+def _validate_import_path(src_path: Path) -> Path:
+    """Validate a server-side import path against the S5 whitelist.
+
+    按 S5 白名单校验服务端导入路径。
+
+    The resolved path must live inside the user data directory
+    (``~/Library/Application Support/XiJian/Core`` by default, or the
+    ``XIJIAN_DATA_DIR`` override).  ``Path.resolve()`` collapses ``..``
+    segments and follows symlinks, so both ``..`` escapes and symlink
+    escapes land outside the root and are rejected.  Raises
+    :class:`ValueError` (turned into a job error by the caller) with
+    an explicit message.
+
+    解析后的路径必须位于用户数据目录内（默认
+    ``~/Library/Application Support/XiJian/Core``，或 ``XIJIAN_DATA_DIR``
+    覆盖值）。``Path.resolve()`` 会折叠 ``..`` 段并跟随符号链接，
+    因此 ``..`` 逃逸与符号链接逃逸都会落到根目录之外并被拒绝。
+    抛出 :class:`ValueError`（调用方转为任务错误）并携带明确消息。
+    """
+    data_root = default_storage_dir().resolve()
+    resolved = src_path.resolve()
+    if not resolved.is_relative_to(data_root):
+        raise ValueError(
+            f"archive path {src_path} is outside the user data directory {data_root}"
+        )
+    size = resolved.stat().st_size
+    if size > _MAX_IMPORT_BYTES:
+        raise ValueError(
+            f"archive too large: {size} bytes exceeds the {_MAX_IMPORT_BYTES} byte limit"
+        )
+    return resolved
 
 
 def _detect_archive_ext(data: bytes) -> str:
@@ -95,15 +134,22 @@ def start_import(payload: dict, job_id: str) -> None:
             # 1. Resolve the archive bytes.
             # 1. 解析归档字节。
             if payload.get("file_id"):
+                stored = state.files.get(payload["file_id"]) or {}
+                # S5 — check the recorded byte count (when known) before
+                # pulling the whole payload into memory.
+                # S5 — 在把整个负载读入内存前检查记录的字节数（若已知）。
+                recorded_size = stored.get("bytes_count")
+                if recorded_size is not None and recorded_size > _MAX_IMPORT_BYTES:
+                    raise ValueError(
+                        f"file {payload['file_id']!r} too large: {recorded_size} bytes "
+                        f"exceeds the {_MAX_IMPORT_BYTES} byte limit"
+                    )
                 src_bytes = files_content(payload["file_id"])
                 if src_bytes is None:
                     raise ValueError(f"file {payload['file_id']!r} not found in storage")
-                stored = state.files.get(payload["file_id"]) or {}
                 filename = stored.get("filename") or f"import_{job_id}.bin"
             elif payload.get("path"):
-                src_path = Path(payload["path"])
-                if not src_path.is_file():
-                    raise ValueError(f"archive not found: {src_path}")
+                src_path = _validate_import_path(Path(payload["path"]))
                 src_bytes = src_path.read_bytes()
                 filename = src_path.name
             else:

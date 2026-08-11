@@ -214,6 +214,9 @@ struct IdentityDescriptionSection: View {
 /// AI 功能来源：本地 Core / 远程 API（端点、Token、模型 ID、帮助文档）
 struct AISourceConfigSection: View {
     @Environment(UserProfileSettings.self) private var profile
+    /// 是否显示远程详细配置（端点/Token/模型 ID）。新人引导第二页只做二选一（U7），
+    /// 详细配置收进设置页；设置页传 true 显示完整表单。
+    var showsDetails: Bool = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -231,22 +234,31 @@ struct AISourceConfigSection: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             case .remote:
-                VStack(alignment: .leading, spacing: 8) {
-                    TextField(loc("API 端点"), text: Bindable(profile).remoteEndpoint)
-                        .textFieldStyle(.roundedBorder)
-                    SecureField(loc("Token"), text: Bindable(profile).remoteToken)
-                        .textFieldStyle(.roundedBorder)
-                    TextField(loc("模型 ID（暂不指定）"), text: Bindable(profile).remoteModelID)
-                        .textFieldStyle(.roundedBorder)
-                    Button {
-                        if let url = URL(string: "https://xijian.wiki.skyc8266.uk") {
-                            NSWorkspace.shared.open(url)
-                        }
-                    } label: {
-                        Label(loc("查看帮助文档"), systemImage: "questionmark.circle")
+                if showsDetails {
+                    VStack(alignment: .leading, spacing: 8) {
+                        TextField(loc("API 端点"), text: Bindable(profile).remoteEndpoint)
+                            .textFieldStyle(.roundedBorder)
+                        SecureField(loc("连接密钥（Token）"), text: Bindable(profile).remoteToken)
+                            .textFieldStyle(.roundedBorder)
+                        Text(loc("连接密钥（Token），用于访问远程 API"))
                             .font(.caption)
+                            .foregroundStyle(.secondary)
+                        TextField(loc("模型 ID（暂不指定）"), text: Bindable(profile).remoteModelID)
+                            .textFieldStyle(.roundedBorder)
+                        Button {
+                            if let url = URL(string: "https://xijian.wiki.skyc8266.uk") {
+                                NSWorkspace.shared.open(url)
+                            }
+                        } label: {
+                            Label(loc("查看帮助文档"), systemImage: "questionmark.circle")
+                                .font(.caption)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
+                } else {
+                    Label(loc("使用远程 API；端点、Token 与模型 ID 可在设置页配置"), systemImage: "network")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
             }
         }

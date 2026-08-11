@@ -291,31 +291,49 @@ struct WorldDetailView: View {
 
     // MARK: 状态编辑
 
-    @State private var stateFields: [String: String] = [:]
+    @State private var stateFields: [String: JSONValue] = [:]
+    @State private var selectedStateField = ""
 
     private var stateEditSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Label(loc("编辑状态维度"), systemImage: "slider.horizontal.3")
                 .font(.headline)
-            Text(loc("支持 economy、health、diet、stamina、mentality 等字段；数值或文本均可。"))
+            Text(loc("选择要更新的字段；数值用滑块，开关用开关，其余用文本框。"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
 
+            // 添加字段：候选来自预定义世界字段 + 当前已有字段（U2，不再手输字段名）
+            HStack(spacing: 8) {
+                Picker(loc("选择字段"), selection: $selectedStateField) {
+                    ForEach(stateCandidates, id: \.self) { key in
+                        Text(key).tag(key)
+                    }
+                }
+                .labelsHidden()
+                .frame(maxWidth: .infinity)
+
+                Button(loc("添加")) {
+                    guard !selectedStateField.isEmpty, stateFields[selectedStateField] == nil else { return }
+                    let numericKeys = Set(StateFieldCandidates.world)
+                    stateFields[selectedStateField] = numericKeys.contains(selectedStateField) ? .number(0) : .string("")
+                }
+                .disabled(selectedStateField.isEmpty || stateFields[selectedStateField] != nil)
+            }
+
             Form {
                 ForEach(Array(stateFields.keys.sorted()), id: \.self) { key in
-                    TextField(key, text: Binding(
-                        get: { stateFields[key] ?? "" },
-                        set: { stateFields[key] = $0 }
-                    ))
-                }
-                HStack {
-                    TextField(loc("新字段名"), text: $newStateKey)
-                    Button(loc("添加")) {
-                        let trimmed = newStateKey.trimmingCharacters(in: .whitespaces)
-                        if !trimmed.isEmpty && stateFields[trimmed] == nil {
-                            stateFields[trimmed] = ""
+                    HStack(alignment: .top, spacing: 8) {
+                        StateFieldRow(key: key, value: stateFields[key] ?? .string(""), maxValue: 100, edited: Binding(
+                            get: { stateFields[key] ?? .string("") },
+                            set: { stateFields[key] = $0 }
+                        ))
+                        Button {
+                            stateFields.removeValue(forKey: key)
+                        } label: {
+                            Image(systemName: "trash")
+                                .foregroundStyle(.secondary)
                         }
-                        newStateKey = ""
+                        .buttonStyle(.plain)
                     }
                 }
             }
@@ -324,13 +342,10 @@ struct WorldDetailView: View {
             Button(loc("保存状态")) {
                 var patch: [String: JSONValue] = [:]
                 for (key, value) in stateFields {
-                    let trimmed = value.trimmingCharacters(in: .whitespaces)
-                    guard !trimmed.isEmpty else { continue }
-                    if let number = Double(trimmed) {
-                        patch[key] = .number(number)
-                    } else {
-                        patch[key] = .string(trimmed)
+                    if case .string(let s) = value, s.trimmingCharacters(in: .whitespaces).isEmpty {
+                        continue
                     }
+                    patch[key] = value
                 }
                 guard !patch.isEmpty else { return }
                 Task {
@@ -341,14 +356,16 @@ struct WorldDetailView: View {
         }
         .onAppear {
             if stateFields.isEmpty, let state = viewModel.state {
-                for entry in state.extra {
-                    if let value = entry.value.stringValue {
-                        stateFields[entry.key] = value
-                    }
+                for key in state.extra.keys.sorted() {
+                    stateFields[key] = state.extra[key]
                 }
             }
         }
     }
 
-    @State private var newStateKey = ""
+    /// 候选字段：预定义世界字段 + 当前已有字段
+    private var stateCandidates: [String] {
+        let existing = viewModel.state?.extra.keys.map { $0 } ?? []
+        return StateFieldCandidates.merged(existing: existing, predefined: StateFieldCandidates.world)
+    }
 }

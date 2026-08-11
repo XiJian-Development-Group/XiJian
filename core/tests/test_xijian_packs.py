@@ -804,3 +804,63 @@ def test_api_rescan(client, auth_headers, tmp_path):
     assert packs_stub.get_pack("scan-pack") is not None
     # 资源包的角色 id 是 char-yuki（辅助函数中的默认值）。
     assert "char-yuki" in stubs_state.characters
+
+# ---------------------------------------------------------------------------
+# E4 — graceful degradation when py7zr is unavailable
+# E4 — py7zr 不可用时的优雅降级
+# ---------------------------------------------------------------------------
+
+
+def test_extract_7z_without_py7zr_raises_pack_error(monkeypatch, tmp_path):
+    """Without py7zr, a .7z extraction raises PackError with an install hint (E4)."""
+    # 7z suffix is enough — the guard fires before the file is opened.
+    dummy = tmp_path / "bundle.7z"
+    dummy.write_bytes(b"7z\xbc\xaf\x27\x1cnot-a-real-archive")
+
+    monkeypatch.setattr(packs_stub, "_HAS_PY7ZR", False)
+    try:
+        with pytest.raises(packs_stub.PackError) as ei:
+            packs_stub.extract_archive(dummy, tmp_path / "out")
+    finally:
+        monkeypatch.setattr(packs_stub, "_HAS_PY7ZR", True)
+
+    assert "py7zr" in ei.value.message
+    assert "pip install py7zr" in ei.value.message
+    assert ei.value.code == "pack_py7zr_missing"
+
+
+def test_zip_extract_still_works_without_py7zr(monkeypatch, tmp_path):
+    """zip extraction is unaffected when py7zr is missing (E4)."""
+    archive = tmp_path / "bundle.zip"
+    with zipfile.ZipFile(archive, "w") as zf:
+        zf.writestr("hello.txt", "world")
+
+    monkeypatch.setattr(packs_stub, "_HAS_PY7ZR", False)
+    try:
+        out = tmp_path / "out"
+        packs_stub.extract_archive(archive, out)
+    finally:
+        monkeypatch.setattr(packs_stub, "_HAS_PY7ZR", True)
+
+    assert (out / "hello.txt").read_text() == "world"
+
+
+def test_install_zip_without_py7zr_still_succeeds(monkeypatch, tmp_path):
+    """A full zip install path works without py7zr (E4)."""
+    pack = _write_pack_dir(tmp_path, package_id="no7z-char", name="No7z")
+    archive = tmp_path / "no7z.zip"
+    with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as zf:
+        for f in sorted(pack.rglob("*")):
+            if f.is_file():
+                zf.write(f, f.relative_to(pack).as_posix())
+
+    monkeypatch.setattr(packs_stub, "_HAS_PY7ZR", False)
+    try:
+        record = packs_stub.install_archive(archive)
+    finally:
+        monkeypatch.setattr(packs_stub, "_HAS_PY7ZR", True)
+
+    assert record["package_id"] == "no7z-char"
+    # The installed pack is indexed (its character id defaults to
+    # ``char-yuki`` which may already be seeded, so assert the index).
+    assert packs_stub.get_pack("no7z-char") is not None

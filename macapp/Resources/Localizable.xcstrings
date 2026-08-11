@@ -791,22 +791,6 @@
         }
       }
     },
-    "barge-in：新语音输入到达时中断当前 TTS 播放": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Barge-in: interrupt current TTS playback when new voice input arrives"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Barge-in：新しい音声入力が届いたら現在の TTS 再生を中断"
-          }
-        }
-      }
-    },
     "http://127.0.0.1:18500": {
       "localizations": {
         "en": {
@@ -3448,22 +3432,6 @@
         }
       }
     },
-    "实时语音通话（A6）": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Real-time Voice Call (A6)"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "リアルタイム音声通話（A6）"
-          }
-        }
-      }
-    },
     "审计 ID：%@": {
       "localizations": {
         "en": {
@@ -3860,22 +3828,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "キャラクター %lld 体、世界観 %lld 個、記憶 %lld 件をインポートしました"
-          }
-        }
-      }
-    },
-    "已开启打断（barge-in）": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Barge-in enabled"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Barge-in を有効化しました"
           }
         }
       }
@@ -5657,22 +5609,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "ローカル"
-          }
-        }
-      }
-    },
-    "本地 API · Bearer Token": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Local API · Bearer Token"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "ローカル API · Bearer Token"
           }
         }
       }
@@ -8948,6 +8884,406 @@
           "stringUnit": {
             "state": "translated",
             "value": "🎵（歌曲イベント）"
+          }
+        }
+      }
+    },
+    "与角色实时语音通话": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Real-time Voice Call"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リアルタイム音声通話"
+          }
+        }
+      }
+    },
+    "打断：新语音输入到达时中断当前播放": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interrupt: stop current playback when new voice input arrives"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "割り込み：新しい音声入力が届いたら現在の TTS 再生を中断"
+          }
+        }
+      }
+    },
+    "本地 API · 连接密钥": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Local API · Connection Key"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ローカル API · 接続キー"
+          }
+        }
+      }
+    },
+    "连接密钥（Token），用于访问远程 API": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connection key (Token) for accessing the remote API"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リモート API アクセス用の接続キー（Token）"
+          }
+        }
+      }
+    },
+    "将删除本机全部角色、世界与聊天数据。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Will delete all local characters, worlds and chat data."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ローカルの全キャラクター・ワールド・チャットデータを削除します。"
+          }
+        }
+      }
+    },
+    "完整路径：%@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Full path: %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完全パス：%@"
+          }
+        }
+      }
+    },
+    "连接密钥是访问本机 Core API 的凭据，可在“服务器与进程”中查看或复制。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The connection key is the credential for the local Core API; view or copy it in Server & Process settings."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "接続キーはローカル Core API の認証情報です。「サーバーとプロセス」で確認・コピーできます。"
+          }
+        }
+      }
+    },
+    "关闭保护前需要双重确认。点击下方按钮发起挑战，随后按提示输入服务端下发的挑战短语。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Disabling protection requires double confirmation. Tap the button below to start a challenge, then enter the challenge phrase provided by the server."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保護を無効化するには二重確認が必要です。下のボタンでチャレンジを開始し、サーバーが発行するチャレンジフレーズを入力してください。"
+          }
+        }
+      }
+    },
+    "选择 AI 功能来源：本地 Core 或远程 API。其他偏好可在设置中随时调整。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose your AI source: local Core or remote API. Other preferences can be adjusted anytime in Settings."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "AI 機能の提供元を選択：ローカル Core またはリモート API。その他の設定は後からいつでも変更できます。"
+          }
+        }
+      }
+    },
+    "使用远程 API；端点、Token 与模型 ID 可在设置页配置": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Using remote API; endpoint, token and model ID can be configured in Settings."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リモート API を使用。エンドポイント・Token・モデル ID は設定ページで構成できます。"
+          }
+        }
+      }
+    },
+    "选择要更新的状态字段，留空不改动。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select a state field to update; empty values are kept unchanged."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更新する状態フィールドを選択してください。空欄は変更しません。"
+          }
+        }
+      }
+    },
+    "选择字段": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select field"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フィールドを選択"
+          }
+        }
+      }
+    },
+    "文本值": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Text value"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "テキスト値"
+          }
+        }
+      }
+    },
+    "选择要更新的字段；数值用滑块，开关用开关，其余用文本框。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Select a field to update: sliders for numbers, toggles for booleans, text fields for the rest."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更新するフィールドを選択：数値はスライダー、真偽はトグル、その他はテキストフィールド。"
+          }
+        }
+      }
+    },
+    "暂无键值对。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No key-value pairs yet."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "キーと値のペアはまだありません。"
+          }
+        }
+      }
+    },
+    "添加键值": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add key-value"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "キーと値を追加"
+          }
+        }
+      }
+    },
+    "从 k=v 文本导入": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Import from k=v text"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "k=v テキストからインポート"
+          }
+        }
+      }
+    },
+    "每行一个 k=v，例如 location=home,time_of_day=evening 拆成两行。非法行会标红，不会被静默丢弃。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "One k=v per line, e.g. split location=home,time_of_day=evening into two lines. Invalid lines are highlighted in red and never silently dropped."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1 行につき k=v を 1 つ入力します（例：location=home,time_of_day=evening は 2 行に分ける）。不正な行は赤で表示され、黙って破棄されません。"
+          }
+        }
+      }
+    },
+    "无法解析的行：%@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lines that could not be parsed: %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "解析できない行：%@"
+          }
+        }
+      }
+    },
+    "解析并合并": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Parse & merge"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "解析して結合"
+          }
+        }
+      }
+    },
+    "状态 %@：%lld / %lld": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "State %@: %lld / %lld"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "状態 %@：%lld / %lld"
+          }
+        }
+      }
+    },
+    "XiJian": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "XiJian"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "XiJian"
+          }
+        }
+      }
+    },
+    "已开启打断": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Interrupt enabled"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "割り込みオン"
+          }
+        }
+      }
+    },
+    "连接密钥": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connection Key"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "接続キー"
+          }
+        }
+      }
+    },
+    "连接密钥（Token）": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connection Key (Token)"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "接続キー（Token）"
           }
         }
       }

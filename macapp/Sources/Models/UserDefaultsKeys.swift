@@ -23,7 +23,8 @@ enum XJDefaultsKey {
     static let corePort = "xijian.core.port"
     static let coreUseCustomServer = "xijian.core.useCustomServer"
     static let coreCustomBaseURL = "xijian.core.customBaseURL"
-    static let coreCustomToken = "xijian.core.customToken"
+    /// 自定义服务器 token 的「已配置」标记（明文值本身在 Keychain，见 S7）
+    static let coreCustomTokenConfigured = "xijian.core.customTokenConfigured"
 
     // MARK: 用户资料（UserProfileSettings）
     static let profileUserName = "xijian.profile.userName"
@@ -32,7 +33,8 @@ enum XJDefaultsKey {
     static let profileOnboardingCompleted = "xijian.profile.onboardingCompleted"
     static let profileAISource = "xijian.profile.aiSource"
     static let profileRemoteEndpoint = "xijian.profile.remoteEndpoint"
-    static let profileRemoteToken = "xijian.profile.remoteToken"
+    /// 远程 API token 的「已配置」标记（明文值本身在 Keychain，见 S7）
+    static let profileRemoteTokenConfigured = "xijian.profile.remoteTokenConfigured"
     static let profileRemoteModelID = "xijian.profile.remoteModelID"
     static let profileNotificationState = "xijian.profile.notificationState"
     static let profileBackgroundActivity = "xijian.profile.backgroundActivity"

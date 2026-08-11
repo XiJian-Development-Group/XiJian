@@ -290,19 +290,32 @@ def ensure_runtime_dirs() -> None:
     额外创建可执行文件侧的 ``logs/`` 目录。
     """
     storage = default_storage_dir()
+    tmp = default_tmp_dir()
     targets = [
         default_log_dir(),
-        default_tmp_dir(),
+        tmp,
         storage,
         storage / "logs",
     ]
     for d in targets:
         try:
-            d.mkdir(parents=True, exist_ok=True)
+            d.mkdir(parents=True, exist_ok=True, mode=0o700)
         except OSError:
             # Failure to create directories does not block startup;
             # errors will surface again on the actual write attempt.
             # 目录创建失败不阻塞启动，后续写入时会再次报错
+            pass
+    # S3 — Restrict permissions on the unified tmp dir and the storage
+    # root to the owning user.  ``mkdir(mode=)`` only applies to the
+    # leaf directory (parents keep the default mode), so re-assert
+    # 0700 explicitly afterwards.  The logs dir keeps the default mode.
+    # S3 — 将统一 tmp 目录与存储根目录权限收紧为属主用户。
+    # ``mkdir(mode=)`` 只作用于叶子目录（父目录保持默认模式），
+    # 因此事后显式重新断言 0700。logs 目录保持默认模式。
+    for d in (tmp, storage):
+        try:
+            os.chmod(d, 0o700)
+        except OSError:
             pass
 
 

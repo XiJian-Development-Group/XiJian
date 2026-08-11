@@ -15,6 +15,7 @@ import hashlib
 import json
 import threading
 import time
+from collections import OrderedDict
 from typing import Any
 
 from flask import Flask, g, jsonify, request
@@ -40,12 +41,23 @@ _LOGGER = get_logger()
 #: In-memory idempotency cache keyed by ``Idempotency-Key`` header.
 #: Each entry stores ``{"key_hash", "status", "headers", "body",
 #: "expires_at"}`` where ``key_hash`` is the sha256 of the key + body
-#: tuple (DESIGN §8).
+#: tuple (DESIGN §8).  An :class:`~collections.OrderedDict` gives the
+#: cache an LRU bound (S8): insertion order doubles as recency, the
+#: most recently used key is moved to the end on write, and when the
+#: cache exceeds ``_IDEM_CACHE_MAX`` entries the oldest (front) entry
+#: is evicted.
 #: 内存中的幂等性缓存，以 ``Idempotency-Key`` 标头为键。
 #: 每个条目存储 ``{"key_hash", "status", "headers", "body", "expires_at"}``，
 #: 其中 ``key_hash`` 是 key + body 元组的 sha256（DESIGN §8）。
-_idem_cache: dict[str, dict] = {}
+#: 使用 :class:`~collections.OrderedDict` 为缓存加 LRU 上限 (S8)：
+#: 插入顺序兼作新鲜度，最新使用的键写入时移到末尾，
+#: 当缓存超过 ``_IDEM_CACHE_MAX`` 条时淘汰最旧（队首）条目。
+_idem_cache: OrderedDict[str, dict] = OrderedDict()
 _idem_lock = threading.Lock()
+
+#: Hard cap on idempotency cache entries (S8).
+#: 幂等性缓存条目的硬上限 (S8)。
+_IDEM_CACHE_MAX = 4096
 
 
 def _mask_key(idem_key: str) -> str:
@@ -114,6 +126,7 @@ def _cache_put(
     在幂等性缓存中插入新条目。
     """
     with _idem_lock:
+        _cleanup_expired()
         _idem_cache[idem_key] = {
             "key_hash": key_hash,
             "status": status,
@@ -121,6 +134,14 @@ def _cache_put(
             "body": body,
             "expires_at": time.time() + IDEMPOTENCY_TTL_SECONDS,
         }
+        _idem_cache.move_to_end(idem_key)
+        # S8 — LRU eviction: expired entries were just swept; if the
+        # cache is still over the cap, drop the least-recently-used
+        # (front) entry until it fits.
+        # S8 — LRU 淘汰：过期条目刚被清除；若缓存仍超上限，
+        # 持续丢弃最久未使用（队首）的条目直至容量合适。
+        while len(_idem_cache) > _IDEM_CACHE_MAX:
+            _idem_cache.popitem(last=False)
 
 
 def reset_idempotency_cache_for_testing() -> None:

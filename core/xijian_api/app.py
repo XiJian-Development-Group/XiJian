@@ -37,7 +37,7 @@ from werkzeug.serving import make_server as _werkzeug_make_server
 import atexit
 
 from xijian_api import auth
-from xijian_api.config import Config, DEFAULT_HOST, DEFAULT_PORT
+from xijian_api.config import Config, DEFAULT_HOST, DEFAULT_PORT, _truthy
 from xijian_api.discovery import write_discovery, remove_discovery
 from xijian_api.errors import register_error_handlers
 from xijian_api.handshake import register_healthz
@@ -99,6 +99,21 @@ def create_app(*, testing: bool = False, config: Config | None = None) -> Flask:
     app = Flask("xijian_api")
     app.config["TESTING"] = bool(testing)
     app.config["XIJIAN_CONFIG"] = config
+
+    # S6 — Cap request body size (default 1 GiB, overridable via
+    # ``XIJIAN_MAX_CONTENT_MB``).  Flask/Werkzeug raise a 413
+    # ``RequestEntityTooLarge`` automatically when the Content-Length
+    # (or the streamed body) exceeds this; the global error handler
+    # in ``errors.py`` converts it to a clean JSON 413.
+    # S6 — 限制请求体大小（默认 1 GiB，可通过 ``XIJIAN_MAX_CONTENT_MB``
+    # 覆盖）。超过上限时 Flask/Werkzeug 自动抛出 413
+    # ``RequestEntityTooLarge``；``errors.py`` 的全局错误处理器将其
+    # 转换为干净的 JSON 413。
+    try:
+        max_content_mb = int(os.environ.get("XIJIAN_MAX_CONTENT_MB", "1024"))
+    except (TypeError, ValueError):
+        max_content_mb = 1024
+    app.config["MAX_CONTENT_LENGTH"] = max_content_mb * 1024 * 1024
 
     # Load the Bearer token (either from disk or generate a placeholder
     # in test mode).
@@ -348,15 +363,33 @@ def _build_app_resilient(config: Config) -> Flask:
     构建 Flask 应用，自动从令牌故障中恢复。
 
     The most common production startup failure is a missing bearer
-    token file when dev mode is off.  Rather than aborting, we retry
-    once in dev mode (auto-generating a token) and log the downgrade.
+    token file when dev mode is off.  The automatic dev fallback
+    (regenerating a token) is only taken when the operator explicitly
+    opts in via ``XIJIAN_ALLOW_DEV_FALLBACK=1`` (or the config is in
+    dev mode, where the error cannot normally occur).  Otherwise the
+    ``RuntimeError`` is re-raised so production refuses to start in a
+    degraded state, and the log line explains how to fix it (S1/B3).
 
     最常见的生产启动故障是开发模式关闭时缺少 Bearer 令牌文件。
-    与其中止，我们会在开发模式下重试一次（自动生成令牌）并记录降级。
+    仅当运营者通过 ``XIJIAN_ALLOW_DEV_FALLBACK=1`` 显式选择（或
+    配置本身处于开发模式——此时该错误通常不会发生）才执行自动降级
+    （重新生成令牌）。否则原样 re-raise ``RuntimeError``，使生产环境
+    拒绝以降级状态启动，并在日志中说明修复方式 (S1/B3)。
     """
     try:
         return create_app(testing=config.testing, config=config)
     except RuntimeError as exc:
+        allow_dev_fallback = _truthy(os.environ.get("XIJIAN_ALLOW_DEV_FALLBACK")) or bool(
+            config.server.dev
+        )
+        if not allow_dev_fallback:
+            _LOGGER.error(
+                "生产模式需要预置 token 文件（XIJIAN_DEV_TOKEN_FILE 或默认路径），"
+                "或显式使用 --dev，或设置 XIJIAN_ALLOW_DEV_FALLBACK=1 允许降级。"
+                " 拒绝降级启动: %s",
+                exc,
+            )
+            raise
         # Token-related failures are the typical recoverable case.
         # 令牌相关故障是典型的可恢复情况。
         _LOGGER.warning(

@@ -16,10 +16,23 @@ struct XiJianApp: App {
         }
         .windowStyle(.hiddenTitleBar)
         .windowToolbarStyle(.unified)
+        .defaultSize(width: 960, height: 640)
         .commands {
             // 仅替换「新建窗口」菜单；保留系统默认的退出菜单与 Cmd+Q 快捷键
             //（AppDelegate 的 applicationShouldTerminate 负责停止 Core 子进程）。
             CommandGroup(replacing: .newItem) {}
+            // U13：常用操作加 Cmd 快捷键（主窗口内可直接 ⌘R 重启 Core）
+            CommandMenu(loc("XiJian")) {
+                Button(loc("重启 Core")) {
+                    Task { await CoreManager.shared.restartCore() }
+                }
+                .keyboardShortcut("r", modifiers: .command)
+
+                Button(loc("查看日志")) {
+                    AppDelegate.showLogsAction()
+                }
+                .keyboardShortcut("l", modifiers: .command)
+            }
         }
     }
 }
@@ -102,6 +115,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func showLogs() {
+        Self.showLogsAction()
+    }
+
+    /// 打开 Core 日志目录（静态版，供主菜单快捷键复用）
+    @MainActor
+    static func showLogsAction() {
         let logDir = CoreManager.shared.coreDirectory?.appendingPathComponent("logs")
         if let logDir = logDir, FileManager.default.fileExists(atPath: logDir.path) {
             NSWorkspace.shared.open(logDir)
