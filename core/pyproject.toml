@@ -1,6 +1,6 @@
 [project]
 name = "xijian-api"
-version = "1.2.0a0"
+version = "1.1.0"
 description = "隙间 (XiJian) local Flask API server — core skeleton."
 requires-python = ">=3.11"
 dependencies = [

@@ -10,7 +10,7 @@ external callers (entry points, tests).
 
 from __future__ import annotations
 
-__version__ = "1.2.0a0"
+__version__ = "1.1.0"
 
 from xijian_api.app import create_app, main
 
