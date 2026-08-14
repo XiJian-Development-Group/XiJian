@@ -15,7 +15,7 @@ final class CharacterViewModel {
     var showError = false
 
     /// 选中角色详情
-    private(set) var detail: CharacterInfo?
+    var detail: CharacterInfo?
     /// 角色状态
     private(set) var state: CharacterStateInfo?
     /// 最近状态变更日志（最新在前，最多 10 条）

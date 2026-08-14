@@ -276,15 +276,23 @@ world_event_categories_disabled: dict[str, set[str]] = _load_categories()
 # ---------------------------------------------------------------------------
 
 
-def reset_for_testing() -> None:
+def reset_for_testing(seed_demo_data: bool = True) -> None:
     """Wipe every bucket and re-seed defaults.
 
     DictDB buckets are cleared (cache + SQLite table truncated).
     In-memory buckets are cleared directly.
-    清空每个桶并重新播种默认值。
+    ��空每个��并重新播种默认值。
 
-    DictDB 桶被清空（缓存 + SQLite 表截断）。
-    内存桶直接被清空。
+    DictDB ��被清空（��存 + SQLite 表截断）。
+    ��存��直接被清空。
+
+    Parameters
+    ----------
+    seed_demo_data:
+        When True (default), seed demo records (Yuki, Modern Tokyo, etc.).
+        When False, only system-level defaults are seeded.
+        为 True (默认) 时播种演示记录 (Yuki、Modern Tokyo 等)。
+        为 False 时仅播种系统级默认值。
     """
     _all_dictdb = [
         characters, interactions, worlds, memory, memory_configs,
@@ -320,7 +328,19 @@ def reset_for_testing() -> None:
     world_event_categories_disabled.clear()
 
     from xijian_api.stubs import seed_all
-    seed_all()
+    seed_all(seed_demo_data=seed_demo_data)
+# Re-seed models from config (models are not part of seed_all).
+    # ��������型不属于 seed_all，单独从配置重新播种。
+    try:
+        from flask import current_app
+        from xijian_api.routes.models import seed_default_models
+        from xijian_api.stubs import state as stubs_state
+        if current_app:
+            seed_default_models()
+    except RuntimeError:
+        # No app context (e.g. called from non-Flask script).
+        # 无应用上下文（例如从非 Flask 脚本调用）。
+        pass
 
 
 # Reload categories after seed_all in case seed_all populated them

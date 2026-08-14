@@ -10,6 +10,7 @@ public final class AppViewModel {
 
     /// 侧边栏标签
     enum Tab: String, CaseIterable, Identifiable {
+        case home = "首页"
         case chat = "对话"
         case characters = "角色"
         case worlds = "世界"
@@ -22,6 +23,7 @@ public final class AppViewModel {
         /// 本地化显示名
         var displayName: String {
             switch self {
+            case .home: return loc("首页")
             case .chat: return loc("对话")
             case .characters: return loc("角色")
             case .worlds: return loc("世界")
@@ -33,6 +35,7 @@ public final class AppViewModel {
 
         var icon: String {
             switch self {
+            case .home: return "house.fill"
             case .chat: return "bubble.left.and.bubble.right"
             case .characters: return "person.2"
             case .worlds: return "globe.asia.australia"
@@ -45,7 +48,7 @@ public final class AppViewModel {
 
     // MARK: 导航
 
-    var selectedTab: Tab = .chat
+    var selectedTab: Tab = .home
 
     // MARK: 全局聊天参数（UserDefaults 持久化）
 

@@ -129,6 +129,11 @@ final class ChatViewModel {
         // 尽力持久化到会话
         if let sessionID { try? await client.appendSessionMessage(sessionID, role: "user", content: trimmed) }
 
+        // 记录最后对话时间（用于首页按最近对话排序）
+        if let characterID = app.selectedCharacterID {
+            recordLastChatTime(for: characterID)
+        }
+
         // 构造流式请求（发送全部历史）
         isStreaming = true
         let profile = UserProfileSettings.shared
@@ -229,5 +234,12 @@ final class ChatViewModel {
         } else {
             presentError(error.localizedDescription)
         }
+    }
+
+    /// 记录角色最后对话时间（存入 UserDefaults，用于首页排序）
+    private func recordLastChatTime(for characterID: String) {
+        var times = UserDefaults.standard.dictionary(forKey: XJDefaultsKey.characterLastChatTime) as? [String: TimeInterval] ?? [:]
+        times[characterID] = Date().timeIntervalSince1970
+        UserDefaults.standard.set(times, forKey: XJDefaultsKey.characterLastChatTime)
     }
 }

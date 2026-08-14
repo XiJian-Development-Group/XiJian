@@ -1,8 +1,8 @@
 import SwiftUI
 import XiJianKit
 
-/// 主界面：NavigationSplitView，侧边栏包含 对话/角色/世界/记忆/设置
-/// 首次启动（未完成新人引导）时展示 OnboardingView，完成后进入主界面。
+/// 主界面：NavigationSplitView，侧边栏包含 首页/对话/角色/世界/记忆/设置
+/// 首次启动（未完成新人引导）时展示 OnboardingView，完成后进入主界面（默认首页）。
 public struct ContentView: View {
     @Environment(CoreManager.self) private var core
     @Environment(ThemeSettings.self) private var theme
@@ -77,6 +77,8 @@ public struct ContentView: View {
     @ViewBuilder
     private var detail: some View {
         switch appVM.selectedTab {
+        case .home:
+            HomeView()
         case .chat:
             ChatView(viewModel: chatVM)
         case .characters:

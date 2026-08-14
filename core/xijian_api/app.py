@@ -139,12 +139,16 @@ def create_app(*, testing: bool = False, config: Config | None = None) -> Flask:
     except Exception as exc:  # noqa: BLE001 - migration is best-effort
         _LOGGER.warning("legacy migration failed (non-fatal): %s", exc)
 
-    # Seed in-memory stub state so endpoints that expect default
-    # records (Yuki, world_modern_tokyo, ...) have something to return.
-    # 播种内存中的存根状态，使期望默认记录（Yuki, world_modern_tokyo 等）的端点有数据可返回。
+# Seed in-memory stub state.  The config flag ``features.seed_default_data``
+    # controls whether demo records (Yuki, Modern Tokyo, hug/kiss, memory entries)
+    # are created.  When false (default), stores start empty and operators add
+    # their own data via API or resource packs.
+    # 播种内存中的存根状态。配置标志 ``features.seed_default_data``
+    # ������制是否创建演示记录 (Yuki、Modern Tokyo、��抱/亲��、记��条目)。
+    # 为 false (默认) 时，存��为空，运营者通过 API 或资源包自行��加数据。
     from xijian_api.stubs import seed_all
 
-    seed_all()
+    seed_all(seed_demo_data=config.features.seed_default_data)
 
     # A5.3 — Apply the ``[snapshots]`` config section (R5) to the
     # runtime backup policy so operators' config.toml edits take

@@ -105,7 +105,7 @@ def _register_test_routes(application) -> None:
 @pytest.fixture(autouse=True)
 def _reset_state(app):
     """Clear idempotency cache + stub state between tests.
-    (在测试间清除幂等性缓存 + 存根状态。)
+    (在��试间清除��等性��存 + 存根状态。)
 
     ``stubs_state.reset_for_testing`` re-seeds defaults via
     ``seed_all()``, which in turn calls
@@ -117,26 +117,29 @@ def _reset_state(app):
     tests assert on).
     (``stubs_state.reset_for_testing`` 通过 ``seed_all()`` 重新播种默认值，
     后者又调用 :func:`xijian_api.routes.models.seed_default_models` ——
-    该助手需要一个活跃的 Flask ``app_context`` 以便读取
+    该助手需要一个活��的 Flask ``app_context`` 以便读取
     ``current_app.config["XIJIAN_CONFIG"]``。我们在此推送会话应用的上下文，
-    以便重新播种看到真实配置（从而注册模型测试断言的 ``[[models]]`` 条目。))
+    以便重新播种看到真实配置（从而注册模型��试断言的 ``[[models]]`` 条目。))
 
     The overload module keeps its sliding window in module-level
     ``deque`` instances that survive ``state.reset_for_testing``; we
     reset those explicitly below.
-    (过载模块在模块级 ``deque`` 实例中保持其滑动窗口，这些实例在
+    (过载模��在模��级 ``deque`` 实例中保持其��动��口，这些实例在
     ``state.reset_for_testing`` 后存活；我们在下方显式重置它们。)
     """
     reset_idempotency_cache_for_testing()
     with app.app_context():
-        stubs_state.reset_for_testing()
+        from xijian_api.stubs import state as stubs_state
+        config = app.config.get("XIJIAN_CONFIG")
+        seed_demo = config.features.seed_default_data if config else True
+        stubs_state.reset_for_testing(seed_demo_data=seed_demo)
         from xijian_api.stubs import overload as ov_stub
         ov_stub.reset_for_testing()
         from xijian_api.stubs import character_state as cs_stub
         cs_stub.reset_for_testing()
         # Re-install the A3.2 default status handlers (Critical
         # subscriber) after the reset cleared the registry.
-        # (在重置清空注册表后重新安装 A3.2 默认状态处理器 (Critical 订阅者)。)
+        # (在重置清空注册表后重新安装 A3.2 ��认状态处理器 (Critical ����者)。)
         # Guarded: the A3 chapter lands this helper in parallel; until
         # it exists the reset must not fail the whole suite.
         if hasattr(cs_stub, "install_default_status_handlers"):
@@ -149,16 +152,16 @@ def _reset_state(app):
         # registry; reinstall the A4.2 → A5.4 cross-link so the
         # TestOverloadHandler cases in ``test_xijian_npcs`` see the
         # ``_suspend_for_overload`` handler.  Idempotent.
-        # (上方的 ``overload.reset_for_testing()`` 清除了动作处理器注册表；
-        # 重新安装 A4.2 → A5.4 交叉链接，以便 ``test_xijian_npcs`` 中的
-        # TestOverloadHandler 用例看到 ``_suspend_for_overload`` 处理器。幂等。)
+        # (上方的 ``overload.reset_for_testing()`` ��除了动作处理器注册表；
+        # 重新安装 A4.2 → A5.4 交����接，以便 ``test_xijian_npcs`` 中的
+        # TestOverloadHandler 用例看到 ``_suspend_for_overload`` 处理器。��等。)
         npcs_stub.install_overload_handler()
         # A5.4 cross-links for the other three actions — same pattern:
         # the registry was cleared above, so reset the guarded flags and
         # re-install each consumer (memory compress / snapshots emergency
         # dump / tts degrade).
-        # (A5.4 其余三个动作的交叉链接 —— 同样模式：注册表已被清空，
-        # 因此重置受保护标志并重新安装每个消费者。)
+        # (A5.4 其余三个动作的交����接 —— 同样模式：注册表已被清空，
+        # 因此重置受保��标志并重新安装每个消费者。)
         from xijian_api.stubs import memory as memory_stub
         memory_stub.reset_for_testing()
         memory_stub.install_overload_handler()
@@ -195,7 +198,7 @@ def _reset_state(app):
         from xijian_api.stubs import economy as economy_stub
         economy_stub.reset_for_testing()
         # A5.1 output-safety system.
-        # (A5.1 输出安全系统。)
+        # (A5.1 ��出安全系统。)
         from xijian_api.stubs import safety_rules as safety_rules_stub
         safety_rules_stub.reset_for_testing()
         from xijian_api.stubs import safety as safety_stub
@@ -206,10 +209,10 @@ def _reset_state(app):
         # store; the rulebook reset has to come first so the
         # sanitize pass on the next test starts with no
         # active ``forbidden_word`` rules.
-        # (A5.2 MCP 保护系统。重置顺序很重要：
-        # ``mcp.reset_for_testing()`` 清除审计/冻结/快照/规则桶
-        # 和每世界策略存储；规则手册重置必须先来，以便下一个测试的
-        # 清理遍历从无活跃 ``forbidden_word`` 规则开始。)
+        # (A5.2 MCP 保��系统。重置顺序很重要：
+        # ``mcp.reset_for_testing()`` ��除��计/��结/快照/规则��
+        # 和每世界策略存��；规则手册重置必须先来，以便下一个��试的
+        # ��理遍历从无活�� ``forbidden_word`` 规则开始。)
         from xijian_api.stubs import mcp_rules as mcp_rules_stub
         mcp_rules_stub.reset_for_testing()
         from xijian_api.stubs import mcp as mcp_stub
@@ -218,22 +221,22 @@ def _reset_state(app):
         # wipes the snapshot bucket AND the policy record
         # so the next test starts from the spec's default
         # (5 GiB ceiling etc.).
-        # (A5.3 自动备份。``reset_for_testing()`` 清除快照桶
-        # 和策略记录，以便下一个测试从规范默认值 (5 GiB 上限等) 开始。)
+        # (A5.3 自动备份。``reset_for_testing()`` ��除快照��
+        # 和策略记录，以便下一个��试从规范默认值 (5 GiB 上限等) ��始。)
         from xijian_api.stubs import snapshots as snap_stub
         snap_stub.reset_for_testing()
         # A1.1 manual backups — wipes the protected-module registry,
         # per-character associations and backup records; stops the
         # daily scheduler.
-        # (A1.1 手动备份 — 清除受保护模块注册表、每角色关联和备份记录；
-        # 停止每日调度器。)
+        # (A1.1 手动备份 — ��除受保��模��注册表、每角色关联和备份记录；
+        # ���止每日调度器。)
         from xijian_api.stubs import manual_backups as mb_stub
         mb_stub.reset_for_testing()
         # A6 / A7 / A8 (added 2026-08-01).  The A6 hooks (reply /
         # sing engines) and the A7 tick thread are module-level
         # state that survives ``state.reset_for_testing``.
-        # (A6 / A7 / A8 (2026-08-01 新增)。A6 钩子 (回复/唱歌引擎)
-        # 与 A7 tick 线程是模块级状态，需要显式重置。)
+        # (A6 / A7 / A8 (2026-08-01 新增)。A6 ���子 (回复/唱歌引��)
+        # 与 A7 tick 线程是模��级状态，需要显式重置。)
         from xijian_api.stubs import voice_calls as vc_stub
         vc_stub.reset_for_testing()
         from xijian_api.stubs import character_initiated_actions as cia_stub

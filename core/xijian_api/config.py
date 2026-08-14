@@ -65,20 +65,27 @@ _MODEL_TYPES = (
 def _config_search_paths() -> list[Path]:
     """Return candidate config file paths in priority order.
 
-    返回按优先级排序的候选配置文件路径。
+    返回按��先级排序的候选配置文件路径。
     """
     paths: list[Path] = []
     env = os.environ.get("XIJIAN_CONFIG")
     if env:
         paths.append(Path(env))
-    # 打包模式：可执行文件同级目录的 config.toml 优先
+    # 打包模式：可��行文件同级目录的 config.toml ��先
     # Packaged mode: config.toml in the same directory as the executable takes priority
     from xijian_api.runtime import is_frozen, executable_dir
     if is_frozen():
         paths.append(executable_dir() / "config.toml")
     paths.append(Path.cwd() / "config.toml")
+    # Config may live in the repo root or in the core/ subdirectory.
+    # 配置文件可能位于��库根目录或 core/ 子目录。
     repo_root = Path(__file__).resolve().parent.parent.parent
     paths.append(repo_root / "config.toml")
+    paths.append(repo_root / "core" / "config.toml")
+    # Also check the directory containing the xijian_api package (core/).
+    # 同时��查包含 xijian_api ��的目录 (core/)。
+    xijian_api_parent = Path(__file__).resolve().parent.parent
+    paths.append(xijian_api_parent / "config.toml")
     return paths
 
 
@@ -467,6 +474,12 @@ class Config:
                 "keep_token_file",
                 _truthy(os.environ["XIJIAN_DEV_TOKEN_FILE"]),
             )
+        if "XIJIAN_SEED_DEFAULT_DATA" in os.environ:
+            object.__setattr__(
+                config.features,
+                "seed_default_data",
+                _truthy(os.environ["XIJIAN_SEED_DEFAULT_DATA"]),
+            )
         return config
 
     @classmethod
@@ -571,8 +584,22 @@ def _build_config(
     models = _build_models(data.get("models", []))
 
     features_data = dict(data.get("features", {}))
+    # In testing mode, default seed_default_data to True so tests can
+    # rely on demo records (Yuki, Modern Tokyo, etc.) unless explicitly
+    # disabled in the TOML/env.  The testing flag overrides the TOML value.
+    # ��试模式下默认 seed_default_data 为 True，使��试可依��演示记录
+    # (Yuki、Modern Tokyo 等)，除非 TOML/环境变量显式关闭。��试标志���� TOML ��。
+    seed_default_default = True if testing else False
+    seed_default_value = features_data.get("seed_default_data", seed_default_default)
+    if testing:
+        # Testing mode forces seed_default_data=True unless explicitly set to false in env
+        env_override = os.environ.get("XIJIAN_SEED_DEFAULT_DATA")
+        if env_override is not None:
+            seed_default_value = _truthy(env_override)
+        else:
+            seed_default_value = True
     features = FeaturesConfig(
-        seed_default_data=_truthy(features_data.get("seed_default_data", False)),
+        seed_default_data=_truthy(seed_default_value),
         protection_module=_truthy(features_data.get("protection_module", True)),
         rate_limit=_truthy(features_data.get("rate_limit", False)),
         dev_test_emit=_truthy(features_data.get("dev_test_emit", False)),

@@ -43,4 +43,8 @@ enum XJDefaultsKey {
     static let backgroundKind = "xijian.background.kind"
     static let backgroundPath = "xijian.background.path"
     static let backgroundBlurred = "xijian.background.blurred"
+
+    // MARK: 首页（HomeView）
+    static let pinnedCharacters = "xijian.home.pinnedCharacters"
+    static let characterLastChatTime = "xijian.character.lastChatTime"
 }
