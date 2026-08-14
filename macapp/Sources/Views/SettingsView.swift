@@ -59,17 +59,32 @@ struct SettingsView: View {
                     }
                 }
 
-                Section(loc("数据管理")) {
+Section(loc("数据管理")) {
                     NavigationLink {
                         BackupSettingsView()
                     } label: {
-                        Label(loc("备份与受保护模块"), systemImage: "externaldrive.badge.timemachine")
+                        Label(loc("备份与受保��模��"), systemImage: "externaldrive.badge.timemachine")
                             .foregroundStyle(theme.accentColor)
                     }
                     Button(role: .destructive) {
                         showResetConfirm = true
                     } label: {
-                        Label(loc("重置 Core 数据"), systemImage: "trash")
+                        Label(loc("重置 Core ��据"), systemImage: "trash")
+                    }
+                }
+
+                Section(loc("AI 后端与模型")) {
+                    NavigationLink {
+                        AIBackendSettingsView()
+                    } label: {
+                        Label("AI 后端配置", systemImage: "server.rack")
+                            .foregroundStyle(theme.accentColor)
+                    }
+                    NavigationLink {
+                        ModelManagementView()
+                    } label: {
+                        Label("模型管理", systemImage: "cube.box.fill")
+                            .foregroundStyle(theme.accentColor)
                     }
                 }
 

@@ -600,12 +600,32 @@ def gen_wallpaper_id() -> str:
 
 def gen_pet_action_log_id() -> str:
     """Return a pet-action-log id (``petlog_<12 hex>``).
-    返回桌宠动作日志 ID (``petlog_<12 hex>``)。
+    返回����动作日志 ID (``petlog_<12 hex>``)。
 
-    A8 desktop pet: every auditable "捣乱" action (mouse_click /
+    A8 desktop pet: every auditable "��乱" action (mouse_click /
     key_input / window_move / ...) lands one row here so AC-2
-    ("桌宠捣乱必须有可审计日志") is satisfiable.
-    A8 桌宠：每次可审计的"捣乱"动作 (mouse_click / key_input /
+    ("������乱必须有可��计日志") is satisfiable.
+    A8 ����：每次可��计的"��乱"动作 (mouse_click / key_input /
     window_move / ...) 在此落一条记录，使 AC-2 可满足。
     """
     return gen_id("petlog_", _SHORT_HEX_LEN)
+
+
+def gen_backend_id() -> str:
+    """Return an AI backend id (``bknd_<12 hex>``).
+    返回 AI 后端 ID (``bknd_<12 hex>``)。
+
+    Used for dynamic AI backend configurations (OpenAI-compatible endpoints).
+    用于动态 AI 后端配置 (OpenAI-compatible 端点)。
+    """
+    return gen_id("bknd_", _SHORT_HEX_LEN)
+
+
+def gen_model_id() -> str:
+    """Return an AI model id (``aimdl_<12 hex>``).
+    返回 AI ��型 ID (``aimdl_<12 hex>``)。
+
+    Used for dynamic AI model configurations (beyond config.toml).
+    用于动态 AI ��型配置 (超出 config.toml)。
+    """
+    return gen_id("aimdl_", _SHORT_HEX_LEN)

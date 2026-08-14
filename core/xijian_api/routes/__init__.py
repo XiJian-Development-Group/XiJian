@@ -86,6 +86,7 @@ _OPTIONAL_ROUTE_MODULES: tuple[str, ...] = (
     # 存储统一迁移 / 资源包系统 (added 2026-08-03).
     "xijian_api.routes.xijian_migration",
     "xijian_api.routes.xijian_packs",
+    "xijian_api.routes.xijian_backends",
 )
 
 
