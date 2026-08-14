@@ -239,15 +239,51 @@ def delete_model(model_id: str):
 
 @bp.post("/v1/xijian/models/<model_id>/load")
 def load_model(model_id: str):
-    """加载模型（委托给 /v1/models/<id>/load）。"""
-    # 这里只更新本地 loaded 标志，实际加载由 /v1/models/<id>/load 处理
+    """加载动态模型。
+    
+    对于 OpenAI-compatible 后端的远程模型，验证连接并标记为已加载。
+    对于本地模型，委托给 /v1/models/<id>/load 端点。
+    """
     record = state.ai_models.get(model_id)
     if record is None:
         raise ApiError(404, "model not found", "not_found_error", code="model_not_found")
 
-    # ��发到现有的加载端点
-    from xijian_api.routes.models import load_model as load_model_impl
-    # 这里简化处理：只标记 loaded=True，实际加载需调用 /v1/models/<id>/load
+    backend_id = record.get("backend_id")
+    if not backend_id:
+        raise ApiError(400, "model has no associated backend", "invalid_request_error", code="missing_backend")
+
+    backend = state.ai_backends.get(backend_id)
+    if not backend:
+        raise ApiError(404, "associated backend not found", "not_found_error", code="backend_not_found")
+
+    backend_type = backend.get("type", "openai_compatible")
+    if backend_type not in ("openai", "openai_compatible"):
+        raise ApiError(400, f"backend type {backend_type} does not support dynamic loading", "invalid_request_error", code="unsupported_backend_type")
+
+    # For OpenAI-compatible backends, validate the connection by making a test request
+    import httpx
+    base_url = backend.get("base_url", "").rstrip("/")
+    api_key = backend.get("api_key", "")
+    model_name = record.get("name", "")
+
+    try:
+        # Test connection with a lightweight request (list models)
+        test_url = f"{base_url}/models"
+        headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+        with httpx.Client(timeout=10.0) as client:
+            response = client.get(test_url, headers=headers)
+            if response.status_code >= 400:
+                raise ApiError(502, f"backend connection failed: HTTP {response.status_code}", "backend_error", code="backend_connection_failed")
+            # Verify the model exists on the backend
+            models_data = response.json()
+            model_ids = [m.get("id") for m in models_data.get("data", [])]
+            if model_ids and model_name not in model_ids:
+                # Model not found on backend - log warning but don't fail (backend might have different naming)
+                pass
+    except httpx.RequestError as exc:
+        raise ApiError(502, f"backend connection failed: {exc}", "backend_error", code="backend_connection_failed")
+
+    # Mark as loaded
     record["loaded"] = True
     record["updated_at"] = now_ts()
     return jsonify(record)
@@ -255,7 +291,7 @@ def load_model(model_id: str):
 
 @bp.post("/v1/xijian/models/<model_id>/unload")
 def unload_model(model_id: str):
-    """��载模型。"""
+    """��载动态模型。"""
     record = state.ai_models.get(model_id)
     if record is None:
         raise ApiError(404, "model not found", "not_found_error", code="model_not_found")

@@ -452,6 +452,14 @@ public final class CoreManager {
         return APIClient(baseURL: baseURL, token: token, session: clientSessionOverride ?? .shared)
     }
 
+    /// 生成 APIClient；Core 未运行或��少 token 时��错
+    func makeClientOrThrow() throws -> APIClient {
+        guard let client = makeClient() else {
+            throw APIError.coreNotRunning
+        }
+        return client
+    }
+
     /// 是否需要合并复制：目标可执行文件缺失，或 bundle 内可执行文件比已安装的更新，
     /// 或 bundle 与已安装的 `_internal` 目录总大小不同。
     /// PyInstaller onedir 的代码主体在 `_internal/`，仅 Python 代码变化可能不影响

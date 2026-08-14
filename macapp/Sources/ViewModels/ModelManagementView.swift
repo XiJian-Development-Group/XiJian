@@ -6,9 +6,9 @@ private struct ModelRow: View {
     let model: AIModel
     let isSelected: Bool
     let onSelect: () -> Void
-    let onDelete: () -> Void
-    let onLoad: () -> Void
-    let onUnload: () -> Void
+    let onDelete: @MainActor () async -> Void
+    let onLoad: @MainActor () async -> Void
+    let onUnload: @MainActor () async -> Void
 
     var body: some View {
         HStack {
@@ -55,9 +55,9 @@ private struct ModelRow: View {
             Spacer()
             Menu {
                 if model.loaded {
-                    Button("��载", systemImage: "eject.fill", action: onUnload)
+                    Button("��载", systemImage: "eject.fill") { Task { await onUnload() } }
                 } else {
-                    Button("加载", systemImage: "play.fill", action: onLoad)
+                    Button("加载", systemImage: "play.fill") { Task { await onLoad() } }
                 }
                 Divider()
                 Button("编辑", systemImage: "pencil") {
@@ -65,7 +65,7 @@ private struct ModelRow: View {
                 }
                 Divider()
                 Button(role: .destructive) {
-                    onDelete()
+                    Task { await onDelete() }
                 } label: {
                     Label("删除", systemImage: "trash")
                 }
@@ -103,9 +103,9 @@ struct ModelManagementView: View {
                         model: model,
                         isSelected: editingModel?.id == model.id,
                         onSelect: { editingModel = model },
-                        onDelete: { deleteModel(model) },
-                        onLoad: { loadModel(model) },
-                        onUnload: { unloadModel(model) }
+                        onDelete: { Task { await deleteModel(model) } },
+                        onLoad: { Task { await loadModel(model) } },
+                        onUnload: { Task { await unloadModel(model) } }
                     )
                 }
                 if models.isEmpty {
@@ -286,7 +286,6 @@ private struct ModelEditForm: View {
                     Text("大小 (GB)")
                     Spacer()
                     TextField("0", value: $sizeGB, format: .number)
-                        .keyboardType(.decimalPad)
                         .frame(width: 80)
                 }
                 TextField("量化 (例: q4_k_m, 4bit)", text: $quant)
@@ -294,14 +293,12 @@ private struct ModelEditForm: View {
                     Text("上下文长度")
                     Spacer()
                     TextField("0", value: $contextLength, format: .number)
-                        .keyboardType(.numberPad)
                         .frame(width: 100)
                 }
                 HStack {
                     Text("最小内存 (GB)")
                     Spacer()
                     TextField("0", value: $minRamGB, format: .number)
-                        .keyboardType(.decimalPad)
                         .frame(width: 80)
                 }
             }
@@ -370,7 +367,7 @@ struct AIModel: Identifiable, Codable, Hashable, Sendable {
     let quant: String
     let contextLength: Int
     let minRamGB: Double
-    let loaded: Bool
+    var loaded: Bool
     let createdAt: Date
     let updatedAt: Date
 

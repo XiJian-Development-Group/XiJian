@@ -6,7 +6,7 @@ private struct BackendRow: View {
     let backend: AIBackend
     let isSelected: Bool
     let onSelect: () -> Void
-    let onDelete: () -> Void
+    let onDelete: @MainActor () async -> Void
     let onEdit: () -> Void
 
     var body: some View {
@@ -35,7 +35,7 @@ private struct BackendRow: View {
                 Button("编辑", systemImage: "pencil", action: onEdit)
                 Divider()
                 Button(role: .destructive) {
-                    onDelete()
+                    Task { await onDelete() }
                 } label: {
                     Label("删除", systemImage: "trash")
                 }
@@ -72,7 +72,7 @@ struct AIBackendSettingsView: View {
                         backend: backend,
                         isSelected: editingBackend?.id == backend.id,
                         onSelect: { editingBackend = backend },
-                        onDelete: { deleteBackend(backend) },
+                        onDelete: { Task { await deleteBackend(backend) } },
                         onEdit: { editingBackend = backend }
                     )
                 }

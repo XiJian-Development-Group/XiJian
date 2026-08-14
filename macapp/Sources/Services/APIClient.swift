@@ -66,7 +66,7 @@ struct APIClient {
 
     // MARK: - 基础请求
 
-    private func makeRequest(
+    func makeRequest(
         _ method: String,
         _ path: String,
         query: [URLQueryItem]? = nil,
