@@ -63,13 +63,13 @@ Section(loc("数据管理")) {
                     NavigationLink {
                         BackupSettingsView()
                     } label: {
-                        Label(loc("备份与受保��模��"), systemImage: "externaldrive.badge.timemachine")
+                        Label(loc("备份与受保护模块"), systemImage: "externaldrive.badge.timemachine")
                             .foregroundStyle(theme.accentColor)
                     }
                     Button(role: .destructive) {
                         showResetConfirm = true
                     } label: {
-                        Label(loc("重置 Core ��据"), systemImage: "trash")
+                        Label(loc("重置 Core 数据"), systemImage: "trash")
                     }
                 }
 

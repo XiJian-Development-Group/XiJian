@@ -144,8 +144,8 @@ def create_app(*, testing: bool = False, config: Config | None = None) -> Flask:
     # are created.  When false (default), stores start empty and operators add
     # their own data via API or resource packs.
     # 播种内存中的存根状态。配置标志 ``features.seed_default_data``
-    # ������制是否创建演示记录 (Yuki、Modern Tokyo、��抱/亲��、记��条目)。
-    # 为 false (默认) 时，存��为空，运营者通过 API 或资源包自行��加数据。
+    # 配置控制是否创建演示记录 (Yuki、Modern Tokyo、拥抱/亲吻、记录条目)。
+    # 为 false (默认) 时，存储为空，运营者通过 API 或资源包自行添加数据。
     from xijian_api.stubs import seed_all
 
     seed_all(seed_demo_data=config.features.seed_default_data)

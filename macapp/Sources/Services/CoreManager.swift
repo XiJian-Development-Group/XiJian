@@ -452,7 +452,7 @@ public final class CoreManager {
         return APIClient(baseURL: baseURL, token: token, session: clientSessionOverride ?? .shared)
     }
 
-    /// 生成 APIClient；Core 未运行或��少 token 时��错
+    /// 生成 APIClient；Core 未运行或缺少 token 时出错
     func makeClientOrThrow() throws -> APIClient {
         guard let client = makeClient() else {
             throw APIError.coreNotRunning

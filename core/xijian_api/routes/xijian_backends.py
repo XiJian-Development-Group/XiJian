@@ -23,7 +23,7 @@ bp = Blueprint("xijian_backends", __name__)
 # Backend CRUD
 # ---------------------------------------------------------------------------
 
-# Backend 存����：backend_id -> record
+# Backend 存储：backend_id -> record
 # Record fields: id, name, type, base_url, api_key, headers, is_default, created_at, updated_at
 
 
@@ -136,7 +136,7 @@ def delete_backend(backend_id: str):
 # Model CRUD (dynamic models beyond config.toml)
 # ---------------------------------------------------------------------------
 
-# Model 存����：model_id -> record
+# Model 存储：model_id -> record
 # Record fields: id, name, backend_id, backend_type, filename, family, size_b, quant,
 #                context_length, min_ram_gb, loaded, created_at, updated_at
 
@@ -175,7 +175,7 @@ def _validate_model_payload(payload: dict) -> dict:
 
 @bp.get("/v1/xijian/models")
 def list_models():
-    """列出所有模型（包含 config.toml 与动态��加的）。"""
+    """列出所有模型（包含 config.toml 与动态添加的）。"""
     models = list(state.ai_models.values())
     models.sort(key=lambda m: m.get("name", ""))
     return jsonify({"object": "list", "data": models})
@@ -183,7 +183,7 @@ def list_models():
 
 @bp.post("/v1/xijian/models")
 def create_model():
-    """创建新的模型配置（动态��加，不修改 config.toml）。"""
+    """创建新的模型配置（动态添加，不修改 config.toml）。"""
     payload = request.get_json(silent=True) or {}
     validated = _validate_model_payload(payload)
 
@@ -291,7 +291,7 @@ def load_model(model_id: str):
 
 @bp.post("/v1/xijian/models/<model_id>/unload")
 def unload_model(model_id: str):
-    """��载动态模型。"""
+    """卸载动态模型。"""
     record = state.ai_models.get(model_id)
     if record is None:
         raise ApiError(404, "model not found", "not_found_error", code="model_not_found")

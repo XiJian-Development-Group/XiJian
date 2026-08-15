@@ -1,7 +1,7 @@
 import SwiftUI
 import XiJianKit
 
-/// ��型管理行
+/// 模型管理行
 private struct ModelRow: View {
     let model: AIModel
     let isSelected: Bool
@@ -55,7 +55,7 @@ private struct ModelRow: View {
             Spacer()
             Menu {
                 if model.loaded {
-                    Button("��载", systemImage: "eject.fill") { Task { await onUnload() } }
+                    Button("卸载", systemImage: "eject.fill") { Task { await onUnload() } }
                 } else {
                     Button("加载", systemImage: "play.fill") { Task { await onLoad() } }
                 }
@@ -82,7 +82,7 @@ private struct ModelRow: View {
     }
 }
 
-/// ��型管理页面
+/// 模型管理页面
 struct ModelManagementView: View {
     @Environment(CoreManager.self) private var core
     @Environment(ThemeSettings.self) private var theme
@@ -109,7 +109,7 @@ struct ModelManagementView: View {
                     )
                 }
                 if models.isEmpty {
-                    Text("��无模型配置")
+                    Text("暂无模型配置")
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .center)
                         .padding(.vertical, 20)
@@ -121,7 +121,7 @@ struct ModelManagementView: View {
                     Button {
                         showAddSheet = true
                     } label: {
-                        Label("��加模型", systemImage: "plus.circle.fill")
+                        Label("添加模型", systemImage: "plus.circle.fill")
                     }
                 }
             }
@@ -142,7 +142,7 @@ struct ModelManagementView: View {
                 Button {
                     showAddSheet = true
                 } label: {
-                    Label("��加模型", systemImage: "plus")
+                    Label("添加模型", systemImage: "plus")
                 }
             }
         }
@@ -243,7 +243,7 @@ struct ModelManagementView: View {
     }
 }
 
-/// ��型编辑/创建表单
+/// 模型编辑/创建表单
 private struct ModelEditForm: View {
     let model: AIModel?
     let backends: [AIBackend]
@@ -273,14 +273,14 @@ private struct ModelEditForm: View {
                 .disabled(backends.isEmpty)
 
                 if backends.isEmpty {
-                    Text("请先在 AI 后端页面��加后端")
+                    Text("请先在 AI 后端页面添加后端")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
 
             Section("模型参数 (可选)") {
-                TextField("文件名 / ��径", text: $filename)
+                TextField("文件名 / 路径", text: $filename)
                 TextField("模型族 (例: gpt-4o, qwen2.5)", text: $family)
                 HStack {
                     Text("大小 (GB)")
@@ -424,7 +424,7 @@ extension APIClient {
         let request = try makeRequest("POST", "v1/xijian/models/\(id)/unload")
         let (_, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-            throw APIError.httpStatus((response as? HTTPURLResponse)?.statusCode ?? 500, "��载失败")
+            throw APIError.httpStatus((response as? HTTPURLResponse)?.statusCode ?? 500, "卸载失败")
         }
     }
 }

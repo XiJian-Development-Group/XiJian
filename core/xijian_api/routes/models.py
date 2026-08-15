@@ -56,10 +56,10 @@ def _entry_to_oai_record(entry: ModelEntry) -> dict:
 
 
 def _seed_models_from_config(config: Config) -> None:
-    """从 ``config.models`` �����充 :data:`state.models`。
+    """从 ``config.models`` 填充 :data:`state.models`。
 
-    当��已非空时为空操作，以免����手动注册（或运行时��加）的模型。
-    当配置没有 ``[[models]]`` 条目时��保持为空 — 不��加任何演示数据。
+    当桶已非空时为空操作，以免覆盖手动注册（或运行时添加）的模型。
+    当配置没有 ``[[models]]`` 条目时保持为空 — 不添加任何演示数据。
     """
     if state.models:
         return
@@ -84,7 +84,7 @@ def seed_default_models() -> None:
 
 
 def init_app(app) -> None:
-    """从应用的 :class:`Config` ��������充模型��。"""
+    """从应用的 :class:`Config` 填充模型桶。"""
     config = app.config.get("XIJIAN_CONFIG")
     if config is not None:
         _seed_models_from_config(config)

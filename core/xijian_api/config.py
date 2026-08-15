@@ -65,25 +65,25 @@ _MODEL_TYPES = (
 def _config_search_paths() -> list[Path]:
     """Return candidate config file paths in priority order.
 
-    返回按��先级排序的候选配置文件路径。
+    返回按优先级排序的候选配置文件路径。
     """
     paths: list[Path] = []
     env = os.environ.get("XIJIAN_CONFIG")
     if env:
         paths.append(Path(env))
-    # 打包模式：可��行文件同级目录的 config.toml ��先
+    # 打包模式：可执行文件同级目录的 config.toml 优先
     # Packaged mode: config.toml in the same directory as the executable takes priority
     from xijian_api.runtime import is_frozen, executable_dir
     if is_frozen():
         paths.append(executable_dir() / "config.toml")
     paths.append(Path.cwd() / "config.toml")
     # Config may live in the repo root or in the core/ subdirectory.
-    # 配置文件可能位于��库根目录或 core/ 子目录。
+    # 配置文件可能位于仓库根目录或 core/ 子目录。
     repo_root = Path(__file__).resolve().parent.parent.parent
     paths.append(repo_root / "config.toml")
     paths.append(repo_root / "core" / "config.toml")
     # Also check the directory containing the xijian_api package (core/).
-    # 同时��查包含 xijian_api ��的目录 (core/)。
+    # 同时检查包含 xijian_api 包的目录 (core/)。
     xijian_api_parent = Path(__file__).resolve().parent.parent
     paths.append(xijian_api_parent / "config.toml")
     return paths
@@ -587,8 +587,8 @@ def _build_config(
     # In testing mode, default seed_default_data to True so tests can
     # rely on demo records (Yuki, Modern Tokyo, etc.) unless explicitly
     # disabled in the TOML/env.  The testing flag overrides the TOML value.
-    # ��试模式下默认 seed_default_data 为 True，使��试可依��演示记录
-    # (Yuki、Modern Tokyo 等)，除非 TOML/环境变量显式关闭。��试标志���� TOML ��。
+    # 测试模式下默认 seed_default_data 为 True，使测试可依赖演示记录
+    # (Yuki、Modern Tokyo 等)，除非 TOML/环境变量显式关闭。测试标志覆盖 TOML 值。
     seed_default_default = True if testing else False
     seed_default_value = features_data.get("seed_default_data", seed_default_default)
     if testing:

@@ -64,7 +64,7 @@ def seed_all(seed_demo_data: bool = True) -> None:
     Called once at app start-up (and again on demand) so endpoints
     that expect at least one record (``char_yuki``,
     ``world_modern_tokyo``) have something to return.
-    在应用启动时调用一次（按需再次调用），用默认数据��充内存存��，
+    在应用启动时调用一次（按需再次调用），用默认数据填充内存存根，
     以便期望至少有一条记录（``char_yuki``, ``world_modern_tokyo``）的
     端点有数据可返回。
 
@@ -75,7 +75,7 @@ def seed_all(seed_demo_data: bool = True) -> None:
     or resource packs.
     当 ``seed_demo_data`` 为 False 时，仅播种系统级默认值
     (安全、过载、设置、经济等)。演示记录如规范角色 (Yuki)、
-    世界 (Modern Tokyo)、交互 (��抱/亲��) 和记��条目将被跳过 ——
+    世界 (Modern Tokyo)、交互 (拥抱/亲吻) 和记录条目将被跳过 ——
     运营者通过 API 或资源包自行创建。
     """
     # Demo data (controlled by seed_demo_data flag)
@@ -85,15 +85,15 @@ def seed_all(seed_demo_data: bool = True) -> None:
         # A3.1 startup scan — mark loaded every character with an
         # ``is_active=1`` model so they're available without a manual
         # load (spec §加载策略: 启动时仅加载 is_active=1 的模型).
-        # A3.1 启动���� — 将有 ``is_active=1`` ��型的角色标记为已加载，
+        # A3.1 启动扫描 — 将有 ``is_active=1`` 模型的角色标记为已加载，
         # 无需手动加载即可使用 (规范 §加载策略：启动时仅加载 is_active=1 的模型)。
         characters.auto_load_active_models()
         interactions.seed_default()
         # Worlds are seeded *first* so the related per-world buckets
         # (environment, compute_config) can materialise their lazy
         # defaults against an existing world record.
-        # 世界先被 *播种*，以便相关的每世界存����
-        # (environment, compute_config) ����对现有的世界记录实例化它们的��性默认值。
+        # 世界先被 *播种*，以便相关的每世界存储桶
+        # (environment, compute_config) 能够对现有的世界记录实例化它们的惰性默认值。
         worlds.seed_default()
         memory.seed_default()
         memory_config.seed_default()  # type: ignore[attr-defined]
@@ -105,17 +105,17 @@ def seed_all(seed_demo_data: bool = True) -> None:
     # starts the background tick thread (if env allows).  It does
     # NOT seed any default NPCs — operators create them.
     # ``npcs.seed_default`` 注册 A5.4 过载处理器并启动后台 tick 线程
-    # (如果环境��许)。它 *不* 播种任何默认 NPC —— 由运营创建。
+    # (如果环境允许)。它 *不* 播种任何默认 NPC —— 由运营创建。
     npcs.seed_default()
     # A1.1 manual backup — seeds the protected-module registry and
     # starts the daily scheduler (env-gated like the other schedulers).
-    # A1.1 手动备份 — 播种受保��模��注册表并启动每日调度器
+    # A1.1 手动备份 — 播种受保护模块注册表并启动每日调度器
     # (与其他调度器一样受环境变量门控)。
     manual_backups.seed_default()
     # The merged safety module seeds both the A5.1 rulebook and
     # the legacy protection-state defaults (enabled / guard_level).
-    # 合并后的 safety ����同时播种 A5.1 规则书和
-    # 旧版保��状态默认值 (enabled / guard_level)。
+    # 合并后的 safety 模块同时播种 A5.1 规则书和
+    # 旧版保护状态默认值 (enabled / guard_level)。
     safety.seed_default()
     settings.seed_default()
     overload.seed_default()
@@ -124,7 +124,7 @@ def seed_all(seed_demo_data: bool = True) -> None:
     # interactions; the world library is operator-curated.  We still
     # call the seed hooks so future additions have a stable entry point.
     # A4.3 场景系统 — 无默认 POI / 旅行模式 / 场景交互；世界库由运营策展。
-    # 我们仍然调用播种��子，以便未来的��加有��定的入口点。
+    # 我们仍然调用播种钩子，以便未来的添加有确定的入口点。
     pois.seed_default()
     travel_modes.seed_default()
     scene_interactions.seed_default()
@@ -132,8 +132,8 @@ def seed_all(seed_demo_data: bool = True) -> None:
     # operators define currencies per world and grant initial balances
     # through the route layer.  We still call the seed hooks so
     # future additions have a stable entry point.
-    # A4.4 经济 — 无默认货币 / ���包 / 交易；运营按世界定义货币并通过
-    # ��由��授予初始余��。我们仍调用播种��子，以便未来��加有��定入口点。
+    # A4.4 经济 — 无默认货币 / 钱包 / 交易；运营按世界定义货币并通过
+    # 路由层授予初始余额。我们仍调用播种钩子，以便未来添加有确定入口点。
     world_currencies.seed_default()
     world_economy_state.seed_default()
     wallets.seed_default()
@@ -143,15 +143,15 @@ def seed_all(seed_demo_data: bool = True) -> None:
     # (prompt-injection / system-prompt-probe) so the merged
     # safety layer catches them out of the box.  The per-world
     # rulebook is operator-curated beyond that.
-    # A5.1 ��出安全 — 播种四条遗留防��规则
-    # (提示注入 / 系统提示探��)，以便合并后的安全��开��即用即可捕获它们。
-    # ��世界规则书在此基��上由运营策展。
+    # A5.1 输出安全 — 播种四条遗留防止规则
+    # (提示注入 / 系统提示探测)，以便合并后的安全开箱即用即可捕获它们。
+    # 每世界规则书在此基础上由运营策展。
     safety_rules.seed_default()
     # A5.2 MCP-protection — no default rules, freezes, or
     # snapshots (operator-curated).  Seed hooks are wired so
     # future rule-bundle imports have a stable entry point.
-    # A5.2 MCP ���� — 无默认规则、��结或快照 (运营策展)。
-    # 播种��子已连接，以便未来规则包导入有��定入口点。
+    # A5.2 MCP 保护 — 无默认规则、冻结或快照 (运营策展)。
+    # 播种钩子已连接，以便未来规则包导入有确定入口点。
     mcp_rules.seed_default()
     mcp.seed_default()
     # A5.3 automatic backup — seeds the policy record if
@@ -159,9 +159,9 @@ def seed_all(seed_demo_data: bool = True) -> None:
     # starts the hourly scheduled-backup thread (if env allows).
     # No default snapshots (operators trigger the first dump via the
     # route or a key event).
-    # A5.3 自动备份 — ����失则播种策略记录，注册 A5.4 ``emergency_dump``
-    # 处理器，并在环境��许时启动每小时定时备份线程；无默认快照
-    # (运营通过路由或关��事件��发首次转��)。
+    # A5.3 自动备份 — 缺失则播种策略记录，注册 A5.4 ``emergency_dump``
+    # 处理器，并在环境允许时启动每小时定时备份线程；无默认快照
+    # (运营通过路由或关键事件触发首次转储)。
     snapshots.seed_default()
     # A5.4 TTS-degradation guard — registers the ``degrade_tts``
     # overload handler so GPU/ANE pressure trips the TTS flag.
@@ -170,13 +170,13 @@ def seed_all(seed_demo_data: bool = True) -> None:
     # citations module holds no state of its own but exposes its
     # helpers on the package for the chat pipeline to import via
     # ``from xijian_api.stubs import citations``.
-    # citations ����不持有自身状态，但在包上暴��其��助��数，
-    # 供��天管道通过 ``from xijian_api.stubs import citations`` 导入。
+    # citations 模块不持有自身状态，但在包上暴露其辅助函数，
+    # 供聊天管道通过 ``from xijian_api.stubs import citations`` 导入。
     _ = citations
     # A6 / A7 / A8 seed hooks — no default records, but the A7 hook
     # starts the proactive-scan tick thread (env-gated).
-    # A6 / A7 / A8 播种��子 — 无默认记录，但 A7 ���子会启动
-    # 主动���� tick 线程 (受环境变量门控)。
+    # A6 / A7 / A8 播种钩子 — 无默认记录，但 A7 钩子会启动
+    # 主动联系 tick 线程 (受环境变量门控)。
     voice_calls.seed_default()
     character_initiated_actions.seed_default()
     desktop_pets.seed_default()
@@ -184,9 +184,9 @@ def seed_all(seed_demo_data: bool = True) -> None:
     # side effect that runs the first time the module is imported).
     # After ``state.reset_for_testing`` the bucket is empty, so re-seed
     # by calling the explicit helper exposed by the route module.
-    # ``models`` 位于路由�� (它有导入时播种的副作用，首次导入模��时运行)。
-    # ``state.reset_for_testing`` 后��为空，所以通过调用路由模��暴��的显式
-    # ��助��数重新播种。
+    # ``models`` 位于路由模块 (它有导入时播种的副作用，首次导入模块时运行)。
+    # ``state.reset_for_testing`` 后为空，所以通过调用路由模块暴露的显式
+    # 辅助函数重新播种。
     from xijian_api.routes.models import seed_default_models
     seed_default_models()
 

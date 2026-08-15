@@ -77,7 +77,7 @@ struct AIBackendSettingsView: View {
                     )
                 }
                 if backends.isEmpty {
-                    Text("��无 AI 后端配置")
+                    Text("暂无 AI 后端配置")
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .center)
                         .padding(.vertical, 20)
@@ -89,7 +89,7 @@ struct AIBackendSettingsView: View {
                     Button {
                         showAddSheet = true
                     } label: {
-                        Label("��加后端", systemImage: "plus.circle.fill")
+                        Label("添加后端", systemImage: "plus.circle.fill")
                     }
                 }
             }
@@ -110,7 +110,7 @@ struct AIBackendSettingsView: View {
                 Button {
                     showAddSheet = true
                 } label: {
-                    Label("��加后端", systemImage: "plus")
+                    Label("添加后端", systemImage: "plus")
                 }
             }
         }

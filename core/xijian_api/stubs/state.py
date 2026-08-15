@@ -200,19 +200,19 @@ messages: DictDB = bucket("messages")
 videos: DictDB = bucket("videos")
 models: DictDB = bucket("models")
 # A6 realtime call — call sessions + per-call event stream.
-# A6 实时通话 — 通话会话 + ����通话事件流。
+# A6 实时通话 — 通话会话 + 对应通话事件流。
 voice_calls: DictDB = bucket("voice_calls")
 call_events: DictDB = bucket("call_events")
 # A7 proactive contact — character-initiated actions + per-character
 # / global notification policy.
-# A7 主动联系 — 角色主动发起动作 + ����角色/全局通知策略。
+# A7 主动联系 — 角色主动发起动作 + 每个角色/全局通知策略。
 character_initiated_actions: DictDB = bucket("character_initiated_actions")
 character_initiated_configs: DictDB = bucket("character_initiated_configs")
 # A8 desktop pets — pet placements, dynamic wallpapers, auditable
 # pet action log, and the desktop-client pending-action queue that
 # :mod:`xijian_api.mcp.tools.desktop` fills.
-# A8 ������ — ������放置、动态����、可��计����动作日志，以及��面客户端
-# 待办动作队列 (由 :mod:`xijian_api.mcp.tools.desktop` �����充)。
+# A8 桌面宠物 — 桌面宠物放置、动态壁纸、可审计动作日志，以及桌面客户端
+# 待办动作队列 (由 :mod:`xijian_api.mcp.tools.desktop` 填充)。
 desktop_pets: DictDB = bucket("desktop_pets")
 dynamic_wallpapers: DictDB = bucket("dynamic_wallpapers")
 pet_action_log: DictDB = bucket("pet_action_log")
@@ -285,10 +285,10 @@ def reset_for_testing(seed_demo_data: bool = True) -> None:
 
     DictDB buckets are cleared (cache + SQLite table truncated).
     In-memory buckets are cleared directly.
-    ��空每个��并重新播种默认值。
+    清空每个桶并重新播种默认值。
 
-    DictDB ��被清空（��存 + SQLite 表截断）。
-    ��存��直接被清空。
+    DictDB 桶被清空（缓存 + SQLite 表截断）。
+    内存存储直接被清空。
 
     Parameters
     ----------
@@ -336,7 +336,7 @@ def reset_for_testing(seed_demo_data: bool = True) -> None:
     from xijian_api.stubs import seed_all
     seed_all(seed_demo_data=seed_demo_data)
 # Re-seed models from config (models are not part of seed_all).
-    # ��������型不属于 seed_all，单独从配置重新播种。
+    # 模型不属于 seed_all，单独从配置重新播种。
     try:
         from flask import current_app
         from xijian_api.routes.models import seed_default_models
