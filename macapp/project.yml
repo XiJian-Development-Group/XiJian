@@ -8,6 +8,7 @@ options:
   xcodeVersion: "15.0"
   pkgConfig: false
   bundleId: com.xijian.XiJian
+  postGenCommand: "python3 Scripts/add_resources.py"
   configFiles:
     Debug: Configs/Debug.xcconfig
     Release: Configs/Release.xcconfig
@@ -61,12 +62,19 @@ targets:
     platform: macOS
     sources:
       - path: Sources/App.swift
+    resources:
+      - path: Resources/Assets.xcassets
+        type: folder
+      - path: Resources/Core
+        type: folder
+      - path: Resources/Localizable.xcstrings
     settings:
       base:
         PRODUCT_NAME: XiJian
         PRODUCT_BUNDLE_IDENTIFIER: com.xijian.XiJian
         INFOPLIST_FILE: Sources/Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CODE_SIGN_ENTITLEMENTS: Entitlements.entitlements
     dependencies:
       - target: XiJianKit
 

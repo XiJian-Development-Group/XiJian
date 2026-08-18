@@ -32,6 +32,10 @@
     <true/>
     <key>NSMicrophoneUsageDescription</key>
     <string>XiJian 需要访问麦克风以进行实时语音通话（语音输入）。/ XiJian needs microphone access for real-time voice calls (voice input).</string>
+    <key>NSScreenCaptureUsageDescription</key>
+    <string>XiJian 需要屏幕录制权限以支持桌面壁纸模式与桌宠查看屏幕功能。/ XiJian needs screen capture permission for desktop wallpaper mode and desktop pet screen viewing.</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>XiJian 需要控制其他应用的权限以支持桌宠操控电脑功能（需用户手动开启）。/ XiJian needs Apple Events permission for desktop pet computer control (requires manual enable).</string>
     <key>NSSupportsAutomaticGraphicsSwitching</key>
     <true/>
     <key>NSPrincipalClass</key>
