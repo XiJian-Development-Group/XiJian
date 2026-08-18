@@ -53,11 +53,13 @@ xijian-api/                    # 解压后的根目录
 
 ### 3.1 环境要求
 
-- **macOS**: Apple Silicon (arm64)，macOS 26.0+
-- **Windows**: Windows 10 22H2 及以上 / 11（建议 24H2 及以上）x64
+- **macOS**: Apple Silicon (arm64)，macOS 26.0+ —— 原生 macOS 应用构建目标
+- **Windows**: Windows 10 22H2 及以上 / 11（建议 24H2 及以上）x64 —— 仅 Core API 打包目标（无原生 UI）
 - **conda**: Anaconda/Miniconda/Miniforge
 - **Python**: 3.12（由 conda 环境提供）
 - **磁盘空间**: 至少 2GB（含 AI 依赖时约 3GB）
+
+> **说明**：Linux / iOS / Android 当前无构建目标。Linux 仅 Core API 理论可跑但无 UI 前端；iOS/Android 无原生客户端，仅作为伴侣端连接电脑。
 
 ### 3.2 初始化环境
 

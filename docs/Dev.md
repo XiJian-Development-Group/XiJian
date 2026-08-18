@@ -17,9 +17,9 @@
 | 平台       | 状态     | UI 实现          | AI 推理                | 备注                                                                                |
 | ---------- | -------- | ---------------- | ---------------------- | ----------------------------------------------------------------------------------- |
 | macOS      | 主目标   | Swift / SwiftUI  | MLX（mlx-swift）       | 最低 macOS 26.0（推荐 macOS 26 Tahoe）；推荐内存 64–128 GB；可用磁盘 ≥ 32 GB     |
-| iOS / iPad | 暂不支持 | —                | —                      | iOS 适配有计划，但不是现在（详见 README）                                                             |
-| Windows    | 副目标   | Python + Pywebview | GGUF（llama.cpp / Ollama） | 最低 Windows 11（建议 24H2 及以上）；最低 20GB 可用显存（参见 README.md）；可用磁盘 ≥ 64 GB                                  |
-| Linux      | 副目标   | Python + Pywebview | GGUF（llama.cpp / Ollama） | 同 Windows                                                                          |
+| iOS / iPad | 伴侣端   | —                | —                      | 无原生客户端；需连接运行隙间的 macOS/Windows 电脑，仅作远程控制/通知面板                 |
+| Windows    | 副目标   | Python + Pywebview | GGUF（llama.cpp / Ollama） | 最低 Windows 10 22H2 / 11（建议 24H2 及以上）；最低 20GB 可用显存（参见 README.md）；可用磁盘 ≥ 64 GB                                  |
+| Linux      | 暂不支持 | —                | —                      | 无原生客户端计划，后端 Core API 理论可跑，但无 UI 前端                                                 |
 
 ### 1.3 关键约束
 
@@ -286,10 +286,10 @@ for _ in 0..<30 {
 throw .apiTimeout
 ```
 
-**Win/Linux (Python)**：
+**Win/Linux (Python) — 创作者工具 / DevKit**：
 
 ```python
-# ui/desktop/xijian_desktop/port_scanner.py —— 简化示意
+# devkit/discovery.py —— Core API 发现示意（非主客户端）
 import os, time, urllib.request
 from typing import Optional
 
@@ -305,6 +305,8 @@ def wait_for_handshake(port: int, timeout: float = 15.0) -> bool:
             time.sleep(0.3)
     return False
 ```
+
+> ⚠️ **注意**：Win/Linux 目前**没有原生主客户端**（Python + Pywebview 主客户端在计划中，当前未完成）。上述代码为 DevKit（创作者工具）发现本地 Core API 的示例。主客户端仅 macOS (SwiftUI) 已实现。
 
 #### 4.2.3 API 协议规范
 
@@ -396,25 +398,24 @@ class CharacterService:
 
 - **进程管理**：使用 `Process` 启动 Python API 子进程，通过 `Pipe` 捕获端口写入 stdout / 临时文件
 - **网络**：标准 `URLSession` + WebSocket 客户端
-- **Live2D**：Cubism SDK for Native + Metal 渲染管线
+- **渲染**：VRM 1.0 (GLTF) + Metal 渲染管线（Live2D 已移除，统一采用 VRM，详见功能清单 v2.1 决议）
 - **平台特性**：
   - TouchBar：`NSTouchBar`
   - 自建「灵动岛」：`NSScreen` 顶部区域 + 自绘，**注意与其他应用冲突**
-  - 桌宠 / 壁纸：透明背景窗口 + 屏幕录制 API（需用户授权）
-  - 屏幕操控：CGEvent 模拟键鼠
-  - **应急快捷键**：默认 `⌃⌥⌘.`，按下立即中断 AI 操作
+  - 桌宠 / 壁纸：透明背景窗口 + 屏幕录制 API（需用户授权）⚠️ **开发中**
+  - 屏幕操控：CGEvent 模拟键鼠 ⚠️ **开发中**
+  - **应急快捷键**：默认 `⌃⌥⌘Q`，按下立即中断 AI 操作 ⚠️ **开发中**
 
-#### 4.4.2 Win / Linux（Python + Pywebview）
+#### 4.4.2 Win / Linux（Python + Pywebview）— 计划中，当前未完成
 
 - **进程管理**：`subprocess.Popen` 启动 Python API 子进程
 - **Pywebview**：使用系统 WebView（Win 上 Edge WebView2 / Linux 上 GTK WebKit）
 - **前端**：HTML / CSS / JS
-  - Live2D：Cubism Web SDK
-  - 3D：three.js（备用）
+  - 渲染：VRM 1.0 (GLTF) + three.js（Live2D 已移除，统一采用 VRM）
 - **平台特性**：
-  - 桌宠：Pywebview 的 frameless 模式 + 透明背景
-  - 屏幕观察 / 操控：mss（截屏）+ pyautogui / xdotool（操控）
-  - 应急快捷键：`pynput` 注册全局热键
+  - 桌宠：Pywebview 的 frameless 模式 + 透明背景 ⚠️ **开发中**
+  - 屏幕观察 / 操控：mss（截屏）+ pyautogui / xdotool（操控）⚠️ **开发中**
+  - 应急快捷键：`pynput` 注册全局热键 ⚠️ **开发中**
 - **打包**：PyInstaller → `.exe` / AppImage / `.deb`
 
 ---
@@ -452,7 +453,7 @@ class CharacterService:
 
 | 资源                          | 审核要求         |
 | ----------------------------- | ---------------- |
-| Live2D 模型 或 3D 模型        | 质量审核         |
+| VRM 1.0 模型 (GLTF)           | 质量审核         |
 | 基本声音数据（用于声音克隆）  | 质量审核         |
 | 互动配置文件（JSON）+ 动作信息 | NSFW 分级审核     |
 | 场景配置文件（JSON）          | 无审核           |
@@ -572,7 +573,7 @@ test(world): 覆盖经济系统边界值
 
 ### 10.3 渲染
 
-- Live2D 渲染帧率：≥ 60 FPS
+- VRM 渲染帧率：≥ 60 FPS
 - 桌宠模式空闲 CPU 占用：≤ 5%
 
 ### 10.4 测试
@@ -606,14 +607,12 @@ test(world): 覆盖经济系统边界值
 > [docs/Dev. Function List功能清单v2.md](Dev.%20Function%20List%E5%8A%9F%E8%83%BD%E6%B8%85%E5%8D%95v2.md) 为准。
 
 - **M0 — 架构定型**：API 网关 + AI 抽象层 + 保护模块骨架 + 端口握手
-- **M1 — 单角色可用**：macOS 实时对话 + Live2D + 基本记忆
+- **M1 — 单角色可用**：macOS 实时对话 + VRM 渲染 + 基本记忆 ⚠️ VRM 渲染开发中
 - **M2 — 模拟世界**：经济 / 健康 / 互动 / 场景切换
-- **M3 — 生态特性**：TouchBar / 灵动岛 / 壁纸 / 桌宠
-- **M4 — 主动消息与通知**
-- **M5 — Win / Linux Pywebview 端**：复用 core，复用 AI 抽象层换 GGUF backend
-- **M6 — iOS / Android**（待评估）
-
----
+- **M3 — 生态特性**：TouchBar / 灵动岛 / 壁纸 / 桌宠 ⚠️ 开发中
+- **M4 — 主动消息与通知** ⚠️ 开发中
+- **M5 — Win / Linux Pywebview 端**：复用 core，复用 AI 抽象层换 GGUF backend ⚠️ 计划中，当前未完成
+- **M6 — iOS / Android**（待评估，作为连接电脑的伴侣端）
 
 ## 13. 行为准则
 
