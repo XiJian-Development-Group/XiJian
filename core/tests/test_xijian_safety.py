@@ -738,7 +738,9 @@ class TestHttpGate:
         start_body = start.get_json()
         assert "challenge_id" in start_body
         assert "expires_at" in start_body
-        assert start_body["challenge_phrase"] == "关闭保护 Yuki"
+        challenge_phrase = start_body["challenge_phrase"]
+        expected_phrase = "我确认关闭隙间保护模块，并自行承担由此造成的全部后果"
+        assert challenge_phrase == expected_phrase
 
         # 错误短语 → phrase_mismatch，仍保持启用。
         challenge_id = start_body["challenge_id"]
@@ -761,7 +763,7 @@ class TestHttpGate:
         ok = client.post(
             "/v1/xijian/safety/gate/disable",
             headers=auth_headers,
-            json={"challenge_id": cid2, "phrase": "关闭保护 Yuki"},
+            json={"challenge_id": cid2, "phrase": "我确认关闭隙间保护模块，并自行承担由此造成的全部后果"},
         )
         assert ok.status_code == 200
         assert ok.get_json()["enabled"] is False

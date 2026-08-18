@@ -127,10 +127,11 @@ def test_character_state_update_blocked_when_protection_off(client, auth_headers
         json={"confirmation": "I understand the risks"},
     )
     challenge_id = start.get_json()["challenge_id"]
+    challenge_phrase = start.get_json()["challenge_phrase"]
     client.post(
         "/v1/xijian/safety/gate/disable",
         headers=auth_headers,
-        json={"challenge_id": challenge_id, "phrase": "关闭保护 Yuki"},
+        json={"challenge_id": challenge_id, "phrase": challenge_phrase},
     )
 
     blocked = client.post(

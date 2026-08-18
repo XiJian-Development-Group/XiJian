@@ -96,6 +96,7 @@ Test surface
 from __future__ import annotations
 
 import copy
+import io
 import logging
 import os
 import pickle
@@ -136,6 +137,43 @@ if _ZSTD_AVAILABLE:
     _DECOMPRESS_ERRORS = (zlib.error, zstandard.ZstdError)
 else:  # pragma: no cover — depends on the runtime env
     _DECOMPRESS_ERRORS = (zlib.error,)
+
+
+# Safe unpickler: only allow built-in Python types, reject any custom classes.
+# This prevents RCE via malicious pickle payloads.
+class _SafeUnpickler(pickle.Unpickler):
+    """Unpickler that only allows safe built-in types."""
+
+    ALLOWED_BUILTINS = {
+        'builtins': {
+            'dict', 'list', 'tuple', 'set', 'frozenset',
+            'str', 'bytes', 'bytearray',
+            'int', 'float', 'complex',
+            'bool', 'NoneType', 'Ellipsis',
+        },
+    }
+
+    def find_class(self, module: str, name: str):
+        # Only allow built-in types from the allowlist
+        if module in self.ALLOWED_BUILTINS and name in self.ALLOWED_BUILTINS[module]:
+            return getattr(__builtins__, name)
+        raise pickle.UnpicklingError(
+            f"Unsafe pickle: {module}.{name} not allowed"
+        )
+
+
+def _safe_loads(data: bytes) -> Any:
+    """Safely deserialize pickle data with restricted globals.
+    
+    Only allows built-in Python types (dict, list, str, int, etc.).
+    Raises SnapshotError if the payload contains disallowed types.
+    """
+    try:
+        return _SafeUnpickler(io.BytesIO(data)).load()
+    except pickle.UnpicklingError as exc:
+        raise SnapshotError(f"Unsafe snapshot payload: {exc}") from exc
+    except (pickle.UnpicklingError, EOFError, AttributeError) as exc:
+        raise SnapshotError(f"Snapshot unpickle failed: {exc}") from exc
 
 
 _LOGGER = logging.getLogger("xijian_api.snapshots")
@@ -418,20 +456,19 @@ def _compress_bytes(payload: Any, *, backend: str | None = None) -> tuple[bytes,
 
 
 def decompress_bytes(compressed: bytes, *, backend: str | None = None) -> Any:
-    """Decompress + unpickle a snapshot byte payload (round-trip).
+    """Decompress + safely unpickle a snapshot byte payload (round-trip).
 
     The inverse of :func:`_compress_bytes` — used by the
     round-trip consistency check and by operators restoring an
     archive from disk.  ``backend`` defaults to the policy's
     ``compression_backend``.
+
+    Uses a safe unpickler that only allows built-in Python types
+    (dict, list, str, int, float, bool, None, etc.) to prevent
+    RCE via malicious pickle payloads.
     """
     raw = _zstd_decompress(compressed, backend=backend)
-    try:
-        return pickle.loads(raw)
-    except (pickle.UnpicklingError, EOFError) as exc:
-        raise SnapshotError(
-            "snapshot unpickle failed: %s" % exc
-        ) from exc
+    return _safe_loads(raw)
 
 
 # ---------------------------------------------------------------------------

@@ -871,11 +871,14 @@ def start_disable(payload: dict) -> dict:
 
     Returns a ``challenge_id`` + ``challenge_phrase`` the client
     must echo back in :func:`confirm_disable` within 60 seconds.
+
+    The challenge phrase is a server-generated confirmation text
+    that explicitly states the user accepts all consequences.
     """
     _ensure_protection_record()
     confirmation = (payload or {}).get("confirmation", "")
     challenge_id = gen_challenge_id()
-    phrase = "关闭保护 Yuki"
+    phrase = "我确认关闭隙间保护模块，并自行承担由此造成的全部后果"
     expires_at = now_ts() + _CHALLENGE_TTL_SECONDS
     with _CHALLENGE_LOCK:
         _CHALLENGES[challenge_id] = {

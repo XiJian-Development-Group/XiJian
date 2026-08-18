@@ -200,7 +200,7 @@ class TestCorruptPayloadErrors:
         import zlib as _zlib
 
         bogus = _zlib.compress(b"this is not a pickle")
-        with pytest.raises(SnapshotError, match="unpickle failed"):
+        with pytest.raises(SnapshotError, match="Unsafe snapshot payload"):
             snap_stub.decompress_bytes(bogus, backend=COMPRESSION_BACKEND_ZLIB)
 
 
