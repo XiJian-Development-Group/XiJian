@@ -79,7 +79,7 @@ from devkit import (
     DEV_SUBMIT_SMTP_HOST,
     DEV_SUBMIT_SMTP_PORT,
     DEV_SUBMIT_SMTP_USE_TLS,
-    DEV_SUBMIT_SMTP_USER,
+    _API_VERSION,
     archive_name,
     check_archive_size,
     check_rate_limit,
@@ -235,7 +235,6 @@ from devkit.ai_assistant import (
 
 
 _LOGGER = logging.getLogger("devkit.api")
-_API_VERSION = "xijian.devkit.api/v1"
 
 
 # ---------------------------------------------------------------------------
@@ -333,17 +332,17 @@ class DevKitApi:
 
     @_serialize_call
     def whoami(self) -> dict[str, Any]:
-        """返回 UI 在页头渲染的静态配置。"""
+        """返回 UI 在页头渲染的静态配置。
+
+        注意：不返回敏感的 SMTP 配置（host/port/user）或收件人邮箱，
+        这些信息属于开发者私有配置或固定收件人，不应在前端暴露。
+        """
         return {
             "api_version": _API_VERSION,
             "cooldown_seconds": int(DEV_SUBMIT_COOLDOWN_SECONDS),
             "max_attachment_bytes": int(DEV_SUBMIT_MAX_ATTACHMENT_BYTES),
             "max_attachment_mb": int(DEV_SUBMIT_MAX_ATTACHMENT_BYTES) // 1_000_000,
-            "smtp_host": DEV_SUBMIT_SMTP_HOST,
-            "smtp_port": int(DEV_SUBMIT_SMTP_PORT),
             "smtp_use_tls": bool(DEV_SUBMIT_SMTP_USE_TLS),
-            "smtp_user": DEV_SUBMIT_SMTP_USER,
-            "recipient": DEV_SUBMIT_RECIPIENT,
             "target_kinds": list(TARGET_KINDS),
             "preferred_archive_format": ARCHIVE_FORMAT_7Z,
         }

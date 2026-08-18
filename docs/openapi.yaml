@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: 隙间（XiJian）本地 API 协议规范
-  version: 1.0.0
+  version: 1.1.0
   description: |
     「隙间」Core API 的 OpenAPI 3.0 规范。
 
@@ -28,7 +28,7 @@ info:
     name: 使用MIT协议开源
     identifier: MIT
 servers:
-- url: http://127.0.0.1:{port}/v1
+- url: http://127.0.0.1:{port}
   description: 本地环回（外部不可访问，若需要外部访问，请修改到0.0.0.0）
   variables:
     port:
@@ -11761,6 +11761,278 @@ paths:
                 additionalProperties: true
         '404':
           $ref: '#/components/responses/NotFound'
+  /xijian/backends:
+    get:
+      tags:
+      - xijian.backends
+      operationId: listBackends
+      summary: 列出所有已配置的 AI 后端
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: 后端列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  object:
+                    type: string
+                    enum: [list]
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AIBackend'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags:
+      - xijian.backends
+      operationId: createBackend
+      summary: 创建新的 AI 后端配置
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AIBackendCreate'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIBackend'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /xijian/backends/{backend_id}:
+    get:
+      tags:
+      - xijian.backends
+      operationId: getBackend
+      summary: 获取单个后端配置
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/BackendId'
+      responses:
+        '200':
+          description: 后端详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIBackend'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags:
+      - xijian.backends
+      operationId: patchBackend
+      summary: 更新后端配置
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/BackendId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AIBackendUpdate'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIBackend'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags:
+      - xijian.backends
+      operationId: deleteBackend
+      summary: 删除后端配置
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/BackendId'
+      responses:
+        '204':
+          description: 删除成功
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /xijian/models:
+    get:
+      tags:
+      - xijian.models
+      operationId: listModels
+      summary: 列出所有模型（包含 config.toml 与动态添加的）
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: 模型列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  object:
+                    type: string
+                    enum: [list]
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AIModel'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+    post:
+      tags:
+      - xijian.models
+      operationId: createModel
+      summary: 创建新的模型配置（动态添加，不修改 config.toml）
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AIModelCreate'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIModel'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+  /xijian/models/{model_id}:
+    get:
+      tags:
+      - xijian.models
+      operationId: getModel
+      summary: 获取单个模型配置
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/ModelId'
+      responses:
+        '200':
+          description: 模型详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIModel'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags:
+      - xijian.models
+      operationId: patchModel
+      summary: 更新模型配置
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/ModelId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AIModelUpdate'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIModel'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    delete:
+      tags:
+      - xijian.models
+      operationId: deleteModel
+      summary: 删除动态模型配置
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/ModelId'
+      responses:
+        '204':
+          description: 删除成功
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /xijian/models/{model_id}/load:
+    post:
+      tags:
+      - xijian.models
+      operationId: loadModel
+      summary: 加载动态模型
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/ModelId'
+      responses:
+        '200':
+          description: 加载成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIModel'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /xijian/models/{model_id}/unload:
+    post:
+      tags:
+      - xijian.models
+      operationId: unloadModel
+      summary: 卸载动态模型
+      security:
+      - bearerAuth: []
+      parameters:
+      - $ref: '#/components/parameters/ModelId'
+      responses:
+        '200':
+          description: 卸载成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIModel'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
 components:
   securitySchemes:
     bearerAuth:
@@ -11909,6 +12181,13 @@ components:
       schema:
         type: string
       description: 游标（下一页 first_id）
+    BackendId:
+      name: backend_id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: 后端 ID
   responses:
     BadRequest:
       description: 请求参数错误
@@ -12926,6 +13205,197 @@ components:
             $ref: '#/components/schemas/ProtectedModule'
         has_more:
           type: boolean
+    AIBackend:
+      type: object
+      properties:
+        id:
+          type: string
+          description: 后端唯一标识符
+        object:
+          type: string
+          enum: [ai_backend]
+        name:
+          type: string
+          description: 后端显示名称
+        type:
+          type: string
+          enum: [openai, openai_compatible]
+          description: 后端类型
+        base_url:
+          type: string
+          format: uri
+          description: 后端 API 基础 URL
+        api_key:
+          type: string
+          description: API 密钥（仅返回掩码或为空）
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+          description: 额外请求头
+        is_default:
+          type: boolean
+          description: 是否为默认后端
+        created_at:
+          type: integer
+          description: 创建时间戳
+        updated_at:
+          type: integer
+          description: 更新时间戳
+    AIBackendCreate:
+      type: object
+      required:
+      - name
+      - type
+      - base_url
+      properties:
+        name:
+          type: string
+          description: 后端显示名称
+        type:
+          type: string
+          enum: [openai, openai_compatible]
+          description: 后端类型
+        base_url:
+          type: string
+          format: uri
+          description: 后端 API 基础 URL
+        api_key:
+          type: string
+          description: API 密钥
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+          description: 额外请求头
+        is_default:
+          type: boolean
+          default: false
+          description: 是否设为默认后端
+    AIBackendUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          description: 后端显示名称
+        type:
+          type: string
+          enum: [openai, openai_compatible]
+          description: 后端类型
+        base_url:
+          type: string
+          format: uri
+          description: 后端 API 基础 URL
+        api_key:
+          type: string
+          description: API 密钥
+        headers:
+          type: object
+          additionalProperties:
+            type: string
+          description: 额外请求头
+        is_default:
+          type: boolean
+          description: 是否设为默认后端
+    AIModel:
+      type: object
+      properties:
+        id:
+          type: string
+          description: 模型唯一标识符
+        object:
+          type: string
+          enum: [ai_model]
+        name:
+          type: string
+          description: 模型名称
+        backend_id:
+          type: string
+          description: 关联的后端 ID
+        filename:
+          type: string
+          description: 模型文件名（本地模型）
+        family:
+          type: string
+          description: 模型系列
+        size_b:
+          type: number
+          description: 模型大小（字节）
+        quant:
+          type: string
+          description: 量化格式
+        context_length:
+          type: integer
+          description: 上下文长度
+        min_ram_gb:
+          type: number
+          description: 最小内存需求（GB）
+        loaded:
+          type: boolean
+          description: 是否已加载
+        created_at:
+          type: integer
+          description: 创建时间戳
+        updated_at:
+          type: integer
+          description: 更新时间戳
+    AIModelCreate:
+      type: object
+      required:
+      - name
+      - backend_id
+      properties:
+        name:
+          type: string
+          description: 模型名称
+        backend_id:
+          type: string
+          description: 关联的后端 ID
+        filename:
+          type: string
+          description: 模型文件名（本地模型）
+        family:
+          type: string
+          description: 模型系列
+        size_b:
+          type: number
+          description: 模型大小（字节）
+        quant:
+          type: string
+          description: 量化格式
+        context_length:
+          type: integer
+          description: 上下文长度
+        min_ram_gb:
+          type: number
+          description: 最小内存需求（GB）
+    AIModelUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+          description: 模型名称
+        backend_id:
+          type: string
+          description: 关联的后端 ID
+        filename:
+          type: string
+          description: 模型文件名（本地模型）
+        family:
+          type: string
+          description: 模型系列
+        size_b:
+          type: number
+          description: 模型大小（字节）
+        quant:
+          type: string
+          description: 量化格式
+        context_length:
+          type: integer
+          description: 上下文长度
+        min_ram_gb:
+          type: number
+          description: 最小内存需求（GB）
   examples:
     characterProactiveMessage:
       summary: 角色主动消息

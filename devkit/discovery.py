@@ -24,7 +24,7 @@ _LOGGER = logging.getLogger("devkit.discovery")
 def _unified_tmp_dir() -> Path:
     env_dir = os.environ.get("XIJIAN_DATA_DIR")
     if env_dir:
-        return Path(env_dir).expanduser().parent / "tmp"
+        return Path(env_dir).expanduser() / "tmp"
     return Path.home() / "Library" / "Application Support" / "XiJian" / "tmp"
 
 

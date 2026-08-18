@@ -41,12 +41,11 @@ from pathlib import Path
 from typing import Any
 
 
-API_VERSION = "1.0.0"
+API_VERSION = "1.1.0"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 18500
 
-RATE_LIMIT_LIMIT_REQUESTS = 100000
-RATE_LIMIT_REMAINING_REQUESTS = 99999
+
 IDEMPOTENCY_TTL_SECONDS = 24 * 60 * 60
 DEFAULT_STREAM_FORMAT = "sse"
 
@@ -367,7 +366,6 @@ class FeaturesConfig:
     """
     seed_default_data: bool = False
     protection_module: bool = True
-    rate_limit: bool = False
     dev_test_emit: bool = False
 
 
@@ -601,7 +599,6 @@ def _build_config(
     features = FeaturesConfig(
         seed_default_data=_truthy(seed_default_value),
         protection_module=_truthy(features_data.get("protection_module", True)),
-        rate_limit=_truthy(features_data.get("rate_limit", False)),
         dev_test_emit=_truthy(features_data.get("dev_test_emit", False)),
     )
 
@@ -773,12 +770,29 @@ def token_file_path(pid: int | None = None, template: str | None = None) -> Path
     return default_token_file(pid)
 
 
+def is_dev_mode(config: Config | None = None) -> bool:
+    """Return True if dev mode is enabled.
+
+    Checks both the config.dev flag and the XIJIAN_DEV environment variable.
+    This is the single source of truth for dev-mode checks across the codebase.
+
+    返回 True 表示开发模式已启用。
+
+    同时检查 config.dev 标志和 XIJIAN_DEV 环境变量。这是整个代码库中
+    开发模式检查的单一真实来源。
+    """
+    import os
+    if os.environ.get("XIJIAN_DEV") == "1":
+        return True
+    if config is not None and getattr(config, "dev", False):
+        return True
+    return False
+
+
 __all__ = [
     "API_VERSION",
     "DEFAULT_HOST",
     "DEFAULT_PORT",
-    "RATE_LIMIT_LIMIT_REQUESTS",
-    "RATE_LIMIT_REMAINING_REQUESTS",
     "IDEMPOTENCY_TTL_SECONDS",
     "DEFAULT_STREAM_FORMAT",
     "ServerConfig",
@@ -793,4 +807,5 @@ __all__ = [
     "SnapshotsConfig",
     "Config",
     "token_file_path",
+    "is_dev_mode",
 ]

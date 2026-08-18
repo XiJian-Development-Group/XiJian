@@ -24,8 +24,6 @@ from xijian_api import auth
 from xijian_api.config import (
     API_VERSION,
     IDEMPOTENCY_TTL_SECONDS,
-    RATE_LIMIT_LIMIT_REQUESTS,
-    RATE_LIMIT_REMAINING_REQUESTS,
 )
 from xijian_api.errors import ApiError
 from xijian_api.utils.ids import gen_request_id, gen_trace_id
@@ -189,21 +187,6 @@ def _add_common_headers(response):
     trace_id = getattr(g, "trace_id", None)
     if trace_id:
         response.headers.setdefault("X-XiJian-Trace-Id", trace_id)
-    # Rate-limit headers — DESIGN §5: "local default 0 限流 but keep
-    # the headers".
-    # 速率限制标头 — DESIGN §5: "本地默认不限制但保留标头"。
-    response.headers.setdefault(
-        "X-RateLimit-Limit-Requests", str(RATE_LIMIT_LIMIT_REQUESTS)
-    )
-    response.headers.setdefault(
-        "X-RateLimit-Remaining-Requests", str(RATE_LIMIT_REMAINING_REQUESTS)
-    )
-    response.headers.setdefault(
-        "X-RateLimit-Limit-Tokens", str(RATE_LIMIT_LIMIT_REQUESTS)
-    )
-    response.headers.setdefault(
-        "X-RateLimit-Remaining-Tokens", str(RATE_LIMIT_REMAINING_REQUESTS)
-    )
     return response
 
 

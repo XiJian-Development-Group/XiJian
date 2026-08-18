@@ -14,7 +14,7 @@ def test_root_returns_server_identity(client, auth_headers):
     body = response.get_json()
     assert body["name"] == "xijian-api"
     assert body["status"] == "ok"
-    assert body["api_version"] == "1.0.0"
+    assert body["api_version"] == "1.1.0"
     assert "server_version" in body
 
 
@@ -25,7 +25,7 @@ def test_v1_returns_capabilities(client, auth_headers):
     response = client.get("/v1", headers=auth_headers)
     assert response.status_code == 200
     body = response.get_json()
-    assert body["api_version"] == "1.0.0"
+    assert body["api_version"] == "1.1.0"
     assert "server_version" in body
     caps = body["capabilities"]
     assert isinstance(caps, list)

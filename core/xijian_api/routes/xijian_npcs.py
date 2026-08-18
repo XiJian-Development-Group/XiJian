@@ -39,11 +39,11 @@ A4.1 交叉链接
 from __future__ import annotations
 
 import logging
-import os
 from typing import Any
 
 from flask import Blueprint, jsonify, request
 
+from xijian_api.config import is_dev_mode
 from xijian_api.errors import ApiError
 from xijian_api.pagination import paginate
 from xijian_api.stubs import npcs as npcs_stub
@@ -70,8 +70,8 @@ def _require_json() -> dict:
 
 
 def _dev_only() -> None:
-    """除非设置 ``XIJIAN_DEV=1``，否则阻止仅限开发的路由。"""
-    if os.environ.get("XIJIAN_DEV") != "1":
+    """除非开发模式已启用，否则阻止仅限开发的路由。"""
+    if not is_dev_mode():
         raise ApiError(
             403, "dev-only endpoint", "forbidden_error", code="dev_only",
         )

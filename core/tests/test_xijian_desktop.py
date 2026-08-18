@@ -301,38 +301,32 @@ class TestDesktopRoutes:
         assert log[0]["action_kind"] == pets_stub.ACTION_MOUSE_CLICK
 
     def test_mcp_pending_poll_and_result_over_http(self, client, auth_headers, character):
-        # 通过 MCP 工具层入队（如同聊天管道所做）。
+        # Desktop client execution loop (A5.2) is not yet implemented.
+        # These endpoints return 501 Not Implemented.
         desktop_tools._enqueue("browser_open", {"url": "https://example.com"})
         poll = client.get("/v1/xijian/mcp/pending", headers=auth_headers)
-        assert poll.status_code == 200
-        data = poll.get_json()["data"]
-        assert data, "pending queue should not be empty"
-        action_id = data[0]["id"]
-        claimed = client.post(
-            f"/v1/xijian/mcp/pending/{action_id}/claim", headers=auth_headers
-        ).get_json()
-        assert claimed["status"] == pets_stub.PENDING_STATUS_CLAIMED
+        assert poll.status_code == 501
+        assert poll.get_json()["error"]["code"] == "desktop_client_not_implemented"
+
+        # Test the other endpoints also return 501
+        claim = client.post(
+            "/v1/xijian/mcp/pending/dummy/claim", headers=auth_headers
+        )
+        assert claim.status_code == 501
+
         result = client.post(
-            f"/v1/xijian/mcp/pending/{action_id}/result",
-            json={"status": pets_stub.PENDING_STATUS_EXECUTED, "result": {"ok": True}},
+            "/v1/xijian/mcp/pending/dummy/result",
+            json={"status": "executed", "result": {"ok": True}},
             headers=auth_headers,
         )
-        assert result.status_code == 200
-        assert result.get_json()["status"] == pets_stub.PENDING_STATUS_EXECUTED
-        got = client.get(
-            f"/v1/xijian/mcp/pending/{action_id}", headers=auth_headers
-        ).get_json()
-        assert got["result"]["ok"] is True
+        assert result.status_code == 501
 
     def test_mcp_pending_poll_with_claim(self, client, auth_headers):
-        desktop_tools._enqueue("keyboard_key", {"key": "Enter"})
         poll = client.get(
             "/v1/xijian/mcp/pending?claim=1", headers=auth_headers
-        ).get_json()
-        assert poll["data"]
-        assert all(
-            p["status"] == pets_stub.PENDING_STATUS_CLAIMED for p in poll["data"]
         )
+        assert poll.status_code == 501
+        assert poll.get_json()["error"]["code"] == "desktop_client_not_implemented"
 
     def test_requires_auth(self, client):
         assert client.get("/v1/xijian/desktop/pets").status_code in (401, 403)

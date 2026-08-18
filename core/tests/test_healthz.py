@@ -50,4 +50,4 @@ def test_healthz_stamps_api_version_header(client):
     (标准 ``X-XiJian-API-Version`` 头部在响应中设置。)
     """
     response = client.get("/healthz")
-    assert response.headers.get("X-XiJian-API-Version") == "1.0.0"
+    assert response.headers.get("X-XiJian-API-Version") == "1.1.0"

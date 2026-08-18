@@ -330,74 +330,47 @@ def list_pending_actions():
 
     ``?claim=1`` 顺手认领返回的每一条（pending → claimed），减少
     一次往返。``?status=`` 过滤，``?limit=`` 限制条数。
+
+    ⚠️ NOT IMPLEMENTED: The desktop client execution loop (A5.2) is not yet
+    implemented. This endpoint returns 501 until the desktop client is available.
     """
-    args = request.args
-    try:
-        limit = int(args.get("limit", 50))
-    except ValueError:
-        limit = 50
-    status = args.get("status")
-    claim = args.get("claim", "0").lower() in ("1", "true")
-    items = pets_stub.list_pending(status=status, limit=limit)
-    if claim:
-        for item in items:
-            if item.get("status") == pets_stub.PENDING_STATUS_PENDING:
-                pets_stub.claim_action(item["id"])
-    return jsonify({
-        "object": "list",
-        "data": items,
-        "count": len(items),
-    })
+    raise ApiError(
+        501,
+        "Desktop client execution loop (A5.2) not yet implemented. "
+        "This endpoint is reserved for future desktop client integration.",
+        "not_implemented",
+        code="desktop_client_not_implemented",
+    )
 
 
 @bp.get("/v1/xijian/mcp/pending/<action_id>")
 def get_pending_action(action_id: str):
-    record = pets_stub.get_pending(action_id)
-    if record is None:
-        raise ApiError(
-            404, "pending action not found", "not_found_error",
-            code="pending_action_not_found",
-        )
-    return jsonify(record)
+    raise ApiError(
+        501,
+        "Desktop client execution loop (A5.2) not yet implemented.",
+        "not_implemented",
+        code="desktop_client_not_implemented",
+    )
 
 
 @bp.post("/v1/xijian/mcp/pending/<action_id>/claim")
 def claim_pending_action(action_id: str):
-    try:
-        record = pets_stub.claim_action(action_id)
-    except pets_stub.DesktopPetError as exc:
-        raise _error(exc)
-    return jsonify(record)
+    raise ApiError(
+        501,
+        "Desktop client execution loop (A5.2) not yet implemented.",
+        "not_implemented",
+        code="desktop_client_not_implemented",
+    )
 
 
 @bp.post("/v1/xijian/mcp/pending/<action_id>/result")
 def report_pending_result(action_id: str):
-    """Write back the execution result.
-
-    Body: ``{"status": "executed"|"failed", "result": {...},
-    "pet_id": optional}``。AC-4 gate（壁纸模式禁写）在 stub 层强制。
-    """
-    body = _require_json()
-    status = body.get("status")
-    if status not in (pets_stub.PENDING_STATUS_EXECUTED, pets_stub.PENDING_STATUS_FAILED):
-        raise ApiError(
-            400,
-            f"`status` must be one of "
-            f"({pets_stub.PENDING_STATUS_EXECUTED!r}, "
-            f"{pets_stub.PENDING_STATUS_FAILED!r})",
-            "invalid_request_error",
-            code="invalid_result_status", param="status",
-        )
-    try:
-        record = pets_stub.report_result(
-            action_id,
-            status,
-            body.get("result") or {},
-            pet_id=body.get("pet_id"),
-        )
-    except pets_stub.DesktopPetError as exc:
-        raise _error(exc)
-    return jsonify(record)
+    raise ApiError(
+        501,
+        "Desktop client execution loop (A5.2) not yet implemented.",
+        "not_implemented",
+        code="desktop_client_not_implemented",
+    )
 
 
 __all__ = ["bp"]

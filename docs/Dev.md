@@ -398,7 +398,7 @@ class CharacterService:
 
 - **进程管理**：使用 `Process` 启动 Python API 子进程，通过 `Pipe` 捕获端口写入 stdout / 临时文件
 - **网络**：标准 `URLSession` + WebSocket 客户端
-- **渲染**：VRM 1.0 (GLTF) + Metal 渲染管线（Live2D 已移除，统一采用 VRM，详见功能清单 v2.1 决议）
+- **渲染**：VRM 1.0 (GLTF) + Metal 渲染管线（统一采用 VRM，详见功能清单 v2.1 决议）
 - **平台特性**：
   - TouchBar：`NSTouchBar`
   - 自建「灵动岛」：`NSScreen` 顶部区域 + 自绘，**注意与其他应用冲突**
@@ -411,7 +411,7 @@ class CharacterService:
 - **进程管理**：`subprocess.Popen` 启动 Python API 子进程
 - **Pywebview**：使用系统 WebView（Win 上 Edge WebView2 / Linux 上 GTK WebKit）
 - **前端**：HTML / CSS / JS
-  - 渲染：VRM 1.0 (GLTF) + three.js（Live2D 已移除，统一采用 VRM）
+    - 渲染：VRM 1.0 (GLTF) + three.js（统一采用 VRM）
 - **平台特性**：
   - 桌宠：Pywebview 的 frameless 模式 + 透明背景 ⚠️ **开发中**
   - 屏幕观察 / 操控：mss（截屏）+ pyautogui / xdotool（操控）⚠️ **开发中**
@@ -723,6 +723,18 @@ A：所有 NSFW 内容必须在资源配置中明确标注，主程序默认隐�
 
 **Q：Pywebview 在不同 Linux 桌面环境上是否一致？**
 A：不一致。打包时需明确目标环境（GNOME / KDE），并在文档中标注已知差异。
+
+---
+
+## 17. DevKit 自动更新器安全声明
+
+> **⚠️ 必读：DevKit 自动更新器安全声明**
+>
+> **故意禁用 TLS 证书验证**：由于中国大陆用户必须通过代理/加速器访问 GitHub，代理的 TLS 拦截会导致证书验证失败。为保证更新检查/下载基本可用，更新器在所有网络请求中禁用 TLS 验证（`ssl.CERT_NONE`）。
+>
+> **无代码签名 / 无校验和验证**：本项目为完全开源免费软件，开发组不持有、也不打算获取代码签名证书。因此无法提供代码签名验证（Apple notarization、Windows Authenticode、Linux GPG 等）。考虑到分发渠道不可控、GitHub Releases 自身可能被篡改、无签名基础设施下 SHA 校验和只能提供虚假安全感，**故意不实现**下载后的校验和/签名验证。
+>
+> **风险自担**：更新检查/下载流程**不提供传输层机密性/完整性保证**。任何能劫持用户到 GitHub 连接的攻击者（包括但不限于代理运营商、ISP、DNS 劫持者）均可注入任意更新包，导致以当前用户权限执行恶意代码。**使用自动更新功能即表示您知晓并接受上述风险**。如需更高安全性，建议用户**手动**从 GitHub Releases 页面下载并验证，或使用操作系统自带的包管理器（如 Homebrew、Scoop、Flatpak 等）分发。
 
 ---
 

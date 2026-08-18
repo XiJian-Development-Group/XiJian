@@ -40,6 +40,7 @@ import os
 
 from flask import Blueprint, jsonify, request
 
+from xijian_api.config import is_dev_mode
 from xijian_api.errors import ApiError
 from xijian_api.pagination import paginate
 from xijian_api.stubs import plot_runtime as plot_stub
@@ -294,8 +295,8 @@ def list_plot_runtime_edges(runtime_id: str):
 @bp.post("/v1/xijian/plots/scheduler/tick")
 def plot_scheduler_tick():
     """手动触发一次剧情触发器评估（仅开发环境）。"""
-    if os.environ.get("XIJIAN_DEV") != "1":
-        raise ApiError(404, "not found", "not_found_error", code="route_not_found")
+    if not is_dev_mode():
+        raise ApiError(403, "dev-only endpoint", "forbidden_error", code="dev_only")
 
     payload = request.get_json(silent=True) or {}
     world_id = payload.get("world_id")

@@ -52,6 +52,7 @@ from devkit import (
     _cumulative_size,
     _smtp_send,
     _validate_submission,
+    _API_VERSION,
     archive_name,
     build_email_message,
     build_manifest,
@@ -759,12 +760,18 @@ class TestDevKitApiMeta:
         resp = api.whoami()
         assert resp["ok"] is True
         d = resp["data"]
-        assert d["smtp_host"] == DEV_SUBMIT_SMTP_HOST
-        assert d["smtp_port"] == DEV_SUBMIT_SMTP_PORT
-        assert d["recipient"] == DEV_SUBMIT_RECIPIENT
+        # 敏感字段不再返回
+        assert "smtp_host" not in d
+        assert "smtp_port" not in d
+        assert "smtp_user" not in d
+        assert "recipient" not in d
+        assert d["smtp_use_tls"] == DEV_SUBMIT_SMTP_USE_TLS
         assert d["target_kinds"] == list(TARGET_KINDS)
         assert d["max_attachment_bytes"] == DEV_SUBMIT_MAX_ATTACHMENT_BYTES
         assert d["max_attachment_mb"] == DEV_SUBMIT_MAX_ATTACHMENT_BYTES // 1_000_000
+        assert d["api_version"] == _API_VERSION
+        assert d["cooldown_seconds"] == DEV_SUBMIT_COOLDOWN_SECONDS
+        assert d["preferred_archive_format"] == ARCHIVE_FORMAT_7Z
 
     def test_ping(self):
         api = DevKitApi()

@@ -22,8 +22,11 @@ import zipfile
 from pathlib import Path
 from typing import Any, Generator
 
-import py7zr
 import pytest
+
+# py7zr is only needed for 7z archive tests; import lazily to avoid
+# collection failure when the package is not installed.
+# py7zr 仅在 7z 归档测试中需要；延迟导入避免包未安装时收集失败。
 
 from xijian_api.stubs import packs as packs_stub
 from xijian_api.stubs import state as stubs_state
@@ -115,6 +118,7 @@ def _sevenz_dir(src: Path, dest: Path) -> None:
 
     将目录打包为 7z，manifest.json 位于归档根级。
     """
+    import py7zr
     with py7zr.SevenZipFile(dest, "w") as zf:
         for f in sorted(src.rglob("*")):
             if f.is_file():
@@ -330,6 +334,7 @@ def test_7z_symlink_entry_rejected(tmp_path):
     _os.symlink("target.txt", payload / "evil_link")
 
     evil = tmp_path / "evil.7z"
+    import py7zr
     with py7zr.SevenZipFile(evil, "w") as zf:
         zf.writeall(payload, "payload")
 

@@ -162,6 +162,9 @@ _DEV_SUBMIT_LOCAL_DIR: str | None = os.environ.get("XIJIAN_DEV_LOCAL_DIR")
 # 常量
 # ---------------------------------------------------------------------------
 
+#: DevKit API 版本（用于 whoami/get_status 返回）。
+_API_VERSION = "1.0.0"
+
 #: 我们写入 manifest 的归档格式标签。让接收方一眼就能
 #: 识别回退 zip 的提交。
 ARCHIVE_FORMAT_7Z = "7z-solid"
@@ -1100,6 +1103,7 @@ __all__ = [
     "TARGET_KINDS",
     "ARCHIVE_FORMAT_7Z",
     "ARCHIVE_FORMAT_ZIP",
+    "_API_VERSION",
     # pure helpers
     "archive_name",
     "build_manifest",
