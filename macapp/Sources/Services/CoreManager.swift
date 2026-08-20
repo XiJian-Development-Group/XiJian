@@ -139,7 +139,13 @@ public final class CoreManager {
     }
 
     /// 应用数据根目录：~/Library/Application Support/XiJian
+    /// 支持通过 XIJIAN_DATA_DIR 环境变量覆盖（与 Core 配置一致）。
     var appSupportDirectory: URL {
+        if let envDir = ProcessInfo.processInfo.environment["XIJIAN_DATA_DIR"],
+           !envDir.isEmpty {
+            let expanded = (envDir as NSString).expandingTildeInPath
+            return URL(fileURLWithPath: expanded)
+        }
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
             ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support")
         return base.appendingPathComponent("XiJian", isDirectory: true)
@@ -250,6 +256,7 @@ public final class CoreManager {
 
         // 预置稳定 token：Core 以生产模式启动（不再自动降级 dev）。
         // 文件固定名 tmp/xijian.token，只在缺失时生成，避免每次启动换 token。
+        // 同时迁移旧版 pid-based token 文件（xijian-<pid>.token）到固定文件。
         guard let tokenFile = provisionTokenFile() else {
             state = .error(loc("无法创建 token 文件（%@）。请检查 tmp 目录权限。", runtimeTmpDirectory.path))
             return
@@ -279,13 +286,9 @@ public final class CoreManager {
         do {
             try proc.run()
             pid = proc.processIdentifier
-            // S1：立即预置 token 文件（tmp/xijian-<pid>.token，0600）。
-            // Core 以生产模式启动，缺少 token 文件会直接报错退出（不再静默降级），
-            // 因此必须在 Core 的 setup_token 执行前把文件写进去。
-            // proc.run() 返回后 Python 解释器仍在初始化（数百毫秒级），
-            // 这里同步写文件（毫秒级），竞态窗口极小；即使偶发失败，
-            // Core 会明确报错退出，macapp 也能在日志里看到原因，不会静默降级。
-            provisionTokenFile(pid: proc.processIdentifier)
+            // token 文件已在启动前通过 provisionTokenFile() 创建（固定名 xijian.token），
+            // 并通过 XIJIAN_TOKEN_FILE 环境变量传递给 Core 进程。
+            // 无需再写入 pid-based token 文件。
         } catch {
             process = nil
             pid = nil
@@ -576,22 +579,6 @@ public final class CoreManager {
         return false
     }
 
-    /// 预置 token 文件：tmp/xijian-<pid>.token（0600）。
-    /// token 值固定（首次生成后存 Keychain，后续复用），避免每次启动换 token
-    /// 导致旧客户端（已缓存的 Bearer）失联。
-    private func provisionTokenFile(pid: Int32) {
-        let token = Self.provisionedLocalToken()
-        let dir = runtimeTmpDirectory
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        let file = dir.appendingPathComponent("xijian-\(pid).token")
-        do {
-            try Data(token.utf8).write(to: file, options: .atomic)
-            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
-        } catch {
-            appendLog(loc("[XiJian] 预置 token 文件失败：%@（Core 可能因此拒绝启动）", error.localizedDescription))
-        }
-    }
-
     /// 读取/生成固定本机 token（Keychain 持久化；Keychain 不可用时每次重新生成）。
     nonisolated static func provisionedLocalToken() -> String {
         let account = "xijian.core.localToken"
@@ -612,11 +599,14 @@ public final class CoreManager {
 
     /// 清理本机 tmp 目录下残留的 token/port 发现文件（S3）：
     /// 匹配 xijian-<pid>.token / xijian-<pid>.port 且 pid 已不在运行的文件。
+    /// 固定名文件 xijian.token / xijian.port 不清理。
     /// 启动时调用一次，避免多次启动后 tmp 累积旧文件。
     private func cleanupStaleDiscoveryFiles() {
         let dir = runtimeTmpDirectory
         guard let files = try? FileManager.default.contentsOfDirectory(atPath: dir.path) else { return }
         for name in files {
+            // 排除固定名文件
+            if name == "xijian.token" || name == "xijian.port" { continue }
             guard name.hasPrefix("xijian-"),
                   name.hasSuffix(".token") || name.hasSuffix(".port") else { continue }
             let pidPart = name
@@ -656,19 +646,13 @@ public final class CoreManager {
     }
 
     /// 等待 tmp/xijian.token（macapp 预置的稳定 token 文件）出现并读取。
-    /// 兼容旧逻辑：若设置了固定文件则读固定文件，否则回退 pid 派生文件。
+    /// 仅读取固定名文件；pid-based token 文件已废弃。
     private func waitForToken(pid: Int32, id: Int) async -> String? {
         let tokenFile = runtimeTmpDirectory.appendingPathComponent("xijian.token")
-        let fallbackFile = runtimeTmpDirectory.appendingPathComponent("xijian-\(pid).token")
         let deadline = Date().addingTimeInterval(tokenTimeout)
         while Date() < deadline {
             if id != operationID { return nil }
             if let data = try? Data(contentsOf: tokenFile) {
-                let value = String(data: data, encoding: .utf8)?
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                if let value, !value.isEmpty { return value }
-            }
-            if let data = try? Data(contentsOf: fallbackFile) {
                 let value = String(data: data, encoding: .utf8)?
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 if let value, !value.isEmpty { return value }
@@ -679,6 +663,8 @@ public final class CoreManager {
     }
 
     /// 生成并写入稳定 token 文件（tmp/xijian.token，0600）。文件已存在时直接复用。
+    /// 迁移逻辑：若固定文件不存在，尝试读取旧版 pid-based token 文件（xijian-<pid>.token）
+    /// 并迁移到固定文件，避免用户每次升级都需重新登录。
     private func provisionTokenFile() -> URL? {
         let dir = runtimeTmpDirectory
         do {
@@ -690,7 +676,18 @@ public final class CoreManager {
         if FileManager.default.fileExists(atPath: file.path) {
             return file
         }
-        // 64 个十六进制字符（32 字节），与 Core dev 分支的 secrets.token_hex(32) 同长度。
+        // 迁移：查找旧版 pid-based token 文件
+        if let migratedToken = migrateLegacyTokenFile(in: dir) {
+            do {
+                try Data(migratedToken.utf8).write(to: file, options: .atomic)
+                try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
+                appendLog(loc("[XiJian] 已迁移旧版 token 文件到固定位置"))
+                return file
+            } catch {
+                appendLog(loc("[XiJian] 迁移 token 文件失败：%@", error.localizedDescription))
+            }
+        }
+        // 无旧文件：生成新 token
         let token = (0..<32).map { _ in String(format: "%02x", Int.random(in: 0...255)) }.joined()
         do {
             try Data(token.utf8).write(to: file, options: .atomic)
@@ -699,6 +696,31 @@ public final class CoreManager {
         } catch {
             return nil
         }
+    }
+
+    /// 尝试从旧版 pid-based token 文件迁移 token。
+    /// 返回迁移得到的 token 字符串，若无可用旧文件则返回 nil。
+    private func migrateLegacyTokenFile(in dir: URL) -> String? {
+        guard let files = try? FileManager.default.contentsOfDirectory(atPath: dir.path) else { return nil }
+        for name in files {
+            guard name.hasPrefix("xijian-"), name.hasSuffix(".token") else { continue }
+            // 排除固定名文件
+            if name == "xijian.token" { continue }
+            let pidPart = name
+                .replacingOccurrences(of: "xijian-", with: "")
+                .replacingOccurrences(of: ".token", with: "")
+            guard let _ = Int32(pidPart), _ > 0 else { continue }
+            let oldFile = dir.appendingPathComponent(name)
+            if let data = try? Data(contentsOf: oldFile),
+               let token = String(data: data, encoding: .utf8)?
+                   .trimmingCharacters(in: .whitespacesAndNewlines),
+               !token.isEmpty {
+                // 清理旧文件
+                try? FileManager.default.removeItem(at: oldFile)
+                return token
+            }
+        }
+        return nil
     }
 
     /// 读取进程输出（stdout/stderr 合并），维护环形日志缓冲
@@ -851,5 +873,131 @@ public final class CoreManager {
         logFileExists = false
         logFileLoadError = nil
         state = .stopped
+    }
+
+    // MARK: - Config.toml 读写（供 CoreConfigEditorView 使用）
+
+    /// 当前 config.toml 的关键字段快照（用于编辑器回显）
+    struct ConfigSnapshot {
+        var host: String = "127.0.0.1"
+        var port: Int = 18500
+        var devMode: Bool = false
+        var keepTokenFile: Bool = false
+        var driver: String = "auto"
+        var baseDir: String = "~/Library/Application Support/XiJian/Core"
+        var modelsSubdir: String = "models"
+        var seedDefaultData: Bool = false
+        var protectionModule: Bool = true
+        var rateLimit: Bool = false
+        var overloadMonitor: Bool = true
+        var overloadTier: String = "medium"
+    }
+
+    /// 读取 config.toml 并返回关键字段（解析失败时返回默认值）
+    var currentConfig: ConfigSnapshot {
+        var snap = ConfigSnapshot()
+        guard let coreDir = coreDirectory,
+              let configURL = URL(string: "file://\(coreDir.path)").appendingPathComponent("config.toml") as URL?,
+              FileManager.default.fileExists(atPath: configURL.path),
+              let content = try? String(contentsOf: configURL, encoding: .utf8) else {
+            return snap
+        }
+        // Simple TOML parsing for known keys
+        for line in content.components(separatedBy: .newlines) {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.hasPrefix("#") || trimmed.isEmpty { continue }
+            if let eq = trimmed.firstIndex(of: "=") {
+                let key = trimmed[..<eq].trimmingCharacters(in: .whitespacesAndNewlines)
+                let val = trimmed[trimmed.index(after: eq)...].trimmingCharacters(in: .whitespacesAndNewlines)
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "\"\'"))
+                switch key {
+                case "host": snap.host = val
+                case "port": snap.port = Int(val) ?? 18500
+                case "dev": snap.devMode = ["true","1","yes","on"].contains(val.lowercased())
+                case "keep_token_file": snap.keepTokenFile = ["true","1","yes","on"].contains(val.lowercased())
+                case "driver": snap.driver = val
+                case "base_dir": snap.baseDir = val
+                case "models_subdir": snap.modelsSubdir = val
+                case "seed_default_data": snap.seedDefaultData = ["true","1","yes","on"].contains(val.lowercased())
+                case "protection_module": snap.protectionModule = ["true","1","yes","on"].contains(val.lowercased())
+                case "rate_limit": snap.rateLimit = ["true","1","yes","on"].contains(val.lowercased())
+                case "monitor": snap.overloadMonitor = ["true","1","yes","on"].contains(val.lowercased())
+                case "tier": snap.overloadTier = val
+                default: break
+                }
+            }
+        }
+        return snap
+    }
+
+    /// 将关键字段写回 config.toml（保留其它字段、注释、格式）
+    func updateConfig(
+        host: String,
+        port: Int,
+        devMode: Bool,
+        keepTokenFile: Bool,
+        driver: String,
+        baseDir: String,
+        modelsSubdir: String,
+        seedDefaultData: Bool,
+        protectionModule: Bool,
+        rateLimit: Bool,
+        overloadMonitor: Bool,
+        overloadTier: String
+    ) throws {
+        guard let coreDir = coreDirectory else {
+            throw NSError(domain: "CoreManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "Core directory not found"])
+        }
+        let configURL = coreDir.appendingPathComponent("config.toml")
+        var content: String
+        if FileManager.default.fileExists(atPath: configURL.path) {
+            content = try String(contentsOf: configURL, encoding: .utf8)
+        } else {
+            content = ""
+        }
+        var lines = content.components(separatedBy: .newlines)
+        let updates: [String: String] = [
+            "host": host,
+            "port": String(port),
+            "dev": devMode ? "true" : "false",
+            "keep_token_file": keepTokenFile ? "true" : "false",
+            "driver": driver,
+            "base_dir": baseDir,
+            "models_subdir": modelsSubdir,
+            "seed_default_data": seedDefaultData ? "true" : "false",
+            "protection_module": protectionModule ? "true" : "false",
+            "rate_limit": rateLimit ? "true" : "false",
+            "monitor": overloadMonitor ? "true" : "false",
+            "tier": overloadTier,
+        ]
+        // Update existing keys
+        for i in 0..<lines.count {
+            let trimmed = lines[i].trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.hasPrefix("#") || trimmed.isEmpty { continue }
+            if let eq = trimmed.firstIndex(of: "=") {
+                let key = trimmed[..<eq].trimmingCharacters(in: .whitespacesAndNewlines)
+                if let newVal = updates[key] {
+                    // Preserve leading whitespace and inline comment
+                    let leading = lines[i].prefix { $0 == " " || $0 == "\t" }
+                    var comment = ""
+                    if let hashIdx = trimmed.firstIndex(of: "#") {
+                        comment = " " + String(trimmed[hashIdx...])
+                    }
+                    lines[i] = leading + key + " = \"" + newVal + "\"" + comment
+                    updates.removeValue(forKey: key)
+                }
+            }
+        }
+        // Append missing keys under appropriate sections
+        if !updates.isEmpty {
+            // Simple strategy: append at end
+            lines.append("")
+            lines.append("# Added by CoreConfigEditorView")
+            for (key, val) in updates {
+                lines.append("\(key) = \"\(val)\"")
+            }
+        }
+        let newContent = lines.joined(separator: "\n")
+        try newContent.write(to: configURL, atomically: true, encoding: .utf8)
     }
 }

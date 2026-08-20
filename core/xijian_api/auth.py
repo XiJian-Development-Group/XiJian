@@ -85,7 +85,7 @@ def constant_time_eq(a: str, b: str) -> bool:
         return False
 
 
-def setup_token(config: Config, *, pid: int | None = None) -> str:
+def setup_token(config: Config) -> str:
     """Initialise the in-memory token from disk (or generate one).
 
     从磁盘初始化内存中的令牌（或生成一个）。
@@ -99,9 +99,6 @@ def setup_token(config: Config, *, pid: int | None = None) -> str:
     config:
         The :class:`xijian_api.config.Config` instance.
         :class:`xijian_api.config.Config` 实例。
-    pid:
-        Override the PID used to locate the token file (used by tests).
-        覆盖用于定位令牌文件的 PID（供测试使用）。
     """
     global _TOKEN
     if _TOKEN is not None:
@@ -113,7 +110,7 @@ def setup_token(config: Config, *, pid: int | None = None) -> str:
         _TOKEN = "test-token-do-not-use-in-prod"
         return _TOKEN
 
-    path = token_file_path(pid)
+    path = token_file_path()
     keep = config.keep_token_file
 
     if path.exists():

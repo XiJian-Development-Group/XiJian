@@ -12,6 +12,8 @@ dependencies = [
   # 资源包系统：7z 固实归档读写（B 节）。zip 用标准库 zipfile 兜底。
   # Resource packs: 7z solid archive I/O (§B).  zip falls back to stdlib zipfile.
   "py7zr>=0.21",
+  # TOML 写入支持（模型加载状态持久化）
+  "tomli-w>=1.0",
 ]
 
 [project.optional-dependencies]

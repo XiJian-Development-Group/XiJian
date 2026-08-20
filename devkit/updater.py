@@ -2,19 +2,29 @@
 
 ⚠️ 安全声明（必读）
 =======================
-**本更新器故意禁用 TLS 证书验证**，且**不实现签名校验或 SHA 校验和验证**。
+**默认模式（兼容模式）**：故意禁用 TLS 证书验证（``ssl.CERT_NONE``），不实现签名校验或 SHA 校验和验证。
 
 原因与风险：
-1. **中国大陆网络环境**：绝大多数中国用户无法直接访问 GitHub，必须通过加速器 / 代理。这些代理常采用 TLS 拦截（中间人），会导致标准 TLS 验证失败（``CERTIFICATE_VERIFY_FAILED``），从而无法完成更新检查与下载。为保证基本可用性，本更新器在所有网络请求中使用 ``ssl.CERT_NONE``。
+1. **中国大陆网络环境**：绝大多数中国用户无法直接访问 GitHub，必须通过加速器 / 代理。这些代理常采用 TLS 拦截（中间人），会导致标准 TLS 验证失败（``CERTIFICATE_VERIFY_FAILED``），从而无法完成更新检查与下载。为保证基本可用性，默认模式在所有网络请求中禁用 TLS 证书验证。
 
 2. **开源软件无签名能力**：本项目为完全开源免费软件，开发组**不持有、也不打算获取**任何代码签名证书或分发签名基础设施。因此无法提供代码签名验证（如 Apple 要求的 notarization、Windows Authenticode、Linux GPG 签名等）。
 
-3. **校验和验证已被有意为之省略**：考虑到（a）开源项目的分发渠道不可控，（b）GitHub Releases 自身可能被篡改，（c）无签名基础设施下 SHA 校验和只能提供虚假的安全感，我们决定**不实现**下载后的校验和验证。
+3. **校验和验证在默认模式下省略**：考虑到（a）开源项目的分发渠道不可控，（b）GitHub Releases 自身可能被篡改，（c）无签名基础设施下 SHA 校验和只能提供虚假的安全感，默认模式**不实现**下载后的校验和验证。
 
-**后果**：
+**后果（默认模式）**：
 - 更新检查 / 下载流程**不提供传输层机密性/完整性保证**。任何能劫持用户到 GitHub 连接的攻击者（包括但不限于代理运营商、ISP、中间网络设备、DNS 劫持者）均可注入任意更新包，导致本地以当前用户权限执行恶意代码。
-- 本更新器**仅适用于受信网络环境**，或由用户自行评估风险后使用。在中国大陆必须使用代理/加速器的用户，**请务必理解上述风险并自行承担**。
-- 如需更高安全性，建议用户**手动**从 GitHub Releases 页面下载并验证（如可用），或使用操作系统自带的包管理器（如 Homebrew、Scoop、Flatpak 等）分发。
+- 本更新器默认模式**仅适用于受信网络环境**，或由用户自行评估风险后使用。在中国大陆必须使用代理/加速器的用户，**请务必理解上述风险并自行承担**。
+
+---
+**安全模式（可选，XIJIAN_DEVKIT_VERIFY_TLS=1）**：
+设置环境变量 ``XIJIAN_DEVKIT_VERIFY_TLS=1`` 可启用安全模式：
+- 启用标准 TLS 证书验证（使用系统 CA 信任库，验证主机名）
+- 下载完成后自动尝试获取并验证 SHA256 校验和（从 ``.sha256`` 文件或 ``sha256sum.txt``）
+- 校验失败将删除下载文件并返回错误
+
+**注意**：安全模式在中国大陆代理环境下可能无法工作（TLS 拦截导致证书验证失败）。仅在可直连 GitHub 或使用不拦截 TLS 的代理时建议启用。
+
+如需最高安全性，建议用户**手动**从 GitHub Releases 页面下载并验证（如可用），或使用操作系统自带的包管理器（如 Homebrew、Scoop、Flatpak 等）分发。
 
 **本声明亦体现在项目文档（README.md、Dev.md、website）中**。用户在启用自动更新前应当阅读并确认知晓风险。
 
@@ -63,19 +73,29 @@ _USER_AGENT = "XiJian-DevKit-Updater"
 #: 更新检查 / 下载的网络超时（秒）。
 _TIMEOUT = 20
 
-#: ⚠️ 故意禁用 TLS 证书验证 —— 参见模块顶部「安全声明」。
-#: 中国大陆用户几乎总是通过加速器 / 代理访问 GitHub，其 TLS 拦截
-#: 会破坏证书验证（``CERTIFICATE_VERIFY_FAILED``）。由于无签名基础设施
-#: 且不实现校验和验证，我们刻意跳过 TLS 证书验证，使更新检查 / 下载
-#: 能通过这些代理正常工作。**此设计会降低传输层安全性，详见模块文档。**
-_SSL_CONTEXT = ssl.create_default_context()
-_SSL_CONTEXT.check_hostname = False
-_SSL_CONTEXT.verify_mode = ssl.CERT_NONE
+#: SSL 上下文获取函数 —— 支持安全模式（启用 TLS 验证）和兼容模式（禁用）。
+#: 安全模式由环境变量 ``XIJIAN_DEVKIT_VERIFY_TLS=1`` 启用。
+#: 兼容模式（默认）禁用证书验证，以适应中国大陆代理环境。
+def _get_ssl_context() -> ssl.SSLContext:
+    """Return SSL context based on security mode.
+
+    - 安全模式 (XIJIAN_DEVKIT_VERIFY_TLS=1): 使用系统默认 CA 信任库，验证主机名。
+    - 兼容模式 (默认): 禁用证书验证，允许通过 TLS 拦截代理。
+
+    See module docstring for security implications.
+    """
+    if os.environ.get("XIJIAN_DEVKIT_VERIFY_TLS") == "1":
+        return ssl.create_default_context()  # 默认验证
+    # 兼容模式：禁用验证（对代理友好）
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    return ctx
 
 
 def _urlopen(req: "urllib.request.Request"):
-    """以禁用 TLS 验证的方式打开 URL（对代理友好）。"""
-    return urllib.request.urlopen(req, timeout=_TIMEOUT, context=_SSL_CONTEXT)
+    """打开 URL，根据安全模式选择 SSL 上下文。"""
+    return urllib.request.urlopen(req, timeout=_TIMEOUT, context=_get_ssl_context())
 
 
 # ---------------------------------------------------------------------------
@@ -291,6 +311,55 @@ def check_for_update(
 # ---------------------------------------------------------------------------
 
 
+def _fetch_sha256(asset_url: str, asset_name: str, opener: Callable[[urllib.request.Request], Any]) -> str | None:
+    """尝试从 GitHub Releases 获取 SHA256 校验和。
+
+    查找同名资产的 .sha256 文件或 sha256sum.txt。
+    返回十六进制字符串或 None（未找到/失败）。
+    """
+    # 尝试 .sha256 后缀文件
+    sha_url = asset_url + ".sha256"
+    req = urllib.request.Request(sha_url, headers={"User-Agent": _USER_AGENT})
+    try:
+        with opener(req) as resp:
+            content = resp.read().decode("utf-8").strip()
+            # 格式: "sha256_hash  filename" 或仅 hash
+            parts = content.split()
+            if parts:
+                return parts[0].lower()
+    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError, ValueError):
+        pass
+
+    # 尝试 sha256sum.txt（常见于同一 release 下的所有文件）
+    base_url = asset_url.rsplit("/", 1)[0] + "/sha256sum.txt"
+    req = urllib.request.Request(base_url, headers={"User-Agent": _USER_AGENT})
+    try:
+        with opener(req) as resp:
+            content = resp.read().decode("utf-8")
+            for line in content.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                parts = line.split()
+                if len(parts) >= 2 and parts[1].endswith(asset_name):
+                    return parts[0].lower()
+    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError, ValueError):
+        pass
+
+    return None
+
+
+def _verify_sha256(filepath: pathlib.Path, expected: str) -> bool:
+    """验证文件的 SHA256 校验和。"""
+    import hashlib
+    h = hashlib.sha256()
+    with open(filepath, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    actual = h.hexdigest().lower()
+    return actual == expected
+
+
 def download_update(
     asset_url: str,
     asset_name: str,
@@ -302,6 +371,9 @@ def download_update(
 
     提供时，会周期性调用 ``progress_cb(downloaded_bytes, total_bytes)``。
     返回 ``{"path": str, "size": int}`` 或 ``{"error": str}``。
+
+    若启用安全模式 (XIJIAN_DEVKIT_VERIFY_TLS=1) 且能获取到 SHA256 校验和，
+    将在下载完成后自动验证；验证失败则删除文件并返回错误。
     """
     if not asset_url or not asset_name:
         return {"error": "缺少下载地址或文件名"}
@@ -310,8 +382,8 @@ def download_update(
     dest = downloads_dir() / safe_name
     tmp = dest.with_suffix(dest.suffix + ".part")
 
-    req = urllib.request.Request(asset_url, headers={"User-Agent": _USER_AGENT})
     opener = _opener or _urlopen
+    req = urllib.request.Request(asset_url, headers={"User-Agent": _USER_AGENT})
     try:
         with opener(req) as resp:
             total = int(resp.headers.get("Content-Length", 0) or 0)
@@ -336,6 +408,22 @@ def download_update(
         except OSError:
             pass
         return {"error": f"下载失败：{exc}"}
+
+    # 安全模式下尝试 SHA256 验证
+    if os.environ.get("XIJIAN_DEVKIT_VERIFY_TLS") == "1":
+        expected_sha256 = _fetch_sha256(asset_url, asset_name, opener)
+        if expected_sha256:
+            if not _verify_sha256(dest, expected_sha256):
+                try:
+                    dest.unlink()
+                except OSError:
+                    pass
+                return {"error": f"SHA256 校验失败：文件可能被篡改 (expected {expected_sha256})"}
+        else:
+            # 无校验和文件时仅警告（不阻塞），避免误判
+            pass
+
+    return {"path": str(dest), "size": dest.stat().st_size}
 
     return {"path": str(dest), "size": dest.stat().st_size}
 

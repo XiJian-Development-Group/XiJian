@@ -20,6 +20,24 @@ from pathlib import Path
 from xijian_api.stubs import state
 
 
+def _resolve_safe_path(base: Path, subpath: str) -> Path:
+    """Resolve ``subpath`` relative to ``base`` and ensure it stays within ``base``.
+
+    防止路径遍历攻击：将 ``subpath`` 相对于 ``base`` 解析，并确保结果
+    在 ``base`` 目录内。若越界则抛出 ValueError。
+    """
+    # Normalize base (resolve symlinks, etc.)
+    base_resolved = base.resolve()
+    # Resolve the target path
+    target = (base_resolved / subpath).resolve()
+    # Ensure target is within base
+    try:
+        target.relative_to(base_resolved)
+    except ValueError:
+        raise ValueError(f"path traversal attempt: {subpath!r} escapes {base_resolved!r}")
+    return target
+
+
 def _file_dir() -> Path:
     """Resolve the on-disk file directory from config storage.
 
@@ -56,7 +74,8 @@ def persist(file_id: str, payload: bytes, *, purpose: str, filename: str) -> dic
     """Write ``payload`` to disk and create a state record.
     将 ``payload`` 写入磁盘并创建状态记录。
     """
-    target = _file_dir() / file_id
+    base = _file_dir()
+    target = _resolve_safe_path(base, file_id)
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_bytes(payload)
     record = {
@@ -79,8 +98,8 @@ def delete(file_id: str) -> bool:
     path = record.get("path")
     if path:
         try:
-            Path(path).unlink(missing_ok=True)
-        except OSError:
+            _resolve_safe_path(_file_dir(), Path(path).name).unlink(missing_ok=True)
+        except (OSError, ValueError):
             pass
     return True
 
@@ -97,7 +116,11 @@ def content(file_id: str) -> bytes | None:
         return payload
     path = record.get("path")
     if path:
-        return Path(path).read_bytes()
+        try:
+            safe_path = _resolve_safe_path(_file_dir(), Path(path).name)
+            return safe_path.read_bytes()
+        except (OSError, ValueError):
+            return None
     return None
 
 

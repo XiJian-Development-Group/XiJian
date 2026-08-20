@@ -46,7 +46,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from flask import jsonify, request
+from flask import jsonify, request, current_app
 
 from xijian_api.utils.log import get_logger
 
@@ -347,12 +347,28 @@ def register_error_handlers(app) -> None:
         # （一个 HTTPException）形式出现。若没有显式处理器，下方的
         # 通用 ``Exception`` 处理器会把它吞成 500；注册专用处理器
         # 使超大体返回干净的 JSON 413。
+        # Try to read the configured limit from Flask config for user-friendly message.
+        max_bytes_val = 1024 * 1024 * 1024  # default 1GB
+        try:
+            max_bytes = current_app.config.get("MAX_CONTENT_LENGTH")
+            if isinstance(max_bytes, int) and max_bytes > 0:
+                max_bytes_val = max_bytes
+        except Exception:
+            pass
+        # Format: MB if >= 1MB, KB if >= 1KB, else bytes
+        if max_bytes_val >= 1024 * 1024:
+            limit_msg = f"max {max_bytes_val // (1024 * 1024)} MB"
+        elif max_bytes_val >= 1024:
+            limit_msg = f"max {max_bytes_val // 1024} KB"
+        else:
+            limit_msg = f"max {max_bytes_val} bytes"
         return render_error(
             ApiError(
                 status=413,
-                message="request body too large",
+                message=f"request body too large ({limit_msg})",
                 type_="invalid_request_error",
                 code="request_entity_too_large",
+                extra={"max_bytes": max_bytes_val},
             )
         )
 

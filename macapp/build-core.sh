@@ -101,9 +101,9 @@ echo "==> embedding core into ${RESOURCES_DIR}"
 rm -rf "${RESOURCES_DIR}"
 mkdir -p "${RESOURCES_DIR}"
 
-# 可执行文件 + _internal 运行时
-cp -R "${DIST_CORE}/xijian-api" "${RESOURCES_DIR}/xijian-api"
-cp -R "${DIST_CORE}/_internal" "${RESOURCES_DIR}/_internal"
+# 可执行文件 + _internal 运行时（用 ditto 保留代码签名/扩展属性）
+ditto "${DIST_CORE}/xijian-api" "${RESOURCES_DIR}/xijian-api"
+ditto "${DIST_CORE}/_internal" "${RESOURCES_DIR}/_internal"
 
 # 配置文件与说明（spec 不负责拷贝，这里手动带）
 if [[ -f "${CORE_DIR}/config.toml" ]]; then

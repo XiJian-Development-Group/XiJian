@@ -749,25 +749,20 @@ def token_file_path(pid: int | None = None, template: str | None = None) -> Path
     解析 Bearer 令牌文件路径。
 
     Priority: ``XIJIAN_TOKEN_FILE`` env var (fixed path, no pid) >
-    ``template`` > default unified temporary directory.  The env-var
+    fixed token file ``tmp/xijian.token``.  The env-var
     path is how the macOS app provisions a stable token before
     launching the Core process (no race on the pid-derived name).
 
     优先级：``XIJIAN_TOKEN_FILE`` 环境变量（固定路径，不含 pid）>
-    ``template`` > 默认统一临时目录。macOS 应用正是通过环境变量路径
+    固定 token 文件 ``tmp/xijian.token``。macOS 应用正是通过环境变量路径
     在启动 Core 进程前预置稳定 token（避免 pid 派生文件名带来的竞态）。
     """
     env_token = os.environ.get("XIJIAN_TOKEN_FILE")
     if env_token:
         return Path(env_token).expanduser()
-    if pid is None:
-        pid = os.getpid()
-    if template:
-        return Path(template.format(pid=pid)).expanduser()
-    # 开发模式与打包模式统一：token 文件位于统一临时目录（tmp/）。
-    # Dev and packaged modes are unified: token files live in the shared tmp/.
+    # 固定 token 文件（无 pid）
     from xijian_api.runtime import default_token_file
-    return default_token_file(pid)
+    return default_token_file()
 
 
 def is_dev_mode(config: Config | None = None) -> bool:
@@ -786,6 +781,46 @@ def is_dev_mode(config: Config | None = None) -> bool:
         return True
     if config is not None and getattr(config, "dev", False):
         return True
+    return False
+
+
+def update_model_loaded_status(model_id: str, loaded: bool) -> bool:
+    """Update the ``loaded`` status of a model in the config.toml file.
+
+    更新配置文件中模型的 ``loaded`` 状态。
+
+    Returns True on success, False if config file not found or model not found.
+    成功返回 True，配置文件未找到或模型不存在返回 False。
+    """
+    for candidate in _config_search_paths():
+        if candidate and candidate.exists():
+            try:
+                with candidate.open("rb") as fp:
+                    data = tomllib.load(fp)
+            except Exception:
+                continue
+
+            models = data.get("models", [])
+            updated = False
+            for m in models:
+                if isinstance(m, dict) and m.get("id") == model_id:
+                    m["loaded"] = bool(loaded)
+                    updated = True
+                    break
+
+            if not updated:
+                return False
+
+            # Write back the entire TOML
+            try:
+                import tomli_w
+            except ImportError:
+                # tomli_w not available, use tomllib to read but can't write
+                return False
+
+            with candidate.open("wb") as fp:
+                tomli_w.dump(data, fp)
+            return True
     return False
 
 
@@ -808,4 +843,5 @@ __all__ = [
     "Config",
     "token_file_path",
     "is_dev_mode",
+    "update_model_loaded_status",
 ]

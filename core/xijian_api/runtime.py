@@ -199,14 +199,12 @@ def default_token_dir() -> Path:
     return default_tmp_dir()
 
 
-def default_token_file(pid: int | None = None) -> Path:
-    """Return the default token file path.
+def default_token_file() -> Path:
+    """Return the default token file path (fixed name: xijian.token, no pid).
 
-    返回默认 token 文件路径。
+    返回默认 token 文件路径（固定名：xijian.token，无 pid）。
     """
-    if pid is None:
-        pid = os.getpid()
-    return default_token_dir() / f"xijian-{pid}.token"
+    return default_token_dir() / "xijian.token"
 
 
 def default_port_file(pid: int | None = None) -> Path:

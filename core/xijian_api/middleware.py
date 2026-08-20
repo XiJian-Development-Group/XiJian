@@ -25,7 +25,7 @@ from xijian_api.config import (
     API_VERSION,
     IDEMPOTENCY_TTL_SECONDS,
 )
-from xijian_api.errors import ApiError
+from xijian_api.errors import ApiError, render_error
 from xijian_api.utils.ids import gen_request_id, gen_trace_id
 from xijian_api.utils.log import get_logger
 
@@ -362,7 +362,159 @@ def _install_after_request(app: Flask) -> None:
         return _add_common_headers(response)
 
 
+# ---------------------------------------------------------------------------
+# Rate Limiting (Token Bucket)
+# 限流（令牌桶）
+# ---------------------------------------------------------------------------
+#
+# Per-endpoint token bucket rate limiting with configurable capacity and
+# refill rate.  Enabled by default in production (dev=false), controlled
+# by config.features.rate_limit.
+#
+# 每端点令牌桶限流，可配置容量和填充速率。生产环境（dev=false）默认开启，
+# 由 config.features.rate_limit 控制。
+#
+# Returns 429 with Retry-After header when limit exceeded.
+# 超限时返回 429 并附带 Retry-After 标头。
+
+
+_rate_limit_buckets: dict[str, dict] = {}
+_rate_limit_lock = threading.Lock()
+_DEFAULT_CAPACITY = 60  # requests per window
+_DEFAULT_REFILL_RATE = 1.0  # tokens per second
+
+
+def _get_rate_limit_config() -> tuple[int, float, bool]:
+    """Get rate limit config from Flask app config.
+
+    Returns (capacity, refill_rate, enabled).
+    """
+    try:
+        from flask import current_app
+        config = current_app.config.get("XIJIAN_CONFIG")
+        if config is not None:
+            # Check if rate limit is enabled (dev mode disables by default)
+            dev_mode = getattr(config.server, "dev", False)
+            enabled = config.features.rate_limit and not dev_mode
+            # Allow customization via config (future: add rate_limit fields to config)
+            capacity = getattr(config, "rate_limit_capacity", _DEFAULT_CAPACITY)
+            refill_rate = getattr(config, "rate_limit_refill_rate", _DEFAULT_REFILL_RATE)
+            return capacity, refill_rate, enabled
+    except Exception:
+        pass
+    return _DEFAULT_CAPACITY, _DEFAULT_REFILL_RATE, False
+
+
+def _rate_limit_key() -> str:
+    """Generate a rate limit key for the current request.
+
+    Uses client IP + endpoint path for per-endpoint limiting.
+    """
+    ip = request.headers.get("X-Forwarded-For", request.remote_addr or "unknown").split(",")[0].strip()
+    path = request.path
+    return f"{ip}:{path}"
+
+
+def _check_rate_limit() -> tuple[bool, dict]:
+    """Check and consume a token from the bucket.
+
+    Returns (allowed, headers) where headers contains RateLimit-* headers
+    for the response.
+    """
+    capacity, refill_rate, enabled = _get_rate_limit_config()
+    if not enabled:
+        return True, {}
+
+    key = _rate_limit_key()
+    now = time.time()
+
+    with _rate_limit_lock:
+        bucket = _rate_limit_buckets.get(key)
+        if bucket is None:
+            bucket = {
+                "tokens": float(capacity),
+                "last_refill": now,
+            }
+            _rate_limit_buckets[key] = bucket
+
+        # Refill tokens based on elapsed time
+        elapsed = now - bucket["last_refill"]
+        bucket["tokens"] = min(capacity, bucket["tokens"] + elapsed * refill_rate)
+        bucket["last_refill"] = now
+
+        if bucket["tokens"] >= 1.0:
+            bucket["tokens"] -= 1.0
+            allowed = True
+        else:
+            allowed = False
+
+        # Calculate headers
+        retry_after = int((1.0 - bucket["tokens"]) / refill_rate) + 1 if not allowed else 0
+        headers = {
+            "X-RateLimit-Limit": str(capacity),
+            "X-RateLimit-Remaining": str(max(0, int(bucket["tokens"]))),
+            "X-RateLimit-Reset": str(int(now + retry_after)),
+        }
+        if not allowed:
+            headers["Retry-After"] = str(retry_after)
+
+        return allowed, headers
+
+
+def _install_rate_limit(app: Flask) -> None:
+    @app.before_request
+    def _rate_limit_check():  # type: ignore[no-redef]
+        allowed, headers = _check_rate_limit()
+        if not allowed:
+            # Store headers on g so after_request can add them
+            g._rate_limit_headers = headers
+            raise ApiError(
+                status=429,
+                message="rate limit exceeded",
+                type_="rate_limit_error",
+                code="rate_limit_exceeded",
+            )
+    @app.after_request
+    def _rate_limit_headers(response):  # type: ignore[no-redef]
+        rl_headers = getattr(g, "_rate_limit_headers", None)
+        if rl_headers:
+            for k, v in rl_headers.items():
+                response.headers.setdefault(k, v)
+        return response
+
+
+def install_middleware(app: Flask) -> None:
+    """Wire all request middleware on ``app``.
+
+    在 ``app`` 上挂接所有请求中间件。
+
+    Order matters:
+
+    顺序很重要：
+
+    1. ``before_request`` populates ``g.request_id`` / ``g.trace_id``.
+       ``before_request`` 填充 ``g.request_id`` / ``g.trace_id``。
+    2. The auth check runs (raises :class:`AuthError` on failure).
+       认证检查运行（失败时抛出 :class:`AuthError`）。
+    3. Rate limit check runs (returns 429 on limit exceeded).
+       限流检查运行（超限时返回 429）。
+    4. Idempotency replay is attempted before the view runs.
+       在视图运行前尝试幂等性重放。
+    5. ``after_request`` stamps the standard headers.
+       ``after_request`` 打上标准标头。
+    6. The post-request hook stores idempotent responses.
+       请求后钩子存储幂等响应。
+    """
+    _install_request_id(app)
+    _install_auth(app)
+    _install_rate_limit(app)
+    _install_idempotency(app)
+    _install_after_request(app)
+
+
 __all__ = [
     "install_middleware",
     "reset_idempotency_cache_for_testing",
+    "_get_rate_limit_config",
+    "_check_rate_limit",
 ]

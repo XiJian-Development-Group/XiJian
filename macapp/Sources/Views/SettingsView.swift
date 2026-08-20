@@ -86,6 +86,12 @@ Section(loc("数据管理")) {
                         Label("模型管理", systemImage: "cube.box.fill")
                             .foregroundStyle(theme.accentColor)
                     }
+                    NavigationLink {
+                        CoreConfigEditorView()
+                    } label: {
+                        Label(loc("Core 配置编辑器"), systemImage: "gearshape.2.fill")
+                            .foregroundStyle(theme.accentColor)
+                    }
                 }
 
                 Section(loc("安全与剧情")) {
@@ -768,5 +774,198 @@ struct ColorPickerSheet: View {
         }
         .padding(20)
         .frame(width: 320)
+    }
+}
+
+// MARK: - Core 配置编辑器
+
+/// Core 配置编辑器：通过 GUI 编辑 config.toml 关键字段，避免手写 TOML。
+struct CoreConfigEditorView: View {
+    @Environment(CoreManager.self) private var core
+    @Environment(ThemeSettings.self) private var theme
+    @State private var showAlert = false
+    @State private var alertTitle = ""
+    @State private var alertMessage = ""
+    @State private var isSaving = false
+
+    // Server settings
+    @State private var host = "127.0.0.1"
+    @State private var port = 18500
+    @State private var devMode = false
+    @State private var keepTokenFile = false
+    @State private var driver = "auto" // auto | werkzeug | waitress
+
+    // Storage settings
+    @State private var baseDir = "~/Library/Application Support/XiJian/Core"
+    @State private var modelsSubdir = "models"
+
+    // Features
+    @State private var seedDefaultData = false
+    @State private var protectionModule = true
+    @State private var rateLimit = false
+
+    // Overload
+    @State private var overloadMonitor = true
+    @State private var overloadTier = "medium" // medium | strict
+
+    var body: some View {
+        Form {
+            Section(loc("服务器")) {
+                XJSettingRow(title: loc("监听地址"), subtitle: loc("默认 127.0.0.1，仅本地回环")) {
+                    TextField("127.0.0.1", text: $host)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 200)
+                }
+
+                XJSettingRow(title: loc("端口"), subtitle: loc("默认 18500，1-65535")) {
+                    TextField("18500", value: $port, formatter: NumberFormatter())
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 120)
+                }
+
+                XJSettingRow(title: loc("开发模式"), subtitle: loc("启用测试路由、自动生成 token、详细错误")) {
+                    Toggle("", isOn: $devMode)
+                }
+
+                XJSettingRow(title: loc("保留 token 文件"), subtitle: loc("关闭时退出后删除 token")) {
+                    Toggle("", isOn: $keepTokenFile)
+                }
+
+                XJSettingRow(title: loc("WSGI 驱动"), subtitle: loc("waitress 不支持 WebSocket")) {
+                    Picker("", selection: $driver) {
+                        Text(loc("自动 (werkzeug)")).tag("auto")
+                        Text("werkzeug").tag("werkzeug")
+                        Text("waitress").tag("waitress")
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: 300)
+                }
+            }
+
+            Section(loc("存储")) {
+                XJSettingRow(title: loc("基础目录"), subtitle: loc("模型权重、上传、快照根目录；可用 XIJIAN_DATA_DIR 覆盖")) {
+                    TextField(baseDir, text: $baseDir)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(maxWidth: .infinity)
+                }
+
+                XJSettingRow(title: loc("模型子目录"), subtitle: loc("相对基础目录，默认 models")) {
+                    TextField("models", text: $modelsSubdir)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 200)
+                }
+            }
+
+            Section(loc("功能开关")) {
+                XJSettingRow(title: loc("预填充演示数据"), subtitle: loc("启动时创建 Yuki、Modern Tokyo 等演示记录")) {
+                    Toggle("", isOn: $seedDefaultData)
+                }
+
+                XJSettingRow(title: loc("保护模块"), subtitle: loc("启用 OOC 检测、提示词注入防护、数据回滚")) {
+                    Toggle("", isOn: $protectionModule)
+                }
+
+                XJSettingRow(title: loc("限流"), subtitle: loc("启用 API 请求限流（生产环境建议开启）")) {
+                    Toggle("", isOn: $rateLimit)
+                }
+            }
+
+            Section(loc("过载保护")) {
+                XJSettingRow(title: loc("监控开启"), subtitle: loc("后台 1Hz 采样 CPU/内存/磁盘，超阈值自动限流/终止")) {
+                    Toggle("", isOn: $overloadMonitor)
+                }
+
+                XJSettingRow(title: loc("严格度"), subtitle: loc("MacBook Air 推荐 strict；Mac mini/Pro 推荐 medium")) {
+                    Picker("", selection: $overloadTier) {
+                        Text(loc("适中")).tag("medium")
+                        Text(loc("严格")).tag("strict")
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(maxWidth: 300)
+                }
+            }
+
+            Section {
+                HStack {
+                    Spacer()
+                    Button(loc("保存到 config.toml")) {
+                        saveConfig()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(isSaving)
+                    .controlSize(.large)
+
+                    if isSaving {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+                    Spacer()
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .navigationTitle(loc("Core 配置编辑器"))
+        .onAppear {
+            loadConfig()
+        }
+        .alert(alertTitle, isPresented: $showAlert) {
+            Button(loc("好"), role: .cancel) {}
+        } message: {
+            Text(alertMessage)
+        }
+    }
+
+    private func loadConfig() {
+        // Read from core's current config if available, otherwise use defaults
+        // This is a simplified version — in production you'd parse the actual config.toml
+        if let config = core.currentConfig {
+            host = config.host
+            port = config.port
+            devMode = config.devMode
+            keepTokenFile = config.keepTokenFile
+            driver = config.driver
+            baseDir = config.baseDir
+            modelsSubdir = config.modelsSubdir
+            seedDefaultData = config.seedDefaultData
+            protectionModule = config.protectionModule
+            rateLimit = config.rateLimit
+            overloadMonitor = config.overloadMonitor
+            overloadTier = config.overloadTier
+        }
+    }
+
+    private func saveConfig() {
+        isSaving = true
+        Task {
+            do {
+                try core.updateConfig(
+                    host: host,
+                    port: port,
+                    devMode: devMode,
+                    keepTokenFile: keepTokenFile,
+                    driver: driver,
+                    baseDir: baseDir,
+                    modelsSubdir: modelsSubdir,
+                    seedDefaultData: seedDefaultData,
+                    protectionModule: protectionModule,
+                    rateLimit: rateLimit,
+                    overloadMonitor: overloadMonitor,
+                    overloadTier: overloadTier
+                )
+                await MainActor.run {
+                    isSaving = false
+                    alertTitle = loc("保存成功")
+                    alertMessage = loc("配置已写入 config.toml，重启 Core 后生效。")
+                    showAlert = true
+                }
+            } catch {
+                await MainActor.run {
+                    isSaving = false
+                    alertTitle = loc("保存失败")
+                    alertMessage = error.localizedDescription
+                    showAlert = true
+                }
+            }
+        }
     }
 }

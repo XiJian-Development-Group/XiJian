@@ -34,7 +34,7 @@ from flask import Blueprint, current_app, jsonify, request
 
 from xijian_api.ai import get_registry
 from xijian_api.ai.base import BackendError, ModelNotFound
-from xijian_api.config import Config, ModelEntry
+from xijian_api.config import Config, ModelEntry, update_model_loaded_status
 from xijian_api.errors import ApiError
 from xijian_api.stubs import state
 from xijian_api.utils.ids import gen_load_op_id, gen_unload_op_id
@@ -84,10 +84,32 @@ def seed_default_models() -> None:
 
 
 def init_app(app) -> None:
-    """从应用的 :class:`Config` 填充模型桶。"""
+    """从应用的 :class:`Config` 填充模型桶，并自动加载标记为 loaded 的模型。"""
     config = app.config.get("XIJIAN_CONFIG")
     if config is not None:
         _seed_models_from_config(config)
+        # Auto-load models marked as loaded=true in config
+        _auto_load_models(config)
+
+
+def _auto_load_models(config: Config) -> None:
+    """Auto-load models that have loaded=true in config.
+
+    启动时自动加载配置中 loaded=true 的模型。
+    """
+    from xijian_api.ai import get_registry
+
+    registry = get_registry()
+    for entry in config.models:
+        if entry.loaded:
+            try:
+                registry.load(entry.id, config=config)
+            except Exception as exc:  # noqa: BLE001 - best effort
+                import logging
+
+                logging.getLogger(__name__).warning(
+                    "auto-load model %s failed: %s", entry.id, exc
+                )
 
 
 @bp.get("/v1/models")
@@ -140,6 +162,9 @@ def load_model(model_id: str):
     }
     state.models[op_id] = op
 
+    # 先创建快照，再启动后台线程，避免 mock 后端瞬间完成导致竞态。
+    snapshot = dict(op)
+
     def _run() -> None:
         # 注册表是进程级单例；此处调用 ``load`` 即使多个请求
         # 竞争同一 ``model_id`` 也是安全的 — :meth:`ModelRegistry._lock_for`
@@ -174,12 +199,10 @@ def load_model(model_id: str):
         op["status"] = "loaded"
         op["finished_at"] = now_ts()
         record["xijian"]["loaded"] = True
+        # Persist loaded status to config.toml
+        update_model_loaded_status(model_id, True)
 
     threading.Thread(target=_run, daemon=True).start()
-    # 为响应快照操作，使后台线程无法在序列化中途修改它。
-    # 模拟模型微秒级加载，曾与 jsonify 竞争，在测试观察到排队状态前
-    # 就把 ``status`` 从 ``"loading"`` 翻转为 ``"loaded"``。
-    snapshot = dict(op)
     response = jsonify(snapshot)
     response.status_code = 202
     return response
@@ -200,6 +223,8 @@ def unload_model(model_id: str):
         "finished_at": now_ts(),
     }
     record["xijian"]["loaded"] = False
+    # Persist unloaded status to config.toml
+    update_model_loaded_status(model_id, False)
     return jsonify(state.models[op_id])
 
 
