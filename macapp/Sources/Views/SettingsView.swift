@@ -918,20 +918,19 @@ struct CoreConfigEditorView: View {
     private func loadConfig() {
         // Read from core's current config if available, otherwise use defaults
         // This is a simplified version — in production you'd parse the actual config.toml
-        if let config = core.currentConfig {
-            host = config.host
-            port = config.port
-            devMode = config.devMode
-            keepTokenFile = config.keepTokenFile
-            driver = config.driver
-            baseDir = config.baseDir
-            modelsSubdir = config.modelsSubdir
-            seedDefaultData = config.seedDefaultData
-            protectionModule = config.protectionModule
-            rateLimit = config.rateLimit
-            overloadMonitor = config.overloadMonitor
-            overloadTier = config.overloadTier
-        }
+        let config = core.currentConfig
+        host = config.host
+        port = config.port
+        devMode = config.devMode
+        keepTokenFile = config.keepTokenFile
+        driver = config.driver
+        baseDir = config.baseDir
+        modelsSubdir = config.modelsSubdir
+        seedDefaultData = config.seedDefaultData
+        protectionModule = config.protectionModule
+        rateLimit = config.rateLimit
+        overloadMonitor = config.overloadMonitor
+        overloadTier = config.overloadTier
     }
 
     private func saveConfig() {

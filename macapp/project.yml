@@ -8,7 +8,7 @@ options:
   xcodeVersion: "15.0"
   pkgConfig: false
   bundleId: com.xijian.XiJian
-  postGenCommand: "python3 Scripts/add_resources.py"
+  # postGenCommand: "python3 Scripts/add_resources.py"
   configFiles:
     Debug: Configs/Debug.xcconfig
     Release: Configs/Release.xcconfig

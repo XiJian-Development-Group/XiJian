@@ -1,0 +1,14 @@
+// Release.xcconfig
+// Release configuration for XiJian
+
+SWIFT_COMPILATION_MODE = wholemodule
+SWIFT_OPTIMIZATION_LEVEL = -O
+DEBUG_INFORMATION_FORMAT = dwarf-with-dsym
+
+// Strip symbols for smaller binary
+DEPLOYMENT_POSTPROCESSING = YES
+STRIP_INSTALLED_PRODUCT = YES
+STRIP_STYLE = non-global
+
+// Optimization
+GCC_OPTIMIZATION_LEVEL = s

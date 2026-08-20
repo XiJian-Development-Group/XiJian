@@ -709,7 +709,7 @@ public final class CoreManager {
             let pidPart = name
                 .replacingOccurrences(of: "xijian-", with: "")
                 .replacingOccurrences(of: ".token", with: "")
-            guard let _ = Int32(pidPart), _ > 0 else { continue }
+            guard let pid = Int32(pidPart), pid > 0 else { continue }
             let oldFile = dir.appendingPathComponent(name)
             if let data = try? Data(contentsOf: oldFile),
                let token = String(data: data, encoding: .utf8)?
@@ -763,7 +763,7 @@ public final class CoreManager {
     /// 最近一次读取的日志文件原始行（供与进程输出去重）
     private var fileRawLines: [String] = []
     /// 日志文件读取上限（字节）：超过后只读尾部，避免大文件卡 UI
-    private static let maxLogFileReadBytes: Int64 = 8 * 1024 * 1024
+    nonisolated static let maxLogFileReadBytes: Int64 = 8 * 1024 * 1024
 
     /// Core 日志文件路径：~/Library/Application Support/XiJian/Core/logs/xijian-api.log
     var coreLogFileURL: URL? {
@@ -781,7 +781,8 @@ public final class CoreManager {
             merged.append(contentsOf: recentLogs)
         } else {
             // 文件与进程输出内容重叠：以文件为准，按原始行去重
-            let rawSet = Set(raw.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) })
+            let wsnl = CharacterSet.whitespacesAndNewlines
+            let rawSet = Set(raw.map { $0.trimmingCharacters(in: wsnl) })
             merged.append(contentsOf: recentLogs.filter { !rawSet.contains($0.message) })
         }
         logEntries = merged
@@ -839,7 +840,7 @@ public final class CoreManager {
         } else {
             text = try String(contentsOf: url, encoding: .utf8)
         }
-        var lines = text.components(separatedBy: .newlines)
+        var lines = text.components(separatedBy: CharacterSet.newlines)
         // 去掉首尾空行（文件常以换行结尾，避免空行占用行数上限）
         while let first = lines.first, first.isEmpty { lines.removeFirst() }
         while let last = lines.last, last.isEmpty { lines.removeLast() }
@@ -897,18 +898,21 @@ public final class CoreManager {
     var currentConfig: ConfigSnapshot {
         var snap = ConfigSnapshot()
         guard let coreDir = coreDirectory,
-              let configURL = URL(string: "file://\(coreDir.path)").appendingPathComponent("config.toml") as URL?,
+              let baseURL = URL(string: "file://\(coreDir.path)"),
+              let configURL = baseURL.appendingPathComponent("config.toml") as URL?,
               FileManager.default.fileExists(atPath: configURL.path),
               let content = try? String(contentsOf: configURL, encoding: .utf8) else {
             return snap
         }
         // Simple TOML parsing for known keys
-        for line in content.components(separatedBy: .newlines) {
-            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+        let newlineSet = CharacterSet.newlines
+        let whitespaceNewlineSet = CharacterSet.whitespacesAndNewlines
+        for line in content.components(separatedBy: newlineSet) {
+            let trimmed = line.trimmingCharacters(in: whitespaceNewlineSet)
             if trimmed.hasPrefix("#") || trimmed.isEmpty { continue }
             if let eq = trimmed.firstIndex(of: "=") {
-                let key = trimmed[..<eq].trimmingCharacters(in: .whitespacesAndNewlines)
-                let val = trimmed[trimmed.index(after: eq)...].trimmingCharacters(in: .whitespacesAndNewlines)
+                let key = trimmed[..<eq].trimmingCharacters(in: whitespaceNewlineSet)
+                let val = trimmed[trimmed.index(after: eq)...].trimmingCharacters(in: whitespaceNewlineSet)
                     .trimmingCharacters(in: CharacterSet(charactersIn: "\"\'"))
                 switch key {
                 case "host": snap.host = val
@@ -955,8 +959,10 @@ public final class CoreManager {
         } else {
             content = ""
         }
-        var lines = content.components(separatedBy: .newlines)
-        let updates: [String: String] = [
+        let newlineSet = CharacterSet.newlines
+        let whitespaceNewlineSet = CharacterSet.whitespacesAndNewlines
+        var lines = content.components(separatedBy: newlineSet)
+        var updates: [String: String] = [
             "host": host,
             "port": String(port),
             "dev": devMode ? "true" : "false",
@@ -972,10 +978,10 @@ public final class CoreManager {
         ]
         // Update existing keys
         for i in 0..<lines.count {
-            let trimmed = lines[i].trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmed = lines[i].trimmingCharacters(in: whitespaceNewlineSet)
             if trimmed.hasPrefix("#") || trimmed.isEmpty { continue }
             if let eq = trimmed.firstIndex(of: "=") {
-                let key = trimmed[..<eq].trimmingCharacters(in: .whitespacesAndNewlines)
+                let key = trimmed[..<eq].trimmingCharacters(in: whitespaceNewlineSet)
                 if let newVal = updates[key] {
                     // Preserve leading whitespace and inline comment
                     let leading = lines[i].prefix { $0 == " " || $0 == "\t" }
