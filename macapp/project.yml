@@ -8,7 +8,6 @@ options:
   xcodeVersion: "15.0"
   pkgConfig: false
   bundleId: com.skyc8266.xijian.macapp-dev
-  # postGenCommand: "python3 Scripts/add_resources.py"
   configFiles:
     Debug: Configs/Debug.xcconfig
     Release: Configs/Release.xcconfig
@@ -65,9 +64,16 @@ targets:
     resources:
       - path: Resources/Assets.xcassets
         type: folder
-      - path: Resources/Core
-        type: folder
       - path: Resources/Localizable.xcstrings
+    buildPhases:
+      - type: run_script
+        name: Copy Core Resources
+        script: |
+          rsync -av --delete "${PROJECT_DIR}/Resources/Core/" "${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/Core/"
+        inputPaths:
+          - "${PROJECT_DIR}/Resources/Core"
+        outputPaths:
+          - "${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/Core"
     settings:
       base:
         PRODUCT_NAME: XiJian
