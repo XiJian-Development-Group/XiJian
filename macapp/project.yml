@@ -1,13 +1,13 @@
 name: XiJian
 options:
-  bundleIdPrefix: com.xijian
+  bundleIdPrefix: com.skyc8266
   deploymentTarget:
     macOS: "14.0"
   createIntermediateGroups: true
   swiftVersion: "5.9"
   xcodeVersion: "15.0"
   pkgConfig: false
-  bundleId: com.xijian.XiJian
+  bundleId: com.skyc8266.xijian.macapp-dev
   # postGenCommand: "python3 Scripts/add_resources.py"
   configFiles:
     Debug: Configs/Debug.xcconfig
@@ -18,7 +18,7 @@ settings:
     MACOSX_DEPLOYMENT_TARGET: "14.0"
     ENABLE_PREVIEWS: YES
     INFOPLIST_FILE: Sources/Info.plist
-    PRODUCT_BUNDLE_IDENTIFIER: com.xijian.XiJian
+    PRODUCT_BUNDLE_IDENTIFIER: com.skyc8266.xijian.macapp-dev
     ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     CURRENT_PROJECT_VERSION: 1
     MARKETING_VERSION: 1.0.0
@@ -41,7 +41,7 @@ targets:
     settings:
       base:
         PRODUCT_NAME: XiJianKit
-        PRODUCT_BUNDLE_IDENTIFIER: com.xijian.XiJianKit
+        PRODUCT_BUNDLE_IDENTIFIER: com.skyc8266.xijian.kit
         SWIFT_MODULE_NAME: XiJianKit
         DEFINES_MODULE: YES
         INSTALL_PATH: "@loader_path/../Frameworks"
@@ -71,7 +71,7 @@ targets:
     settings:
       base:
         PRODUCT_NAME: XiJian
-        PRODUCT_BUNDLE_IDENTIFIER: com.xijian.XiJian
+        PRODUCT_BUNDLE_IDENTIFIER: com.skyc8266.xijian.macapp-dev
         INFOPLIST_FILE: Sources/Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CODE_SIGN_ENTITLEMENTS: Entitlements.entitlements
