@@ -41,7 +41,7 @@
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
     <key>NSHumanReadableCopyright</key>
-    <string>Copyright © 2024 XiJian. All rights reserved.</string>
+    <string>Copyleft The XiJian Development Group</string>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.utilities</string>
     <key>NSAppTransportSecurity</key>

@@ -54,7 +54,7 @@ from __future__ import annotations
 import json
 from typing import Any, Iterator
 
-from flask import current_app
+from flask import current_app, jsonify
 
 from xijian_api.ai.base import (
     BackendError as AIBackendError,
@@ -1628,16 +1628,25 @@ def complete(
                 audit_response=bool((xijian or {}).get("recall", {}).get("audit", True)),
             )
         response = last_response or {"id": gen_chat_id(), "object": "chat.completion", "choices": []}
-        # A5-03 safety guard: scan output on the response.
+        # A5-03 safety guard: scan input on the user's message first.
         last_user_msg = next(
             (m.get("content", "") for m in reversed(messages) if m.get("role") == "user"),
             "",
         )
         if last_user_msg:
-            safety_stub.scan_input(
+            input_scan = safety_stub.scan_input(
                 text=last_user_msg,
                 character_id=character_id,
             )
+            if input_scan.get("verdict") in ("block", "hard_block"):
+                return {
+                    "error": {
+                        "message": "Your message was blocked by the safety system: " + (input_scan.get("blocked", "contains prohibited content")),
+                        "type": "safety_violation",
+                        "code": "safety_blocked",
+                    }
+                }, 400
+
         response_text = ""
         for choice in (response.get("choices") or []):
             msg = choice.get("message") or {}
@@ -1680,10 +1689,18 @@ def complete(
         "",
     )
     if last_user_msg:
-        safety_stub.scan_input(
+        input_scan = safety_stub.scan_input(
             text=last_user_msg,
             character_id=char_id,
         )
+        if input_scan.get("verdict") in ("block", "hard_block"):
+            return jsonify({
+                "error": {
+                    "message": "Your message was blocked by the safety system: " + (input_scan.get("blocked", "contains prohibited content")),
+                    "type": "safety_violation",
+                    "code": "safety_blocked",
+                }
+            }), 400
     response_text = ""
     for choice in (response.get("choices") or []):
         msg = choice.get("message") or {}

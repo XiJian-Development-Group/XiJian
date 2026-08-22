@@ -114,11 +114,43 @@ def _auto_load_models(config: Config) -> None:
 
 @bp.get("/v1/models")
 def list_models():
-    """列出所有已知模型。"""
+    """列出所有已知模型。
+
+    仅返回后端可用的模型：过滤掉 backend 不可用、或本地权重缺失的模型。
+    """
+    from xijian_api.ai.registry import available_backends
+
+    available = available_backends()
+    chat_backends = set(available.get("chat", []))
+
+    data = []
+    for record in state.models.values():
+        model_id = record["id"]
+        meta = record.get("xijian", {})
+        backend = meta.get("backend", "mock")
+
+        # 检查后端是否可用
+        backend_available = backend in chat_backends
+
+        # 对于本地后端，检查权重文件是否存在
+        weights_exist = True
+        if backend in ("mlx", "gguf"):
+            try:
+                config = current_app.config.get("XIJIAN_CONFIG")
+                if config:
+                    entry = config.model_by_id(model_id)
+                    if entry:
+                        weights_exist = entry.absolute_path(config.storage).exists()
+            except RuntimeError:
+                pass
+
+        if backend_available and weights_exist:
+            data.append(record)
+
     return jsonify(
         {
             "object": "list",
-            "data": list(state.models.values()),
+            "data": data,
         }
     )
 

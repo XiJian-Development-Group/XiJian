@@ -399,7 +399,106 @@ def seed_default() -> None:
     可能包含受版权保护的模式库。:mod:`xijian_api.stubs.seed_all`
     钩子已连接，使未来规则包导入有稳定入口点。
     """
-    return None
+    # 基础危险命令拦截规则（仅在规则簿为空时种子）
+    if not state.safety_rules:
+        _seed_basic_safety_rules()
+
+
+def _seed_basic_safety_rules() -> None:
+    """种子基础安全规则：危险命令、注入模式、OOC基础模式。
+    仅在规则簿为空时运行，避免覆盖用户自定义规则。
+    """
+    from xijian_api.utils.ids import gen_safety_rule_id
+    from xijian_api.utils.time import now_ts
+    timestamp = now_ts()
+
+    # 危险命令拦截（forbidden_word，字面匹配，不区分大小写）
+    dangerous_commands = [
+        ("rm -rf", 5, "危险文件删除命令"),
+        ("rm -rf /", 5, "根目录删除命令"),
+        ("rm -rf ~", 5, "用户目录删除命令"),
+        ("dd if=", 5, "磁盘镜像写入命令"),
+        ("mkfs.", 5, "文件系统格式化命令"),
+        ("fdisk", 5, "分区工具命令"),
+        ("chmod 777", 4, "危险权限修改"),
+        ("chown -R", 4, "递归所有权修改"),
+        ("kill -9", 4, "强制进程终止"),
+        ("shutdown", 4, "关机命令"),
+        ("reboot", 4, "重启命令"),
+        (":(){ :|:& };:", 5, "Fork炸弹"),
+        ("curl.*\\|.*sh", 4, "远程脚本管道执行"),
+        ("wget.*\\|.*sh", 4, "远程脚本管道执行"),
+        ("base64 -d", 4, "Base64解码执行"),
+        ("eval ", 4, "代码执行函数"),
+        ("exec ", 4, "代码执行函数"),
+    ]
+
+    # 提示注入模式
+    injection_patterns = [
+        (r"ignore\s+previous\s+instructions", 5, "忽略先前指令注入"),
+        (r"忽略.*之前的指令", 5, "中文忽略指令注入"),
+        (r"system\s+prompt", 4, "系统提示词探测"),
+        (r"系统提示词", 4, "中文系统提示词探测"),
+        (r"you\s+are\s+now", 4, "角色扮演注入"),
+        (r"你现在是", 4, "中文角色扮演注入"),
+        (r"pretend\s+to\s+be", 4, "伪装注入"),
+        (r"假装.*是", 4, "中文伪装注入"),
+        (r"disable\s+safety", 5, "禁用安全机制"),
+        (r"关闭安全", 5, "中文禁用安全"),
+        (r"bypass", 4, "绕过限制"),
+        (r"绕过", 4, "中文绕过限制"),
+    ]
+
+    # OOC 基础模式
+    ooc_patterns = [
+        (r"作为AI语言模型", 3, "AI身份暴露"),
+        (r"作为一个AI", 3, "AI身份暴露"),
+        (r"我只是一个AI", 3, "AI身份暴露"),
+        (r"作为语言模型", 3, "AI身份暴露"),
+        (r"我不能", 2, "拒绝回答模式"),
+        (r"我不应该", 2, "拒绝回答模式"),
+        (r"这违反", 2, "拒绝回答模式"),
+    ]
+
+    timestamp = now_ts()
+    for pattern, severity, desc in dangerous_commands:
+        rule_id = gen_safety_rule_id()
+        state.safety_rules[rule_id] = {
+            "id": rule_id,
+            "rule_kind": KIND_FORBIDDEN_WORD,
+            "pattern": pattern,
+            "severity": severity,
+            "is_active": True,
+            "created_at": timestamp,
+            "updated_at": timestamp,
+        }
+
+    for pattern, severity, desc in injection_patterns:
+        rule_id = gen_safety_rule_id()
+        state.safety_rules[rule_id] = {
+            "id": rule_id,
+            "rule_kind": KIND_INJECTION_PATTERN,
+            "pattern": pattern,
+            "severity": severity,
+            "is_active": True,
+            "created_at": timestamp,
+            "updated_at": timestamp,
+        }
+
+    for pattern, severity, desc in ooc_patterns:
+        rule_id = gen_safety_rule_id()
+        state.safety_rules[rule_id] = {
+            "id": rule_id,
+            "rule_kind": KIND_OOC_PATTERN,
+            "pattern": pattern,
+            "severity": severity,
+            "is_active": True,
+            "created_at": timestamp,
+            "updated_at": timestamp,
+        }
+
+    # 记录种子数量
+    _LOGGER.info("Seeded %d basic safety rules", len(state.safety_rules))
 
 
 def reset_for_testing() -> None:

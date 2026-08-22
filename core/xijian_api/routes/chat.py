@@ -179,7 +179,12 @@ def chat_completions():
             tools=tools,
             tool_choice=tool_choice,
         )
-        resp = jsonify(response)
+        # Handle safety block response (tuple of (dict, status_code))
+        if isinstance(response, tuple):
+            resp = jsonify(response[0])
+            resp.status_code = response[1]
+        else:
+            resp = jsonify(response)
         resp.headers["X-XiJian-Model-Id"] = safe_header_value(model)
         resp.headers["X-XiJian-Backend"] = safe_header_value(
             (xijian_ext or {}).get("backend", "stub")

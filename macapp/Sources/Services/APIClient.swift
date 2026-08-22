@@ -186,6 +186,29 @@ struct APIClient {
         }
     }
 
+    // MARK: - AI 后端
+
+    func listAIBackends() async throws -> [AIBackend] {
+        let envelope: ListEnvelope<AIBackend> = try await get("/v1/xijian/backends")
+        return envelope.data
+    }
+
+    func getAIBackend(_ id: String) async throws -> AIBackend {
+        try await get("/v1/xijian/backends/\(id)")
+    }
+
+    func createAIBackend(_ backend: AIBackend) async throws -> AIBackend {
+        try await post("/v1/xijian/backends", body: backend)
+    }
+
+    func updateAIBackend(_ backend: AIBackend) async throws -> AIBackend {
+        try await patch("/v1/xijian/backends/\(backend.id)", body: backend)
+    }
+
+    func deleteAIBackend(id: String) async throws {
+        try await deleteVoid("/v1/xijian/backends/\(id)")
+    }
+
     // MARK: - 模型
 
     func listModels() async throws -> [ModelInfo] {
@@ -724,6 +747,23 @@ struct CharacterPayload: Encodable {
 }
 
 /// 任意 Encodable 包装（用于异构 body 字典）
+/// AI 后端配置模型
+struct AIBackend: Identifiable, Codable, Hashable, Sendable {
+    let id: String
+    let name: String
+    let type: String
+    let baseURL: String
+    let apiKey: String
+    let headers: [String: String]
+    let isDefault: Bool
+    let createdAt: Date
+    let updatedAt: Date
+
+    enum CodingKeys: String, CodingKey {
+        case id, name, type, baseURL = "base_url", apiKey = "api_key", headers, isDefault = "is_default", createdAt = "created_at", updatedAt = "updated_at"
+    }
+}
+
 struct AnyEncodable: Encodable {
     private let encodeClosure: (Encoder) throws -> Void
 

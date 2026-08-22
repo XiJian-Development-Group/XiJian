@@ -182,127 +182,76 @@ struct AIBackendSettingsView: View {
     }
 }
 
-/// 后端编辑/创建表单
+/// 后端编辑表单
 private struct BackendEditForm: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var name = ""
+    @State private var type = "openai"
+    @State private var baseURL = ""
+    @State private var apiKey = ""
+    @State private var isDefault = false
+    @State private var isSaving = false
+
     let backend: AIBackend?
     let onSave: (AIBackend) -> Void
     let onCancel: () -> Void
 
-    @State private var name: String = ""
-    @State private var type: String = "openai_compatible"
-    @State private var baseURL: String = ""
-    @State private var apiKey: String = ""
-    @State private var isDefault: Bool = false
-    @State private var isSaving = false
+    init(backend: AIBackend?, onSave: @escaping (AIBackend) -> Void, onCancel: @escaping () -> Void) {
+        self.backend = backend
+        self.onSave = onSave
+        self.onCancel = onCancel
 
-    private let types = ["openai_compatible"]
+        if let backend {
+            _name = State(initialValue: backend.name)
+            _type = State(initialValue: backend.type)
+            _baseURL = State(initialValue: backend.baseURL)
+            _apiKey = State(initialValue: backend.apiKey)
+            _isDefault = State(initialValue: backend.isDefault)
+        }
+    }
 
     var body: some View {
         Form {
             Section("基本信息") {
                 TextField("名称", text: $name)
                 Picker("类型", selection: $type) {
-                    ForEach(types, id: \.self) { Text($0.capitalized) }
+                    Text("OpenAI 官方").tag("openai")
+                    Text("兼容 OpenAI 协议（自定义端点）").tag("openai_compatible")
                 }
-                TextField("Base URL (例: https://api.openai.com/v1)", text: $baseURL)
-                    .textContentType(.URL)
-                    .autocorrectionDisabled()
+                .pickerStyle(.segmented)
+                TextField("Base URL", text: $baseURL)
+                    .textFieldStyle(.roundedBorder)
                 SecureField("API Key", text: $apiKey)
+                    .textFieldStyle(.roundedBorder)
+            }
+
+            Section("其他") {
+                Toggle("设为默认", isOn: $isDefault)
             }
 
             Section {
-                Toggle("设为默认后端", isOn: $isDefault)
-            }
-
-            Section {
-                Button(isSaving ? "保存中…" : (backend == nil ? "创建" : "保存")) {
-                    save()
-                }
-                .disabled(name.isEmpty || baseURL.isEmpty || isSaving)
-                .frame(maxWidth: .infinity, alignment: .center)
-            }
-        }
-        .navigationTitle(backend == nil ? "新建后端" : "编辑后端")
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button("取消", action: onCancel)
+                Button("保存") { save() }
                     .disabled(isSaving)
             }
         }
-        .onAppear {
-            if let b = backend {
-                name = b.name
-                type = b.type
-                baseURL = b.baseURL
-                apiKey = b.apiKey
-                isDefault = b.isDefault
-            }
-        }
+        .padding()
+        .frame(minWidth: 400, idealWidth: 500)
     }
 
     private func save() {
         isSaving = true
         let newBackend = AIBackend(
-            id: backend?.id ?? "",
+            id: "",
             name: name,
             type: type,
             baseURL: baseURL,
             apiKey: apiKey,
             headers: [:],
             isDefault: isDefault,
-            createdAt: backend?.createdAt ?? Date(),
+            createdAt: Date(),
             updatedAt: Date()
         )
         onSave(newBackend)
+        dismiss()
     }
-}
-
-/// 供 API 客户端使用的后端模型
-struct AIBackend: Identifiable, Codable, Hashable, Sendable {
-    let id: String
-    let name: String
-    let type: String
-    let baseURL: String
-    let apiKey: String
-    let headers: [String: String]
-    let isDefault: Bool
-    let createdAt: Date
-    let updatedAt: Date
-
-    enum CodingKeys: String, CodingKey {
-        case id, name, type, baseURL = "base_url", apiKey = "api_key", headers, isDefault = "is_default", createdAt = "created_at", updatedAt = "updated_at"
-    }
-}
-
-extension APIClient {
-    func listAIBackends() async throws -> [AIBackend] {
-        let request = try makeRequest("GET", "v1/xijian/backends")
-        let (data, _) = try await session.data(for: request)
-        let response = try JSONDecoder().decode(BackendsResponse.self, from: data)
-        return response.data
-    }
-
-    func createAIBackend(_ backend: AIBackend) async throws -> AIBackend {
-        let request = try makeRequest("POST", "v1/xijian/backends", body: backend)
-        let (data, _) = try await session.data(for: request)
-        return try JSONDecoder().decode(AIBackend.self, from: data)
-    }
-
-    func updateAIBackend(_ backend: AIBackend) async throws -> AIBackend {
-        let request = try makeRequest("PATCH", "v1/xijian/backends/\(backend.id)", body: backend)
-        let (data, _) = try await session.data(for: request)
-        return try JSONDecoder().decode(AIBackend.self, from: data)
-    }
-
-    func deleteAIBackend(id: String) async throws {
-        let request = try makeRequest("DELETE", "v1/xijian/backends/\(id)")
-        let (_, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-            throw APIError.httpStatus((response as? HTTPURLResponse)?.statusCode ?? 500, "删除失败")
-        }
-    }
-}
-
-private struct BackendsResponse: Codable {
-    let data: [AIBackend]
 }
