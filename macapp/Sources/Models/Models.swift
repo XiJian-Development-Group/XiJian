@@ -140,8 +140,22 @@ struct ChatMessage: Codable, Identifiable, Hashable {
     var isAssistant: Bool { role == "assistant" }
 
     /// 构造本地待发送消息
+    /// 本地构造消息：自动生成唯一 id。
+    /// 关键修复：此前本地消息 id 恒为 nil，而聊天列表 ForEach 以 id 为
+    /// identity，导致所有本地消息共享同一身份、渲染互相覆盖（用户消息 /
+    /// 回复 / 新消息"消失"的直接根因）。
     init(role: String, content: String, sessionID: String? = nil) {
-        self.id = nil
+        self.init(
+            id: UUID().uuidString,
+            role: role,
+            content: content,
+            sessionID: sessionID
+        )
+    }
+
+    /// 显式指定 id 的构造：流式更新时复用同一 id，保证 SwiftUI 身份稳定。
+    init(id: String?, role: String, content: String, sessionID: String? = nil) {
+        self.id = id
         self.object = nil
         self.session_id = sessionID
         self.role = role

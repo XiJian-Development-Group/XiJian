@@ -168,6 +168,9 @@ final class ChatViewModel {
 
         var assistantMessage = ChatMessage(role: "assistant", content: "", sessionID: sessionID)
         messages.append(assistantMessage)
+        // 固定流式回复的身份：循环内以同一 id 重建，SwiftUI 才能就地 diff，
+        // 而不是把每块增量当成"另一条消息"（identity 漂移会导致回复不显示）。
+        let assistantLocalID = assistantMessage.id
 
         streamingTask = Task {
             do {
@@ -178,7 +181,12 @@ final class ChatViewModel {
                     switch event {
                     case .chunk(let chunk):
                         accumulated += chunk.deltaContent
-                        assistantMessage = ChatMessage(role: "assistant", content: accumulated, sessionID: sessionID)
+                        assistantMessage = ChatMessage(
+                            id: assistantLocalID,
+                            role: "assistant",
+                            content: accumulated,
+                            sessionID: sessionID
+                        )
                         // 就地更新最后一条消息
                         if let idx = messages.indices.last, messages[idx].isAssistant {
                             messages[idx] = assistantMessage
@@ -207,6 +215,8 @@ final class ChatViewModel {
                         trimEmptyAssistantMessage()
                     }
                 } else if accumulated.isEmpty {
+                    // 被取消（用户停止 / 看门狗 / 视图销毁）且无内容：留痕便于排查。
+                    CoreManager.shared.appendLog(loc("[聊天] 流被取消且未收到任何内容"))
                     trimEmptyAssistantMessage()
                 }
             } catch {
@@ -228,6 +238,8 @@ final class ChatViewModel {
         streamingTask = nil
         isStreaming = false
         streamRequestID = nil
+        // 清掉可能残留的空回复气泡，避免 UI 留下"死泡"。
+        trimEmptyAssistantMessage()
         if let requestID {
             Task {
                 _ = try? await core.makeClient()?.chatAbort(requestID: requestID)

@@ -172,12 +172,12 @@ struct ChatView: View {
                     if viewModel.messages.isEmpty {
                         emptyState
                     }
-                    ForEach(Array(viewModel.messages.enumerated()), id: \.element.id) { index, message in
+                    let lastMessageID = viewModel.messages.last?.id
+                    ForEach(viewModel.messages) { message in
                         MessageBubbleView(
                             message: message,
-                            isStreaming: viewModel.isStreaming && index == viewModel.messages.count - 1
+                            isStreaming: viewModel.isStreaming && message.id == lastMessageID
                         )
-                        .id(message.id)
                     }
                 }
                 .padding(.vertical, 8)
