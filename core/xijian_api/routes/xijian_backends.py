@@ -237,6 +237,61 @@ def delete_model(model_id: str):
     return ("", 204)
 
 
+@bp.get("/v1/xijian/backends/<backend_id>/remote-models")
+def list_remote_models(backend_id: str):
+    """代理拉取指定后端可用的远程模型列表（GET {base_url}/models）。
+
+    返回 ``{"object": "list", "data": [{"id": ..., ...}, ...]}``，
+    连接失败返回 502 与明确错误信息。
+    """
+    backend = state.ai_backends.get(backend_id)
+    if backend is None:
+        raise ApiError(404, "backend not found", "not_found_error", code="backend_not_found")
+
+    base_url = (backend.get("base_url") or "").strip().rstrip("/")
+    if not base_url:
+        raise ApiError(400, "backend has no base_url", "invalid_request_error", code="missing_base_url")
+
+    api_key = backend.get("api_key") or ""
+    extra_headers = backend.get("headers") or {}
+    headers = dict(extra_headers)
+    if api_key:
+        headers.setdefault("Authorization", f"Bearer {api_key}")
+
+    import httpx
+
+    try:
+        with httpx.Client(timeout=15.0) as client:
+            resp = client.get(f"{base_url}/models", headers=headers)
+    except httpx.RequestError as exc:
+        raise ApiError(502, f"无法连接后端：{exc}", "backend_error", code="backend_connection_failed")
+
+    if resp.status_code >= 400:
+        raise ApiError(
+            502,
+            f"后端返回 HTTP {resp.status_code}",
+            "backend_error",
+            code="backend_connection_failed",
+        )
+
+    try:
+        payload = resp.json()
+    except ValueError:
+        raise ApiError(502, "后端返回了无法解析的响应", "backend_error", code="backend_invalid_response")
+
+    items = payload.get("data") if isinstance(payload, dict) else payload
+    if not isinstance(items, list):
+        items = []
+    normalized = []
+    for item in items:
+        if isinstance(item, dict) and item.get("id"):
+            normalized.append({"id": str(item["id"]), "owned_by": item.get("owned_by", "")})
+        elif isinstance(item, str):
+            normalized.append({"id": item, "owned_by": ""})
+
+    return jsonify({"object": "list", "data": normalized})
+
+
 @bp.post("/v1/xijian/models/<model_id>/load")
 def load_model(model_id: str):
     """加载动态模型。

@@ -75,6 +75,7 @@ from xijian_api.errors import BackendError as ApiBackendError
 from xijian_api.stubs import citations as citations_stub
 from xijian_api.stubs import memory as memory_stub
 from xijian_api.stubs import safety as safety_stub
+from xijian_api.stubs import safety_ai as safety_ai_stub
 from xijian_api.utils.ids import gen_chat_id
 
 
@@ -1548,6 +1549,54 @@ def _record_dialogue_memory(
         pass
 
 
+def _check_input_safety(
+    backend: ChatBackend,
+    messages: list[Any],
+    *,
+    character_id: str | None,
+) -> dict[str, Any] | None:
+    """Rule scan + AI semantic review of the last user message.
+
+    A5-03 双层输入防护：字面规则扫描 + AI 大模型语义审查。
+    Returns ``None`` when safe; otherwise a ``(body, 400)`` error tuple.
+    """
+    last_user_msg = next(
+        (m.get("content", "") for m in reversed(messages) if m.get("role") == "user"),
+        "",
+    )
+    text = _content_to_text(last_user_msg)
+    if not text:
+        return None
+
+    # Layer 1 — literal rules (forbidden words / injection patterns).
+    # 第一层——字面规则（违禁词 / 注入模式）。
+    input_scan = safety_stub.scan_input(text=text, character_id=character_id)
+    if input_scan.get("verdict") in ("block", "hard_block"):
+        return {
+            "error": {
+                "message": "消息已被安全系统拦截："
+                + str(input_scan.get("blocked") or "包含违规内容"),
+                "type": "safety_violation",
+                "code": "safety_blocked",
+            }
+        }, 400
+
+    # Layer 2 — AI semantic review (skips mock backends internally).
+    # 第二层——AI 语义审查（内部自动跳过 mock 后端）。
+    ai_verdict = safety_ai_stub.ai_review_input(
+        backend, text, character_id=character_id
+    )
+    if ai_verdict.get("verdict") == safety_ai_stub.VERDICT_BLOCK:
+        return {
+            "error": {
+                "message": "消息已被安全系统拦截：" + str(ai_verdict.get("reason") or "语义审查未通过"),
+                "type": "safety_violation",
+                "code": "safety_blocked",
+            }
+        }, 400
+    return None
+
+
 def complete(
     messages: list[dict],
     *,
@@ -1592,6 +1641,17 @@ def complete(
         n=n,
     )
 
+    # A5-03 dual-layer input guard (rules + AI semantic review) — runs
+    # once here so every downstream path (tools / recall / plain) is
+    # covered before any model generation happens.
+    # A5-03 双层输入防护（规则 + AI 语义审查）——在此统一执行一次，
+    # 覆盖所有下游路径（工具 / 召回 / 普通），先于任何模型生成。
+    input_error = _check_input_safety(
+        backend, messages, character_id=(xijian or {}).get("character_id")
+    )
+    if input_error is not None:
+        return input_error
+
     # MCP tools pipeline (A2) — checked before recall so that
     # xijian.tools.enabled takes precedence.  The tools pipeline
     # includes memory_recall as one of the MCP tools, so it
@@ -1628,25 +1688,6 @@ def complete(
                 audit_response=bool((xijian or {}).get("recall", {}).get("audit", True)),
             )
         response = last_response or {"id": gen_chat_id(), "object": "chat.completion", "choices": []}
-        # A5-03 safety guard: scan input on the user's message first.
-        last_user_msg = next(
-            (m.get("content", "") for m in reversed(messages) if m.get("role") == "user"),
-            "",
-        )
-        if last_user_msg:
-            input_scan = safety_stub.scan_input(
-                text=last_user_msg,
-                character_id=character_id,
-            )
-            if input_scan.get("verdict") in ("block", "hard_block"):
-                return {
-                    "error": {
-                        "message": "Your message was blocked by the safety system: " + (input_scan.get("blocked", "contains prohibited content")),
-                        "type": "safety_violation",
-                        "code": "safety_blocked",
-                    }
-                }, 400
-
         response_text = ""
         for choice in (response.get("choices") or []):
             msg = choice.get("message") or {}
@@ -1682,25 +1723,9 @@ def complete(
         ) from exc
 
     response = _to_oai_response(result, model=model)
-    # A5-03 safety guard on the fallback path.
+    # A5-03 output guard on the fallback path (input was already
+    # checked once at the top of complete()).
     char_id = (xijian or {}).get("character_id")
-    last_user_msg = next(
-        (m.get("content", "") for m in reversed(messages) if m.get("role") == "user"),
-        "",
-    )
-    if last_user_msg:
-        input_scan = safety_stub.scan_input(
-            text=last_user_msg,
-            character_id=char_id,
-        )
-        if input_scan.get("verdict") in ("block", "hard_block"):
-            return jsonify({
-                "error": {
-                    "message": "Your message was blocked by the safety system: " + (input_scan.get("blocked", "contains prohibited content")),
-                    "type": "safety_violation",
-                    "code": "safety_blocked",
-                }
-            }), 400
     response_text = ""
     for choice in (response.get("choices") or []):
         msg = choice.get("message") or {}
@@ -1844,6 +1869,17 @@ def stream_chunks(
         max_tokens=max_tokens,
         stop=stop,
     )
+    # A5-03 dual-layer input guard on the plain streaming path — runs
+    # before the first byte is yielded, so Flask can still convert a
+    # raise into a clean 400 (headers are not yet sent).
+    # A5-03 普通流式路径的双层输入防护——在产出第一个字节前执行，
+    # 此时响应头未发出，抛出的 ApiError 仍可被转换为干净的 400。
+    input_error = _check_input_safety(
+        backend, messages, character_id=(xijian or {}).get("character_id")
+    )
+    if input_error is not None:
+        body, status = input_error
+        raise ApiError(status, body["error"]["message"], body["error"]["type"], code=body["error"]["code"])
     try:
         for chunk in backend.chat(
             _normalise_messages(messages),
