@@ -1,14 +1,25 @@
 """AI Backend & Model management routes — ``/v1/xijian/backends`` and ``/v1/xijian/models``.
 
 AI 后端与模型管理路由。
-提供动态配置后端（OpenAI-compatible 等）与模型的增删改查能力，
-配置持久化到数据库，启动时与 config.toml 合并。
+提供动态配置后端（OpenAI-compatible 等）与模型的增删改查能力。
+
+持久化与机密安全
+----------------
+
+* 配置元数据（名称 / URL / headers 等）存 SQLite（DictDB，跨重启保留）。
+* **API Key 只存操作系统钥匙串**（macOS Keychain，经
+  :mod:`xijian_api.keychain`），SQLite 中永不落明文；读取接口在响应时
+  从钥匙串回填，删除后端时同步清除钥匙串条目。历史明文数据在首次
+  访问时自动迁移进钥匙串并抹除。
 """
 
 from __future__ import annotations
 
+import logging
+
 from flask import Blueprint, jsonify, request
 
+from xijian_api import keychain
 from xijian_api.config import ModelEntry
 from xijian_api.errors import ApiError
 from xijian_api.stubs import state
@@ -17,6 +28,51 @@ from xijian_api.utils.time import now_ts
 
 
 bp = Blueprint("xijian_backends", __name__)
+
+_LOGGER = logging.getLogger("xijian_api.backends")
+
+#: 模块级迁移守卫：每个进程只跑一次明文 key 迁移。
+_MIGRATED = False
+
+
+def _ensure_keys_migrated() -> None:
+    """把历史版本明文存进 DB 的 api_key 迁移到系统钥匙串并抹除。
+
+    幂等：进程内仅执行一次；无明文 key 时零开销。
+    """
+    global _MIGRATED
+    if _MIGRATED:
+        return
+    _MIGRATED = True
+    for record in state.ai_backends.values():
+        plain = record.get("api_key") or ""
+        if not plain:
+            continue
+        backend_id = record.get("id") or ""
+        if backend_id and keychain.set_secret(backend_id, plain):
+            record["api_key"] = ""
+            record["updated_at"] = now_ts()
+            _LOGGER.info("migrated api_key for backend %s into system keychain", backend_id)
+
+
+def _store_api_key(backend_id: str, value: str) -> None:
+    """写入钥匙串；失败时抛错，避免用户误以为已安全保存。"""
+    if not value:
+        return
+    if not keychain.set_secret(backend_id, value):
+        raise ApiError(
+            500,
+            "无法将 API Key 写入系统钥匙串，为避免明文落盘已取消保存。",
+            "server_error",
+            code="keychain_write_failed",
+        )
+
+
+def _with_api_key(record: dict) -> dict:
+    """返回回填了钥匙串中 api_key 的记录副本（用于响应）。"""
+    out = dict(record)
+    out["api_key"] = keychain.get_secret(out.get("id", "")) or ""
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -60,15 +116,16 @@ def _validate_backend_payload(payload: dict, require_id: bool = False) -> dict:
 
 @bp.get("/v1/xijian/backends")
 def list_backends():
-    """列出所有已配置的 AI 后端。"""
-    backends = list(state.ai_backends.values())
+    """列出所有已配置的 AI 后端（api_key 从钥匙串回填）。"""
+    _ensure_keys_migrated()
+    backends = [_with_api_key(b) for b in state.ai_backends.values()]
     backends.sort(key=lambda b: (0 if b.get("is_default") else 1, b.get("name", "")))
     return jsonify({"object": "list", "data": backends})
 
 
 @bp.post("/v1/xijian/backends")
 def create_backend():
-    """创建新的 AI 后端配置。"""
+    """创建新的 AI 后端配置（API Key 存入系统钥匙串）。"""
     payload = request.get_json(silent=True) or {}
     validated = _validate_backend_payload(payload)
 
@@ -78,30 +135,37 @@ def create_backend():
             b["is_default"] = False
 
     backend_id = gen_backend_id()
+    api_key = validated.pop("api_key") or ""
     now = now_ts()
     record = {
         "id": backend_id,
         "object": "ai_backend",
         **validated,
+        # SQLite 永不落明文 key；仅存"是否已配置"标记。
+        "api_key": "",
+        "has_api_key": bool(api_key),
         "created_at": now,
         "updated_at": now,
     }
+    if api_key:
+        _store_api_key(backend_id, api_key)
     state.ai_backends[backend_id] = record
-    return jsonify(record), 201
+    return jsonify(_with_api_key(record)), 201
 
 
 @bp.get("/v1/xijian/backends/<backend_id>")
 def get_backend(backend_id: str):
-    """获取单个后端配置。"""
+    """获取单个后端配置（api_key 从钥匙串回填）。"""
+    _ensure_keys_migrated()
     record = state.ai_backends.get(backend_id)
     if record is None:
         raise ApiError(404, "backend not found", "not_found_error", code="backend_not_found")
-    return jsonify(record)
+    return jsonify(_with_api_key(record))
 
 
 @bp.patch("/v1/xijian/backends/<backend_id>")
 def patch_backend(backend_id: str):
-    """更新后端配置。"""
+    """更新后端配置（新 API Key 写入钥匙串；留空表示保持不变）。"""
     record = state.ai_backends.get(backend_id)
     if record is None:
         raise ApiError(404, "backend not found", "not_found_error", code="backend_not_found")
@@ -115,20 +179,27 @@ def patch_backend(backend_id: str):
             if b["id"] != backend_id:
                 b["is_default"] = False
 
-    for key in ("name", "type", "base_url", "api_key", "headers", "is_default"):
+    new_api_key = validated.pop("api_key") or ""
+    for key in ("name", "type", "base_url", "headers", "is_default"):
         if key in validated:
             record[key] = validated[key]
 
+    if new_api_key:
+        # 仅在用户提交了非空 key 时更新；空值 = 保留现有 key。
+        _store_api_key(backend_id, new_api_key)
+        record["has_api_key"] = True
+
     record["updated_at"] = now_ts()
-    return jsonify(record)
+    return jsonify(_with_api_key(record))
 
 
 @bp.delete("/v1/xijian/backends/<backend_id>")
 def delete_backend(backend_id: str):
-    """删除后端配置。"""
+    """删除后端配置（同步清除钥匙串条目）。"""
     if backend_id not in state.ai_backends:
         raise ApiError(404, "backend not found", "not_found_error", code="backend_not_found")
     del state.ai_backends[backend_id]
+    keychain.delete_secret(backend_id)
     return ("", 204)
 
 
@@ -252,7 +323,7 @@ def list_remote_models(backend_id: str):
     if not base_url:
         raise ApiError(400, "backend has no base_url", "invalid_request_error", code="missing_base_url")
 
-    api_key = backend.get("api_key") or ""
+    api_key = keychain.get_secret(backend_id) or backend.get("api_key") or ""
     extra_headers = backend.get("headers") or {}
     headers = dict(extra_headers)
     if api_key:
@@ -318,7 +389,7 @@ def load_model(model_id: str):
     # For OpenAI-compatible backends, validate the connection by making a test request
     import httpx
     base_url = backend.get("base_url", "").rstrip("/")
-    api_key = backend.get("api_key", "")
+    api_key = keychain.get_secret(backend_id) or backend.get("api_key") or ""
     model_name = record.get("name", "")
 
     try:

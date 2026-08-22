@@ -13,8 +13,20 @@ doesn't leak between tests in ways that affect assertions.
 from __future__ import annotations
 
 import os
+import tempfile
 
 import pytest
+
+# CRITICAL — test/production data isolation.
+# Every DictDB bucket resolves its SQLite file from XIJIAN_DATA_DIR /
+# XIJIAN_DB_PATH at first connection.  Without this override the whole
+# suite would read/write (and reset_for_testing() would DROP tables in)
+# the user's real database under ~/Library/Application Support/XiJian.
+# The env var MUST be set before any ``xijian_api`` import because
+# :mod:`xijian_api.stubs.state` opens connections at import time.
+# 关键——测试与生产数据隔离。必须在导入任何 xijian_api 模块之前设置，
+# 因为 stubs.state 在导入时即建立 SQLite 连接。
+os.environ["XIJIAN_DATA_DIR"] = tempfile.mkdtemp(prefix="xijian-test-data-")
 
 # Make sure ``XIJIAN_DEV=1`` is *not* set when the test suite is
 # collected — otherwise :func:`xijian_api.auth.setup_token` would try
@@ -57,6 +69,34 @@ os.environ.setdefault("XIJIAN_INITIATED_TICK", "0")
 from xijian_api import auth  # noqa: E402  (在环境变量设置之后导入)
 from xijian_api.app import create_app  # noqa: E402
 from xijian_api.config import API_VERSION  # noqa: E402
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _fake_keychain():
+    """Route xijian_api.keychain to an in-memory store during tests.
+
+    Prevents the suite from writing thousands of throwaway entries into
+    the developer/user's real login keychain while still exercising the
+    same call contract (set / get / delete round-trips).
+    将 keychain 模块替换为内存实现：避免测试向真实登录钥匙串写入大量
+    一次性条目，同时保持相同的调用契约（写入/读取/删除往返）。
+    """
+    from xijian_api import keychain as kc
+
+    store: dict[str, str] = {}
+    originals = {
+        name: getattr(kc, name)
+        for name in ("available", "set_secret", "get_secret", "delete_secret")
+    }
+    kc.available = lambda: True
+    kc.set_secret = lambda backend_id, value: (
+        store.__setitem__(backend_id, value) or True
+    )
+    kc.get_secret = lambda backend_id: store.get(backend_id)
+    kc.delete_secret = lambda backend_id: (store.pop(backend_id, None), True)[1]
+    yield
+    for name, fn in originals.items():
+        setattr(kc, name, fn)
 from xijian_api.middleware import reset_idempotency_cache_for_testing  # noqa: E402
 from xijian_api.stubs import state as stubs_state  # noqa: E402
 
