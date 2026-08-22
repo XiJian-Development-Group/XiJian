@@ -152,6 +152,73 @@ def _select_default_backend() -> ChatBackend:
     return backend
 
 
+#: Cache of dynamically-resolved remote backends keyed by model id so
+#: repeated chats reuse the same instance (mirrors ModelRegistry reuse).
+#: 动态远程后端实例缓存，按模型 ID 键控，重复对话复用同一实例。
+_dynamic_remote_backends: dict[str, ChatBackend] = {}
+
+
+def _resolve_dynamic_remote(model_id: str) -> ChatBackend | None:
+    """Resolve ``model_id`` against dynamically registered remote models.
+
+    Looks up :data:`state.ai_models` (records created via
+    ``POST /v1/xijian/models``), fetches the parent backend's
+    base_url / api_key (keychain-backed) and returns a loaded OpenAI
+    chat backend instance.  Returns ``None`` when the id is not a
+    dynamic remote model — callers then fall through to other paths.
+    在动态注册的远程模型（``POST /v1/xijian/models`` 创建）中解析
+    ``model_id``：取所属后端的 base_url 与 API Key（钥匙串读取），
+    返回已加载的 OpenAI 聊天后端实例。非动态模型返回 ``None``。
+    """
+    from xijian_api import keychain as kc
+    from xijian_api.stubs import state as stubs_state
+
+    cached = _dynamic_remote_backends.get(model_id)
+    if cached is not None and cached.is_loaded():
+        return cached
+
+    record = None
+    for rec in stubs_state.ai_models.values():
+        if rec.get("name") == model_id:
+            record = rec
+            break
+    if record is None:
+        return None
+
+    backend = stubs_state.ai_backends.get(record.get("backend_id") or "")
+    if backend is None:
+        raise ApiBackendError(
+            status=503,
+            message="模型所属的 AI 后端已被删除，请重新配置。",
+            type_="backend_unavailable",
+            code="backend_unavailable",
+        )
+
+    kwargs: dict[str, Any] = {
+        "base_url": (backend.get("base_url") or "").strip(),
+        "model_name": model_id,
+        "headers": backend.get("headers") or {},
+    }
+    stored_key = kc.get_secret(backend.get("id") or "") or backend.get("api_key") or ""
+    if stored_key:
+        kwargs["api_key"] = stored_key
+
+    from xijian_api.ai.registry import get_chat_backend
+
+    inst = get_chat_backend("openai", ())
+    try:
+        inst.load(None, context_length=0, **kwargs)
+    except AIBackendError as exc:
+        raise ApiBackendError(
+            status=503,
+            message=str(exc) or "远程后端配置无效",
+            type_="backend_unavailable",
+            code=getattr(exc, "code", "backend_error"),
+        ) from exc
+    _dynamic_remote_backends[model_id] = inst
+    return inst
+
+
 def _resolve_backend_for(model_id: str) -> ChatBackend:
     """Return a ready-to-call backend for ``model_id``.
 
@@ -159,6 +226,9 @@ def _resolve_backend_for(model_id: str) -> ChatBackend:
       entry's declared backend is loaded through the process-wide
       :class:`ModelRegistry` and the cached instance is returned.
       Subsequent calls reuse the same instance.
+    * When ``model_id`` matches a dynamically registered remote model
+      (:data:`state.ai_models`), an OpenAI-compatible backend bound to
+      its configured endpoint is returned (cached per model).
     * Otherwise the configured default chain is tried — useful for
       ad-hoc free-form model ids that don't need to be registered.
 
@@ -191,6 +261,11 @@ def _resolve_backend_for(model_id: str) -> ChatBackend:
                     type_="backend_unavailable",
                     code=getattr(exc, "code", "backend_error"),
                 ) from exc
+
+    dynamic = _resolve_dynamic_remote(model_id)
+    if dynamic is not None:
+        return dynamic
+
     return _select_default_backend()
 
 

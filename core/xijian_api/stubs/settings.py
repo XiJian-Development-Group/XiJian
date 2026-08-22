@@ -38,10 +38,20 @@ def seed_default() -> None:
 
 
 def _settings_bucket() -> dict:
-    """Return the settings dict, creating an empty one on first use.
-    返回设置字典，首次使用时创建空字典。
+    """Return the settings record, creating an empty one on first use.
+
+    Backed by the persistent ``app_settings`` DictDB so user settings
+    survive Core restarts (previously this lived in the in-memory
+    ``safety_state`` and was wiped on every restart).
+    返回设置记录，首次使用时创建。改由持久化的 ``app_settings``
+    DictDB 承载，使设置跨 Core 重启保留（此前存于内存
+    ``safety_state``，每次重启即丢）。
     """
-    return state.safety_state.setdefault("settings", {})
+    rec = state.app_settings.get("settings")
+    if not isinstance(rec, dict):
+        rec = {}
+        state.app_settings["settings"] = rec
+    return rec
 
 
 def get_settings() -> dict:
@@ -52,13 +62,14 @@ def get_settings() -> dict:
 
 
 def patch_settings(patch: dict) -> dict:
-    """Apply a partial update to settings.
-    对设置应用部分更新。
+    """Apply a partial update to settings (write-through to storage).
+    对设置应用部分更新（写透到持久存储）。
     """
     settings = _settings_bucket()
     for key, value in patch.items():
         settings[key] = value
     settings["updated_at"] = now_ts()
+    state.app_settings["settings"] = settings
     return dict(settings)
 
 

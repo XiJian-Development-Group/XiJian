@@ -192,18 +192,59 @@ VALID_STAGES: frozenset[str] = frozenset({
 DEFAULT_SAFETY_THRESHOLD = 3
 
 #: Per-world ``is_dangerous`` flag (the "世界危险等级" knob spec
-#: US-A5.1-02 references).  Lives in :data:`state.safety_audit_log`'s
-#: sibling bucket :data:`state.world_economy_state` for the
-#: per-world policy toggles; we add a parallel in-memory store
-#: here rather than extending the economy module — the two
-#: concerns share a "policy toggle" pattern but don't need to
-#: share a state record.  The trade-off: a world reset wipes
-#: both via :func:`reset_for_testing`.
+#: US-A5.1-02 references).  Runtime cache over the persistent
+#: ``app_settings`` bucket — write-through on every set, lazy-loaded
+#: once per process so the policy survives Core restarts.
+#: 每世界 ``is_dangerous`` 开关。作为 ``app_settings`` 持久桶之上的
+#: 运行时缓存：每次设置写透，进程内首次访问时懒加载，跨重启保留。
 _WORLD_DANGEROUS: dict[str, bool] = {}
+_WORLD_DANGEROUS_LOADED = False
 
-#: Per-world safety threshold overrides.  Default = global
-#: :data:`DEFAULT_SAFETY_THRESHOLD`.
+#: Per-world safety threshold overrides (runtime cache, see above).
+#: 每世界安全阈值覆盖（运行时缓存，同上）。
 _WORLD_THRESHOLDS: dict[str, int] = {}
+_WORLD_THRESHOLDS_LOADED = False
+
+
+def _load_world_policy_once() -> None:
+    """Lazy-load world policy caches from persistent storage.
+
+    从持久存储懒加载世界策略缓存（每进程一次）。
+    """
+    global _WORLD_DANGEROUS_LOADED, _WORLD_THRESHOLDS_LOADED
+    if not _WORLD_DANGEROUS_LOADED:
+        rec = state.app_settings.get("safety.world_dangerous")
+        if isinstance(rec, dict):
+            _WORLD_DANGEROUS.update({k: bool(v) for k, v in rec.items()})
+        _WORLD_DANGEROUS_LOADED = True
+    if not _WORLD_THRESHOLDS_LOADED:
+        rec = state.app_settings.get("safety.world_thresholds")
+        if isinstance(rec, dict):
+            _WORLD_THRESHOLDS.update(
+                {k: int(v) for k, v in rec.items() if k != "__global__"}
+            )
+            g = rec.get("__global__")
+            if isinstance(g, int) and not isinstance(g, bool):
+                global DEFAULT_SAFETY_THRESHOLD
+                DEFAULT_SAFETY_THRESHOLD = g
+        _WORLD_THRESHOLDS_LOADED = True
+
+
+def _persist_world_dangerous() -> None:
+    try:
+        state.app_settings["safety.world_dangerous"] = dict(_WORLD_DANGEROUS)
+    except Exception:  # noqa: BLE001 — best-effort persistence
+        pass
+
+
+def _persist_world_thresholds() -> None:
+    try:
+        snapshot = dict(_WORLD_THRESHOLDS)
+        if DEFAULT_SAFETY_THRESHOLD != 3:
+            snapshot["__global__"] = DEFAULT_SAFETY_THRESHOLD
+        state.app_settings["safety.world_thresholds"] = snapshot
+    except Exception:  # noqa: BLE001
+        pass
 
 #: Monotonic insert-sequence counter.  Used as a tiebreaker so
 #: that ``list_log`` returns entries in true insertion order
@@ -270,6 +311,7 @@ def _worst_match(matches: list[dict]) -> dict | None:
 def _is_world_dangerous(world_id: str | None) -> bool:
     if not world_id:
         return False
+    _load_world_policy_once()
     return bool(_WORLD_DANGEROUS.get(world_id, False))
 
 
@@ -292,10 +334,16 @@ def _event_is_dangerous(event_tags: list[str] | None) -> bool:
 
 
 def set_world_dangerous(world_id: str, dangerous: bool) -> dict:
-    """Toggle the per-world "dangerous" flag (US-A5.1-02)."""
+    """Toggle the per-world "dangerous" flag (US-A5.1-02).
+
+    Write-through: the flag persists across Core restarts.
+    写透持久化：开关跨 Core 重启保留。
+    """
     if not isinstance(world_id, str) or not world_id:
         raise SafetyError("world_id is required")
+    _load_world_policy_once()
     _WORLD_DANGEROUS[world_id] = bool(dangerous)
+    _persist_world_dangerous()
     return {"world_id": world_id, "is_dangerous": bool(dangerous)}
 
 
@@ -375,6 +423,7 @@ def audit_tool_call(
 def get_safety_threshold(world_id: str | None = None) -> int:
     """Return the effective threshold for ``world_id`` (falling
     back to the global default)."""
+    _load_world_policy_once()
     if world_id and world_id in _WORLD_THRESHOLDS:
         return int(_WORLD_THRESHOLDS[world_id])
     return DEFAULT_SAFETY_THRESHOLD
@@ -382,7 +431,11 @@ def get_safety_threshold(world_id: str | None = None) -> int:
 
 def set_safety_threshold(world_id: str | None, threshold: int) -> dict:
     """Override the per-world safety threshold.  Pass
-    ``world_id=None`` to set the global default."""
+    ``world_id=None`` to set the global default.
+
+    Write-through: persists across Core restarts.
+    写透持久化：跨 Core 重启保留。
+    """
     if not isinstance(threshold, int) or isinstance(threshold, bool):
         raise SafetyError(
             "threshold must be an int, got %s" % type(threshold).__name__
@@ -392,13 +445,16 @@ def set_safety_threshold(world_id: str | None, threshold: int) -> dict:
             "threshold must be in [%d, %d], got %d"
             % (rules_stub.MIN_SEVERITY, rules_stub.MAX_SEVERITY, threshold)
         )
+    _load_world_policy_once()
     if world_id is None:
         global DEFAULT_SAFETY_THRESHOLD  # noqa: F841 — keep the constant referenced
         # Mutate the module-level constant via a private dict so
         # tests can reset to default easily.
         _WORLD_THRESHOLDS["__global__"] = int(threshold)
+        DEFAULT_SAFETY_THRESHOLD = int(threshold)
     else:
         _WORLD_THRESHOLDS[world_id] = int(threshold)
+    _persist_world_thresholds()
     return {"world_id": world_id, "threshold": int(threshold)}
 
 
@@ -406,11 +462,14 @@ def reset_world_policy(world_id: str) -> int:
     """Drop the per-world policy entries (dangerous + threshold).
     Called by the worlds reset flow so a reset world starts with
     the defaults."""
+    _load_world_policy_once()
     removed = 0
     if _WORLD_DANGEROUS.pop(world_id, None) is not None:
         removed += 1
     if _WORLD_THRESHOLDS.pop(world_id, None) is not None:
         removed += 1
+    _persist_world_dangerous()
+    _persist_world_thresholds()
     return removed
 
 
@@ -803,6 +862,14 @@ def reset_for_testing() -> None:
     state.safety_state.clear()
     _WORLD_DANGEROUS.clear()
     _WORLD_THRESHOLDS.clear()
+    global _WORLD_DANGEROUS_LOADED, _WORLD_THRESHOLDS_LOADED
+    # Re-arm lazy reload so a later access re-reads the (now cleared)
+    # persistent bucket instead of trusting stale load flags.
+    # 重新武装懒加载标志，使后续访问重新读取（已清空的）持久桶。
+    _WORLD_DANGEROUS_LOADED = False
+    _WORLD_THRESHOLDS_LOADED = False
+    global DEFAULT_SAFETY_THRESHOLD
+    DEFAULT_SAFETY_THRESHOLD = 3
     with _CHALLENGE_LOCK:
         _CHALLENGES.clear()
 

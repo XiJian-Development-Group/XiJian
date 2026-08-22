@@ -255,6 +255,8 @@ struct ChatParameterPanel: View {
     @Bindable var viewModel: ChatViewModel
     @Environment(ThemeSettings.self) private var theme
     @State private var appVM = AppViewModel.shared
+    @State private var maxTokensText: String = ""
+    @State private var maxTokenHint: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -275,13 +277,31 @@ struct ChatParameterPanel: View {
                 HStack {
                     Text(loc("最大 Token"))
                     Spacer()
-                    Text("\(appVM.maxTokens)")
-                        .foregroundStyle(.secondary)
+                    if let hint = maxTokenHint, !hint.isEmpty {
+                        Text(hint)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    } else {
+                        Text("\(appVM.maxTokens)")
+                            .foregroundStyle(.secondary)
+                    }
                 }
-                Slider(value: Binding(
-                    get: { Double(appVM.maxTokens) },
-                    set: { appVM.maxTokens = Int($0) }
-                ), in: 64...8192, step: 64)
+                TextField(loc("正整数，如 2048、131072"), text: $maxTokensText)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 180)
+                    .onSubmit { commitMaxTokens() }
+                    .onChange(of: maxTokensText) { _, _ in
+                        // 输入过程中仅清除旧错误提示；提交时统一校验。
+                        if maxTokenHint != nil { maxTokenHint = nil }
+                    }
+                HStack(spacing: 8) {
+                    ForEach([1024, 4096, 8192, 16384], id: \.self) { preset in
+                        Button("\(preset)") { appVM.maxTokens = preset; maxTokensText = String(preset) }
+                            .controlSize(.small)
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
 
             Toggle(loc("启用记忆召回"), isOn: Bindable(appVM).recallEnabled)
@@ -296,7 +316,40 @@ struct ChatParameterPanel: View {
             CharacterWorldPicker(characterID: Bindable(appVM).selectedCharacterID, worldID: Bindable(appVM).selectedWorldID)
         }
         .padding(16)
-        .frame(width: 320)
+        .frame(width: 340)
+        .onAppear { maxTokensText = String(appVM.maxTokens) }
+    }
+
+    /// 提交并校验最大 Token 输入。
+    /// 规则：去空白后必须为纯数字；1…2_000_000 之间；
+    /// 任何非法输入给出明确中文提示，不静默钳位、不崩溃。
+    private func commitMaxTokens() {
+        let raw = maxTokensText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else {
+            maxTokenHint = loc("请输入一个数值")
+            return
+        }
+        // 仅接受纯数字（拒绝 +/-/小数/科学计数/全角字符等一切花活）。
+        guard raw.allSatisfy({ $0.isNumber && $0.isASCII }) else {
+            maxTokenHint = loc("仅支持正整数")
+            return
+        }
+        guard let value = Int(raw) else {
+            maxTokenHint = loc("数值超出可表示范围")
+            return
+        }
+        let hardLimit = 2_000_000
+        if value == 0 {
+            maxTokenHint = loc("必须大于 0")
+            return
+        }
+        if value > hardLimit {
+            maxTokenHint = loc("过大：上限 %lld", hardLimit)
+            return
+        }
+        appVM.maxTokens = value
+        maxTokenHint = nil
+        maxTokensText = String(value)
     }
 }
 

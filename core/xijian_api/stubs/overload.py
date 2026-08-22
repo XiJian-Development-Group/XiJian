@@ -560,6 +560,9 @@ def set_tier(tier: str) -> dict:
     """Switch the active tier.  Raises ``ValueError`` for anything else.
 
     Per AC-3 the user picks strict or medium; there is no other knob.
+    The choice is persisted to ``app_settings`` so it survives restarts.
+    用户仅可在 strict / medium 间选择；选择写透到 ``app_settings``，
+    跨重启保留。
     """
     if tier not in VALID_TIERS:
         raise ValueError(f"invalid tier: {tier!r}")
@@ -569,7 +572,27 @@ def set_tier(tier: str) -> dict:
         record = state.overload.setdefault("config", {})
         record["tier"] = tier
         record["tier_changed_at"] = now_ts()
+    try:
+        state.app_settings["overload.tier"] = {"tier": tier}
+    except Exception:  # noqa: BLE001 — persistence is best-effort
+        pass
     return {"tier": tier, "tier_changed_at": record["tier_changed_at"]}
+
+
+def restore_tier() -> None:
+    """Re-apply the persisted tier after a restart (best-effort).
+
+    启动时恢复已持久化的档位（尽力而为，绝不抛错）。
+    """
+    try:
+        rec = state.app_settings.get("overload.tier")
+        if isinstance(rec, dict) and rec.get("tier") in VALID_TIERS:
+            global _TIER
+            _TIER = rec["tier"]
+            record = state.overload.setdefault("config", {})
+            record["tier"] = rec["tier"]
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def host_recommendation() -> str:
@@ -1051,6 +1074,9 @@ def seed_default() -> None:
     suppressed in tests via ``XIJIAN_OVERLOAD_MONITOR=0`` so the
     background thread doesn't race the assertions.
     """
+    # Restore the persisted tier (no-op when nothing was saved).
+    # 恢复已持久化的档位（无保存记录时为空操作）。
+    restore_tier()
     if not state.overload.get("config"):
         state.overload["config"] = {
             "tier": _TIER,

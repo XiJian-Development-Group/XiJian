@@ -222,6 +222,12 @@ mcp_pending_actions: DictDB = bucket("mcp_pending_actions")
 ai_backends: DictDB = bucket("ai_backends")
 ai_models: DictDB = bucket("ai_models")
 
+#: Cross-restart runtime knobs (settings / overload tier / world safety
+#: policy).  Small JSON-safe records keyed by dotted names.
+#: 跨重启的运行期配置（通用设置 / 过载档位 / 安全世界策略）。
+#: 以点分名称为键的小型 JSON 安全记录。
+app_settings: DictDB = bucket("app_settings")
+
 
 # In-memory special buckets (not suited for key-value SQL)
 # 内存特殊桶（不适合键值 SQL）
@@ -322,6 +328,10 @@ def reset_for_testing(seed_demo_data: bool = True) -> None:
         mcp_pending_actions,
         # AI Backend & Model management (added 2026-08-14).
         ai_backends, ai_models,
+        # Runtime user knobs that must survive restarts (added 2026-08-22):
+        # settings stub / overload tier / safety world policy.
+        # 运行期用户配置桶（必须跨重启保留）：通用设置 / 过载档位 / 安全世界策略。
+        app_settings,
     ]
     for db in _all_dictdb:
         db.clear()

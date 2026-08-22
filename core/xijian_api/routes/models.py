@@ -147,6 +147,39 @@ def list_models():
         if backend_available and weights_exist:
             data.append(record)
 
+    # Merge dynamically registered remote models (/v1/xijian/models)
+    # into the OAI list so model pickers see them in ONE endpoint.
+    # Clients send record["name"] back as the `model` field; the chat
+    # pipeline resolves these via state.ai_models (see chat._resolve_backend_for).
+    # 将动态注册的远程模型合并进 OAI 列表，使模型选择器从单一端点
+    # 获取完整列表。客户端把 name 作为 model 字段回传，聊天管道经
+    # state.ai_models 解析（见 chat._resolve_backend_for）。
+    seen_ids = {r["id"] for r in data}
+    for rec in state.ai_models.values():
+        name = rec.get("name") or ""
+        if not name or name in seen_ids:
+            continue
+        seen_ids.add(name)
+        data.append(
+            {
+                "id": name,
+                "object": "model",
+                "created": rec.get("created_at") or now_ts(),
+                "owned_by": "xijian",
+                "xijian": {
+                    "backend": "openai",
+                    "type": "chat",
+                    "family": rec.get("family") or "",
+                    "quant": rec.get("quant") or "",
+                    "context_length": int(rec.get("context_length") or 0),
+                    "min_ram_gb": float(rec.get("min_ram_gb") or 0.0),
+                    "loaded": bool(rec.get("loaded")),
+                    "filename": "",
+                    "size_b": float(rec.get("size_b") or 0.0),
+                },
+            }
+        )
+
     return jsonify(
         {
             "object": "list",
