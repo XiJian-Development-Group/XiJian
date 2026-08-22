@@ -62,7 +62,8 @@ public final class AppViewModel {
 
     var maxTokens: Int {
         didSet {
-            let clamped = min(max(maxTokens, 64), 32768)
+            // 上限 1M token（1_048_576），覆盖长上下文远程模型。
+            let clamped = min(max(maxTokens, 64), 1_048_576)
             if maxTokens != clamped { maxTokens = clamped; return }
             UserDefaults.standard.set(maxTokens, forKey: XJDefaultsKey.chatMaxTokens)
         }

@@ -248,12 +248,16 @@ struct APIClient {
 
     /// 流式聊天。返回的流逐块产出 SSE 事件；取消流（task.cancel）会自动
     /// 关闭连接，随后应调用 chatAbort 通知服务端停止生成。
+    ///
+    /// 内置空闲看门狗：连续 ``idleTimeout`` 秒未收到任何字节则中止并抛
+    /// 超时错误，避免服务端挂起导致发送按钮永久锁死（isStreaming 僵尸）。
     func streamChat(
         request: ChatRequest,
-        session: URLSession? = nil
+        session: URLSession? = nil,
+        idleTimeout: TimeInterval = 120
     ) -> AsyncThrowingStream<SSEEvent, Error> {
-        AsyncThrowingStream { continuation in
-            let task = Task {
+        AsyncThrowingStream { (continuation: AsyncThrowingStream<SSEEvent, Error>.Continuation) in
+            let task = Task<Void, Error> {
                 do {
                     var xijian: [String: JSONValue] = [
                         "character_id": request.characterID.map { .string($0) } ?? .null,
@@ -299,21 +303,58 @@ struct APIClient {
                         throw APIError.httpStatus(http.statusCode, Self.extractErrorMessage(from: errorData))
                     }
 
+                    // ---- 空闲看门狗：超过 idleTimeout 无字节即判死 ----
+                    let clock = StreamActivityClock()
+
                     var currentLine: [UInt8] = []
-                    for try await byte in bytes {
-                        if Task.isCancelled { break }
-                        if byte == 0x0A { // \n
-                            let line = String(decoding: currentLine, as: UTF8.self)
-                                .trimmingCharacters(in: .whitespacesAndNewlines)
-                            currentLine = []
-                            if line.isEmpty { continue }
-                            if let event = Self.parseSSELine(line) {
-                                continuation.yield(event)
-                                if case .done = event { break }
+                    var lineCount = 0
+                    var byteCount = 0
+
+                    let reader = Task<Void, Error> {
+                        for try await byte in bytes {
+                            if Task.isCancelled { break }
+                            clock.touch()
+                            byteCount += 1
+                            if byte == 0x0A { // \n
+                                let line = String(decoding: currentLine, as: UTF8.self)
+                                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                                currentLine = []
+                                if line.isEmpty { continue }
+                                lineCount += 1
+                                if let event = Self.parseSSELine(line) {
+                                    continuation.yield(event)
+                                    if case .done = event { break }
+                                } else if lineCount <= 3 {
+                                    let snippet = String(line.prefix(200))
+                                    Task { @MainActor in
+                                        CoreManager.shared.appendLog(loc("[聊天] 未识别的 SSE 行: %@", snippet))
+                                    }
+                                }
+                            } else {
+                                currentLine.append(byte)
                             }
-                        } else {
-                            currentLine.append(byte)
                         }
+                    }
+                    let watchdog = Task {
+                        while !Task.isCancelled {
+                            if clock.idleSeconds() > idleTimeout {
+                                reader.cancel()
+                                continuation.finish(throwing: APIError.network(loc("生成超时：%lld 秒内服务器未返回任何内容", Int64(idleTimeout))))
+                                let lines = Int64(lineCount), bytes = Int64(byteCount)
+                                Task { @MainActor in
+                                    CoreManager.shared.appendLog(loc("[聊天] 流式响应空闲超过 %lld 秒，已中止（共 %lld 行 / %lld 字节）", Int64(idleTimeout), lines, bytes))
+                                }
+                                return
+                            }
+                            try? await Task.sleep(nanoseconds: 1_000_000_000)
+                        }
+                    }
+                    // 等读任务自然结束（[DONE]/连接关闭/出错）
+                    try? await reader.value
+                    watchdog.cancel()
+                    let totalLines = Int64(lineCount), totalBytes = Int64(byteCount)
+                    Task { @MainActor in
+                        CoreManager.shared.appendLog(loc("[聊天] 流结束：%lld 行 / %lld 字节", totalLines, totalBytes))
                     }
                     continuation.finish()
                 } catch is CancellationError {
@@ -773,5 +814,21 @@ struct AnyEncodable: Encodable {
 
     func encode(to encoder: Encoder) throws {
         try encodeClosure(encoder)
+    }
+}
+
+/// 线程安全的流活动时钟：记录最近一次收到字节的时间，
+/// 供 streamChat 的空闲看门狗判断是否超时。
+private final class StreamActivityClock: @unchecked Sendable {
+    private let lock = NSLock()
+    private var last = Date()
+
+    func touch() {
+        lock.lock(); last = Date(); lock.unlock()
+    }
+
+    func idleSeconds() -> TimeInterval {
+        lock.lock(); defer { lock.unlock() }
+        return Date().timeIntervalSince(last)
     }
 }

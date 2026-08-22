@@ -102,7 +102,15 @@ final class ChatViewModel {
     /// 发送用户消息并流式接收回复
     func send(text: String) async {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, !isStreaming else { return }
+        guard !trimmed.isEmpty else { return }
+        // 僵尸态自愈：上一次任务实际已结束但 isStreaming 未复位的极端情况。
+        if isStreaming {
+            if streamingTask == nil { isStreaming = false }
+        }
+        guard !isStreaming else {
+            presentError(loc("上一条消息仍在生成中，请稍候或点击停止。"))
+            return
+        }
         guard let client = core.makeClient() else {
             presentError(loc("Core 未运行，无法发送消息。请先在设置中启动 Core。"))
             return
@@ -188,6 +196,18 @@ final class ChatViewModel {
                     if let sessionID, !accumulated.isEmpty {
                         try? await client.appendSessionMessage(sessionID, role: "assistant", content: accumulated)
                     }
+                }
+                // 静默失败兜底：流结束但既无内容也无正常收尾 → 明确报错并清掉空气泡，
+                // 绝不让 UI 停留在"看起来发出去了但什么都没发生"的状态。
+                if !Task.isCancelled {
+                    if !finishedNormally {
+                        presentError(loc("生成中断：服务器未正常完成回复。请重试或查看 Core 日志。"))
+                    } else if accumulated.isEmpty {
+                        presentError(loc("服务器返回了空回复。请检查模型配置或稍后重试。"))
+                        trimEmptyAssistantMessage()
+                    }
+                } else if accumulated.isEmpty {
+                    trimEmptyAssistantMessage()
                 }
             } catch {
                 if !Task.isCancelled {
