@@ -27,7 +27,7 @@ from typing import Any
 #: 仅在无法读取 ``Config/Config.json`` 时使用的回退版本。与
 #: 该文件中的 ``Version.DevKit`` 以及 ``.app`` 应用包的
 #: ``CFBundleShortVersionString`` 保持同步。
-FALLBACK_VERSION = "v1.6.2"
+FALLBACK_VERSION = "v1.7.0"
 
 
 def config_json_path() -> pathlib.Path:

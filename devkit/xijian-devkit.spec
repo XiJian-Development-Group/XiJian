@@ -150,8 +150,8 @@ if sys.platform == "darwin":
         info_plist={
             "CFBundleName": "XiJianDevKit",
             "CFBundleDisplayName": "隙间 · 开发者工具",
-            "CFBundleShortVersionString": "1.6.2",
-            "CFBundleVersion": "1.6.2",
+            "CFBundleShortVersionString": "1.7.0",
+            "CFBundleVersion": "1.7.0",
             "NSHighResolutionCapable": True,
             # No network server is ever opened; the app talks SMTP outbound
             # only.  Declared here for App Transport Security clarity.
