@@ -5,6 +5,39 @@
 
 ---
 
+## 2026-08-26 · Galgame 引擎 P2：DevKit GUI 剧本编辑器 + 资产管理
+
+### 已完成（devkit 221 全绿；JS node --check 通过）
+
+#### 存量修正（借 P2 一起修）
+- 节点类型下拉从 `dialogue/narration/choice/event/branch`（Core 不认）对齐为 Core 六类 `start/branch/event/choice/reward/end`。
+- 字段名对齐 Core：GUI 的 `name`/`content` → `title`/`description`（读取旧数据自动映射，不丢存量）。
+- `save_plot_node` 保存前强制走 `validate_node_payload`（类型 + script 结构校验）。
+
+#### 内嵌剧本编辑器（节点属性面板，无代码）
+- 节点表单内新增「演出剧本」区块：步骤列表（序号+类型+摘要）、添加（14 类指令下拉）、上移/下移/删除、按类型动态渲染表单。
+- 指令表单：say（说话人+台词）、narration、setBg、setFigure（立绘名+位置左中右+表情差分+入场方式）、setBgm/playSe/playVoice、setVar（名/op=,+=,-=/值）、transition（fade/slide/none）、shake（弱中强+时长）、flash（颜色+时长）、cg、wait、choice（多行文本「文本|目标|条件」快速编辑）。
+- script 随节点保存，进节点编辑器时深拷贝副本，切步自动 collect 未保存输入。
+
+#### 资产管理区
+- 三列展示 sprite/bg/audio（文件名+KB+外部引用标记）；上传走 pywebview 原生对话框（Python 侧驱动，按 kind 过滤扩展名）；删除同时清文件+索引。
+- **试听/预览**：音频 data URL 直接播放（Audio），图片缩略图内嵌展示，视频内嵌播放器；data URL 上限 8MB 防内存暴涨。
+- **TTS 快速导入**：列出 DevKit tts_output 目录语音，一键登记进剧情包 audio（真实来源打通 TTS→剧情 BGM/Voice 工作流）。
+
+#### 后端 API（plot_editor.py / api.py）
+- 新增 plot_editor：`list_plot_assets` / `delete_plot_asset` / `import_external_asset`（external_ref 出处）/ `read_asset_data_url` / `ASSET_EXTENSIONS` / `validate_node_payload` / `_validate_step_shape`（14 类步结构校验，与 Core STEP_TYPES 对齐——不含 reward/effect 两个仅内部类型）。
+- 新增 api.py 方法：`list_plot_assets` / `upload_plot_asset`（对话框+external_ref 可选）/ `register_plot_asset_by_path` / `delete_plot_asset` / `read_plot_asset_data_url` / `list_tts_output_files`。
+
+### 测试
+- 新增 `tests/test_plot_assets_p2.py`（8 项）：字段映射、六类对齐、script 校验拒绝非法、资产增删查/data URL/外部出处/超大拒绝、save_node 校验链路。
+
+### 没动的 / 留的口子
+1. 外部资产浏览导入 UI（绑定角色/世界立绘库）：角色目录当前无立绘字段（只有 character.json+persona.md），等角色侧定稿后接 `import_external_asset`（后端已就绪）。
+2. 节点连线画布（12 月后）、预览播放器（实测阶段）。
+3. devkit.js 单文件继续膨胀（~3160 行），后续如加播放器预览建议拆模块。
+
+---
+
 ## 2026-08-26 · Galgame 引擎 P1：播放契约 + 32 档存档
 
 ### 已完成（core 2375 全绿，无回归）

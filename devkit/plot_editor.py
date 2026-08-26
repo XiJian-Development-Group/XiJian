@@ -263,6 +263,8 @@ def save_plot_node(work_dir: str, plot_id: str, node: dict[str, Any]) -> dict[st
     if not get_plot(work_dir, plot_id):
         raise DevKitError(404, f"剧情不存在: {plot_id}", code="not_found")
 
+    node = validate_node_payload(node)
+
     nodes = get_plot_nodes(work_dir, plot_id)
     node_id = node.get("id", _gen_id())
     node["id"] = node_id
@@ -344,6 +346,157 @@ def _find_plot_with_edge(work_dir: str, edge_id: str) -> str | None:
         if any(e.get("id") == edge_id for e in get_plot_edges(work_dir, pid)):
             return pid
     return None
+
+
+# ---------------------------------------------------------------------------
+# P2 资产管理 API（GUI 用）
+# ---------------------------------------------------------------------------
+
+#: 各资产 kind 允许的扩展名（上传校验用）。
+ASSET_EXTENSIONS: dict[str, tuple[str, ...]] = {
+    "sprite": (".png", ".jpg", ".jpeg", ".webp"),
+    "bg": (".png", ".jpg", ".jpeg", ".webp", ".mp4", ".webm", ".mov"),
+    "audio": (".wav", ".mp3", ".ogg", ".m4a", ".flac"),
+}
+
+
+def list_plot_assets(work_dir: str, plot_id: str) -> dict[str, list[dict[str, Any]]]:
+    """按 kind 分组返回剧情包资产（GUI 三列展示）。"""
+    grouped: dict[str, list[dict[str, Any]]] = {"sprite": [], "bg": [], "audio": []}
+    for rec in _load_assets_index(work_dir, plot_id):
+        kind = rec.get("kind")
+        if kind in grouped:
+            grouped[kind].append(rec)
+    return grouped
+
+
+def delete_plot_asset(work_dir: str, plot_id: str, asset_id: str) -> bool:
+    """删除一个资产：移除文件 + 索引记录。"""
+    index = _load_assets_index(work_dir, plot_id)
+    target = next((r for r in index if r.get("id") == asset_id), None)
+    if not target:
+        return False
+    fpath = os.path.join(_plot_dir(work_dir, plot_id), target["file"])
+    if os.path.isfile(fpath):
+        os.remove(fpath)
+    index = [r for r in index if r.get("id") != asset_id]
+    _save_assets_index(work_dir, plot_id, index)
+    return True
+
+
+def import_external_asset(
+    work_dir: str, plot_id: str, kind: str,
+    src_path: str, source_kind: str, source_id: str,
+) -> dict[str, Any]:
+    """导入绑定角色/世界的资产：拷贝进包并登记 external_ref 出处。"""
+    if source_kind not in ("character", "world"):
+        raise DevKitError(400, f"外部资产来源类型非法: {source_kind}", code="bad_source_kind")
+    return register_asset(
+        work_dir, plot_id, kind, src_path,
+        external_ref={"kind": source_kind, "source_id": source_id,
+                      "original_path": src_path},
+    )
+
+
+#: data URL 预览上限（8 MB——音频/图片预览足够，防止内存暴涨）。
+_PREVIEW_MAX_BYTES = 8 * 1024 * 1024
+
+_MIME_BY_EXT: dict[str, str] = {
+    ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+    ".webp": "image/webp", ".gif": "image/gif",
+    ".mp4": "video/mp4", ".webm": "video/webm", ".mov": "video/quicktime",
+    ".wav": "audio/wav", ".mp3": "audio/mpeg", ".ogg": "audio/ogg",
+    ".m4a": "audio/mp4", ".flac": "audio/flac",
+}
+
+
+def read_asset_data_url(work_dir: str, plot_id: str, asset_id: str) -> dict[str, Any]:
+    """读取资产内容为 data URL（GUI 试听/预览用，限 8MB）。"""
+    import base64
+    index = _load_assets_index(work_dir, plot_id)
+    target = next((r for r in index if r.get("id") == asset_id), None)
+    if not target:
+        raise DevKitError(404, f"资产不存在: {asset_id}", code="asset_not_found")
+    fpath = os.path.join(_plot_dir(work_dir, plot_id), target["file"])
+    if not os.path.isfile(fpath):
+        raise DevKitError(404, f"资产文件缺失: {target['file']}", code="asset_file_missing")
+    size = os.path.getsize(fpath)
+    if size > _PREVIEW_MAX_BYTES:
+        raise DevKitError(413, f"文件过大（{size} 字节），超过预览上限 8MB", code="too_large")
+    ext = os.path.splitext(fpath)[1].lower()
+    mime = _MIME_BY_EXT.get(ext, "application/octet-stream")
+    with open(fpath, "rb") as f:
+        b64 = base64.b64encode(f.read()).decode("ascii")
+    return {"data_url": f"data:{mime};base64,{b64}", "mime": mime, "size": size}
+
+
+# ---------------------------------------------------------------------------
+# 节点校验（对齐 Core 六类 + script 结构）
+# ---------------------------------------------------------------------------
+
+#: 与 Core ``plot_runtime.NODE_TYPES`` 一致的合法节点类型。
+PLOT_NODE_TYPES = ("start", "branch", "event", "choice", "reward", "end")
+
+#: 与 Core ``plot_runtime.STEP_TYPES`` 一致的演出步类型。
+PLOT_STEP_TYPES = (
+    "say", "narration", "setBg", "setFigure", "setBgm", "playSe",
+    "playVoice", "setVar", "transition", "shake", "flash", "cg",
+    "wait", "choice",
+)
+
+_FIGURE_POSITIONS = ("left", "center", "right")
+
+
+def validate_node_payload(node: dict[str, Any]) -> dict[str, Any]:
+    """校验并规范化 GUI 提交的节点（对齐 Core 契约）。
+
+    兼容旧字段：``name`` → ``title``、``content`` → ``description``。
+    校验 ``type`` ∈ 六类；校验可选 ``script`` 列表的每一步结构。
+    """
+    # 旧字段映射（不丢数据）
+    if "name" in node and "title" not in node:
+        node["title"] = node.pop("name")
+    if "content" in node and "description" not in node:
+        node["description"] = node.pop("content")
+    node.setdefault("title", "")
+    node.setdefault("description", "")
+
+    ntype = node.get("type", "event")
+    if ntype not in PLOT_NODE_TYPES:
+        raise DevKitError(
+            400, f"节点类型非法: {ntype}（允许: {', '.join(PLOT_NODE_TYPES)}）",
+            code="bad_node_type",
+        )
+    node["type"] = ntype
+
+    script = node.get("script")
+    if script is not None:
+        if not isinstance(script, list):
+            raise DevKitError(400, "script 必须是列表", code="bad_script")
+        for i, step in enumerate(script):
+            _validate_step_shape(step, i)
+    return node
+
+
+def _validate_step_shape(step: Any, idx: int) -> None:
+    """轻量校验单个演出步（DevKit 侧重结构，语义由 Core 把关）。"""
+    if not isinstance(step, dict):
+        raise DevKitError(400, f"演出步 #{idx} 格式错误", code="bad_step")
+    stype = step.get("type")
+    if stype not in PLOT_STEP_TYPES:
+        raise DevKitError(
+            400, f"演出步 #{idx} 类型非法: {stype}",
+            code="bad_step_type",
+        )
+    if stype == "say" and not str(step.get("content") or "").strip():
+        raise DevKitError(400, f"演出步 #{idx}（say）台词不能为空", code="empty_line")
+    if stype == "choice":
+        choices = step.get("choices")
+        if not isinstance(choices, list) or not choices:
+            raise DevKitError(400, f"演出步 #{idx}（choice）至少需要一个选项", code="no_choices")
+        for j, ch in enumerate(choices):
+            if not isinstance(ch, dict) or not str(ch.get("text") or "").strip():
+                raise DevKitError(400, f"演出步 #{idx} 选项 #{j} 缺少文本", code="bad_choice")
 
 
 def validate_plot_bindings(work_dir: str, plot_id: str) -> dict[str, Any]:

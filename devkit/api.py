@@ -194,6 +194,11 @@ from devkit.plot_editor import (
     delete_plot_edge as _pe_edge_delete,
     validate_plot_bindings as _pe_validate_bindings,
     export_plot_for_submit as _pe_export,
+    list_plot_assets as _pe_list_assets,
+    register_asset as _pe_register_asset,
+    delete_plot_asset as _pe_delete_asset,
+    import_external_asset as _pe_import_external,
+    read_asset_data_url as _pe_read_asset_url,
 )
 from devkit.dialog_editor import (
     list_dialog_characters as _de_chars,
@@ -232,6 +237,13 @@ from devkit.ai_assistant import (
     auto_suggest as _aa_suggest,
     suggest_with_questions as _aa_suggest_questions,
 )
+
+
+def _require_str(value: Any, label: str, code: str) -> str:
+    """校验并返回非空字符串参数（GUI 调用参数守卫）。"""
+    if not isinstance(value, str) or not value:
+        raise DevKitError(400, f"{label}不能为空", code=code)
+    return value
 
 
 _LOGGER = logging.getLogger("devkit.api")
@@ -1913,6 +1925,87 @@ class DevKitApi:
         if not isinstance(plot_id, str) or not plot_id:
             raise DevKitError(400, "剧情 ID 不能为空", code="missing_plot_id")
         return _pe_validate_bindings(self._work_dir(), plot_id)
+
+    # --- P2 Galgame 资产管理 -------------------------------------------
+
+    @_serialize_call
+    def list_plot_assets(self, plot_id: Any) -> dict[str, Any]:
+        if not isinstance(plot_id, str) or not plot_id:
+            raise DevKitError(400, "剧情 ID 不能为空", code="missing_plot_id")
+        return _pe_list_assets(self._work_dir(), plot_id)
+
+    @_serialize_call
+    def upload_plot_asset(
+        self, plot_id: Any, kind: Any,
+        source_kind: Any = None, source_id: Any = None,
+    ) -> dict[str, Any]:
+        """弹文件对话框选择文件并登记为剧情资产。
+
+        提供 ``source_kind``/``source_id`` 时登记 external_ref（外部资产）。
+        """
+        pid = _require_str(plot_id, "剧情 ID", "missing_plot_id")
+        kind_s = _require_str(kind, "资产类型", "bad_asset_kind")
+        if kind_s not in ("sprite", "bg", "audio"):
+            raise DevKitError(400, f"未知资产类型: {kind_s}", code="bad_asset_kind")
+
+        exts = list(_pe.ASSET_EXTENSIONS.get(kind_s, ()))
+        dlg = self.open_file_dialog("open", file_types=exts, allow_multiple=True)
+        paths = dlg.get("paths") or []
+        if not paths:
+            return {"ok": True, "imported": []}  # 用户取消
+
+        work_dir = self._work_dir()
+        imported = []
+        for p in paths:
+            if source_kind and source_id:
+                rec = _pe_import_external(work_dir, pid, kind_s, p, str(source_kind), str(source_id))
+            else:
+                rec = _pe_register_asset(work_dir, pid, kind_s, p)
+            imported.append(rec)
+        return {"ok": True, "imported": imported}
+
+    @_serialize_call
+    def register_plot_asset_by_path(self, plot_id: Any, kind: Any, path: Any) -> dict[str, Any]:
+        """按已知路径直接登记资产（TTS 快速导入等场景）。"""
+        pid = _require_str(plot_id, "剧情 ID", "missing_plot_id")
+        kind_s = _require_str(kind, "资产类型", "bad_asset_kind")
+        p = _require_str(path, "文件路径", "missing_path")
+        rec = _pe_register_asset(self._work_dir(), pid, kind_s, p)
+        return {"ok": True, "imported": [rec]}
+
+    @_serialize_call
+    def delete_plot_asset(self, plot_id: Any, asset_id: Any) -> dict[str, Any]:
+        pid = _require_str(plot_id, "剧情 ID", "missing_plot_id")
+        aid = _require_str(asset_id, "资产 ID", "missing_asset_id")
+        ok = _pe_delete_asset(self._work_dir(), pid, aid)
+        return {"deleted": ok}
+
+    @_serialize_call
+    def read_plot_asset_data_url(self, plot_id: Any, asset_id: Any) -> dict[str, Any]:
+        """读取资产 data URL（试听/预览）。"""
+        pid = _require_str(plot_id, "剧情 ID", "missing_plot_id")
+        aid = _require_str(asset_id, "资产 ID", "missing_asset_id")
+        return _pe_read_asset_url(self._work_dir(), pid, aid)
+
+    @_serialize_call
+    def list_tts_output_files(self) -> list[dict[str, Any]]:
+        """列出 TTS 输出目录的音频（供 BGM/语音快速试听导入）。"""
+        import os as _os
+        base = _os.path.join(
+            _os.environ.get(
+                "XIJIAN_DEV_WORK_DIR",
+                _os.path.expanduser("~/Library/Application Support/XiJian/DevKit"),
+            ),
+            "tts_output",
+        )
+        if not _os.path.isdir(base):
+            return []
+        out = []
+        for name in sorted(_os.listdir(base)):
+            if name.endswith((".wav", ".mp3", ".ogg", ".m4a", ".flac")):
+                fp = _os.path.join(base, name)
+                out.append({"name": name, "path": fp, "size": _os.path.getsize(fp)})
+        return out
 
     # --- dialog editor --------------------------------------------------
 

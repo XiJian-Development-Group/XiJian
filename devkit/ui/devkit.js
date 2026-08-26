@@ -1828,24 +1828,31 @@ const callApi = async (method, ...args) => {
     const resp = await callApi("get_plot_nodes", plotId);
     if (!resp.ok) { renderItemList("plot-node-list", [], () => ""); return; }
     renderItemList("plot-node-list", resp.data || [], (n) =>
-      `<strong>[${n.type}]</strong> ${escHtml(n.name)}<br/><small>${escHtml((n.content || "").slice(0, 40))}</small>`
+      `<strong>[${n.type}]</strong> ${escHtml(n.title ?? n.name ?? "")}<br/><small>${escHtml((n.description ?? n.content ?? "").slice(0, 40))}</small>`
     );
   };
 
   const loadPlotNodeEditor = (node) => {
     _selectedPlotNodeId = node?.id || null;
+    // 兼容旧字段 name/content → title/description
     $("#plot-node-id").value = node?.id || "";
-    $("#plot-node-name").value = node?.name || "";
-    $("#plot-node-type").value = node?.type || "dialogue";
-    $("#plot-node-content").value = node?.content || "";
+    $("#plot-node-name").value = node?.title ?? node?.name ?? "";
+    $("#plot-node-type").value = node?.type || "event";
+    $("#plot-node-content").value = node?.description ?? node?.content ?? "";
+    _stepEditorScript = Array.isArray(node?.script) ? JSON.parse(JSON.stringify(node.script)) : [];
+    _stepEditorIndex = -1;
+    renderStepList();
   };
 
   const onPlotNodeNew = () => {
     _selectedPlotNodeId = null;
     $("#plot-node-id").value = "";
     $("#plot-node-name").value = "";
-    $("#plot-node-type").value = "dialogue";
+    $("#plot-node-type").value = "event";
     $("#plot-node-content").value = "";
+    _stepEditorScript = [];
+    _stepEditorIndex = -1;
+    renderStepList();
   };
 
   const onPlotNodeSave = async () => {
@@ -1853,11 +1860,12 @@ const callApi = async (method, ...args) => {
     const data = {
       id: $("#plot-node-id").value || undefined,
       plot_id: _selectedPlotId,
-      name: $("#plot-node-name").value.trim(),
+      title: $("#plot-node-name").value.trim(),
       type: $("#plot-node-type").value,
-      content: $("#plot-node-content").value,
+      description: $("#plot-node-content").value,
+      script: _stepEditorScript,
     };
-    if (!data.name) { toast("请填写节点名称", "err"); return; }
+    if (!data.title) { toast("请填写节点名称", "err"); return; }
     const resp = await callApi("save_plot_node", data);
     if (!resp.ok) { setStatus("#plot-status", `节点保存失败：${resp.message}`, "err"); return; }
     toast("节点已保存", "ok");
@@ -1871,6 +1879,298 @@ const callApi = async (method, ...args) => {
     toast("节点已删除", "ok");
     onPlotNodeNew();
     if (_selectedPlotId) await renderPlotNodes(_selectedPlotId);
+  };
+
+  // -----------------------------------------------------------------
+  // 内嵌剧本编辑器（演出步 script）
+  // -----------------------------------------------------------------
+  let _stepEditorScript = [];   // 当前节点的演出步数组（编辑中副本）
+  let _stepEditorIndex = -1;    // 当前选中的步下标
+
+  const _STEP_LABELS = {
+    say: "台词", narration: "旁白", setBg: "背景", setFigure: "立绘",
+    setBgm: "BGM", playSe: "音效", playVoice: "语音", setVar: "设变量",
+    transition: "转场", shake: "震屏", flash: "闪光", cg: "CG",
+    wait: "等待", choice: "选项",
+  };
+
+  const stepSummary = (s) => {
+    switch (s.type) {
+      case "say": return `${s.speaker || "?"}：${(s.content || "").slice(0, 24)}`;
+      case "narration": return (s.content || "").slice(0, 30);
+      case "setBg": return s.bg || "(未选)";
+      case "setFigure": return `${s.figure?.name || "?"}@${s.figure?.pos || "center"}`;
+      case "setBgm": return s.bgm || "(未选)";
+      case "playSe": return s.se || "(未选)";
+      case "playVoice": return s.voice || "(未选)";
+      case "setVar": return (s.setVar || []).map(v => `${v.name}${v.op || "="}${v.value}`).join(", ");
+      case "transition": return s.transition || "fade";
+      case "shake": return `强度${s.intensity || 1} ${s.durationMs || 300}ms`;
+      case "flash": return `${s.color || "#fff"} ${s.durationMs || 200}ms`;
+      case "cg": return s.cg || "(未选)";
+      case "wait": return `${s.waitMs || 0}ms`;
+      case "choice": return `${(s.choices || []).length} 个选项`;
+      default: return "";
+    }
+  };
+
+  const renderStepList = () => {
+    const ul = $("#plot-step-list");
+    if (!ul) return;
+    ul.innerHTML = _stepEditorScript.map((s, i) => `
+      <li data-step-idx="${i}" class="${i === _stepEditorIndex ? "active" : ""}" style="cursor:pointer">
+        <strong>${i + 1}. ${_STEP_LABELS[s.type] || s.type}</strong>
+        <small>${escHtml(stepSummary(s))}</small>
+      </li>`).join("");
+    $("#plot-step-up-btn").disabled = _stepEditorIndex <= 0;
+    $("#plot-step-down-btn").disabled = _stepEditorIndex < 0 || _stepEditorIndex >= _stepEditorScript.length - 1;
+    $("#plot-step-del-btn").disabled = _stepEditorIndex < 0;
+    renderStepForm();
+  };
+
+  // 按类型生成动态表单 HTML（无代码编辑的核心）
+  const stepFormHtml = (s) => {
+    const field = (label, id, val, ph) =>
+      `<label class="field"><span class="field__label">${label}</span><input id="${id}" class="field__input" type="text" value="${escHtml(val ?? "")}" placeholder="${ph || ""}" /></label>`;
+    switch (s.type) {
+      case "say":
+        return `<div class="grid grid--2">${field("说话人 ID", "pf-speaker", s.speaker, "角色 id，留空=旁白")}</div>${field("台词", "pf-content", s.content, "这一句说什么……")}`;
+      case "narration":
+        return field("旁白文本", "pf-content", s.content, "旁白……");
+      case "setBg":
+        return field("背景资产名", "pf-bg", s.bg, "assets/bg/xxx.png 或视频");
+      case "setFigure":
+        return `<div class="grid grid--2">
+          ${field("立绘资产名", "pf-fig-name", s.figure?.name, "assets/sprites/…")}
+          <label class="field"><span class="field__label">位置</span><select id="pf-fig-pos" class="field__input">
+            ${["left", "center", "right"].map(p => `<option value="${p}" ${s.figure?.pos === p ? "selected" : ""}>${p}</option>`).join("")}
+          </select></label></div>
+          <div class="grid grid--2">${field("表情差分", "pf-fig-expr", s.figure?.expr, "如 smile / angry")}${field("入场方式", "pf-fig-trans", s.figure?.trans, "fade/slide/none")}</div>`;
+      case "setBgm": return field("BGM 文件名", "pf-bgm", s.bgm, "assets/audio/xxx.mp3");
+      case "playSe": return field("音效文件名", "pf-se", s.se, "assets/audio/xxx.wav");
+      case "playVoice": return field("语音文件名", "pf-voice", s.voice, "assets/audio/xxx.wav");
+      case "transition":
+        return `<label class="field"><span class="field__label">转场方式</span><select id="pf-transition" class="field__input">
+          ${["fade", "slide", "none"].map(t => `<option value="${t}" ${s.transition === t ? "selected" : ""}>${t}</option>`).join("")}
+        </select></label>`;
+      case "shake":
+        return `<div class="grid grid--2">
+          <label class="field"><span class="field__label">强度</span><select id="pf-shake-int" class="field__input">
+            ${[["1", "弱"], ["2", "中"], ["3", "强"]].map(([v, n]) => `<option value="${v}" ${String(s.intensity || 1) === v ? "selected" : ""}>${n}</option>`).join("")}
+          </select></label>${field("时长 ms", "pf-wait-ms", s.durationMs, "300")}</div>`;
+      case "flash":
+        return `<div class="grid grid--2">${field("颜色", "pf-color", s.color, "#ffffff")}${field("时长 ms", "pf-wait-ms", s.durationMs, "200")}</div>`;
+      case "cg":
+        return field("CG 资产名", "pf-cg", s.cg, "assets/bg/cg_xxx.png");
+      case "wait":
+        return field("等待 ms", "pf-wait-ms", s.waitMs, "500");
+      case "setVar":
+        return `<div class="grid grid--3">${field("变量名", "pf-var-name", s.setVar?.[0]?.name, "flag.metHero")}
+          <label class="field"><span class="field__label">操作</span><select id="pf-var-op" class="field__input">
+            ${["=", "+=", "-="].map(o => `<option value="${o}" ${(s.setVar?.[0]?.op || "=") === o ? "selected" : ""}>${o}</option>`).join("")}
+          </select></label>${field("值", "pf-var-val", s.setVar?.[0]?.value, "1")}</div>`;
+      case "choice":
+        return `<p class="card__hint">选项列表（每行一个：文本 | 目标节点ID | 显示条件可省略）</p>
+          <textarea id="pf-choices" class="field__input field__input--code" rows="4" placeholder="去左边 | node_left&#10;去右边 | node_right | affinity>=5">${escHtml(
+            (s.choices || []).map(c => [c.text, c.target, c.cond].filter(x => x !== undefined && x !== null && x !== "").join(" | ")).join("\n")
+          )}</textarea>`;
+      default:
+        return `<p class="card__hint">该类型暂无参数</p>`;
+    }
+  };
+
+  const renderStepForm = () => {
+    const box = $("#plot-step-form");
+    if (!box) return;
+    if (_stepEditorIndex < 0 || !_stepEditorScript[_stepEditorIndex]) {
+      box.innerHTML = `<p class="card__hint">选择上方步骤进行编辑，或添加新步骤</p>`;
+      return;
+    }
+    box.innerHTML = stepFormHtml(_stepEditorScript[_stepEditorIndex]);
+  };
+
+  // 从动态表单读回用户输入 → 写入当前步
+  const collectStepForm = () => {
+    const s = _stepEditorScript[_stepEditorIndex];
+    if (!s) return;
+    const num = (id, dflt) => { const v = parseInt($(`#${id}`)?.value, 10); return Number.isFinite(v) ? v : dflt; };
+    const txt = (id) => $(`#${id}`)?.value?.trim();
+    switch (s.type) {
+      case "say": s.speaker = txt("pf-speaker") || null; s.content = txt("pf-content"); break;
+      case "narration": s.content = txt("pf-content"); break;
+      case "setBg": s.bg = txt("pf-bg"); break;
+      case "setFigure":
+        s.figure = { name: txt("pf-fig-name"), pos: $("#pf-fig-pos")?.value || "center",
+                     expr: txt("pf-fig-expr") || null, trans: txt("pf-fig-trans") || "fade" };
+        break;
+      case "setBgm": s.bgm = txt("pf-bgm"); break;
+      case "playSe": s.se = txt("pf-se"); break;
+      case "playVoice": s.voice = txt("pf-voice"); break;
+      case "transition": s.transition = $("#pf-transition")?.value || "fade"; break;
+      case "shake": s.intensity = parseInt($("#pf-shake-int")?.value, 10) || 1; s.durationMs = num("pf-wait-ms", 300); break;
+      case "flash": s.color = txt("pf-color") || "#ffffff"; s.durationMs = num("pf-wait-ms", 200); break;
+      case "cg": s.cg = txt("pf-cg"); break;
+      case "wait": s.waitMs = num("pf-wait-ms", 500); break;
+      case "setVar":
+        s.setVar = [{ name: txt("pf-var-name"), op: $("#pf-var-op")?.value || "=", value: txt("pf-var-val") }];
+        break;
+      case "choice": {
+        const lines = ($("#pf-choices")?.value || "").split("\n").map(l => l.trim()).filter(Boolean);
+        s.choices = lines.map(line => {
+          const [text, target, cond] = line.split("|").map(p => p.trim());
+          const ch = { text, target };
+          if (cond) ch.cond = cond;
+          return ch;
+        }).filter(c => c.text);
+        break;
+      }
+    }
+  };
+
+  const onStepAdd = () => {
+    const t = $("#plot-step-new-type").value;
+    if (!t) { toast("请选择步骤类型", "err"); return; }
+    collectStepForm();  // 先保存正在编辑的
+    const fresh = { type: t };
+    if (t === "say") { fresh.speaker = null; fresh.content = ""; }
+    if (t === "narration") fresh.content = "";
+    if (t === "choice") fresh.choices = [];
+    if (t === "wait") fresh.waitMs = 500;
+    if (t === "setVar") fresh.setVar = [];
+    _stepEditorScript.push(fresh);
+    _stepEditorIndex = _stepEditorScript.length - 1;
+    $("#plot-step-new-type").value = "";
+    renderStepList();
+  };
+
+  const onStepSelect = async (e) => {
+    const li = e.target.closest("li[data-step-idx]");
+    if (!li) return;
+    collectStepForm();
+    _stepEditorIndex = parseInt(li.dataset.stepIdx, 10);
+    renderStepList();
+  };
+
+  const onStepMove = (dir) => {
+    const i = _stepEditorIndex;
+    const j = i + dir;
+    if (i < 0 || j < 0 || j >= _stepEditorScript.length) return;
+    collectStepForm();
+    [_stepEditorScript[i], _stepEditorScript[j]] = [_stepEditorScript[j], _stepEditorScript[i]];
+    _stepEditorIndex = j;
+    renderStepList();
+  };
+
+  const onStepDelete = () => {
+    if (_stepEditorIndex < 0) return;
+    _stepEditorScript.splice(_stepEditorIndex, 1);
+    _stepEditorIndex = -1;
+    renderStepList();
+  };
+
+  // -----------------------------------------------------------------
+  // 剧情资产管理（三列展示 + 上传/删除/试听）
+  // -----------------------------------------------------------------
+  let _audioPreviewEl = null;
+
+  const stopAudioPreview = () => {
+    if (_audioPreviewEl) { _audioPreviewEl.pause(); _audioPreviewEl = null; }
+  };
+
+  const renderPlotAssets = async () => {
+    const grid = $("#plot-asset-grid");
+    if (!grid) return;
+    if (!_selectedPlotId) { grid.innerHTML = `<p class="card__hint">先选择一个剧情</p>`; return; }
+    stopAudioPreview();
+    const resp = await callApi("list_plot_assets", _selectedPlotId);
+    if (!resp.ok) { grid.innerHTML = `<p class="card__hint">加载失败：${escHtml(resp.message)}</p>`; return; }
+    const groups = resp.data || {};
+    const titles = { sprite: "立绘", bg: "背景", audio: "音频" };
+    let html = "";
+    for (const kind of ["sprite", "bg", "audio"]) {
+      html += `<div><p class="card__hint"><strong>${titles[kind]}</strong>（${(groups[kind] || []).length}）</p><ul class="item-list" data-kind="${kind}">`;
+      for (const a of groups[kind] || []) {
+        const extMark = a.external_ref ? ` <small title="${escHtml(a.external_ref.source_id || "")}">[外部:${escHtml(a.external_ref.kind)}]</small>` : "";
+        html += `<li data-asset-id="${a.id}" data-kind="${kind}">
+          <span class="asset-name">${escHtml((a.file || "").split("/").pop())}</span>${extMark}
+          <br/><small>${Math.round((a.size || 0) / 1024)} KB</small>
+          <div class="row row--gap">
+            <button class="btn btn--ghost btn--sm" data-act="preview">试听/预览</button>
+            <button class="btn btn--ghost btn--danger-ghost btn--sm" data-act="delete">删除</button>
+          </div>
+          <div class="asset-preview" data-slot></div>
+        </li>`;
+      }
+      html += `</ul></div>`;
+    }
+    grid.innerHTML = html;
+  };
+
+  const onAssetUpload = (kind) => async () => {
+    if (!_selectedPlotId) { toast("请先选择剧情", "err"); return; }
+    const resp = await callApi("upload_plot_asset", _selectedPlotId, kind);
+    if (!resp.ok) { toast(`上传失败：${resp.message}`, "err"); return; }
+    const n = (resp.data?.imported || []).length;
+    toast(n ? `已导入 ${n} 个${kind === "sprite" ? "立绘" : kind === "bg" ? "背景" : "音频"}` : "已取消", "ok");
+    await renderPlotAssets();
+  };
+
+  const onAssetGridClick = async (e) => {
+    const btn = e.target.closest("button[data-act]");
+    if (!btn) return;
+    const li = btn.closest("li[data-asset-id]");
+    if (!li) return;
+    const assetId = li.dataset.assetId;
+    if (btn.dataset.act === "delete") {
+      const resp = await callApi("delete_plot_asset", _selectedPlotId, assetId);
+      if (!resp.ok) { toast("删除失败", "err"); return; }
+      toast("已删除", "ok");
+      await renderPlotAssets();
+      return;
+    }
+    // preview：音频直接播；图片/视频塞进预览槽
+    stopAudioPreview();
+    const slot = li.querySelector("[data-slot]");
+    const resp = await callApi("read_plot_asset_data_url", _selectedPlotId, assetId);
+    if (!resp.ok) { toast(`读取失败：${resp.message}`, "err"); return; }
+    const url = resp.data.data_url;
+    if (resp.data.mime.startsWith("audio/")) {
+      _audioPreviewEl = new Audio(url);
+      _audioPreviewEl.play().catch(() => toast("播放失败", "err"));
+      toast("播放中…", "ok");
+    } else if (resp.data.mime.startsWith("image/")) {
+      slot.innerHTML = `<img src="${url}" style="max-width:100%;max-height:120px;border-radius:6px" />`;
+    } else if (resp.data.mime.startsWith("video/")) {
+      slot.innerHTML = `<video src="${url}" controls style="max-width:100%" />`;
+    }
+  };
+
+  // --- TTS 语音快速导入 ---
+  const onTtsListToggle = async () => {
+    const box = $("#plot-asset-tts-list");
+    if (!box) return;
+    if (box.style.display !== "none") { box.style.display = "none"; return; }
+    const resp = await callApi("list_tts_output_files");
+    if (!resp.ok) { toast(`加载 TTS 列表失败：${resp.message}`, "err"); return; }
+    const items = resp.data || [];
+    $("#plot-asset-tts-items").innerHTML = items.length ? items.map(f => `
+      <li data-tts-path="${escHtml(f.path)}">
+        <span>${escHtml(f.name)}</span> <small>${Math.round(f.size / 1024)} KB</small>
+        <button class="btn btn--ghost btn--sm" data-act="tts-import">导入</button>
+      </li>`).join("") : `<li><small>TTS 输出目录暂无音频</small></li>`;
+    box.style.display = "";
+  };
+
+  const onTtsItemClick = async (e) => {
+    const btn = e.target.closest("button[data-act='tts-import']");
+    if (!btn) return;
+    const li = btn.closest("li[data-tts-path]");
+    if (!li || !_selectedPlotId) { toast("请先选择剧情", "err"); return; }
+    // 走 register 通道：直接传路径登记（upload_plot_asset 不带对话框的变体）
+    const resp = await callApi("register_plot_asset_by_path", _selectedPlotId, "audio", li.dataset.ttsPath);
+    if (!resp.ok) { toast(`导入失败：${resp.message}`, "err"); return; }
+    toast("已导入音频", "ok");
+    await renderPlotAssets();
   };
 
   // Plot edges
@@ -2756,13 +3056,24 @@ const callApi = async (method, ...args) => {
       const li = e.target.closest(".item-list__item");
       if (li && li.dataset.id) {
         const resp = await callApi("get_plot", li.dataset.id);
-        if (resp.ok) { loadPlotEditor(resp.data); await renderPlotNodes(li.dataset.id); await renderPlotEdges(li.dataset.id); }
+        if (resp.ok) { loadPlotEditor(resp.data); await renderPlotNodes(li.dataset.id); await renderPlotEdges(li.dataset.id); await renderPlotAssets(); }
       }
     });
     on("#plot-node-new-btn", "click", onPlotNodeNew);
     on("#plot-node-refresh-btn", "click", async () => { if (_selectedPlotId) await renderPlotNodes(_selectedPlotId); });
     on("#plot-node-save-btn", "click", onPlotNodeSave);
     on("#plot-node-delete-btn", "click", onPlotNodeDelete);
+    on("#plot-step-add-btn", "click", onStepAdd);
+    on("#plot-step-up-btn", "click", () => onStepMove(-1));
+    on("#plot-step-down-btn", "click", () => onStepMove(1));
+    on("#plot-step-del-btn", "click", onStepDelete);
+    on("#plot-asset-upload-sprite-btn", "click", onAssetUpload("sprite"));
+    on("#plot-asset-upload-bg-btn", "click", onAssetUpload("bg"));
+    on("#plot-asset-upload-audio-btn", "click", onAssetUpload("audio"));
+    on("#plot-asset-refresh-btn", "click", renderPlotAssets);
+    on("#plot-asset-grid", "click", onAssetGridClick);
+    on("#plot-asset-tts-btn", "click", onTtsListToggle);
+    on("#plot-asset-tts-items", "click", onTtsItemClick);
     on("#plot-node-list", "click", (e) => {
       const li = e.target.closest(".item-list__item");
       if (li && li.dataset.id) loadPlotNodeEditor(JSON.parse(li.dataset.node || "{}"));

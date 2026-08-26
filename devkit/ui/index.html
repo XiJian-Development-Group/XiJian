@@ -905,11 +905,12 @@
                     <label class="field">
                       <span class="field__label">类型</span>
                       <select id="plot-node-type" class="field__input">
-                        <option value="dialogue">对话</option>
-                        <option value="narration">叙述</option>
-                        <option value="choice">选择</option>
+                        <option value="start">开始</option>
                         <option value="event">事件</option>
+                        <option value="choice">选择</option>
                         <option value="branch">分支</option>
+                        <option value="reward">奖励</option>
+                        <option value="end">结束</option>
                       </select>
                     </label>
                   </div>
@@ -917,6 +918,41 @@
                     <span class="field__label">节点内容</span>
                     <textarea id="plot-node-content" class="field__input field__input--code" rows="3" placeholder="节点描述或对话内容……"></textarea>
                   </label>
+
+                  <!-- 内嵌剧本编辑器（演出步） -->
+                  <details class="field-group" open>
+                    <summary class="field-group__summary">演出剧本（逐句播放）</summary>
+                    <div class="field-group__body">
+                      <ul id="plot-step-list" class="item-list" style="max-height:220px"></ul>
+                      <div class="row row--gap">
+                        <select id="plot-step-new-type" class="field__input" style="max-width:180px">
+                          <option value="">添加演出步…</option>
+                          <option value="say">台词（say）</option>
+                          <option value="narration">旁白（narration）</option>
+                          <option value="setBg">背景（setBg）</option>
+                          <option value="setFigure">立绘（setFigure）</option>
+                          <option value="setBgm">BGM（setBgm）</option>
+                          <option value="playSe">音效（playSe）</option>
+                          <option value="playVoice">语音（playVoice）</option>
+                          <option value="setVar">设变量（setVar）</option>
+                          <option value="transition">转场（transition）</option>
+                          <option value="shake">震屏（shake）</option>
+                          <option value="flash">闪光（flash）</option>
+                          <option value="cg">CG 展示（cg）</option>
+                          <option value="wait">等待（wait）</option>
+                          <option value="choice">选项（choice）</option>
+                        </select>
+                        <button id="plot-step-add-btn" class="btn btn--secondary" type="button">添加</button>
+                      </div>
+                      <!-- 选中演出步的动态表单区 -->
+                      <div id="plot-step-form"></div>
+                      <div class="row row--end">
+                        <button id="plot-step-up-btn" class="btn btn--ghost" type="button" disabled>上移</button>
+                        <button id="plot-step-down-btn" class="btn btn--ghost" type="button" disabled>下移</button>
+                        <button id="plot-step-del-btn" class="btn btn--ghost btn--danger-ghost" type="button" disabled>删除步骤</button>
+                      </div>
+                    </div>
+                  </details>
                   <div class="row row--end">
                     <button id="plot-node-save-btn" class="btn btn--primary" type="button">保存节点</button>
                     <button id="plot-node-delete-btn" class="btn btn--ghost btn--danger-ghost" type="button">删除节点</button>
@@ -951,6 +987,25 @@
                     <button id="plot-edge-save-btn" class="btn btn--primary" type="button">保存连线</button>
                     <button id="plot-edge-delete-btn" class="btn btn--ghost btn--danger-ghost" type="button">删除连线</button>
                   </div>
+                </div>
+              </details>
+
+              <!-- 资产管理 -->
+              <details class="field-group">
+                <summary class="field-group__summary">剧情资产（立绘 / 背景 / 音频）</summary>
+                <div class="field-group__body">
+                  <div class="row row--gap" style="flex-wrap:wrap">
+                    <button id="plot-asset-upload-sprite-btn" class="btn btn--secondary" type="button">上传立绘</button>
+                    <button id="plot-asset-upload-bg-btn" class="btn btn--secondary" type="button">上传背景</button>
+                    <button id="plot-asset-upload-audio-btn" class="btn btn--secondary" type="button">上传音频</button>
+                    <button id="plot-asset-tts-btn" class="btn btn--ghost" type="button">从 TTS 语音导入…</button>
+                    <button id="plot-asset-refresh-btn" class="btn btn--ghost" type="button">刷新</button>
+                  </div>
+                  <div id="plot-asset-tts-list" style="display:none">
+                    <p class="card__hint">TTS 输出目录的语音，点「导入」加入剧情包：</p>
+                    <ul id="plot-asset-tts-items" class="item-list" style="max-height:160px"></ul>
+                  </div>
+                  <div class="grid grid--3" id="plot-asset-grid"></div>
                 </div>
               </details>
 
