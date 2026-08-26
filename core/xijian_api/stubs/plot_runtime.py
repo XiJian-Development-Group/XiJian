@@ -805,6 +805,9 @@ def create_plot_runtime(
     bucket = _get_bucket()
     bucket[runtime_id] = runtime_state
 
+    # 进入起始节点时执行一次副作用（奖励/效果/标记完成/历史）
+    _enter_node(runtime_state, start_node)
+
     _LOGGER.info(
         "剧情运行时创建: runtime_id=%s plot_id=%s world_id=%s start_node=%s",
         runtime_id, plot_id, world_id, start_node["id"],
@@ -840,6 +843,34 @@ def list_plot_runtimes(
             continue
         results.append(_serialize_runtime(rt))
     return results
+
+
+def _node_has_pending_trigger(node: dict[str, Any]) -> bool:
+    """节点是否带尚未满足的触发器（有 trigger 的节点延迟进入）。"""
+    return bool(node.get("trigger"))
+
+
+def _enter_node(rt: dict[str, Any], node: dict[str, Any]) -> tuple[list[dict], list[dict]]:
+    """进入节点时执行副作用：奖励 + 效果 + 标记完成 + 写历史。
+
+    Galgame 语义：节点**进入时**执行一次（而非逐句点击时重复执行）。
+    带 trigger 的节点不在此列——它们延迟到触发器命中时才真正进入
+    （见 evaluate_plot_triggers / advance 到达该节点时的立即评估）。
+    返回 (rewards_results, effects_results) 供调用方记录。
+    """
+    world_id = rt["world_id"]
+    node_id = node.get("id")
+
+    rewards_results = _execute_rewards(node.get("rewards", []), world_id, rt)
+    effects_results = _execute_effects(node.get("effects", []), world_id, rt)
+
+    if node_id and node_id not in rt.get("completed_nodes", []):
+        rt.setdefault("completed_nodes", []).append(node_id)
+
+    history = rt.setdefault("_history", [])
+    if node_id:
+        history.append({"node_id": node_id, "at": now_ts()})
+    return rewards_results, effects_results
 
 
 def advance_plot_runtime(
@@ -881,13 +912,14 @@ def advance_plot_runtime(
     if current_node.get("type") == "choice" and not choose_edge_id:
         raise PlotError("choice 节点必须指定 choose_edge_id")
 
-    # 执行当前节点的奖励和效果。
-    rewards_results = _execute_rewards(current_node.get("rewards", []), world_id, rt)
-    effects_results = _execute_effects(current_node.get("effects", []), world_id, rt)
-
-    # 标记当前节点完成。
-    if current_node_id not in rt["completed_nodes"]:
-        rt["completed_nodes"].append(current_node_id)
+    # 注：副作用（rewards/effects）在节点【进入时】执行一次
+    # （create 时进入 start、流转时进入下一节点）。若当前节点因带
+    # 未命中的触发器而停留（尚未进入），离开它视为隐式进入——补执行
+    # 一次并标记完成（exactly-once 由 completed_nodes 保证）。
+    if current_node_id not in rt.get("completed_nodes", []):
+        leave_rewards, leave_effects = _enter_node(rt, current_node)
+    else:
+        leave_rewards, leave_effects = [], []
 
     outgoing = _get_outgoing_edges(edges, current_node_id)
     next_node_id: str | None = None
@@ -921,22 +953,34 @@ def advance_plot_runtime(
     if next_node_id:
         rt["current_node_id"] = next_node_id
         rt["status"] = PLOT_RUNTIME_STATUS_RUNNING
+        rt["script_index"] = 0  # 进入新节点，重置句级游标
         next_node = nodes.get(next_node_id)
-        if next_node and next_node.get("type") == "end":
-            rt["status"] = PLOT_RUNTIME_STATUS_COMPLETED
+        # 进入新节点时执行其副作用（奖励/效果/标记完成/历史）。
+        # 带 trigger 的节点先评估一次：命中→立即进入；未命中→停留等待调度器。
+        rewards_results: list[dict[str, Any]] = []
+        effects_results: list[dict[str, Any]] = []
+        if next_node:
+            if next_node.get("type") == "end":
+                rt["status"] = PLOT_RUNTIME_STATUS_COMPLETED
+            elif _node_has_pending_trigger(next_node):
+                pass  # 停留等待：调度器 tick 命中或下次手动推进时隐式进入
+            else:
+                rewards_results, effects_results = _enter_node(rt, next_node)
     else:
         # 无出边且非 end 类型，视为结束。
         if current_node.get("type") != "end":
             rt["status"] = PLOT_RUNTIME_STATUS_COMPLETED
         rt["current_node_id"] = None
+        rewards_results = []
+        effects_results = []
 
     rt["updated_at"] = now_ts()
     rt["last_tick_at"] = now_ts()
     bucket[runtime_id] = rt
 
     result = _serialize_runtime(rt)
-    result["executed_rewards"] = rewards_results
-    result["executed_effects"] = effects_results
+    result["executed_rewards"] = leave_rewards + rewards_results
+    result["executed_effects"] = leave_effects + effects_results
     result["next_node_id"] = next_node_id
 
     _LOGGER.info(
@@ -1003,6 +1047,209 @@ def evaluate_plot_triggers(world_id: str) -> list[dict[str, Any]]:
         })
 
     return activated
+
+
+def get_current_playback(runtime_id: str) -> dict[str, Any]:
+    """获取 Galgame 播放器所需的当前演出状态。
+
+    返回当前节点的全部 script（供播放器按顺序渲染）、当前句游标、
+    当前步、是否选项步、可见选项列表、历史栈。
+    """
+    bucket = _get_bucket()
+    rt = bucket.get(runtime_id)
+    if not rt:
+        raise PlotError(f"剧情运行时不存在: {runtime_id}")
+
+    nodes = rt.get("_nodes", {})
+    current_node_id = rt.get("current_node_id")
+    current_node = nodes.get(current_node_id) if current_node_id else None
+    script = current_node.get("script", []) if current_node else []
+    script_index = rt.get("script_index", 0)
+
+    # choice 可见选项：按 cond 过滤（使用剧情变量上下文）
+    choices: list[dict[str, Any]] = []
+    current_step = script[script_index] if script and script_index < len(script) else None
+    if current_step and current_step.get("type") == STEP_TYPE_CHOICE:
+        ctx = _runtime_context(rt["world_id"], rt)
+        for ch in current_step.get("choices", []):
+            cond = ch.get("cond")
+            if cond is None or _eval_cond_any(cond, ctx):
+                choices.append({
+                    "text": ch.get("text"),
+                    "target": ch.get("target"),
+                    "cond": cond,
+                })
+
+    return {
+        "runtime_id": runtime_id,
+        "plot_id": rt.get("plot_id"),
+        "world_id": rt.get("world_id"),
+        "status": rt.get("status"),
+        "current_node_id": current_node_id,
+        "script_index": script_index,
+        "node_script": script,
+        "current_step": current_step,
+        "is_choice": bool(choices),
+        "choices": choices,
+        "history": rt.get("_history", []),
+        "variables": rt.get("variables", {}),
+    }
+
+
+def advance_playback(runtime_id: str, *, choose_edge_id: str | None = None) -> dict[str, Any]:
+    """Galgame 逐句推进。
+
+    - 当前步是 choice 且未选：必须提供 choose_edge_id（对应选项的 target 边）。
+    - 节点 script 未播完：script_index+1，返回下一步（不流转节点、不重复执行副作用）。
+    - 节点 script 已播完：调用 advance_plot_runtime 流转到下一节点（副作用在进入新节点时执行）。
+    - 每次成功推进后自动写 slot 0（最后进度存档）。
+
+    Raises
+    ------
+    PlotError
+        运行时不存在、状态不可推进、choice 未选/选错、边条件不满足时抛出。
+    """
+    bucket = _get_bucket()
+    rt = bucket.get(runtime_id)
+    if not rt:
+        raise PlotError(f"剧情运行时不存在: {runtime_id}")
+    if rt.get("status") != PLOT_RUNTIME_STATUS_RUNNING:
+        raise PlotError(f"剧情运行时状态不可推进: {rt.get('status')}")
+
+    nodes = rt.get("_nodes", {})
+    current_node_id = rt.get("current_node_id")
+    current_node = nodes.get(current_node_id) if current_node_id else None
+    script = current_node.get("script", []) if current_node else []
+    script_index = rt.get("script_index", 0)
+
+    # choice 步处理
+    if script and script_index < len(script):
+        step = script[script_index]
+        if step.get("type") == STEP_TYPE_CHOICE:
+            if not choose_edge_id:
+                raise PlotError("choice 步必须指定 choose_edge_id")
+            # 校验所选 target 是当前选项的合法 target
+            valid_targets = {c.get("target") for c in step.get("choices", [])}
+            if choose_edge_id not in valid_targets:
+                raise PlotError(f"非法的选择目标: {choose_edge_id}")
+
+    # 节点内还有未播的步 → 仅推进句游标
+    if script and script_index < len(script) - 1:
+        rt["script_index"] = script_index + 1
+        rt["updated_at"] = now_ts()
+        bucket[runtime_id] = rt
+        _auto_save(runtime_id)
+        return get_current_playback(runtime_id)
+
+    # 节点 script 已播完 → 节点级流转
+    result = advance_plot_runtime(runtime_id, choose_edge_id=choose_edge_id)
+    _auto_save(runtime_id)
+    return result
+
+
+def _eval_cond_any(cond: Any, ctx: dict[str, Any]) -> bool:
+    """选项可见性条件：复用统一求值器（支持 dict 与字符串表达式）。"""
+    from xijian_api.stubs.condition_eval import eval_any
+    return eval_any(cond, ctx)
+
+
+# ---------------------------------------------------------------------------
+# 存档系统（每剧情包最多 32 档，slot 0 = 自动存档）
+# ---------------------------------------------------------------------------
+
+
+#: 每剧情包最大存档槽数（slot 0 自动档 + 1-31 手动档）。
+MAX_SAVE_SLOTS = 32
+
+
+def _save_key(plot_id: str, slot: int) -> tuple[str, int]:
+    if not (0 <= slot < MAX_SAVE_SLOTS):
+        raise PlotError(f"存档槽非法: {slot}（范围 0-{MAX_SAVE_SLOTS-1}）")
+    return (plot_id, slot)
+
+
+def save_plot_save(runtime_id: str, slot: int, *, label: str | None = None,
+                   allow_slot0: bool = False) -> dict[str, Any]:
+    """保存一个存档槽（覆盖写）。
+
+    slot 0 为自动存档专用（仅内部 ``_auto_save`` 可写，``allow_slot0=True``）；
+    手动存档使用 1-31。存轻量进度：序列化运行时 + script_index + 时间戳，
+    不复制 _nodes/_edges 冗余结构（恢复时从 plot_design 重新加载）。
+    """
+    if slot == 0 and not allow_slot0:
+        raise PlotError("slot 0 为自动存档专用，请使用 1-31 的手动槽位")
+
+    bucket = _get_bucket()
+    rt = bucket.get(runtime_id)
+    if not rt:
+        raise PlotError(f"剧情运行时不存在: {runtime_id}")
+
+    key = _save_key(rt["plot_id"], slot)
+    record = {
+        "plot_id": rt["plot_id"],
+        "slot": slot,
+        "runtime_snapshot": _serialize_runtime(rt),
+        "script_index": rt.get("script_index", 0),
+        "saved_at": now_ts(),
+        "label": label or f"槽 {slot}",
+    }
+    state.plot_saves[key] = record
+    return {"plot_id": rt["plot_id"], "slot": slot, "saved_at": record["saved_at"]}
+
+
+def _auto_save(runtime_id: str) -> None:
+    """自动存档（slot 0，最后进度）。失败静默（不影响游玩）。"""
+    try:
+        save_plot_save(runtime_id, 0, label="自动存档", allow_slot0=True)
+    except PlotError:
+        pass
+
+
+def list_plot_saves(plot_id: str) -> list[dict[str, Any]]:
+    """列出某剧情包的所有存档槽。"""
+    result: list[dict[str, Any]] = []
+    for slot in range(MAX_SAVE_SLOTS):
+        rec = state.plot_saves.get((plot_id, slot))
+        if rec:
+            result.append({
+                "plot_id": plot_id,
+                "slot": slot,
+                "saved_at": rec.get("saved_at"),
+                "label": rec.get("label"),
+                "current_node_id": rec.get("runtime_snapshot", {}).get("current_node_id"),
+                "script_index": rec.get("script_index", 0),
+            })
+    return result
+
+
+def load_plot_save(plot_id: str, slot: int) -> dict[str, Any]:
+    """读取一个存档槽，覆盖恢复当前 runtime（按 runtime_id 还原）。
+
+    读档直接覆盖：把存档的 runtime_snapshot 写回 plot_runtime_states
+    （复用同一 runtime_id，不新建）。
+    """
+    key = _save_key(plot_id, slot)
+    rec = state.plot_saves.get(key)
+    if not rec:
+        raise PlotError(f"存档槽不存在: {plot_id} / slot {slot}")
+
+    snapshot = rec["runtime_snapshot"]
+    runtime_id = snapshot.get("id")
+    if not runtime_id:
+        raise PlotError("存档损坏：缺少 runtime id")
+
+    bucket = _get_bucket()
+    bucket[runtime_id] = snapshot
+    return _serialize_runtime(snapshot)
+
+
+def delete_plot_save(plot_id: str, slot: int) -> bool:
+    """删除一个存档槽。"""
+    key = _save_key(plot_id, slot)
+    if key in state.plot_saves:
+        del state.plot_saves[key]
+        return True
+    return False
 
 
 def pause_plot_runtime(runtime_id: str) -> dict[str, Any]:

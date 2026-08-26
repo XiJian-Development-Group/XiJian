@@ -242,7 +242,8 @@ def test_create_plot_runtime(temp_work_dir):
     assert rt["world_id"] == "world_test"
     assert rt["current_node_id"] == "node_start"
     assert rt["status"] == plot_stub.PLOT_RUNTIME_STATUS_RUNNING
-    assert rt["completed_nodes"] == []
+    # Galgame 语义：start 无触发器，创建即进入（副作用已执行、已标记完成）
+    assert rt["completed_nodes"] == ["node_start"]
     assert rt["unlocked_nodes"] == ["node_start"]
 
 
@@ -486,7 +487,8 @@ def test_get_plot_node(temp_work_dir):
     assert node is not None
     assert node["id"] == "node_start"
     assert node["is_current"] is True
-    assert node["is_completed"] is False
+    # Galgame 语义：创建即进入 start（无触发器），故已完成
+    assert node["is_completed"] is True
     assert node["is_unlocked"] is True
 
     node = plot_stub.get_plot_node(rt["id"], "node_event_1")
@@ -725,13 +727,12 @@ def test_rewards_item(temp_work_dir):
         plot_stub.advance_plot_runtime(rt["id"])  # start -> reward
         result = plot_stub.advance_plot_runtime(rt["id"])  # reward -> end
 
+        # Galgame 语义：reward 节点在【到达时】已进入并执行奖励；
+        # 离开它（本次推进）不再重复执行，故 executed_rewards 为空。
         item_rewards = [r for r in result["executed_rewards"] if r["type"] == "item"]
-        assert len(item_rewards) == 1
-        assert item_rewards[0]["ok"] is True
-        assert item_rewards[0]["item_id"] == "item_sword"
-        assert item_rewards[0]["quantity"] == 1
+        assert len(item_rewards) == 0
 
-        # 检查剧情变量
+        # 检查剧情变量：奖励已在到达 reward 节点时写入
         bucket = plot_stub._get_bucket()
         rt_state = bucket[rt["id"]]
         assert rt_state["variables"].get("inventory_item_sword") == 1
@@ -847,12 +848,12 @@ def test_effects_npc_mood(temp_work_dir):
         plot_stub.advance_plot_runtime(rt["id"])  # start -> effect
         result = plot_stub.advance_plot_runtime(rt["id"])  # effect -> end
 
+        # Galgame 语义：effect 节点在【到达时】已进入并执行效果；
+        # 离开它（本次推进）不再重复执行，故 executed_effects 为空。
         mood_effects = [e for e in result["executed_effects"] if e["type"] == "npc_mood"]
-        assert len(mood_effects) == 1
-        assert mood_effects[0]["ok"] is True
-        assert mood_effects[0]["new_mood"] == 70
+        assert len(mood_effects) == 0
 
-        # 验证 NPC 心情已改变
+        # 验证 NPC 心情已在到达 effect 节点时改变（50 + 20 = 70）
         npc = npcs_stub.get("npc_1")
         assert npc["state_json"]["mood"] == 70
 

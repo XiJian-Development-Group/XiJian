@@ -1092,6 +1092,47 @@ C3 剧情运行时：加载 DevKit 导出的剧情设计（节点/边图），�
 
 **错误码**：404 ``route_not_found``（非 dev 环境）。
 
+#### `GET /v1/xijian/plots/runtime/{runtime_id}/playback`
+
+获取 Galgame 播放器当前演出状态：当前节点全部 `script` 演出步、
+`script_index` 游标、`current_step` 当前步、`is_choice` 是否选项步、
+`choices` 可见选项（按条件过滤）、`history` 历史栈、`variables` 剧情变量。
+**错误码**：400 ``plot_error``。
+
+#### `POST /v1/xijian/plots/runtime/{runtime_id}/playback/advance`
+
+Galgame 逐句推进。节点 script 未播完时仅推进句游标（不重复执行副作用）；
+播完后流转到下一节点。每次成功推进自动写 slot 0 自动存档。
+
+**请求体**（可选）：`{"choose_edge_id": "..."}`（当前步为 choice 时必填，
+值为所选选项的 target 边 id）。**错误码**：400 ``plot_error``。
+
+> **副作用语义（Galgame）**：节点 rewards/effects 在【进入节点】时执行一次
+> （创建时进入 start、流转时进入下一节点）；逐句点击不重复发奖。
+> 带 trigger 的节点延迟进入：到达后停留等待调度器 tick 或手动推进时隐式进入
+> （exactly-once 由 completed_nodes 保证）。旧 advance 语义同步此规则。
+
+#### `POST /v1/xijian/plots/saves`
+
+保存存档槽（覆盖写）。**请求体**：`{"runtime_id", "slot" (1-31), "label"?}`；
+slot 0 为自动存档专用，手动保存传 0 返回 400。成功 201。
+**错误码**：400 ``plot_error`` / ``missing_fields``。
+
+#### `GET /v1/xijian/plots/saves?plot_id=`
+
+列出剧情包的所有存档槽（含 slot 0 自动档），每条含 `saved_at` /
+`label` / `current_node_id` / `script_index`。**错误码**：400 ``missing_fields``。
+
+#### `POST /v1/xijian/plots/saves/load`
+
+读档并**覆盖恢复**当前 runtime（复用原 runtime_id，不新建）。
+**请求体**：`{"plot_id", "slot"}`。**错误码**：400 ``plot_error``。
+
+#### `DELETE /v1/xijian/plots/saves`
+
+删除一个存档槽。**请求体**：`{"plot_id", "slot"}`；成功 204。
+**错误码**：404 ``save_not_found``。
+
 ---
 
 ### 3.10 DevKit 预览与测试

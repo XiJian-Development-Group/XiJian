@@ -5,6 +5,37 @@
 
 ---
 
+## 2026-08-26 · Galgame 引擎 P1：播放契约 + 32 档存档
+
+### 已完成（core 2375 全绿，无回归）
+
+#### 播放契约（plot_runtime.py）
+- `get_current_playback(runtime_id)`：当前节点全部 script + `script_index` 游标 + `current_step` + `is_choice`/`choices`（按 cond 过滤可见选项，复用 condition_eval）+ history + variables。
+- `advance_playback(runtime_id, choose_edge_id=None)`：句级推进（未播完仅 script_index+1）；播完流转节点。choice 步必须传 choose_edge_id（校验 target 合法）。
+- REST：`GET .../playback`、`POST .../playback/advance`。
+
+#### 副作用语义重构（exactly-once 进入模型）⚠ 破坏性更改（10/1 前允许）
+- 新增 `_enter_node(rt, node)`：rewards/effects/标记完成/写历史在**进入节点时执行一次**（create 进 start、流转进下一节点）。逐句点击不重复发奖。
+- advance 返回的 `executed_rewards/executed_effects` = [离开节点的隐式进入结果] + [新节点进入结果]；无副作用时为空列表（旧测试已同步新语义）。
+- **带 trigger 的节点延迟进入**：到达后停留等待调度器 tick 命中进入；手动推进经过它视为隐式进入（补执行一次）。调度器契约不变。
+- `_serialize_runtime` / runtime_state 增加 `script_index`；流转重置为 0。
+
+#### 存档系统（32 档）
+- `save_plot_save(runtime_id, slot, label, allow_slot0=False)`：slot0 仅自动档内部可写（手动传 0 报错）；轻量快照存 `plot_saves[(plot_id, slot)]`。
+- `list_plot_saves(plot_id)` / `load_plot_save(plot_id, slot)`（**覆盖恢复**原 runtime_id）/ `delete_plot_save` / `_auto_save`（静默失败）。
+- 自动存档触发点：每次 advance_playback 成功 + **core 退出时**（app.py atexit `_save_running_plots_on_exit`，保存所有 running 剧情后退出）。
+- REST：`POST /plots/saves`、`GET /plots/saves?plot_id=`、`POST /plots/saves/load`、`DELETE /plots/saves`。
+
+### 测试
+- 新增 `tests/test_xijian_plot_playback.py`（4 项）：线性逐句、choice 条件过滤+存档、槽位越界/slot0 保护、读档覆盖恢复、自动存档。
+
+### 没动的 / 留的口子
+1. macapp 仍走旧 advance 契约（播放器 UI 在后续阶段接 playback 端点）。
+2. DevKit GUI 内嵌剧本编辑器（P2）；导出打包内联外部资产（P3）。
+3. openapi.yaml 未同步新端点（macapp 接入前统一生成）。
+
+---
+
 ## 2026-08-26 · Galgame 引擎 P0：数据模型与求值器地基
 
 ### 任务来源

@@ -317,4 +317,86 @@ def plot_scheduler_tick():
     return jsonify({"activated": all_activated})
 
 
+# ---------------------------------------------------------------------------
+# Galgame 播放契约（P1 新增，不破坏原 advance）
+# ---------------------------------------------------------------------------
+
+
+@bp.get("/v1/xijian/plots/runtime/<runtime_id>/playback")
+def plot_playback_state(runtime_id: str):
+    """获取 Galgame 播放器当前演出状态（节点 script / 当前步 / 选项 / 历史）。"""
+    try:
+        return jsonify(plot_stub.get_current_playback(runtime_id))
+    except plot_stub.PlotError as exc:
+        raise ApiError(400, str(exc), "invalid_request_error", code="plot_error") from exc
+
+
+@bp.post("/v1/xijian/plots/runtime/<runtime_id>/playback/advance")
+def plot_playback_advance(runtime_id: str):
+    """Galgame 逐句推进。可选 choose_edge_id（choice 步必填）。"""
+    payload = request.get_json(silent=True) or {}
+    choose_edge_id = payload.get("choose_edge_id")
+    try:
+        return jsonify(plot_stub.advance_playback(runtime_id, choose_edge_id=choose_edge_id))
+    except plot_stub.PlotError as exc:
+        raise ApiError(400, str(exc), "invalid_request_error", code="plot_error") from exc
+
+
+# ---------------------------------------------------------------------------
+# 存档系统（每剧情包最多 32 档，slot 0 = 自动存档）
+# ---------------------------------------------------------------------------
+
+
+@bp.post("/v1/xijian/plots/saves")
+def plot_save_create():
+    """保存一个存档槽。请求体：runtime_id, slot(0-31), label(可选)。"""
+    payload = request.get_json(silent=True) or {}
+    runtime_id = payload.get("runtime_id")
+    slot = payload.get("slot")
+    label = payload.get("label")
+    if not runtime_id or slot is None:
+        raise ApiError(400, "缺少 runtime_id 或 slot", "invalid_request_error", code="missing_fields")
+    try:
+        return jsonify(plot_stub.save_plot_save(runtime_id, int(slot), label=label)), 201
+    except plot_stub.PlotError as exc:
+        raise ApiError(400, str(exc), "invalid_request_error", code="plot_error") from exc
+
+
+@bp.get("/v1/xijian/plots/saves")
+def plot_save_list():
+    """列出某剧情包的存档槽。查询参数：plot_id。"""
+    plot_id = request.args.get("plot_id")
+    if not plot_id:
+        raise ApiError(400, "缺少 plot_id", "invalid_request_error", code="missing_fields")
+    return jsonify({"data": plot_stub.list_plot_saves(plot_id), "object": "list"})
+
+
+@bp.post("/v1/xijian/plots/saves/load")
+def plot_save_load():
+    """读取存档并覆盖恢复 runtime。请求体：plot_id, slot。"""
+    payload = request.get_json(silent=True) or {}
+    plot_id = payload.get("plot_id")
+    slot = payload.get("slot")
+    if not plot_id or slot is None:
+        raise ApiError(400, "缺少 plot_id 或 slot", "invalid_request_error", code="missing_fields")
+    try:
+        return jsonify(plot_stub.load_plot_save(plot_id, int(slot)))
+    except plot_stub.PlotError as exc:
+        raise ApiError(400, str(exc), "invalid_request_error", code="plot_error") from exc
+
+
+@bp.delete("/v1/xijian/plots/saves")
+def plot_save_delete():
+    """删除一个存档槽。请求体：plot_id, slot。"""
+    payload = request.get_json(silent=True) or {}
+    plot_id = payload.get("plot_id")
+    slot = payload.get("slot")
+    if not plot_id or slot is None:
+        raise ApiError(400, "缺少 plot_id 或 slot", "invalid_request_error", code="missing_fields")
+    ok = plot_stub.delete_plot_save(plot_id, int(slot))
+    if not ok:
+        raise ApiError(404, "存档槽不存在", "not_found_error", code="save_not_found")
+    return ("", 204)
+
+
 __all__ = ["bp"]

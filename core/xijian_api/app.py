@@ -619,6 +619,26 @@ def _serve(app: Flask, host: str, port: int, server: str = "auto") -> None:
         raise
 
 
+def _save_running_plots_on_exit() -> None:
+    """退出前把所有运行中的剧情写自动档（slot 0），保存完再退。
+
+    失败只记日志，不阻塞退出流程。
+    """
+    try:
+        from xijian_api.stubs import plot_runtime as plot_stub
+        from xijian_api.stubs import state as _state
+
+        saved = 0
+        for rt in list(_state.plot_runtime_states.values()):
+            if rt.get("status") == plot_stub.PLOT_RUNTIME_STATUS_RUNNING:
+                plot_stub._auto_save(rt["id"])
+                saved += 1
+        if saved:
+            _LOGGER.info("退出前自动存档完成: %d 个剧情", saved)
+    except Exception:  # noqa: BLE001 — 退出路径绝不抛
+        _LOGGER.exception("退出前自动存档失败（忽略）")
+
+
 def main(argv: list[str] | None = None) -> int:
     """Production-style entry point.
 
@@ -833,6 +853,8 @@ def _run(args: argparse.Namespace, log_file: Optional[str]) -> int:
     if token and not config.testing:
         write_discovery(port=port, auth_token=token, pid=os.getpid())
         atexit.register(remove_discovery)
+        # 退出前保存所有运行中剧情的自动档（slot 0），保存完再退。
+        atexit.register(_save_running_plots_on_exit)
         _LOGGER.info("Core discovery published for port %d", port)
 
     # Publish the actual port to the pid-scoped port file (the macOS app
