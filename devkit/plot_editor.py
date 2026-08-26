@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import secrets
@@ -10,6 +11,16 @@ from devkit import DevKitError
 
 _PLOT_SUBDIR = "plots"
 
+# Galgame 资产子目录（相对 plots/<plot_id>/）
+_ASSET_SUBDIR = "assets"
+_ASSET_SPRITES = "sprites"   # 立绘（PNG/JPG，含表情差分）
+_ASSET_BG = "bg"             # 背景（PNG/JPG/视频）
+_ASSET_AUDIO = "audio"       # BGM/SE/Voice
+_ASSET_KINDS = ("sprite", "bg", "audio")
+
+# 外部资产引用（来自绑定角色/世界）的登记标记
+_EXTERNAL_REF_MARKER = "__external__"
+
 
 def _gen_id() -> str:
     return f"plot_{secrets.token_hex(8)}"
@@ -17,6 +28,132 @@ def _gen_id() -> str:
 
 def _plot_dir(work_dir: str, plot_id: str) -> str:
     return os.path.join(work_dir, _PLOT_SUBDIR, plot_id)
+
+
+def _assets_dir(work_dir: str, plot_id: str) -> str:
+    """剧情包资产根目录。"""
+    return os.path.join(_plot_dir(work_dir, plot_id), _ASSET_SUBDIR)
+
+
+def _assets_index_path(work_dir: str, plot_id: str) -> str:
+    return os.path.join(_assets_dir(work_dir, plot_id), "assets_index.json")
+
+
+def _asset_kind_subdir(kind: str) -> str:
+    """资产 kind → 子目录名。"""
+    if kind == "sprite":
+        return _ASSET_SPRITES
+    if kind == "bg":
+        return _ASSET_BG
+    if kind == "audio":
+        return _ASSET_AUDIO
+    raise DevKitError(400, f"未知资产类型: {kind}", code="bad_asset_kind")
+
+
+def register_asset(
+    work_dir: str, plot_id: str, kind: str, src_path: str,
+    asset_id: str | None = None, external_ref: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """登记一个资产到剧情包。
+
+    - 从 ``src_path`` 拷贝文件到 ``assets/<subdir>/``
+    - 在 ``assets_index.json`` 追加一条记录（含哈希/大小/外部引用）
+
+    ``external_ref`` 形如 ``{"kind": "character", "source_id": "char_x",
+    "original_path": "/abs/..."}``，用于标记该资产来自绑定的角色/世界，
+    导出时由调用方负责把源文件传进来（这里只登记与拷贝）。
+    """
+    if kind not in _ASSET_KINDS:
+        raise DevKitError(400, f"未知资产类型: {kind}", code="bad_asset_kind")
+    if not os.path.isfile(src_path):
+        raise DevKitError(400, f"资产源文件不存在: {src_path}", code="asset_not_found")
+
+    sub = _asset_kind_subdir(kind)
+    dest_dir = os.path.join(_assets_dir(work_dir, plot_id), sub)
+    os.makedirs(dest_dir, exist_ok=True)
+
+    fname = os.path.basename(src_path)
+    dest_path = os.path.join(dest_dir, fname)
+    # 避免覆盖：重名时加短哈希后缀
+    if os.path.exists(dest_path):
+        base, ext = os.path.splitext(fname)
+        suffix = hashlib.sha256(fname.encode()).hexdigest()[:6]
+        fname = f"{base}_{suffix}{ext}"
+        dest_path = os.path.join(dest_dir, fname)
+
+    import shutil
+    shutil.copy2(src_path, dest_path)
+
+    digest = hashlib.sha256()
+    size = 0
+    with open(dest_path, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            digest.update(chunk)
+            size += len(chunk)
+
+    record = {
+        "id": asset_id or f"asset_{secrets.token_hex(6)}",
+        "kind": kind,
+        "file": os.path.join(_ASSET_SUBDIR, sub, fname),
+        "hash": digest.hexdigest(),
+        "size": size,
+    }
+    if external_ref:
+        record["external_ref"] = external_ref
+
+    index = _load_assets_index(work_dir, plot_id)
+    index.append(record)
+    _save_assets_index(work_dir, plot_id, index)
+    return record
+
+
+def _load_assets_index(work_dir: str, plot_id: str) -> list[dict[str, Any]]:
+    p = _assets_index_path(work_dir, plot_id)
+    if not os.path.isfile(p):
+        return []
+    try:
+        with open(p, encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, list) else []
+    except (json.JSONDecodeError, OSError):
+        return []
+
+
+def _save_assets_index(work_dir: str, plot_id: str, index: list[dict[str, Any]]) -> None:
+    d = _assets_dir(work_dir, plot_id)
+    os.makedirs(d, exist_ok=True)
+    with open(_assets_index_path(work_dir, plot_id), "w", encoding="utf-8") as f:
+        json.dump(index, f, ensure_ascii=False, indent=2)
+
+
+def build_manifest(work_dir: str, plot_id: str) -> dict[str, Any]:
+    """生成剧情包 manifest（自包含元信息）。"""
+    meta = get_plot(work_dir, plot_id) or {}
+    nodes = get_plot_nodes(work_dir, plot_id)
+    edges = get_plot_edges(work_dir, plot_id)
+    assets = _load_assets_index(work_dir, plot_id)
+    start = next((n.get("id") for n in nodes if n.get("type") == "start"), None)
+    return {
+        "plot_id": plot_id,
+        "name": meta.get("name", plot_id),
+        "version": "1.0.0",
+        "resolution": "1920x1080",
+        "start_node": start,
+        "ui_theme": "default",
+        "node_count": len(nodes),
+        "edge_count": len(edges),
+        "asset_count": len(assets),
+        "assets": assets,
+        "dependencies": {
+            "characters": sorted({
+                n.get("bind_character_id") for n in nodes if n.get("bind_character_id")
+            }),
+            "world": next(
+                (n.get("bind_world_id") for n in nodes if n.get("bind_world_id")), None
+            ),
+        },
+    }
+
 
 
 def _meta_path(work_dir: str, plot_id: str) -> str:

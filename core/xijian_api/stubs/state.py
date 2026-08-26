@@ -141,6 +141,9 @@ memory: DictDB = bucket("memory")
 # C3 plot runtime — one record per running plot instance.
 # C3 剧情运行时 — 每个运行中的剧情实例一条记录。
 plot_runtime_states: DictDB = bucket("plot_runtime_states")
+# Galgame 存档槽（P1 实现读写逻辑）。键为 (plot_id, slot)，
+# slot 0 = 自动存档（最后进度），1-31 = 手动档，每剧情包最多 32 档。
+plot_saves: DictDB = bucket("plot_saves")
 memory_configs: DictDB = bucket("memory_configs")
 sessions: DictDB = bucket("sessions")
 snapshots: DictDB = bucket("snapshots")

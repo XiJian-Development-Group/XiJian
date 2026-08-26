@@ -356,33 +356,14 @@ def _stable_hash_unit(key: tuple) -> float:
 def _evaluate_condition_trigger(
     trigger: dict, world_record: dict | None
 ) -> bool:
-    """Match a ``world_state[field] op value`` expression."""
-    field = trigger["field"]
-    op = trigger["op"]
-    expected = trigger["value"]
+    """Match a ``world_state[field] op value`` expression.
+
+    委托给统一条件求值器 :mod:`xijian_api.stubs.condition_eval`，
+    上下文取自 ``world_record["state"]``（保持 events 既有读取来源）。
+    """
+    from xijian_api.stubs.condition_eval import eval_dict_condition
     state_blob = (world_record or {}).get("state", {}) or {}
-    actual = state_blob.get(field)
-    if op == "eq":
-        return actual == expected
-    if op == "ne":
-        return actual != expected
-    if op == "gt":
-        return _safe_compare(actual, expected, lambda a, b: a > b)
-    if op == "gte":
-        return _safe_compare(actual, expected, lambda a, b: a >= b)
-    if op == "lt":
-        return _safe_compare(actual, expected, lambda a, b: a < b)
-    if op == "lte":
-        return _safe_compare(actual, expected, lambda a, b: a <= b)
-    if op == "in":
-        if not isinstance(expected, (list, tuple, set)):
-            return False
-        return actual in expected
-    if op == "not_in":
-        if not isinstance(expected, (list, tuple, set)):
-            return True
-        return actual not in expected
-    return False
+    return eval_dict_condition(trigger, state_blob)
 
 
 def _safe_compare(actual: Any, expected: Any, op: Callable[[Any, Any], bool]) -> bool:

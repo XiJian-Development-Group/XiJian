@@ -29,10 +29,31 @@ plot_node (nodes.json):
   - trigger: dict     # 触发条件，复用 events 的 trigger_config 结构
   - rewards: list[dict]  # 奖励列表，如 {"type": "currency", "currency_id": "...", "amount": 100}
   - effects: list[dict]  # 状态变更，如 {"type": "npc_mood", "target": "npc_id", "delta": 10}
+  - script: list[Step]  # 【Galgame 叙事层】演出步列表，节点进入后逐句播放
   - bind_character_id: str | None
   - bind_world_id: str | None
   - bind_event_id: str | None
   - metadata: dict    # 扩展字段
+
+Step（演出步）结构::
+
+  {"type": "say", "speaker": "char_id", "content": "台词", "voice": "voice.mp3"}
+  {"type": "narration", "content": "旁白文本"}
+  {"type": "setBg", "bg": "bg_001.png"} | {"type": "setBg", "videoBg": "bg_loop.mp4"}
+  {"type": "setFigure", "figure": {"name": "char_a", "pos": "left", "expr": "smile", "trans": "fade"}}
+  {"type": "setBgm", "bgm": "bgm_01.mp3"}
+  {"type": "playSe", "se": "click.mp3"}
+  {"type": "playVoice", "voice": "line_01.mp3"}
+  {"type": "setVar", "setVar": [{"name": "affinity", "op": "+=", "value": 1}]}
+  {"type": "transition", "transition": "fade"}
+  {"type": "shake"} | {"type": "flash"} | {"type": "cg", "cg": "cg_001.png"}
+  {"type": "wait", "waitMs": 1000}
+  {"type": "choice", "choices": [{"text": "选项A", "target": "node_2",
+                                   "cond": "affinity>=5", "setVar": [...], "effect": [...]}]}
+  {"type": "reward", "reward": [...]}   # 复用既有奖励类型
+  {"type": "effect", "effect": [...]}   # 复用既有效果类型
+
+Step 类型见 :data:`STEP_TYPES`，校验见 :func:`_validate_step`。
 
 plot_edge (edges.json):
   - id: edge_<hex>
@@ -52,6 +73,7 @@ DictDB 桶: ``state.plot_runtime_states``（在 :mod:`xijian_api.stubs.state`
       "plot_id": str,
       "world_id": str,
       "current_node_id": str | None,
+      "script_index": int,          # 节点内当前演出步游标（Galgame 逐句播放）
       "completed_nodes": list[str],
       "available_edges": list[str],
       "variables": dict,           # 剧情局部变量
@@ -134,6 +156,109 @@ _CONDITION_OPS = frozenset({"eq", "ne", "gt", "gte", "lt", "lte", "in", "not_in"
 #: 道具奖励写入变量时的前缀（如 ``inventory_item_sword``）。
 ITEM_VARIABLE_PREFIX = "inventory_"
 
+#: Galgame 演出步（Step）类型。
+#: 节点 ``script`` 列表里的每个元素是一个 Step，播放器逐句渲染。
+STEP_TYPE_SAY = "say"               # 角色对白（speaker 指定角色）
+STEP_TYPE_NARRATION = "narration"   # 旁白（无 speaker）
+STEP_TYPE_SET_BG = "setBg"          # 切换背景（bg 或 videoBg）
+STEP_TYPE_SET_FIGURE = "setFigure"  # 切换立绘（figure 字段）
+STEP_TYPE_SET_BGM = "setBgm"        # 切换 BGM（bgm 文件名，循环）
+STEP_TYPE_PLAY_SE = "playSe"        # 播放音效（se 文件名）
+STEP_TYPE_PLAY_VOICE = "playVoice"  # 播放角色语音（voice 文件名）
+STEP_TYPE_SET_VAR = "setVar"        # 设置剧情变量（setVar 列表）
+STEP_TYPE_TRANSITION = "transition" # 转场特效（transition 字段）
+STEP_TYPE_SHAKE = "shake"           # 画面抖动
+STEP_TYPE_FLASH = "flash"           # 闪白/闪屏特效
+STEP_TYPE_CG = "cg"                 # 事件 CG 解锁/展示（cg 字段）
+STEP_TYPE_WAIT = "wait"             # 等待（waitMs 毫秒）
+STEP_TYPE_CHOICE = "choice"         # 选项分支（choices 列表）
+STEP_TYPE_EFFECT = "effect"         # 游戏化效果（effect 字段，复用既有效果类型）
+STEP_TYPE_REWARD = "reward"         # 游戏化奖励（reward 字段，复用既有奖励类型）
+STEP_TYPES = frozenset({
+    STEP_TYPE_SAY, STEP_TYPE_NARRATION, STEP_TYPE_SET_BG, STEP_TYPE_SET_FIGURE,
+    STEP_TYPE_SET_BGM, STEP_TYPE_PLAY_SE, STEP_TYPE_PLAY_VOICE, STEP_TYPE_SET_VAR,
+    STEP_TYPE_TRANSITION, STEP_TYPE_SHAKE, STEP_TYPE_FLASH, STEP_TYPE_CG,
+    STEP_TYPE_WAIT, STEP_TYPE_CHOICE, STEP_TYPE_EFFECT, STEP_TYPE_REWARD,
+})
+
+#: 立绘位置。
+FIGURE_POSITIONS = frozenset({"left", "center", "right"})
+
+#: 转场/特效类型。
+TRANSITION_TYPES = frozenset({"fade", "slide", "none", "shake", "flash"})
+
+#: 资产引用支持的 kind（用于 figure/bg/videoBg/bgm/se/voice 的引用解析）。
+ASSET_KINDS = frozenset({"sprite", "bg", "audio", "video"})
+
+#: 选项条件/跳转条件可引用的上下文键前缀（调试用）。
+_STEP_VAR_OPS = frozenset({"=", "+=", "-=", "==", "!=", ">", "<", ">=", "<="})
+
+
+def _validate_step(step: dict[str, Any]) -> None:
+    """校验单个演出步结构（Galgame 叙事层）。
+
+    宽松校验：未知 type 直接报错；各 type 需要的字段缺失时报错。
+    不强制要求 content（如纯演出步 setBg 无需文本）。
+    """
+    if not isinstance(step, dict):
+        raise PlotError("演出步必须是对象")
+    stype = step.get("type")
+    if stype not in STEP_TYPES:
+        raise PlotError(f"未知演出步类型: {stype}")
+    if stype in (STEP_TYPE_SAY, STEP_TYPE_NARRATION):
+        if "content" not in step:
+            raise PlotError(f"{stype} 步缺少 content（对白/旁白文本）")
+    if stype == STEP_TYPE_SET_FIGURE:
+        fig = step.get("figure")
+        if not isinstance(fig, dict) or not fig.get("name"):
+            raise PlotError("setFigure 步缺少 figure.name")
+        pos = fig.get("pos")
+        if pos is not None and pos not in FIGURE_POSITIONS:
+            raise PlotError(f"立绘位置非法: {pos}（应为 left/center/right）")
+    if stype == STEP_TYPE_SET_BG:
+        if not step.get("bg") and not step.get("videoBg"):
+            raise PlotError("setBg 步需要 bg 或 videoBg")
+    if stype == STEP_TYPE_SET_BGM:
+        if not step.get("bgm"):
+            raise PlotError("setBgm 步缺少 bgm")
+    if stype == STEP_TYPE_PLAY_SE:
+        if not step.get("se"):
+            raise PlotError("playSe 步缺少 se")
+    if stype == STEP_TYPE_PLAY_VOICE:
+        if not step.get("voice"):
+            raise PlotError("playVoice 步缺少 voice")
+    if stype == STEP_TYPE_CG:
+        if not step.get("cg"):
+            raise PlotError("cg 步缺少 cg")
+    if stype == STEP_TYPE_SET_VAR:
+        sv = step.get("setVar")
+        if not isinstance(sv, list) or not sv:
+            raise PlotError("setVar 步需要非空 setVar 列表")
+        for item in sv:
+            if not isinstance(item, dict) or "name" not in item or "value" not in item:
+                raise PlotError("setVar 项需要 name 与 value")
+            op = item.get("op", "=")
+            if op not in _STEP_VAR_OPS:
+                raise PlotError(f"setVar 运算符非法: {op}")
+    if stype == STEP_TYPE_CHOICE:
+        choices = step.get("choices")
+        if not isinstance(choices, list) or not choices:
+            raise PlotError("choice 步需要非空 choices 列表")
+        for ch in choices:
+            if not isinstance(ch, dict) or not ch.get("text"):
+                raise PlotError("选项需要 text")
+            # choice 可选 target（跳转节点）/ setVar / effect / cond（可见性条件）
+    if stype in (STEP_TYPE_TRANSITION,):
+        trans = step.get("transition")
+        if trans is not None and trans not in TRANSITION_TYPES:
+            raise PlotError(f"转场类型非法: {trans}")
+    if stype in (STEP_TYPE_REWARD,):
+        if not isinstance(step.get("reward"), list):
+            raise PlotError("reward 步需要 reward 列表")
+    if stype in (STEP_TYPE_EFFECT,):
+        if not isinstance(step.get("effect"), list):
+            raise PlotError("effect 步需要 effect 列表")
+
 
 # ---------------------------------------------------------------------------
 # Exceptions / 异常
@@ -205,13 +330,23 @@ def _load_plot_from_devkit(work_dir: str, plot_id: str) -> dict[str, Any] | None
 
 
 def _validate_node(node: dict[str, Any]) -> None:
-    """校验节点结构。"""
+    """校验节点结构。
+
+    节点可携带 ``script``（Galgame 演出步列表）。``script`` 可选：
+    缺省表示纯游戏化节点（按原逻辑执行 rewards/effects）。
+    """
     if not isinstance(node.get("type"), str) or node["type"] not in NODE_TYPES:
         raise PlotError(
             f"节点类型无效: {node.get('type')}，必须是 {sorted(NODE_TYPES)} 之一"
         )
     if not node.get("id"):
         raise PlotError("节点缺少 id")
+    script = node.get("script")
+    if script is not None:
+        if not isinstance(script, list):
+            raise PlotError("节点 script 必须是列表")
+        for step in script:
+            _validate_step(step)
 
 
 def _validate_edge(edge: dict[str, Any]) -> None:
@@ -233,38 +368,13 @@ def _validate_edge(edge: dict[str, Any]) -> None:
 
 
 def _evaluate_condition(condition: dict[str, Any], context: dict[str, Any]) -> bool:
-    """评估条件表达式（复用 events 的 condition trigger 语义）。"""
-    field = condition.get("field")
-    op = condition.get("op")
-    expected = condition.get("value")
+    """评估条件表达式（复用 events 的 condition trigger 语义）。
 
-    if field not in context:
-        return False
-
-    actual = context[field]
-
-    try:
-        if op == "eq":
-            return actual == expected
-        elif op == "ne":
-            return actual != expected
-        elif op == "gt":
-            return float(actual) > float(expected)
-        elif op == "gte":
-            return float(actual) >= float(expected)
-        elif op == "lt":
-            return float(actual) < float(expected)
-        elif op == "lte":
-            return float(actual) <= float(expected)
-        elif op == "contains":
-            return str(expected) in str(actual)
-        elif op == "in":
-            return actual in expected if isinstance(expected, (list, tuple, set)) else False
-        elif op == "not_in":
-            return actual not in expected if isinstance(expected, (list, tuple, set)) else True
-    except (TypeError, ValueError):
-        return False
-    return False
+    委托给统一条件求值器 :mod:`xijian_api.stubs.condition_eval`，
+    保持 ``contains`` = 字符串包含的既有语义。
+    """
+    from xijian_api.stubs.condition_eval import eval_dict_condition
+    return eval_dict_condition(condition, context)
 
 
 def _runtime_context(world_id: str, rt: dict[str, Any]) -> dict[str, Any]:
@@ -613,6 +723,7 @@ def _serialize_runtime(rt: dict[str, Any]) -> dict[str, Any]:
         "plot_id": rt["plot_id"],
         "world_id": rt["world_id"],
         "current_node_id": rt.get("current_node_id"),
+        "script_index": rt.get("script_index", 0),
         "completed_nodes": rt.get("completed_nodes", []),
         "available_edges": rt.get("available_edges", []),
         "variables": rt.get("variables", {}),
@@ -675,6 +786,7 @@ def create_plot_runtime(
         "plot_id": plot_id,
         "world_id": world_id,
         "current_node_id": start_node["id"],
+        "script_index": 0,        # 节点内当前演出步游标（Galgame 逐句播放）
         "completed_nodes": [],
         "available_edges": [
             e["id"] for e in _get_outgoing_edges(edges, start_node["id"])

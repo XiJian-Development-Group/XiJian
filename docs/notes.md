@@ -5,7 +5,48 @@
 
 ---
 
-## 2026-08-10 · 架构统一：临时文件/数据路径收敛 + 文档去重去 AI 味 + 键收敛/版本接入
+## 2026-08-26 · Galgame 引擎 P0：数据模型与求值器地基
+
+### 任务来源
+将剧情系统改造为 Galgame/视觉小说引擎（DevKit + Core 侧，macapp 暂不动）。
+破坏性更改在 10/1 前允许。本期为 P0（地基），后续 P1 播放契约+存档、P2 DevKit GUI、
+P3 导出剧情包、P4 文档、P5 实测。
+
+### 已完成（core 2371 + devkit 213 全绿，无回归）
+
+#### P0-1 统一条件求值器 `core/xijian_api/stubs/condition_eval.py`（新建）
+- 提供 `eval_any` / `eval_dict_condition` / `eval_expr`：dict 条件向后兼容（plot 语义 contains=字符串包含），新增字符串布尔表达式 `&& || !`、比较 `== != > < >= <=`、点号键 `flag.x`、字符串/数字/true-false 字面量。
+- **安全性**：自写 tokenizer + 递归下降解析，**绝不使用 eval/exec**（防注入，已测 `__import__('os')` 安全返回 False）。
+- plot_runtime 与 events 的私有 `_evaluate_condition` 改为委托本模块，行为一致（events 仍从 `world_record["state"]` 读取，未破坏）。
+- 测试 `tests/test_xijian_condition_eval.py`（15 项）。
+
+#### P0-2 Step 演出步模型 `core/xijian_api/stubs/plot_runtime.py`
+- 新增 `STEP_TYPES` 15 类：`say/narration/setBg/setFigure/setBgm/playSe/playVoice/setVar/transition/shake/flash/cg/wait/choice/reward/effect`。
+- 节点新增可选 `script: list[Step]` 字段（Galgame 叙事层）；`_validate_node` 校验 script；`_validate_step` 按 type 校验必需字段。
+- 运行时状态加 `script_index`（节点内逐句播放游标），`_serialize_runtime` 暴露。
+- 向后兼容：无 script 的旧节点完全按原逻辑跑。
+- 测试 `tests/test_xijian_plot_step.py`（12 项）。
+
+#### P0-3 资产与 manifest `devkit/plot_editor.py`
+- 新增资产子目录约定 `plots/<id>/assets/{sprites,bg,audio}/` + `assets_index.json`。
+- `register_asset`（拷贝+哈希+大小+外部引用登记）、`_load/_save_assets_index`、`build_manifest`（含 dependencies.characters/world、start_node、asset_count）。
+- 外部资产（绑定角色/世界）通过 `external_ref` 标记来源，导出时由调用方内联拷贝（P3 实现）。
+- 测试 `devkit/tests/test_plot_assets.py`（6 项）。
+
+#### P0-4 存档桶注册 `core/xijian_api/stubs/state.py`
+- 注册 `plot_saves` DictDB 桶（键 `(plot_id, slot)`，slot0=自动档，1-31=手动档，每包最多 32）。
+- 仅建桶，**存档读写逻辑留 P1**。
+- 测试 `tests/test_xijian_plot_saves_bucket.py`。
+
+### 没动的 / 留的口子
+1. 播放契约（advance 返回 script 演出步、选项列表、历史）在 P1——当前 macapp 仍走老契约，新字段忽略即可。
+2. 存档读写（32 档+自动续玩）在 P1。
+3. DevKit 剧情区 GUI 升级（节点属性面板内嵌剧本编辑器、资产上传、预览播放器）在 P2。
+4. 导出剧情包打包 assets+manifest 在 P3（沿用现有 submit 通道）。
+5. Live2D **永不**支持（cubism SDK 法律约束）；3D 模型留口子（assets kind 后续扩）。
+6. 节点连线画布至少等 12 月首个正式版后做（先列表+属性面板）。
+
+
 
 ### 任务来源
 用户指示：让项目架构更统一——统一文档路径、统一代码风格、统一用户数据持久存储位置；
