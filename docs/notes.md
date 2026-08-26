@@ -5,6 +5,25 @@
 
 ---
 
+## 2026-08-26 · Galgame 引擎 P3：导出剧情包自包含打包
+
+### 已完成（devkit 225 全绿）
+
+`export_plot_for_submit` 升级为自包含导出：
+- 打包内容：plot.json / nodes.json / edges.json / **manifest.json**（剧情包自描述，与归档根部提交 manifest 不同层）/ assets_index.json / 全部资产文件（相对路径保留）。
+- manifest 含 start_node / dependencies.characters/world / asset_count / 资产清单（含 external_ref 出处）/ warnings。
+- 缺失资产文件跳过并记 warnings（不阻断导出）；无资产旧剧情照常导出。
+- 提交通道零改动：files 条目直接进现有 `_resolve_packages → submit → pack_payload`（7Z 固态）管线。
+
+### ⚠ 后补项（角色侧定稿后必须回来做）
+1. **外部资产原生目录扫描**：当前角色/世界没有立绘/背景库字段（角色目录只有 character.json + persona.md），所以导出时只内联「上传时已拷贝进包」的 external_ref 资产。等角色侧定稿立绘/差分存放约定后，需在 export 里加一段：扫描绑定角色的原生资产目录 → 以 `external_assets/<source_kind>/<source_id>/...` arcname 内联 + manifest 记出处。入口函数 `export_plot_for_submit`（devkit/plot_editor.py）。
+2. **Core 安装侧消费**：Core 的资源包引擎要能识别 plots/<id>/manifest.json 与 assets/ 布局（§B pack 兼容 schema 已具备），实测阶段验证安装→离线游玩闭环。
+
+### 测试
+- 新增 `tests/test_plot_export_p3.py`（4 项）：基础四件套+manifest 内容、带资产导出（索引+文件+external_ref 记录）、缺失资产跳过警告、不存在剧情 404。
+
+---
+
 ## 2026-08-26 · Galgame 引擎 P2：DevKit GUI 剧本编辑器 + 资产管理
 
 ### 已完成（devkit 221 全绿；JS node --check 通过）

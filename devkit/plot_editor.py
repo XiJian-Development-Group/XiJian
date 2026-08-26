@@ -536,36 +536,68 @@ def validate_plot_bindings(work_dir: str, plot_id: str) -> dict[str, Any]:
 
 
 def export_plot_for_submit(work_dir: str, plot_id: str) -> dict[str, Any]:
+    """导出剧情包为提交文件条目（P3：自包含打包）。
+
+    包含：plot.json / nodes.json / edges.json / manifest.json /
+    assets_index.json / 全部已登记资产文件。
+
+    - 资产文件缺失时跳过并记入 ``warnings``（不阻断导出）
+    - 无资产的旧剧情照常导出（向后兼容）
+    - 带 ``external_ref`` 的资产已在包内（上传时拷贝），manifest 记录出处；
+      绑定角色/世界的*原生*资产目录扫描待角色侧定稿后补（见 notes）。
+    """
+    import logging
+
     meta = get_plot(work_dir, plot_id)
     if not meta:
         raise DevKitError(404, f"剧情不存在: {plot_id}", code="not_found")
 
+    logger = logging.getLogger("devkit.plot_editor")
+    warnings: list[str] = []
     files: list[dict[str, Any]] = []
+    prefix = f"plots/{plot_id}"
     plot_dir = _plot_dir(work_dir, plot_id)
 
-    meta_file = _meta_path(work_dir, plot_id)
-    if os.path.isfile(meta_file):
-        files.append({
-            "path": meta_file,
-            "arcname": f"plots/{plot_id}/plot.json",
-            "size": os.path.getsize(meta_file),
-        })
+    def _add(src_path: str, arcname: str) -> None:
+        if os.path.isfile(src_path):
+            files.append({
+                "path": src_path,
+                "arcname": arcname,
+                "size": os.path.getsize(src_path),
+            })
+        else:
+            warnings.append(f"缺失文件已跳过: {arcname}")
+            logger.warning("export %s: missing file skipped: %s", plot_id, src_path)
 
-    nodes_file = _nodes_path(work_dir, plot_id)
-    if os.path.isfile(nodes_file):
-        files.append({
-            "path": nodes_file,
-            "arcname": f"plots/{plot_id}/nodes.json",
-            "size": os.path.getsize(nodes_file),
-        })
+    # 1. 核心三件套
+    _add(_meta_path(work_dir, plot_id), f"{prefix}/plot.json")
+    _add(_nodes_path(work_dir, plot_id), f"{prefix}/nodes.json")
+    _add(_edges_path(work_dir, plot_id), f"{prefix}/edges.json")
 
-    edges_file = _edges_path(work_dir, plot_id)
-    if os.path.isfile(edges_file):
+    # 2. 剧情包自描述 manifest（与归档根部提交 manifest 不同层）
+    manifest = build_manifest(work_dir, plot_id)
+    manifest["warnings"] = warnings
+    manifest_path = os.path.join(plot_dir, "manifest.json")
+    with open(manifest_path, "w", encoding="utf-8") as f:
+        json.dump(manifest, f, ensure_ascii=False, indent=2)
+    files.append({
+        "path": manifest_path,
+        "arcname": f"{prefix}/manifest.json",
+        "size": os.path.getsize(manifest_path),
+    })
+
+    # 3. 资产索引 + 资产文件（自包含：下载即离线可用）
+    assets = _load_assets_index(work_dir, plot_id)
+    if assets:
+        idx_path = _assets_index_path(work_dir, plot_id)
         files.append({
-            "path": edges_file,
-            "arcname": f"plots/{plot_id}/edges.json",
-            "size": os.path.getsize(edges_file),
+            "path": idx_path,
+            "arcname": f"{prefix}/assets/assets_index.json",
+            "size": os.path.getsize(idx_path),
         })
+        for rec in assets:
+            rel = rec.get("file", "")
+            _add(os.path.join(plot_dir, rel), f"{prefix}/{rel}")
 
     return {
         "target_kind": "plot",
@@ -574,4 +606,5 @@ def export_plot_for_submit(work_dir: str, plot_id: str) -> dict[str, Any]:
             "notes": meta.get("description", ""),
             "files": [f["path"] for f in files],
         },
+        "manifest": manifest,
     }
