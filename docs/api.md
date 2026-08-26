@@ -1000,6 +1000,12 @@ DevKit 导出的归档即为合法资源包（一套格式两用）。安装后�
 
 C3 剧情运行时：加载 DevKit 导出的剧情设计（节点/边图），在世界内推进剧情。
 
+> **Galgame 引擎（2026-08-26）**：节点可携带 `script` 演出步列表（14 类：
+> `say/narration/setBg/setFigure/setBgm/playSe/playVoice/setVar/transition/
+> shake/flash/cg/wait/choice`），经 `.../playback` 端点逐句播放（本节末尾）。
+> 副作用 exactly-once 进入模型；存档 32 档（slot0 自动专用）；
+> DevKit 导出剧情包自包含资产（manifest.json + assets/，下载即离线可用）。
+
 #### `GET /v1/xijian/plots/designs`
 
 列出 DevKit 工作目录下所有可用剧情设计（分页）。

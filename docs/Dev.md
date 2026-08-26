@@ -392,6 +392,23 @@ class CharacterService:
   - 关闭后变更仍记录，但不再做防御检测
   - 关闭状态本身写入审计日志
 
+#### 4.3.6 剧情运行时 Galgame 引擎（`stubs/plot_runtime.py` 等）
+
+节点图状态机 + 视觉小说播放层（2026-08-26 起逐步落地）：
+
+- **数据模型**：节点（`start/branch/event/choice/reward/end` 六类）可携带 `script: list[Step]`
+  演出步列表；Step 共 14 类（`say/narration/setBg/setFigure/setBgm/playSe/playVoice/
+  setVar/transition/shake/flash/cg/wait/choice`），字段契约见 `docs/api.md` §3.9。
+- **副作用语义（exactly-once 进入模型）**：rewards/effects 在**进入节点时执行一次**
+  （创建时进入 start、流转时进入下一节点）；逐句点击不重复发奖。带 trigger 的节点延迟进入
+  （停留等调度器 tick 或手动推进隐式进入）。
+- **播放契约**：`get_current_playback` 返回当前演出状态（script/游标/选项/历史）；
+  `advance_playback` 句级推进。REST 端点见 §3.9。
+- **存档**：每剧情包 32 档（slot 0 自动档专用），读档覆盖恢复原 runtime；
+  自动存档触发点 = 每次 playback 推进 + Core 退出（atexit）。
+- **条件求值器**：`stubs/condition_eval.py` 统一 dict 条件与字符串布尔表达式
+  （`&& || !`、点号键），tokenizer 解析不使用 eval。
+
 ### 4.4 UI 层
 
 #### 4.4.1 macOS（Swift / SwiftUI）

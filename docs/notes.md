@@ -5,6 +5,19 @@
 
 ---
 
+## 2026-08-26 · Galgame 引擎 P4：文档同步
+
+按 维护教程 §8 文档同步地图核对全部涉及剧情的文档：
+
+- `docs/api.md` §3.9：P1 已随做随更（playback/saves 6 端点 + 副作用语义注记）；P4 补 Galgame 引擎概览（14 类演出步、exactly-once、存档、自包含导出）。
+- `docs/Dev. Function List功能清单v2.md` C3：新增 AC-3（Galgame 能力验收）、数据补 `plot_runtime_states` / `plot_saves`、契约与实现日志指引。
+- `docs/Dev.md` §4.3.6（新增）：剧情运行时 Galgame 引擎——数据模型、副作用语义、播放契约、存档、条件求值器。
+- `docs/notes.md`：P0-P4 每期流水已记；后补项（角色原生资产扫描、Core 安装侧闭环）在 P3 段。
+- macapp.md / 维护教程.md 无需改动（macapp 未接新契约；维护流程未变）。
+- openapi.yaml 留待 macapp 接入前统一生成（P1 已声明）。
+
+---
+
 ## 2026-08-26 · Galgame 引擎 P3：导出剧情包自包含打包
 
 ### 已完成（devkit 225 全绿）

@@ -1598,7 +1598,9 @@
 - 验收标准
   - AC-1：剧情必须可被模拟世界读取并执行（2026-08-09：已挂进 events 调度器——`tick_world` 每次 tick 评估运行中剧情的节点触发条件，激活记录以 `object: "plot.activation"` 并入 tick 返回列表；plot 评估异常不阻断事件调度）
   - AC-2：剧情节点可"绑定角色 / 世界 / 事件"
-- 数据：独立表 `plot_designs` + `plot_nodes` + `plot_edges`
+  - AC-3（2026-08-26 Galgame 引擎）：节点可携带 `script` 演出步列表（14 类指令），DevKit 提供无代码剧本编辑器；播放契约 `playback` 端点逐句推进；副作用 exactly-once 进入模型；存档每包 32 档（slot0 自动）+ Core 退出自动保存；导出剧情包自包含资产（下载即离线可用）
+- 数据：独立表 `plot_designs` + `plot_nodes` + `plot_edges`；运行时 `plot_runtime_states`（落盘）；存档桶 `plot_saves`
+- 契约细节：`docs/api.md` §3.9；实现日志：`docs/notes.md` 2026-08-26 P0-P3 各条
 
 ---
 
