@@ -14,7 +14,7 @@
 - `docs/Dev.md` §4.3.6（新增）：剧情运行时 Galgame 引擎——数据模型、副作用语义、播放契约、存档、条件求值器。
 - `docs/notes.md`：P0-P4 每期流水已记；后补项（角色原生资产扫描、Core 安装侧闭环）在 P3 段。
 - macapp.md / 维护教程.md 无需改动（macapp 未接新契约；维护流程未变）。
-- openapi.yaml 留待 macapp 接入前统一生成（P1 已声明）。
+- openapi.yaml 已同步 P1 全部 6 端点（playback×2 / saves×4，含请求/响应 schema），ApiFox 可直接导入。
 
 ---
 

@@ -8626,6 +8626,224 @@ paths:
         '400':
           $ref: '#/components/responses/BadRequest'
       x-dev-only: true
+  /xijian/plots/runtime/{runtime_id}/playback:
+    get:
+      tags:
+      - xijian_plot
+      operationId: get_current_playback
+      summary: 获取 Galgame 播放器当前演出状态（节点 script / 当前步 / 可见选项 / 历史）。
+      parameters:
+      - name: runtime_id
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Success / 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  runtime_id:
+                    type: string
+                  plot_id:
+                    type: string
+                  world_id:
+                    type: string
+                  status:
+                    type: string
+                  current_node_id:
+                    type: [string, 'null']
+                  script_index:
+                    type: integer
+                  node_script:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+                  current_step:
+                    type: [object, 'null']
+                    additionalProperties: true
+                  is_choice:
+                    type: boolean
+                  choices:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+                  history:
+                    type: array
+                  variables:
+                    type: object
+                    additionalProperties: true
+                additionalProperties: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /xijian/plots/runtime/{runtime_id}/playback/advance:
+    post:
+      tags:
+      - xijian_plot
+      operationId: advance_playback
+      summary: Galgame 逐句推进；当前步为 choice 时必须提供 choose_edge_id。
+      parameters:
+      - name: runtime_id
+        in: path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                choose_edge_id:
+                  type: [string, 'null']
+              additionalProperties: true
+      responses:
+        '200':
+          description: Success / 成功（返回推进后的播放状态，同 playback 响应）
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /xijian/plots/saves:
+    post:
+      tags:
+      - xijian_plot
+      operationId: create_plot_save
+      summary: 保存存档槽（slot 0 为自动档专用，手动保存用 1-31）。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                runtime_id:
+                  type: string
+                slot:
+                  type: integer
+                label:
+                  type: [string, 'null']
+              additionalProperties: true
+              required:
+              - runtime_id
+              - slot
+      responses:
+        '201':
+          description: Created / 创建成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  plot_id:
+                    type: string
+                  slot:
+                    type: integer
+                  saved_at:
+                    type: number
+                additionalProperties: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    get:
+      tags:
+      - xijian_plot
+      operationId: list_plot_saves
+      summary: 列出剧情包的所有存档槽（含 slot 0 自动档）。
+      parameters:
+      - name: plot_id
+        in: query
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Success / 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+                  object:
+                    type: string
+                additionalProperties: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+    delete:
+      tags:
+      - xijian_plot
+      operationId: delete_plot_save
+      summary: 删除一个存档槽。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                plot_id:
+                  type: string
+                slot:
+                  type: integer
+              additionalProperties: true
+              required:
+              - plot_id
+              - slot
+      responses:
+        '204':
+          description: Deleted / 删除成功（无响应体）
+        '404':
+          description: 存档槽不存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAIError'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+  /xijian/plots/saves/load:
+    post:
+      tags:
+      - xijian_plot
+      operationId: load_plot_save
+      summary: 读档并覆盖恢复当前 runtime（复用原 runtime_id，不新建）。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                plot_id:
+                  type: string
+                slot:
+                  type: integer
+              additionalProperties: true
+              required:
+              - plot_id
+              - slot
+      responses:
+        '200':
+          description: Success / 成功（返回恢复后的 runtime 状态）
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
   /xijian/resources/import:
     post:
       tags:
