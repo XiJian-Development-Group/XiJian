@@ -42,9 +42,28 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem?
     var coreManager = CoreManager.shared
 
+    /// 持有的通知观察者 token（仅在 AppDelegate 存活期有效）
+    private var notificationObservers: [NSObjectProtocol] = []
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Set up menu bar item
         setupStatusItem()
+
+        // 启动 Touch Bar 控制器（仅在带 Touch Bar 的机型上有可见硬件）
+        TouchBarController.shared.startObserving()
+        // SwiftUI 的主窗口延迟创建，监听首次出现后挂上
+        let windowObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didBecomeKeyNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            // addObserver(queue: .main) 已在主线程上调度，但编译器看不到；
+            // 用 MainActor.assumeIsolated 桥接 @MainActor 类方法
+            MainActor.assumeIsolated {
+                self?.attachTouchBarToFirstWindow()
+            }
+        }
+        notificationObservers.append(windowObserver)
 
         // 恢复用户已开启的后台活动（防 App Nap）；引导完成时会同步一次，
         // 这里兜底保证 App 重启后开关状态依然生效
@@ -54,18 +73,56 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         Task {
             await coreManager.startCore()
         }
+
+        // 监听 Touch Bar → AppDelegate 的全局动作（每个名称单独订阅，避免命中所有通知）
+        let restartObserver = NotificationCenter.default.addObserver(
+            forName: .xijianRequestRestartCore,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            Task { await self.coreManager.restartCore() }
+        }
+        notificationObservers.append(restartObserver)
+
+        let logsObserver = NotificationCenter.default.addObserver(
+            forName: .xijianRequestViewLogs,
+            object: nil,
+            queue: .main
+        ) { _ in
+            // addObserver(queue: .main) 已在主线程上调度，但编译器看不到；
+            // 用 MainActor.assumeIsolated 桥接静态 @MainActor 方法
+            MainActor.assumeIsolated {
+                Self.showLogsAction()
+            }
+        }
+        notificationObservers.append(logsObserver)
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         // 应用退出时同步停止 Core 子进程（异步任务不会等待）
         coreManager.stopCoreSync()
         AppPermissions.shared.stopBackgroundActivity()
+        TouchBarController.shared.stopObserving()
+        for token in notificationObservers {
+            NotificationCenter.default.removeObserver(token)
+        }
+        notificationObservers.removeAll()
     }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         coreManager.stopCoreSync()
         AppPermissions.shared.stopBackgroundActivity()
         return .terminateNow
+    }
+
+    /// SwiftUI 主窗口首次成为 key window 时，挂上 Touch Bar。
+    /// 仅第一次挂上即可；之后由窗口本身保留。
+    private func attachTouchBarToFirstWindow() {
+        guard let window = NSApp.windows.first(where: { $0.isVisible }) else { return }
+        if window.touchBar == nil {
+            TouchBarController.shared.attach(to: window)
+        }
     }
 
     func setupStatusItem() {

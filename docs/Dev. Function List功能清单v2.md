@@ -1316,13 +1316,62 @@
 
 ## B. Apple TouchBar 与 Dynamic Island 支持（仅限 Apple 设备）
 
-> 本章待补，单独规划后写入
->
-> 占位说明：本节为后续 Apple 平台专属交互预留。当前文档仅占位，方便 v2 后续补全。
->
-> 已知范围（来自 v1）：
-> - TouchBar：在 MacBook Pro Touch Bar 上提供快捷控件
-> - Dynamic Island：在 iPhone 14 Pro 及以上展示角色状态、快捷入口
+### B0. 范围与读者
+
+- 本章定义 Apple 平台专属的辅助交互通道。TouchBar 仅作用于带 Touch Bar 的 MacBook Pro 硬件，Dynamic Island 作用于 iPhone 14 Pro 及以上设备。
+- 实际可用功能在客户端落地时可能受硬件 / 系统版本影响，无对应硬件时控件静默不可见，不影响其他平台功能。
+- 当前（v2.x）已实现 TouchBar 的基本控件；Dynamic Island 待 iOS 客户端启动后单独规划。
+
+### B1. macOS Touch Bar 基本控件
+
+**产品视角**
+
+- 用户故事
+  - US-B1-01：作为 MacBook Pro 用户，我能在 Touch Bar 一键切换侧边栏标签（对话 / 角色 / 世界 / 设置），不必移动鼠标到侧边栏。
+  - US-B1-02：作为用户，我能在 Touch Bar 实时看到 Core 子进程运行状态（运行中 / 启动中 / 未运行 / 错误），并能一键触发「重启 Core」。
+  - US-B1-03：作为用户，我能在 Touch Bar 看到「查看日志」入口，一键打开 Core 日志目录。
+  - US-B1-04：作为聊天用户，我能在 Touch Bar 看到「新会话」与「发送 / 停止」两个上下文相关按钮，仅在「对话」页可见；非对话页隐藏以减少噪音。
+- 功能清单
+  - 标签切换：四档分段控件（对话 / 角色 / 世界 / 设置），实时高亮当前选中标签。
+  - Core 状态：圆形状态点 + 文字标签，按当前 `CoreManager.state` 实时更新；错误态变红。
+  - Core 重启：点击 Core 状态按钮即触发 `CoreManager.restartCore()`（同主菜单 `⌘R`）。
+  - 查看日志：点击后调用 `AppDelegate.showLogsAction()` 打开 Core 日志目录。
+  - 新会话：仅「对话」页可见，调用 `ChatViewModel.newSession()`。
+  - 发送 / 停止：仅「对话」页可见，按 `ChatViewModel.isStreaming` 切换「发送」/「停止」；发送走 `ChatView.send()` 现有逻辑，输入空时静默无操作。
+- 验收标准
+  - AC-1：标签切换双向同步（侧边栏点 ↔ Touch Bar 段控件高亮）。
+  - AC-2：Core 状态文字与图标颜色随 `CoreManager.state` 实时变化，切换时间 < 1s。
+  - AC-3：「新会话」「发送 / 停止」在「对话」页之外不显示。
+  - AC-4：所有按钮在 Core 未运行时仍可点击（点击重启 Core 不依赖 Core 自身）。
+  - AC-5：无 Touch Bar 硬件的 Mac 上不出现任何崩溃、警告或 UI 异常。
+- 边界场景
+  - 主窗口尚未创建时收到 Touch Bar 动作：因 Touch Bar 绑定到 `NSWindow.touchBar`，无窗口则无 Touch Bar，动作不可触发；这是预期行为。
+  - 多个窗口同时存在：当前实现所有窗口共用同一个 `TouchBarController.shared.touchBar`；动作以通知方式解耦广播，最后写入的状态会覆盖之前的。
+  - 聊天页 `ChatViewModel` 未加载（onboarding 未完成）：`ChatView` 尚未挂载，不会上报状态，Touch Bar 默认「未在生成」状态。
+
+**技术视角**
+
+- **API 选型**：SwiftUI 无原生 Touch Bar API，使用 AppKit `NSTouchBar` + `NSCustomTouchBarItem`。
+- **文件结构**
+  - `macapp/Sources/Services/TouchBarController.swift`（XiJianKit 框架内，单例 + `NSTouchBarDelegate`）
+  - `macapp/Sources/App.swift`（`AppDelegate` 启动时挂到主窗口）
+  - `macapp/Sources/Views/ChatView.swift`（聊天页订阅 Touch Bar 动作 + 上报流式状态）
+- **挂载时机**
+  - `AppDelegate.applicationDidFinishLaunching`：调用 `TouchBarController.shared.startObserving()` 启动状态观察循环；订阅 `NSWindow.didBecomeKeyNotification` 等首次出现的主窗口，挂上 `window.touchBar = TouchBarController.shared.touchBar`。
+  - 退出时 `applicationWillTerminate` 调用 `stopObserving()` 并清理通知观察者。
+- **动作桥接**：Touch Bar 控件不直接调用业务方法，统一通过 `NotificationCenter` 解耦：
+  - `xijianRequestSendDraft` / `xijianRequestStopStreaming` / `xijianRequestNewChatSession` → `ChatView` 监听
+  - `xijianRequestRestartCore` / `xijianRequestViewLogs` → `AppDelegate` 监听
+  - 状态上报：`xijianChatStateChanged`（`userInfo: ["isStreaming": Bool]`）由 `ChatView` 在 `onChange(of: viewModel.isStreaming)` 与 `onAppear` 时发出，`TouchBarController` 监听后刷新按钮文案 / 图标。
+- **状态实时性**
+  - `withObservationTracking` 循环观察 `AppViewModel.shared.selectedTab` 与 `CoreManager.shared.state`；任一变化触发刷新回调，更新 `NSCustomTouchBarItem` 持有的子视图（标签段高亮、Core 按钮文字 / tint、上下文按钮 `isHidden`）。
+  - `selectedSegment` / `title` / `image` / `isHidden` 均可直接修改，Touch Bar 实时反映。
+- **不支持的控件**：未启用 Touch Bar 用户自定义面板（`customizationAllowedItemIdentifiers = []`），避免无意义配置项。
+
+### B2. iOS Dynamic Island（占位）
+
+- 计划在 iOS 客户端启动后单独规划，参考 Touch Bar 的通知 + 状态观察模式实现。
+- 占位说明：本节为后续 iOS 平台专属交互预留。
 
 ---
 

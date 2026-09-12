@@ -1460,3 +1460,38 @@ new file:   core/tests/test_xijian_scene_interactions.py  (810 行)
 - 不要再新建别的笔记文件——都进这里，保持单一来源
 - 跨章节的设计决策（比如 A5.x 怎么挡 critical）写到对应章节下"跨章节联动点"
 - 文档里的 `[TODO]` 实际化之后，从 v2 文档摘掉，并在本文件留一行"摘除记录"
+
+---
+
+## 2026-09-12 · B 节：macOS Touch Bar 基本控件
+
+### 改动清单
+
+- 新增 `macapp/Sources/Services/TouchBarController.swift`（XiJianKit 内）：
+  - 单例 `TouchBarController.shared`（`@MainActor`）
+  - `NSTouchBarDelegate` 实现，定义 5 个 `NSTouchBarItem.Identifier`：
+    - 标签切换（4 段：`对话 / 角色 / 世界 / 设置`）
+    - Core 状态（点击 = 重启 Core）
+    - 查看日志
+    - 新会话（仅聊天页可见）
+    - 发送 / 停止（仅聊天页可见，按 `isStreaming` 切换）
+  - `withObservationTracking` 循环观察 `AppViewModel.selectedTab` + `CoreManager.state`，变化时直接改 `NSCustomTouchBarItem.view` 的 `title` / `image` / `tint` / `isHidden` / `selectedSegment`，**不重建 Touch Bar**。
+  - 6 个 `Notification.Name` 解耦桥接到主窗口 UI（`xijianRequestSendDraft` / `…StopStreaming` / `…NewChatSession` / `…ViewLogs` / `…RestartCore` / `xijianChatStateChanged`）。
+- `macapp/Sources/App.swift`：
+  - `applicationDidFinishLaunching` 调 `TouchBarController.shared.startObserving()`，并订阅 `NSWindow.didBecomeKeyNotification` 在主窗口首次 key 时挂上 `window.touchBar`。
+  - 订阅两个全局 Touch Bar 通知（重启 Core / 查看日志），闭包 + `MainActor.assumeIsolated` 桥接 `@MainActor` 静态方法。
+  - `applicationWillTerminate` 调 `stopObserving()` 并清理持有的通知观察者 token。
+- `macapp/Sources/Views/ChatView.swift`：
+  - 监听 3 个聊天页专属通知（发送 / 停止 / 新会话），复用既有 `send()` / `viewModel.stopStreaming()` / `viewModel.newSession()`。
+  - `onChange(of: viewModel.isStreaming)` + `onAppear` 上报 `xijianChatStateChanged`，让 Touch Bar 实时反映「发送 ↔ 停止」切换。
+- 文档同步：
+  - `Dev. Function List功能清单v2.md` B1：补 Touch Bar 基本控件的用户故事、AC、边界、技术视角（B2 iOS Dynamic Island 仍为占位）。
+  - `Dev.md` 4.4.1 平台特性：TouchBar 从 `NSTouchBar` 单字标记改为「✅ 基本控件已实现」并列出 4 类按钮。
+
+### 没动的与原因
+
+- **iOS Dynamic Island（B2）**：iOS 客户端尚未启动；`macapp.md` / `api.md` 等无 iOS 入口，本节保持占位，iOS 端规划时再展开。
+- **Touch Bar 自定义面板（用户可拖拽配置）**：当前实现 `customizationAllowedItemIdentifiers = []`，5 个按钮固定位置。理由：(1) 基本需求已满足；(2) 自定义面板需要稳定 ID + 文案 + 图标三件套，对「基本」阶段是噪音；(3) 后续要扩展时（增加更多 item）再开启更顺。
+- **Touch Bar 在 `ChatView` 内的草稿输入同步（输入空时禁用「发送」）**：当前实现是「按了再说」，`send()` 内部 `text.isEmpty` 直接 `return`。理由：ChatViewModel 是 ContentView 的 `@State` 实例（非单例），把它提升到全局会让"一窗口多 ChatViewModel"语义塌陷；当前文案与 `AppKit` 控件能力不冲突（按钮不显灰但按下无害）。后续若要"按钮 enable 联动"再单独 refactor。
+- **macOS 14 部署目标**：本实现只用 `NSTouchBar`（10.12.2+）+ `withObservationTracking`（iOS 17 / macOS 14+）+ `NSSegmentedControl` 等老 API，不引入新部署目标。
+- **`Dev.md` 4.4.1 中「自建灵动岛」行未动**：本节聚焦 Touch Bar；灵动岛（自建 NSScreen 顶栏）是另一条独立路径，保持原状。

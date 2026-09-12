@@ -417,7 +417,7 @@ class CharacterService:
 - **网络**：标准 `URLSession` + WebSocket 客户端
 - **渲染**：VRM 1.0 (GLTF) + Metal 渲染管线（统一采用 VRM，详见功能清单 v2.1 决议）
 - **平台特性**：
-  - TouchBar：`NSTouchBar`
+  - TouchBar：`NSTouchBar` ✅ **基本控件已实现**（标签切换 + Core 状态/重启 + 查看日志 + 聊天页发送/停止/新会话）
   - 自建「灵动岛」：`NSScreen` 顶部区域 + 自绘，**注意与其他应用冲突**
   - 桌宠 / 壁纸：透明背景窗口 + 屏幕录制 API（需用户授权）⚠️ **开发中**
   - 屏幕操控：CGEvent 模拟键鼠 ⚠️ **开发中**

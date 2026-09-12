@@ -44,6 +44,31 @@ struct ChatView: View {
                 viewModel.showError = false
             }
         }
+        .onChange(of: viewModel.isStreaming) { _, newValue in
+            // 同步流式状态到 Touch Bar（仅当本视图在前台时；多窗口场景下会重复发，最后一次为准）
+            NotificationCenter.default.post(
+                name: .xijianChatStateChanged,
+                object: nil,
+                userInfo: ["isStreaming": newValue]
+            )
+        }
+        .onAppear {
+            // 进入聊天页时上报一次当前流式状态（onChange 不会触发首次值）
+            NotificationCenter.default.post(
+                name: .xijianChatStateChanged,
+                object: nil,
+                userInfo: ["isStreaming": viewModel.isStreaming]
+            )
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .xijianRequestSendDraft)) { _ in
+            Task { await send() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .xijianRequestStopStreaming)) { _ in
+            viewModel.stopStreaming()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .xijianRequestNewChatSession)) { _ in
+            Task { await viewModel.newSession() }
+        }
         .sheet(isPresented: $showCallSheet) {
             if let vm = voiceCallVM {
                 VoiceCallView(viewModel: vm)
