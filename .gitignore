@@ -418,3 +418,9 @@ devkit/.pytest_cache/
 # pretrained model weights (>5 GB).  Exclude from git; manage separately.
 deps/
 /build.zip
+
+### Hermes Agent scratch space
+# Plans, kanban state, scratch dirs created by the Hermes Agent tool while
+# working in this repo.  These are AI assistant workflow artifacts, not
+# project conventions — never read by humans.
+.hermes/
