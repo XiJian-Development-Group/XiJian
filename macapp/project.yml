@@ -84,12 +84,6 @@ targets:
     dependencies:
       - target: XiJianManagerKit
 
-    # Tests target disabled in Phase 1.4 — re-enabled in task 1.4 once new
-    # HermesInstaller / HermesProcess / PTYTerminal tests exist.
-    settings:
-      base:
-        SWIFT_ACTIVE_COMPILATION_CONDITIONS: DISABLE_TESTS
-
 packages:
   swift-markdown-ui:
     url: https://github.com/gonzalezreal/swift-markdown-ui
