@@ -5,6 +5,44 @@
 
 ---
 
+## 2026-10-11 · 项目转型：隙间 → XiJian Manager（Hermes Agent 桌面管理器）
+
+**方向决策**：隙间从「二次元聊天产品」转型为「Hermes Agent 桌面管理器」。所有功能改为让 Hermes Agent 做聊天，隙间只负责配置 + 管理。
+
+**核心变更**：
+- 全 Swift 原生实现（macOS 26.0+ / Swift 5.9 语法 / deployment target 14.0 → 26.0）
+- 删除 `core/`（60K 行 Python，271 个 OAI 兼容端点）
+- 删除 `devkit/`（49K 行 Python）
+- 删除聊天专属 SwiftUI（ChatView / VoiceCallView / PackListView 等 26 个 View + 6 个 Service + 8 个 ViewModel）
+- 重命名 macapp target → XiJianManager（bundle id `com.skyc8266.xi-jian-manager-dev`）
+- 剧情系统 P0-P4 备份到 `archive/plot-system-P0P4-2026-10-11/` 分支 + tag `plot-system-snapshot-before-freeze`
+- 二次元聊天降为附属功能，通过 Hermes SOUL.md / MEMORY.md 实现（Phase 2 加 GUI 编辑器）
+- 桌宠、3D 模型、主动聊天收件箱等之前承诺功能**从 README 删除**（按用户偏好"不实现就别承诺"）
+
+**Phase 1 范围（macOS MVP）**：
+1. HermesInstaller（TDD，5 测试通过）：从 GitHub release 下载 hermes-agent，解压到 `~/.hermes`
+2. HermesProcess + LogTailer（TDD，4 测试通过）：spawn / stop / restart + 健康检查 + 日志 tail
+3. PTYTerminal + ANSIParser（TDD，9 测试通过）：Darwin.openpty + ANSI 转义序列解析
+4. HermesCommandRunner（TDD，4 测试通过）：包装 hermes CLI 子进程
+5. 菜单栏常驻 + 主窗口（4 个 tab：状态 / 终端 / Dashboard / 设置）
+6. README 整页重写
+
+**未做（明确推迟）**：
+- 三语本地化（先中文）
+- Workspace 切换（Phase 2）
+- 角色管理 GUI（Phase 2）
+- 远程 Hermes / CN 网络适配 / MCP / SkillHub / Token 监控（Phase 3）
+- 模型管理 / 主题系统 / Dashboard 子页 / 滑动变祖器（Phase 4）
+- Agent 群聊（Phase 5，按需）
+
+**用户偏好（本转型相关）**：
+- macOS only（明确放弃跨平台维护成本换取 macOS 最佳体验）
+- 全 Swift 实现（不内嵌 Python runtime）
+- 背景分支 + `archive/` 目录不入 git 的 `.hermes/plans/`
+- 真实测试：每个新模块都有 XCTest 覆盖业务核心，不写 UI 自动测试
+
+---
+
 ## 2026-08-26 · Galgame 引擎 P4：文档同步
 
 按 维护教程 §8 文档同步地图核对全部涉及剧情的文档：

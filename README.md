@@ -1,111 +1,82 @@
-# 隙间
+# 隙间 · XiJian Manager
 
-本地优先的 AI 角色扮演程序，包含 3D 虚拟形象、模拟世界、长期记忆、NSFW 互动（默认隐藏）、桌宠/动态壁纸模式。
-
-**项目状态**：开发中，预计首个正式版 2026 年 12 月前发布。
-
-> ⚠️ **功能提示**：3D 模型回应、壁纸/桌宠模式、屏幕感知与操控、应急快捷键、模拟世界自主演化、主动聊天收件箱、端到端语音通话等核心功能工作量巨大，**尚未实现**。感谢理解与耐心等待。
-
----
-
-## 快速了解
+Hermes Agent 的 macOS 桌面管理器。全 Swift 实现，单 macOS 平台。
 
 | 项目 | 说明 |
 |------|------|
-| **名称** | 隙间 |
-| **类型** | 本地 AI 角色扮演 / 模拟器 |
+| **名称** | 隙间 (XiJian Manager) |
+| **类型** | Hermes Agent 桌面 GUI |
 | **语言** | 简体中文 / English / 日本語 |
 | **代码仓库** | [github.com/Mofan2020/XiJian](https://github.com/Mofan2020/XiJian) |
-| **目标平台** | macOS 14+ (M 系列芯片) / Windows 10 22H2+ / iOS & Android 仅作伴侣端 |
+| **目标平台** | macOS 26.0+ (Apple Silicon) |
 
----
+## 是什么
 
-## 核心功能
+隙间是 Hermes Agent 的桌面前端：把 Hermes 那些需要改配置文件或命令行的操作（安装 / 启停 / 切换人设 / 管理记忆 / MCP / Skill 等）变成点点点的桌面应用。
 
-| 功能 | 说明 | 状态 |
-|------|------|------|
-| **实时对话** | 语音/文字聊天，角色通过 3D 模型做出表情与动作回应 | 开发中 |
-| **模拟世界** | 经济、健康、饮食、体力、心智等状态系统；可在场景间移动触发事件 | 部分实现 |
-| **互动系统** | 多种互动类型增进羁绊，角色可拒绝/同意，过程有实时反馈 | 部分实现 |
-| **主动聊天** | 角色可主动发消息，支持壁纸/桌宠模式下交互 | 未实现 |
-| **长期记忆** | 对话/互动自动形成记忆，支持人工增删改查、重要性分级、遗忘曲线 | 核心实现完成 |
-| **安全保护** | 提示词注入防护、OOC 检测、数据版本回滚、过载自动熔断 | 核心实现完成 |
+- **后台常驻**：菜单栏图标（点开主窗口）
+- **人设切换**：通过修改 Hermes SOUL.md / MEMORY.md 实现（二次元聊天作为附属功能）
+- **窗口三栏**：状态概览 / 内嵌终端 / Dashboard 快捷入口 / 设置
 
----
+## 当前状态
 
-## 设备要求
+macOS MVP（Phase 1 完成）：
+- 装/卸/备/更 Hermes（GitHub release 下载 + ditto 解压）
+- 启动/停止/重启 Hermes gateway
+- Dashboard 一键开关
+- 内嵌终端（PTY → Hermes CLI 子进程）
+- 完整 Xcode build 通过 / 22 个单元测试通过
 
-### macOS
-- **芯片**：Apple Silicon (M1/M2/M3 系列) **必需**
-- **内存**：16 GB（可用 ≥ 6 GB）
-- **磁盘**：≥ 24 GB 可用空间
-- **系统**：macOS 14.0+
+## 快速开始
 
-### Windows
-- **显存**：≥ 20 GB（建议更高）
-- **磁盘**：SSD，≥ 26 GB 可用空间
-- **系统**：Windows 10 22H2 / 11（建议 24H2+）
+```bash
+git clone https://github.com/Mofan2020/XiJian.git
+cd XiJian/macapp
+xcodegen generate
+xcodebuild -project XiJianManager.xcodeproj -scheme XiJianManager -configuration Debug build
+open build/Debug/XiJianManager.app
+```
 
-> **为什么 Windows 要求更高？** Core API 与 UI 在两平台采用不同技术栈，Windows 无法利用 Metal 加速，需更大显存跑同等模型。
+## 开发命令
 
-### 移动端
-iOS / Android **仅作为伴侣端**，需连接运行隙间的电脑，暂无原生客户端。
+```bash
+# 跑全部单元测试
+xcodebuild -project XiJianManager.xcodeproj -scheme XiJianManager test
 
----
+# 仅 build（不跑测试）
+xcodebuild -project XiJianManager.xcodeproj -scheme XiJianManager build
+```
 
-## 为什么坚持本地运行？
+## 架构
 
-1. **隐私优先**：所有对话、记忆、生成内容永不离开你的设备
-2. **无订阅费**：一次下载，终身免费使用（开源 MIT 协议）
-3. **离线可用**：无网络也能完整体验核心玩法
-4. **可定制**：支持接入 OpenAI 兼容 API 作为云端兜底
+```
+macapp/Sources/
+  ├── Services/        # HermesInstaller / Process / LogTailer / PTYTerminal / ANSIParser / HermesCommandRunner / AppLifecycleManager
+  ├── Models/          # HermesInstall / InstallError / ThemeSettings / UserProfileSettings / BackgroundSettings
+  ├── Views/           # ContentView + StatusView / TerminalView / DashboardView / SettingsView
+  ├── Theme/           # AppTheme / DesignSystem
+  ├── App.swift        # @main + AppDelegate（菜单栏）
+  └── Localization.swift
+macapp/Tests/         # XCTest（22 个测试，覆盖 installer/process/tailer/pty/ansi/commands）
+```
 
-> 我们没有资源购买云端算力，也不想上传用户数据。如果你设备不足，可在设置中填入兼容 OpenAI 的 API 地址走云端推理。
+## 设计原则
 
----
+1. **macOS only**：单一目标平台，最佳 macOS 体验（按用户偏好牺牲跨平台维护成本）
+2. **全 Swift**：Core / DevKit Python 已删除（备份在 `archive/plot-system-P0P4-2026-10-11/`）
+3. **人设 = 文件**：角色 / 世界 / 记忆全部走纯 markdown / YAML，手改即时生效
+4. **Hermes 进程由 macOS 管理**：不内嵌 Python runtime，PTY → Hermes CLI 子进程
 
-## 关于 AI 编码
+## 不做什么
 
-本项目由两名核心开发者维护，时间有限。我们使用 AI 协助编码与文档编写（OpenCode、MiniMax Code、GitHub Copilot），但**每个正式版发布前都会人工审查**。测试版仅做基本功能检查，请勿用于重要场景。
+- Windows / Linux 版本（明确范围外）
+- 3D 模型、桌宠、壁纸模式（之前的承诺已删除）
+- 桌面宠物 / 主动聊天收件箱（未实现功能已从 README 删除）
 
----
+## 剧情系统
 
-## 安全与免责
+隙间之前包含一套剧情系统（Galgame 体验），代码已备份在 `archive/plot-system-P0P4-2026-10-11/` 分支。**未来可能复活**，但当前不做。
 
-- **更新器风险**：DevKit 自动更新**故意禁用 TLS 验证**（适配国内代理环境），**无签名/校验和**。使用即接受中间人攻击风险。高安全需求请手动下载验证或用包管理器分发。
-- **设备操控**：桌宠模式可申请屏幕读取/操控权限，**风险自负**，开发组不承担任何损失责任。
-- **内容分级**：含 AI 生成文本/图像/音频/视频、声音克隆、NSFW 互动（默认隐藏）。未成年人请在监护人指导下使用。
+## License
 
----
-
-## 开发文档
-
-| 文档 | 说明 |
-|------|------|
-| [功能清单 v2](docs/Dev.%20Function%20List%E5%8A%9F%E8%83%BD%E6%B8%85%E5%8D%95v2.md) | 产品唯一权威规格（SSOT） |
-| [API 规范](docs/api.md) | 本地 REST / SSE / WebSocket 协议 |
-| [构建指南](docs/BuildGuide.md) | PyInstaller / XcodeGen / 打包流程 |
-| [Core 启动指南](docs/CoreStartupGuide.md) | 安装、配置、运行、运维 |
-| [macOS 客户端](docs/macapp.md) | SwiftUI 架构、A6 通话、本地化 |
-| [AI 后端](docs/AIBackend.md) | MLX / GGUF / 远程回退实现 |
-| [依赖清单](docs/Deps.md) | 第三方库用途与许可证 |
-
----
-
-## 参与贡献
-
-- **反馈建议**：邮件至 [support@mail.skyc8266.uk](mailto:support@mail.skyc8266.uk)，主题格式：`[XiJian Project: Contact Us/suggestions] <你的主题>`
-- **加入开发组**：QQ 联系 2500693887
-- **问题反馈**：GitHub Issues（优先）或邮件
-
----
-
-## 许可证
-
-MIT License —— 仅涵盖代码版权许可，**不包含**上述免责声明、内容分级声明、更新器风险声明等法律条款。完整使用条款见 `EULA.md`（如存在）。
-
----
-
-## 致谢
-
-感谢所有开源库作者、测试者、反馈者。喵～
+MIT
