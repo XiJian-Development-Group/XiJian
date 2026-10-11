@@ -1,6 +1,6 @@
 import Foundation
 
-/// macapp 全部 UserDefaults 键的唯一常量表（架构统一：键不再散落各处）。
+/// XiJianManager 全部 UserDefaults 键的唯一常量表（架构统一：键不再散落各处）。
 enum XJDefaultsKey {
     // MARK: 主题（ThemeSettings）
     static let themeAccentHex = "xijian.theme.accentHex"
@@ -12,19 +12,11 @@ enum XJDefaultsKey {
     static let themeBubbleOpacity = "xijian.theme.bubbleOpacity"
     static let themeCustomAccent = "xijian.theme.customAccent"
 
-    // MARK: 聊天（AppViewModel）
-    static let chatTemperature = "xijian.chat.temperature"
-    static let chatMaxTokens = "xijian.chat.maxTokens"
-    static let chatRecall = "xijian.chat.recall"
-    static let chatCharacter = "xijian.chat.character"
-    static let chatWorld = "xijian.chat.world"
-
-    // MARK: Core（CoreManager）
-    static let corePort = "xijian.core.port"
-    static let coreUseCustomServer = "xijian.core.useCustomServer"
-    static let coreCustomBaseURL = "xijian.core.customBaseURL"
-    /// 自定义服务器 token 的「已配置」标记（明文值本身在 Keychain，见 S7）
-    static let coreCustomTokenConfigured = "xijian.core.customTokenConfigured"
+    // MARK: Hermes 安装（Phase 1 任务 1.8 实现完整面板时使用）
+    static let hermesInstallPath = "xijian.hermes.installPath"
+    static let hermesNoCAVerify = "xijian.hermes.noCAVerify"
+    static let hermesMirrorCN = "xijian.hermes.mirrorCN"
+    static let hermesLastBackup = "xijian.hermes.lastBackup"
 
     // MARK: 用户资料（UserProfileSettings）
     static let profileUserName = "xijian.profile.userName"
@@ -44,7 +36,6 @@ enum XJDefaultsKey {
     static let backgroundPath = "xijian.background.path"
     static let backgroundBlurred = "xijian.background.blurred"
 
-    // MARK: 首页（HomeView）
-    static let pinnedCharacters = "xijian.home.pinnedCharacters"
-    static let characterLastChatTime = "xijian.character.lastChatTime"
+    // MARK: 通用
+    static let pinnedPersonas = "xijian.home.pinnedPersonas"
 }

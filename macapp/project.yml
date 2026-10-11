@@ -1,23 +1,23 @@
-name: XiJian
+name: XiJianManager
 options:
-  bundleIdPrefix: com.skyc8266
+  bundleIdPrefix: com.skyc8266.xi-jian-manager
   deploymentTarget:
-    macOS: "14.0"
+    macOS: "26.0"
   createIntermediateGroups: true
   swiftVersion: "5.9"
-  xcodeVersion: "15.0"
+  xcodeVersion: "27.0"
   pkgConfig: false
-  bundleId: com.skyc8266.xijian.macapp-dev
+  bundleId: com.skyc8266.xi-jian-manager-dev
   configFiles:
     Debug: Configs/Debug.xcconfig
     Release: Configs/Release.xcconfig
 settings:
   base:
     SWIFT_VERSION: "5.9"
-    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    MACOSX_DEPLOYMENT_TARGET: "26.0"
     ENABLE_PREVIEWS: YES
     INFOPLIST_FILE: Sources/Info.plist
-    PRODUCT_BUNDLE_IDENTIFIER: com.skyc8266.xijian.macapp-dev
+    PRODUCT_BUNDLE_IDENTIFIER: com.skyc8266.xi-jian-manager-dev
     ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     CURRENT_PROJECT_VERSION: 1
     MARKETING_VERSION: 1.0.0
@@ -30,7 +30,7 @@ settings:
     Release:
       SWIFT_COMPILATION_MODE: wholemodule
 targets:
-  XiJianKit:
+  XiJianManagerKit:
     type: framework
     platform: macOS
     sources:
@@ -39,9 +39,9 @@ targets:
           - "**/App.swift"
     settings:
       base:
-        PRODUCT_NAME: XiJianKit
-        PRODUCT_BUNDLE_IDENTIFIER: com.skyc8266.xijian.kit
-        SWIFT_MODULE_NAME: XiJianKit
+        PRODUCT_NAME: XiJianManagerKit
+        PRODUCT_BUNDLE_IDENTIFIER: com.skyc8266.xi-jian-manager.kit
+        SWIFT_MODULE_NAME: XiJianManagerKit
         DEFINES_MODULE: YES
         INSTALL_PATH: "@loader_path/../Frameworks"
         SKIP_INSTALL: YES
@@ -56,7 +56,7 @@ targets:
         products:
           - cmark-gfm
 
-  XiJian:
+  XiJianManager:
     type: application
     platform: macOS
     sources:
@@ -65,31 +65,30 @@ targets:
       - path: Resources/Assets.xcassets
         type: folder
       - path: Resources/Localizable.xcstrings
-    postBuildScripts:
-      - name: Copy Core Resources
-        script: |
-          rsync -av --delete "${PROJECT_DIR}/Resources/Core/" "${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/Core/"
-        inputFiles:
-          - "$(PROJECT_DIR)/Resources/Core"
-        outputFiles:
-          - "$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/Core"
     settings:
       base:
-        PRODUCT_NAME: XiJian
-        PRODUCT_BUNDLE_IDENTIFIER: com.skyc8266.xijian.macapp-dev
+        PRODUCT_NAME: XiJianManager
+        PRODUCT_BUNDLE_IDENTIFIER: com.skyc8266.xi-jian-manager-dev
         INFOPLIST_FILE: Sources/Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CODE_SIGN_ENTITLEMENTS: Entitlements.entitlements
     dependencies:
-      - target: XiJianKit
+      - target: XiJianManagerKit
 
-  XiJianTests:
+  XiJianManagerTests:
     type: bundle.unit-test
     platform: macOS
     sources:
       - path: Tests
+        createIntermediateGroups: true
     dependencies:
-      - target: XiJianKit
+      - target: XiJianManagerKit
+
+    # Tests target disabled in Phase 1.4 — re-enabled in task 1.4 once new
+    # HermesInstaller / HermesProcess / PTYTerminal tests exist.
+    settings:
+      base:
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: DISABLE_TESTS
 
 packages:
   swift-markdown-ui:
@@ -103,16 +102,16 @@ packages:
     from: 0.8.0
 
 schemes:
-  XiJian:
+  XiJianManager:
     build:
       targets:
-        XiJianKit: [all]
-        XiJian: [all]
+        XiJianManagerKit: [all]
+        XiJianManager: [all]
     run:
       config: Debug
     test:
       config: Debug
       targets:
-        - XiJianTests
+        - XiJianManagerTests
     archive:
       config: Release

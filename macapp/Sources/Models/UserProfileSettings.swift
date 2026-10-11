@@ -146,18 +146,4 @@ public final class UserProfileSettings {
         updated.remove(atOffsets: offsets)
         aliases = updated
     }
-
-    /// 将 AI 来源应用到 CoreManager（远程 → useCustomServer；本地 → 关闭）。
-    /// 与 CoreManager 同 module，直接引用 CoreManager.shared。
-    public func applyAISourceToCore() {
-        let core = CoreManager.shared
-        switch aiSource {
-        case .local:
-            core.useCustomServer = false
-        case .remote:
-            core.useCustomServer = true
-            if !remoteEndpoint.isEmpty { core.customBaseURL = remoteEndpoint }
-            core.customToken = remoteToken
-        }
-    }
 }

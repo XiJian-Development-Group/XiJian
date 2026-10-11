@@ -1,0 +1,54 @@
+import Foundation
+import Observation
+
+/// 应用级 ViewModel：导航、全局设置、错误提示
+@Observable
+@MainActor
+public final class AppViewModel {
+
+    public static let shared = AppViewModel()
+
+    /// 侧边栏标签
+    public enum Tab: String, CaseIterable, Identifiable {
+        case status = "状态"
+        case terminal = "终端"
+        case dashboard = "Dashboard"
+        case settings = "设置"
+
+        public var id: String { rawValue }
+
+        public var displayName: String {
+            switch self {
+            case .status: return loc("状态")
+            case .terminal: return loc("终端")
+            case .dashboard: return loc("Dashboard")
+            case .settings: return loc("设置")
+            }
+        }
+
+        public var icon: String {
+            switch self {
+            case .status: return "circle.fill"
+            case .terminal: return "terminal.fill"
+            case .dashboard: return "globe"
+            case .settings: return "gearshape"
+            }
+        }
+    }
+
+    // MARK: 导航
+
+    public var selectedTab: Tab = .status
+
+    // MARK: 全局错误
+
+    public var showError: Bool = false
+    public var errorMessage: String?
+
+    public init() {}
+
+    public func reportError(_ message: String) {
+        errorMessage = message
+        showError = true
+    }
+}
