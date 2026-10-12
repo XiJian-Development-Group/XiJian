@@ -37,13 +37,13 @@ public final class ThemeSettings {
     // MARK: 枚举
 
     /// 外观模式
-    enum AppearanceMode: String, CaseIterable, Identifiable {
+    public enum AppearanceMode: String, CaseIterable, Identifiable, Sendable {
         case system = "跟随系统"
         case light = "浅色"
         case dark = "深色"
-        var id: String { rawValue }
+        public var id: String { rawValue }
         /// 本地化显示名（rawValue 为持久化存储值，展示时用 displayName）
-        var displayName: String {
+        public var displayName: String {
             switch self {
             case .system: return loc("跟随系统")
             case .light: return loc("浅色")
@@ -53,13 +53,13 @@ public final class ThemeSettings {
     }
 
     /// 气泡样式
-    enum BubbleStyle: String, CaseIterable, Identifiable {
+    public enum BubbleStyle: String, CaseIterable, Identifiable, Sendable {
         case rounded = "圆角"
         case outlined = "描边"
         case flat = "扁平"
-        var id: String { rawValue }
+        public var id: String { rawValue }
         /// 本地化显示名（rawValue 为持久化存储值，展示时用 displayName）
-        var displayName: String {
+        public var displayName: String {
             switch self {
             case .rounded: return loc("圆角")
             case .outlined: return loc("描边")
@@ -69,13 +69,19 @@ public final class ThemeSettings {
     }
 
     /// 主题色预设
-    struct AccentPreset: Identifiable {
-        let id: String
-        let name: String
-        let hex: String
+    public struct AccentPreset: Identifiable, Sendable {
+        public let id: String
+        public let name: String
+        public let hex: String
+
+        public init(id: String, name: String, hex: String) {
+            self.id = id
+            self.name = name
+            self.hex = hex
+        }
     }
 
-    static let presets: [AccentPreset] = [
+    public static let presets: [AccentPreset] = [
         AccentPreset(id: "violet", name: "隙间紫", hex: "#8B5CF6"),
         AccentPreset(id: "sakura", name: "樱花粉", hex: "#F472B6"),
         AccentPreset(id: "mint", name: "薄荷绿", hex: "#34D399"),
@@ -91,27 +97,27 @@ public final class ThemeSettings {
     // MARK: 属性（didSet 持久化）
 
     /// 主题色（十六进制）
-    var accentHex: String {
+    public var accentHex: String {
         didSet { UserDefaults.standard.set(accentHex, forKey: XJDefaultsKey.themeAccentHex) }
     }
 
     /// 是否使用自定义主题色（覆盖预设）
-    var useCustomAccent: Bool {
+    public var useCustomAccent: Bool {
         didSet { UserDefaults.standard.set(useCustomAccent, forKey: XJDefaultsKey.themeCustomAccent) }
     }
 
     /// 外观模式
-    var appearanceMode: AppearanceMode {
+    public var appearanceMode: AppearanceMode {
         didSet { UserDefaults.standard.set(appearanceMode.rawValue, forKey: XJDefaultsKey.themeAppearance) }
     }
 
     /// 气泡样式
-    var bubbleStyle: BubbleStyle {
+    public var bubbleStyle: BubbleStyle {
         didSet { UserDefaults.standard.set(bubbleStyle.rawValue, forKey: XJDefaultsKey.themeBubbleStyle) }
     }
 
     /// 基础字号
-    var fontSize: Double {
+    public var fontSize: Double {
         didSet {
             let clamped = min(max(fontSize, 10), 28)
             if fontSize != clamped { fontSize = clamped; return }
@@ -120,7 +126,7 @@ public final class ThemeSettings {
     }
 
     /// 气泡圆角
-    var cornerRadius: Double {
+    public var cornerRadius: Double {
         didSet {
             let clamped = min(max(cornerRadius, 0), 24)
             if cornerRadius != clamped { cornerRadius = clamped; return }
@@ -129,7 +135,7 @@ public final class ThemeSettings {
     }
 
     /// 气泡透明度（0.5-1.0）
-    var bubbleOpacity: Double {
+    public var bubbleOpacity: Double {
         didSet {
             let clamped = min(max(bubbleOpacity, 0.4), 1.0)
             if bubbleOpacity != clamped { bubbleOpacity = clamped; return }
@@ -138,7 +144,7 @@ public final class ThemeSettings {
     }
 
     /// 是否显示时间戳
-    var showTimestamps: Bool {
+    public var showTimestamps: Bool {
         didSet { UserDefaults.standard.set(showTimestamps, forKey: XJDefaultsKey.themeShowTimestamps) }
     }
 

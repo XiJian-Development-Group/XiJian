@@ -62,6 +62,8 @@ public struct ContentView: View {
             TokenMonitorView()
         case .network:
             CNNetworkView()
+        case .theme:
+            ThemeView()
         case .settings:
             HermesSettingsView()
         }
