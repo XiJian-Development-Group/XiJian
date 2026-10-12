@@ -54,6 +54,8 @@ public struct ContentView: View {
             CharacterEditorView()
         case .memory:
             MemoryEditorView()
+        case .mcp:
+            MCPView()
         case .settings:
             HermesSettingsView()
         }
