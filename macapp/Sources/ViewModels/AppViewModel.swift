@@ -19,6 +19,7 @@ public final class AppViewModel {
         case mcp = "MCP"
         case skills = "Skills"
         case tokens = "Tokens"
+        case network = "网络"
         case settings = "设置"
 
         public var id: String { rawValue }
@@ -34,6 +35,7 @@ public final class AppViewModel {
             case .mcp: return loc("MCP")
             case .skills: return loc("Skills")
             case .tokens: return loc("Tokens")
+            case .network: return loc("网络")
             case .settings: return loc("设置")
             }
         }
@@ -49,6 +51,7 @@ public final class AppViewModel {
             case .mcp: return "server.rack"
             case .skills: return "shippingbox"
             case .tokens: return "chart.bar"
+            case .network: return "network"
             case .settings: return "gearshape"
             }
         }

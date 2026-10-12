@@ -60,6 +60,8 @@ public struct ContentView: View {
             SkillHubView()
         case .tokens:
             TokenMonitorView()
+        case .network:
+            CNNetworkView()
         case .settings:
             HermesSettingsView()
         }

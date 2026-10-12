@@ -2,7 +2,7 @@ import Foundation
 
 /// 中国大陆网络环境适配：GitHub 镜像、npm/pypi 镜像、CA 验证跳过。
 public actor CNNetworkAdapter {
-    public struct Options: Sendable {
+    public struct Options: Sendable, Equatable {
         public var mirrorCN: Bool
         public var noCAVerify: Bool
 
@@ -24,6 +24,9 @@ public actor CNNetworkAdapter {
 
     /// 当前选项
     public private(set) var options: Options
+
+    /// 同步读取当前选项（actor 外部 await）
+    public func currentOptions() -> Options { options }
 
     public init(options: Options = Options()) {
         self.options = options
