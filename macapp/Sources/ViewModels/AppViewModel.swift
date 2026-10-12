@@ -13,6 +13,9 @@ public final class AppViewModel {
         case status = "状态"
         case terminal = "终端"
         case dashboard = "Dashboard"
+        case workspace = "Workspace"
+        case character = "角色"
+        case memory = "记忆"
         case settings = "设置"
 
         public var id: String { rawValue }
@@ -22,6 +25,9 @@ public final class AppViewModel {
             case .status: return loc("状态")
             case .terminal: return loc("终端")
             case .dashboard: return loc("Dashboard")
+            case .workspace: return loc("Workspace")
+            case .character: return loc("角色")
+            case .memory: return loc("记忆")
             case .settings: return loc("设置")
             }
         }
@@ -31,6 +37,9 @@ public final class AppViewModel {
             case .status: return "circle.fill"
             case .terminal: return "terminal.fill"
             case .dashboard: return "globe"
+            case .workspace: return "folder.fill"
+            case .character: return "person.crop.circle"
+            case .memory: return "brain.head.profile"
             case .settings: return "gearshape"
             }
         }

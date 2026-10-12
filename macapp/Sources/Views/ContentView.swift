@@ -48,6 +48,12 @@ public struct ContentView: View {
             HermesTerminalView()
         case .dashboard:
             HermesDashboardView()
+        case .workspace:
+            WorkspaceSwitcherView()
+        case .character:
+            CharacterEditorView()
+        case .memory:
+            MemoryEditorView()
         case .settings:
             HermesSettingsView()
         }
