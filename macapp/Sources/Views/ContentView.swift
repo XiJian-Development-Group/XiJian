@@ -56,6 +56,8 @@ public struct ContentView: View {
             MemoryEditorView()
         case .mcp:
             MCPView()
+        case .skills:
+            SkillHubView()
         case .settings:
             HermesSettingsView()
         }
