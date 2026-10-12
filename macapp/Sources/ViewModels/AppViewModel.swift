@@ -18,6 +18,7 @@ public final class AppViewModel {
         case memory = "记忆"
         case mcp = "MCP"
         case skills = "Skills"
+        case tokens = "Tokens"
         case settings = "设置"
 
         public var id: String { rawValue }
@@ -32,6 +33,7 @@ public final class AppViewModel {
             case .memory: return loc("记忆")
             case .mcp: return loc("MCP")
             case .skills: return loc("Skills")
+            case .tokens: return loc("Tokens")
             case .settings: return loc("设置")
             }
         }
@@ -46,6 +48,7 @@ public final class AppViewModel {
             case .memory: return "brain.head.profile"
             case .mcp: return "server.rack"
             case .skills: return "shippingbox"
+            case .tokens: return "chart.bar"
             case .settings: return "gearshape"
             }
         }

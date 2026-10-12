@@ -58,6 +58,8 @@ public struct ContentView: View {
             MCPView()
         case .skills:
             SkillHubView()
+        case .tokens:
+            TokenMonitorView()
         case .settings:
             HermesSettingsView()
         }
