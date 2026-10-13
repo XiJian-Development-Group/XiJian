@@ -9,6 +9,10 @@ import Foundation
 /// - gateway 启动通过 `hermes cli --port=9119 gateway start` 或类似命令；
 ///   实际命令语法以用户 Hermes 配置为准（Phase 1.7 的 MVP 用通用约定）
 public actor HermesCommandRunner {
+    public static let shared = HermesCommandRunner(
+        hermesPath: URL(fileURLWithPath: ("~/.hermes/hermes-agent/venv/bin/hermes" as NSString).expandingTildeInPath)
+    )
+
     public enum Command: String, Sendable {
         case gatewayStart = "gateway start"
         case gatewayStop = "gateway stop"
@@ -83,6 +87,36 @@ public actor HermesCommandRunner {
     /// 计算 dashboard URL。
     public func dashboardURL(port: Int) -> URL? {
         URL(string: "http://127.0.0.1:\(port)/")
+    }
+
+    /// 启动指定 profile（spawn 一个新的 hermes 进程）。
+    public func startProfile(_ name: String) async throws {
+        let result = try await run(.gatewayStart, extraArguments: ["--profile", name])
+        if result.exitCode != 0 {
+            throw CommandError.nonZeroExit(code: result.exitCode, stderr: result.stderr)
+        }
+    }
+
+    /// 停止指定 profile。
+    public func stopProfile(_ name: String) async throws {
+        let result = try await run(.gatewayStop, extraArguments: ["--profile", name])
+        if result.exitCode != 0 {
+            throw CommandError.nonZeroExit(code: result.exitCode, stderr: result.stderr)
+        }
+    }
+
+    /// 给指定 profile 发送一条聊天消息（阻塞到收到回复）。
+    public func sendChatMessage(profile: String, message: String) async -> Bool {
+        do {
+            let result = try await run(.gatewayStart, extraArguments: [
+                "--profile", profile,
+                "--message", message,
+                "--once",  // 单条消息后退出
+            ])
+            return result.exitCode == 0
+        } catch {
+            return false
+        }
     }
 }
 

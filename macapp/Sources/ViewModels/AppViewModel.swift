@@ -23,6 +23,7 @@ public final class AppViewModel {
         case theme = "主题"
         case models = "模型"
         case advanced = "高级"
+        case agents = "Agents"
         case settings = "设置"
 
         public var id: String { rawValue }
@@ -42,6 +43,7 @@ public final class AppViewModel {
             case .theme: return loc("主题")
             case .models: return loc("模型")
             case .advanced: return loc("高级")
+            case .agents: return loc("Agents")
             case .settings: return loc("设置")
             }
         }
@@ -61,6 +63,7 @@ public final class AppViewModel {
             case .theme: return "paintbrush"
             case .models: return "cpu"
             case .advanced: return "slider.horizontal.3"
+            case .agents: return "person.3"
             case .settings: return "gearshape"
             }
         }
