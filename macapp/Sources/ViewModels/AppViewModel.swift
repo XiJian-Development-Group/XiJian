@@ -21,6 +21,7 @@ public final class AppViewModel {
         case tokens = "Tokens"
         case network = "网络"
         case theme = "主题"
+        case models = "模型"
         case settings = "设置"
 
         public var id: String { rawValue }
@@ -38,6 +39,7 @@ public final class AppViewModel {
             case .tokens: return loc("Tokens")
             case .network: return loc("网络")
             case .theme: return loc("主题")
+            case .models: return loc("模型")
             case .settings: return loc("设置")
             }
         }
@@ -55,6 +57,7 @@ public final class AppViewModel {
             case .tokens: return "chart.bar"
             case .network: return "network"
             case .theme: return "paintbrush"
+            case .models: return "cpu"
             case .settings: return "gearshape"
             }
         }

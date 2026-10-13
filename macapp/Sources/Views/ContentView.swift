@@ -64,6 +64,8 @@ public struct ContentView: View {
             CNNetworkView()
         case .theme:
             ThemeView()
+        case .models:
+            ModelView()
         case .settings:
             HermesSettingsView()
         }
