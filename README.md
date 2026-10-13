@@ -20,12 +20,17 @@ Hermes Agent 的 macOS 桌面管理器。全 Swift 实现，单 macOS 平台。
 
 ## 当前状态
 
-macOS MVP（Phase 1 完成）：
+macOS MVP（Phase 1-5 全部完成）：
 - 装/卸/备/更 Hermes（GitHub release 下载 + ditto 解压）
 - 启动/停止/重启 Hermes gateway
 - Dashboard 一键开关
 - 内嵌终端（PTY → Hermes CLI 子进程）
-- 完整 Xcode build 通过 / 22 个单元测试通过
+- 多 workspace profile 切换（SOUL.md / MEMORY.md / USER.md 编辑）
+- MCP server 管理 / SkillHub / Token 监控 / CN 网络适配 + 测速
+- 主题系统 / 模型管理 / cmd+滚轮调字号 / Dashboard 子页管理 / Web Search 切换
+- Agent 群聊（多 profile 并行）
+- 三语 i18n（zh-Hans / en / ja）
+- **77 个单元测试全过，Debug macOS BUILD SUCCEEDED**
 
 ## 快速开始
 
