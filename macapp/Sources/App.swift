@@ -8,6 +8,7 @@ struct XiJianManagerApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .scrollZoomFont(ThemeSettings.shared)
                 .environment(AppLifecycleManager.shared)
                 .environment(ThemeSettings.shared)
                 .environment(UserProfileSettings.shared)

@@ -31,7 +31,7 @@ extension Color {
 /// 主题设置 — 高度个性化：主题色、深浅色、气泡样式、字体大小等。
 /// UserDefaults 持久化，通过 @Observable 注入环境。
 @Observable
-public final class ThemeSettings {
+public final class ThemeSettings: @unchecked Sendable {
     public static let shared = ThemeSettings()
 
     // MARK: 枚举
