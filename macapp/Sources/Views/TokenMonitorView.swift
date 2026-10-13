@@ -79,6 +79,17 @@ struct TokenMonitorView: View {
                     Text("\(usage.usedTokens) tokens")
                         .font(.callout.monospacedDigit())
                 }
+                HStack(spacing: 12) {
+                    if let tier = usage.tier {
+                        LabeledContent("等级") { Text(tier).font(.callout) }
+                    }
+                    if let resetAt = usage.resetAt {
+                        LabeledContent("重置") {
+                            Text(resetAt, format: .dateTime.month().day().hour().minute())
+                                .font(.callout)
+                        }
+                    }
+                }
             } else if let err = p.error {
                 Text("⚠ \(err)")
                     .font(.caption)

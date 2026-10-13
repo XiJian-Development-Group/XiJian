@@ -66,6 +66,8 @@ public struct ContentView: View {
             ThemeView()
         case .models:
             ModelView()
+        case .advanced:
+            SettingsAdvancedView()
         case .settings:
             HermesSettingsView()
         }

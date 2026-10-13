@@ -158,9 +158,19 @@ public actor TokenMonitor {
         if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             let cents = (json["total_usage"] as? Double) ?? 0
             let granted = json["total_granted"] as? Double
+            let tier: String? = json["tier"] as? String
+            var resetAt: Date?
+            if let resetStr = json["reset_at"] as? String {
+                let iso = ISO8601DateFormatter()
+                resetAt = iso.date(from: resetStr)
+            } else if let resetSec = json["reset_at"] as? Double {
+                resetAt = Date(timeIntervalSince1970: resetSec)
+            }
             return Usage(
                 usedTokens: Int(cents * 1_000_000),
-                totalTokens: granted.map { Int($0 * 1_000_000) }
+                totalTokens: granted.map { Int($0 * 1_000_000) },
+                resetAt: resetAt,
+                tier: tier
             )
         }
         throw TokenError.invalidResponse
