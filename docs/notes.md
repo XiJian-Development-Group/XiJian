@@ -5,6 +5,39 @@
 
 ---
 
+## 2026-11-09 · macapp 编译修复：Swift 6.4 下 min/max 与 url 的 shadowing
+
+**问题**：仓库 HEAD（e4f2f9e）在 Xcode 27 / Swift 6.4.2 下**编译不过**，不是警告而是 error：
+
+```
+ScrollZoomModifier.swift:24:42: error: use of 'min' refers to instance method rather than global function 'min' in module 'Swift'
+ScrollZoomModifier.swift:26:42: error: use of 'max' refers to instance method rather than global function 'max' in module 'Swift'
+```
+
+**改动清单**：
+
+- `macapp/Sources/Views/ScrollZoomModifier.swift`：`min(...)` / `max(...)` 改为 `Swift.min(...)` / `Swift.max(...)`。
+  根因是这个 struct 自己声明了 `public let min: Double` / `public let max: Double`，在类型作用域内把 Swift 标准库的全局 `min`/`max` 遮住了。Swift 6.x 对「实例成员 vs 全局函数」的歧义直接报错，早期 Swift 只在特定条件下才提示。
+- `macapp/Sources/Services/HermesInstaller.swift`：局部常量 `url` 改名为 `apiURL`。
+  根因同类的命名遮蔽（`url` 与 `URLRequest(url:)` 参数语义混淆），提前消歧避免后续误读。
+- `macapp/Tests/.gitkeep`：删除。
+  `macapp/Tests/` 下已有 12 个真实 XCTest 文件，`.gitkeep` 是空占位，目录不可能为空，留着只会让人误以为「这里本来没测试」。
+
+**验证**：
+
+- `xcodebuild -scheme XiJianManager -destination 'platform=macOS' build` → `** BUILD SUCCEEDED **`
+- `xcodebuild ... test` → `Executed 77 tests, with 0 failures`
+- 反向验证：把两处改动还原回原样后重新编译，稳定复现上面两条 error —— 确认是这处改动修好的，不是别处顺带带过去的。
+
+**没动的与原因**：
+
+- **部署目标 / Swift 版本 / 工程配置**：`project.yml` 仍是 `swiftVersion 5.9` + `MACOSX_DEPLOYMENT_TARGET 26.0`，没升。
+  这次是源码级歧义，不需要动语言模式；动 Swift 版本会连带改整套并发检查行为，风险与本次修复不成比例。
+- **其余 `min`/`max` 同类命名**：只改了实际报错的 `ScrollZoomModifier` 一处。其他文件目前没有触发 Swift 的这条歧义诊断，不做无差别全局重命名 —— 那种改动噪音大、回归面广。
+- **`macapp/XiJianManager.xcodeproj`**：在 `.gitignore` 里（`*.xcodeproj/`），靠 `xcodegen generate` 从 `project.yml` 重新生成，不入库。
+
+---
+
 ## 2026-10-11 · 项目转型：隙间 → XiJian Manager（Hermes Agent 桌面管理器）
 
 **方向决策**：隙间从「二次元聊天产品」转型为「Hermes Agent 桌面管理器」。所有功能改为让 Hermes Agent 做聊天，隙间只负责配置 + 管理。

@@ -21,9 +21,9 @@ public struct ScrollZoomModifier: ViewModifier {
                 let flags = NSEvent.modifierFlags
                 if flags.contains(.command) {
                     if direction > 0 {
-                        theme.fontSize = min(theme.fontSize + step, max)
+                        theme.fontSize = Swift.min(theme.fontSize + step, max)
                     } else {
-                        theme.fontSize = max(theme.fontSize - step, min)
+                        theme.fontSize = Swift.max(theme.fontSize - step, min)
                     }
                 }
             }

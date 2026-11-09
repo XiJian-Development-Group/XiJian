@@ -89,8 +89,8 @@ public actor HermesInstaller {
 
     /// 获取最新 release 信息。
     public func checkForUpdate(owner: String = "NousResearch", repo: String = "hermes-agent") async throws -> Release? {
-        let url = URL(string: "https://api.github.com/repos/\(owner)/\(repo)/releases/latest")!
-        var request = URLRequest(url: url)
+        let apiURL = URL(string: "https://api.github.com/repos/\(owner)/\(repo)/releases/latest")!
+        var request = URLRequest(url: apiURL)
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         let (data, response) = try await urlSession.data(for: request)
         guard let http = response as? HTTPURLResponse else {
