@@ -1,0 +1,33 @@
+name: build macapp
+
+# macapp 是这个项目的主体，但它一直没有 CI：仓库里原来只有一个
+# build-devkit workflow，而 devkit 早就不是主体了。
+#
+# 编译与自动化测试应该在这条流水线上跑，不该落到某台机器上。
+on:
+  push:
+    branches: [main]
+    paths:
+      - "macapp/**"
+      - ".github/workflows/build-macapp.yml"
+  pull_request:
+    paths:
+      - "macapp/**"
+
+jobs:
+  test:
+    # 需要 macOS 26 SDK（项目最低 macOS 26）。
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: generate the Xcode project
+        working-directory: macapp
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: build and run the tests
+        working-directory: macapp
+        run: |
+          xcodebuild -project XiJianManager.xcodeproj -scheme XiJianManager -configuration Debug test
