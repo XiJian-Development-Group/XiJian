@@ -14,8 +14,12 @@ public actor CNNetworkAdapter {
         /// 要不要走国内镜像。
         public var mirrorCN: Bool
 
-        public init(mirrorCN: Bool = false) {
+        /// 用户自己的代理（他有梯子的时候）。空字符串表示不用。
+        public var proxyURL: String
+
+        public init(mirrorCN: Bool = false, proxyURL: String = "") {
             self.mirrorCN = mirrorCN
+            self.proxyURL = proxyURL
         }
     }
 
@@ -201,16 +205,34 @@ public actor CNNetworkAdapter {
     }
 
     /// 要注入子进程的环境变量。
+    ///
+    /// **代理和镜像是两件独立的事。** 用户自己有梯子的时候要的是代理，
+    /// 跟开不开国内镜像没关系 —— 以前这里 `guard options.mirrorCN else { return [:] }`，
+    /// 关了镜像就把代理也一起丢了。
     public func environmentOverrides() -> [String: String] {
-        guard options.mirrorCN else { return [:] }
-        var plan = self.plan
-        if plan.npmRegistry == nil, plan.pypi != nil {
-            plan.npmRegistry = CNMirrorCatalog.npmRegistry
+        var env: [String: String] = [:]
+        if options.mirrorCN {
+            var plan = self.plan
+            if plan.npmRegistry == nil, plan.pypi != nil {
+                plan.npmRegistry = CNMirrorCatalog.npmRegistry
+            }
+            if plan.binaryMirror == nil, plan.pypi != nil {
+                plan.binaryMirror = CNMirrorCatalog.binaryMirror
+            }
+            env.merge(CNNetworkPlanner.environment(for: plan)) { _, new in new }
         }
-        if plan.binaryMirror == nil, plan.pypi != nil {
-            plan.binaryMirror = CNMirrorCatalog.binaryMirror
+        let proxy = options.proxyURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !proxy.isEmpty {
+            env["HTTP_PROXY"] = proxy
+            env["HTTPS_PROXY"] = proxy
+            env["ALL_PROXY"] = proxy
+            env["http_proxy"] = proxy
+            env["https_proxy"] = proxy
+            // 本机的东西不走代理。
+            env["NO_PROXY"] = "localhost,127.0.0.1,::1"
+            env["no_proxy"] = "localhost,127.0.0.1,::1"
         }
-        return CNNetworkPlanner.environment(for: plan)
+        return env
     }
 
     /// 导出当前配置（用于诊断）。

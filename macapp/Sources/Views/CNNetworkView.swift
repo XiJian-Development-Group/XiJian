@@ -25,6 +25,16 @@ struct CNNetworkView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section(loc("代理")) {
+                TextField(loc("代理地址"), text: Binding(
+                    get: { options.proxyURL },
+                    set: { options.proxyURL = $0 }
+                ))
+                Text(loc("自己有梯子的时候填这里，Hermes 的子进程会带上这个代理。本机的地址不走代理。改完要重启网关才生效。"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section(loc("候选源")) {
                 if results.isEmpty {
                     Text(options.mirrorCN ? loc("还没测过") : loc("启用国内镜像后可以测试各个源"))
@@ -91,6 +101,8 @@ struct CNNetworkView: View {
     private func save() {
         Task {
             await CNNetworkAdapter.shared.updateOptions(options)
+            // 改完得真的作用到已经在跑的 hermes 上（重启才彻底生效）。
+            await AppLifecycleManager.shared.applyNetworkEnvironment()
             if !options.mirrorCN {
                 results = []
                 plan = CNNetworkPlan()

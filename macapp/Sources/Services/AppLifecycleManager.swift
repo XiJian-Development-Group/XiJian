@@ -69,6 +69,9 @@ public final class AppLifecycleManager {
         }
         installedHermesPath = status.path
         commandRunner = HermesCommandRunner(hermesPath: status.path!)
+        // 国内镜像 / 代理的环境变量得真的进到 hermes 的子进程里，
+        // 不然「开了加速」只是界面上的一个开关。
+        await commandRunner?.setEnvironmentOverrides(await childEnvironment())
         do {
             try await startGateway()
         } catch {
@@ -91,6 +94,7 @@ public final class AppLifecycleManager {
         let config = HermesProcess.Config(
             command: path.path,
             arguments: ["gateway", "run"],
+            environment: await childEnvironment(),
             logFile: logFile,
             // 默认的健康检查就是「进程还活着」——网关的健康本来就是这个意思。
             healthCheck: nil
@@ -123,6 +127,19 @@ public final class AppLifecycleManager {
         }
 
         await startDashboard()
+    }
+
+    /// 把最新的网络环境变量（镜像 / 代理）应用到命令执行器上。
+    ///
+    /// **已经在跑的 gateway 拿不到新环境变量** —— 进程的环境是启动那一刻
+    /// 定下的，改完代理要重启 gateway 才生效。界面上得把这句话说清楚。
+    public func applyNetworkEnvironment() async {
+        await commandRunner?.setEnvironmentOverrides(await childEnvironment())
+    }
+
+    /// 要注入给 hermes 子进程的环境变量（国内镜像 + 用户自己的代理）。
+    private func childEnvironment() async -> [String: String] {
+        await CNNetworkAdapter.shared.environmentOverrides()
     }
 
     /// 把 dashboard 拉起来。已经在跑就用它的端口，没有就自己抢一个。
