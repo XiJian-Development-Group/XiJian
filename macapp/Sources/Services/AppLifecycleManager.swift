@@ -85,9 +85,15 @@ public final class AppLifecycleManager {
         gatewayState = .starting
 
         let logFile = logsDirectory.appendingPathComponent("hermes.log")
+        // 端口写死就等着撞车：本机 9119 常年被占着，gateway 起不来。
+        // 抢一个空端口再交给 hermes，dashboard 就跟着它走。
+        let port = HermesCommandRunner.findFreePort()
+        guard port > 0 else {
+            throw HermesCommandError.commandFailed("找不到空闲的端口")
+        }
         let config = HermesProcess.Config(
             command: path.path,
-            arguments: ["cli", "--port", "9119", "gateway", "start"],
+            arguments: HermesCommandRunner.gatewayStartArguments(port: port),
             logFile: logFile,
             healthCheck: { [weak self] in
                 guard let self else { return false }
@@ -100,7 +106,7 @@ public final class AppLifecycleManager {
         let proc = HermesProcess(config: config)
         try await proc.start()
         hermesProcess = proc
-        dashboardPort = 9119
+        dashboardPort = port
 
         let tailer = LogTailer()
         logTailer = tailer

@@ -1616,5 +1616,29 @@ new file:   core/tests/test_xijian_scene_interactions.py  (810 行)
 ### 还没做的
 
 - 代理（用户自己有梯子时的 `HTTP_PROXY` / `HTTPS_PROXY`）没进界面。
-- 探测到「全部不通」时没有提示，只是方案为空、全部直连。
+- 探测到「不通」时没有提示，只是方案为空、全部直连
 - hermes-cn 的 `doctor` 那种「整体体检」还没接。
+
+## 2026-11-14 gateway 端口不再写死 9119
+
+XiJian 启动 Hermes gateway 原来把 `--port 9119` 写死。本机那个端口常年被
+别的进程占着，gateway 起不来，界面只能一直转。
+
+现在启动前先抢一个空端口（`bind 127.0.0.1:0`，记下号就放开），把它交给
+hermes，dashboard 跟着这个端口走。`HermesCommandRunner.findFreePort()` 抢
+5 次都抢不到就返回 0，调用方报错退出 —— 不再拿 9119 兜底，兜底等于带着一个
+撞车的端口起来。
+
+### 顺手修掉的
+
+- `DarwinSocket.close(handle)` 里调 `close(handle)`：Swift 把这个名字解析成
+  它自己，无限递归、栈溢出，测试进程直接崩（xcodebuild 只报「意外退出」，
+  看不到崩在哪）。改成 `Darwin.close(handle)`，方法名也换成 `closeSocket`。
+- `HermesProcessTests.test_healthCheck_usesInjectedCheck`：它一边断言健康
+  检查、一边让 stop 任务并发地停进程，两个任务在赛跑，量到的是调度不是健康
+  检查。stop 挪到断言之后。
+
+### 还没做的
+
+- Hermes 命令覆盖还差 `update` / `doctor` / `cron` / `session` / `memory`。
+- 代理（用户自己有梯子时的 `HTTP_PROXY` / `HTTPS_PROXY`）还没进界面。

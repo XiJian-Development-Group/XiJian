@@ -61,9 +61,17 @@ public actor HermesCommandRunner {
 
     /// 执行 hermes CLI 命令并返回结果。
     public func run(_ command: Command, extraArguments: [String] = []) async throws -> CommandResult {
+        try await run(arguments: command.rawValue.split(separator: " ").map(String.init) + extraArguments)
+    }
+
+    /// 直接跑一串参数。
+    ///
+    /// `--port` 得放在子命令前面（`hermes cli --port 9119 gateway start`），
+    /// 所以 gateway 不能靠 extraArguments 拼，得整串自己给。
+    public func run(arguments: [String]) async throws -> CommandResult {
         let proc = Process()
         proc.executableURL = hermesPath
-        proc.arguments = command.rawValue.split(separator: " ").map(String.init) + extraArguments
+        proc.arguments = arguments
         if let cwd = workingDirectory {
             proc.currentDirectoryURL = cwd
         }
@@ -89,13 +97,47 @@ public actor HermesCommandRunner {
         )
     }
 
-    /// 启动 gateway 并返回实际端口。等待 port 文件出现（hermes 写入）。
+    /// 启动 gateway 并返回它真正用的端口。
+    ///
+    /// 端口不能写死：本机 9119 常年被别的进程占着，gateway 起不来，界面
+    /// 只能干等。先抢一个空端口，把它交给 hermes，再等它真的通。
     public func startGatewayAndAwaitPort(timeout: TimeInterval = 10) async throws -> Int {
-        _ = try await run(.gatewayStart)
-        // hermes 启动后会在 hermes 安装目录的 tmp/ 下写 xijian-<pid>.port 文件
-        // MVP 简化：返回约定默认端口
-        // TODO Phase 1.7: 解析 port 文件
-        return 9119
+        let port = Self.findFreePort()
+        let result = try await run(arguments: Self.gatewayStartArguments(port: port))
+        if result.exitCode != 0 {
+            throw HermesCommandError.commandFailed(result.stderr.isEmpty ? result.stdout : result.stderr)
+        }
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            if await checkDashboardReachable(port: port) { return port }
+            try await Task.sleep(nanoseconds: 200_000_000)
+        }
+        throw HermesCommandError.timeout(port)
+    }
+
+    /// 启动 gateway 的那条命令。端口在前，子命令在后。
+    public static func gatewayStartArguments(port: Int) -> [String] {
+        ["cli", "--port", String(port), "gateway", "start"]
+    }
+
+    /// 找一个没人占着的端口。
+    ///
+    /// 抢一个空端口、记下号、把 socket 关掉 —— 号就归我们了，hermes 起来
+    /// 的那一瞬间没人抢得到。
+    public static func findFreePort() -> Int {
+        // 抢端口偶尔会失败（正好被别人抢走），重试几次。
+        // 找不到就返回 0 —— 返回一个「反正 9119 也没人用」的假端口，
+        // 只会让 gateway 带着一个撞车的端口起来。
+        for _ in 0..<5 {
+            let socket = DarwinSocket.make()
+            guard socket >= 0 else { continue }
+            defer { DarwinSocket.closeSocket(socket) }
+            guard DarwinSocket.bindLoopback(socket) else { continue }
+            if let port = DarwinSocket.portOf(socket), port > 0 {
+                return port
+            }
+        }
+        return 0
     }
 
     /// 检查 gateway 是否在给定端口运行。

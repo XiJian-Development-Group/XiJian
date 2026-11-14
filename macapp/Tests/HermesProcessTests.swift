@@ -49,7 +49,6 @@ final class HermesProcessTests: XCTestCase {
         )
         let proc = HermesProcess(config: config)
         try await proc.start()
-        let stopTask = Task { try? await proc.stop(timeout: 2.0) }
 
         await controller.setHealthy(false)
         let result1 = await proc.isHealthy()
@@ -57,7 +56,10 @@ final class HermesProcessTests: XCTestCase {
         await controller.setHealthy(true)
         let result2 = await proc.isHealthy()
         XCTAssertTrue(result2)
-        await stopTask.value
+        // 停进程放到断言之后。放在前面的话，stop() 会把状态改成 stopping，
+        // isHealthy() 就只回 false —— 那是两个任务在赛跑，量到的是调度，
+        // 不是健康检查。测试要断的事是「注入的检查说了算」。
+        try await proc.stop(timeout: 2.0)
     }
 
     func test_restart_preservesProcessIdentity() async throws {
