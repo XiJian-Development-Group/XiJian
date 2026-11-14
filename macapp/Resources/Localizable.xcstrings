@@ -9916,6 +9916,54 @@
           }
         }
       }
+    },
+    "代理": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Proxy"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プロキシ"
+          }
+        }
+      }
+    },
+    "代理地址": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Proxy address"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プロキシアドレス"
+          }
+        }
+      }
+    },
+    "自己有梯子的时候填这里，Hermes 的子进程会带上这个代理。本机的地址不走代理。改完要重启网关才生效。": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fill this in when you have your own proxy. Hermes' child processes will use it. Local addresses never go through the proxy. Restart the gateway for it to take effect."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自分のプロキシがあるときはここに入れてください。Hermes の子プロセスがこのプロキシを使います。ローカルのアドレスはプロキシを通りません。反映するにはゲートウェイを再起動してください。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
