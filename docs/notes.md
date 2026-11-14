@@ -1610,8 +1610,8 @@ new file:   core/tests/test_xijian_scene_interactions.py  (810 行)
 - **`restart()` 之后进程状态是「崩了」。** 旧进程的退出通知故意延了 100
   毫秒，等它到的时候新进程已经起来了、状态是 running，旧通知再把状态改成
   crashed。现在终止通知带着进程本身来，只认当前那个进程。
-  这条测试之前一直红着（`HermesProcessTests.test_restart_preservesProcessIdentity`），
-  在干净 HEAD 上也红，这次是真 bug。
+  这条测试是**间歇红**的竞态（`HermesProcessTests.test_restart_preservesProcessIdentity`）：
+  旧实现连跑 10 次红 8 次、过一次两次就撞上了；改完 10 次全绿。
 
 ### 还没做的
 
