@@ -1638,7 +1638,30 @@ hermes，dashboard 跟着这个端口走。`HermesCommandRunner.findFreePort()` 
   检查、一边让 stop 任务并发地停进程，两个任务在赛跑，量到的是调度不是健康
   检查。stop 挪到断言之后。
 
+### 9119 是 dashboard 的端口，不是消息网关的
+
+消息网关（QQ／微信／钉钉）根本不占 HTTP 端口，dashboard 才是那个 web 界面。
+原来的 `hermes cli --port 9119 gateway start` 这条命令**根本不存在**。
+
+- 消息网关：`hermes gateway run`（前台，XiJian 盯着它）／`hermes gateway start`
+  （系统服务托管时用，前台那个会拒绝起第二个 dispatcher）。
+- dashboard：`hermes dashboard --port N --host 127.0.0.1 --no-open`。
+- 端口不用猜：`hermes dashboard --status` 的输出里带着 `--port 9119`，
+  解析出来就是已经在跑的那个 dashboard 的端口。
+
+### 命令表对着 `hermes --help` 重写
+
+以前命令表里有三条**根本不存在**的 Hermes 命令：`profile list`、`profile use`、
+`skill install`。点了必然回一句 unrecognized arguments。
+
+- profile 是**全局参数** `-p <名字>`，得放在子命令前面：`hermes -p ops gateway run`。
+- 技能在 `hermes skills` 下面（list／install／search…）。
+- 补上的命令：doctor／status／cron list／cron doctor／sessions list／
+  memory status／skills list／update。
+- 聊天：`hermes -p <profile> chat -q "..." --oneshot`（以前写的
+  `gateway start --profile X --message Y --once`，Hermes 没这条命令）。
+
 ### 还没做的
 
-- Hermes 命令覆盖还差 `update` / `doctor` / `cron` / `session` / `memory`。
 - 代理（用户自己有梯子时的 `HTTP_PROXY` / `HTTPS_PROXY`）还没进界面。
+- 这批命令还没接到界面上（只有 runner 这一层），界面上得给每个命令一个入口。

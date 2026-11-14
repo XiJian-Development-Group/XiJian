@@ -26,9 +26,9 @@ final class HermesPortTests: XCTestCase {
         XCTAssertTrue(DarwinSocket.isFree(port ?? 0), "交出去的端口必须是空的")
     }
 
-    func testGatewayArgumentsPutThePortInFrontOfTheSubcommand() {
-        // `--port` 得在子命令前面，不然 hermes 不认。
-        XCTAssertEqual(HermesCommandRunner.gatewayStartArguments(port: 12345),
-                       ["cli", "--port", "12345", "gateway", "start"])
+    func testDashboardStartArgumentsCarryThePort() {
+        // 端口是 dashboard 的，不是消息网关的。
+        XCTAssertEqual(HermesCommandRunner.dashboardStartArguments(port: 12345),
+                       ["dashboard", "--port", "12345", "--host", "127.0.0.1", "--no-open"])
     }
 }

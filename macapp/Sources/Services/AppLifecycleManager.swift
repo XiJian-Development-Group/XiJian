@@ -85,28 +85,19 @@ public final class AppLifecycleManager {
         gatewayState = .starting
 
         let logFile = logsDirectory.appendingPathComponent("hermes.log")
-        // 端口写死就等着撞车：本机 9119 常年被占着，gateway 起不来。
-        // 抢一个空端口再交给 hermes，dashboard 就跟着它走。
-        let port = HermesCommandRunner.findFreePort()
-        guard port > 0 else {
-            throw HermesCommandError.commandFailed("找不到空闲的端口")
-        }
+        // 消息网关跟 dashboard 是两回事：
+        // - gateway 是消息平台的前台进程（`hermes gateway run`），它**不占** HTTP 端口；
+        // - dashboard 才是那个 web 界面（`hermes dashboard --port N`），界面里嵌的是它。
         let config = HermesProcess.Config(
             command: path.path,
-            arguments: HermesCommandRunner.gatewayStartArguments(port: port),
+            arguments: ["gateway", "run"],
             logFile: logFile,
-            healthCheck: { [weak self] in
-                guard let self else { return false }
-                if let port = await MainActor.run(body: { self.dashboardPort }) {
-                    return (await self.commandRunner?.checkDashboardReachable(port: port)) ?? false
-                }
-                return false
-            }
+            // 默认的健康检查就是「进程还活着」——网关的健康本来就是这个意思。
+            healthCheck: nil
         )
         let proc = HermesProcess(config: config)
         try await proc.start()
         hermesProcess = proc
-        dashboardPort = port
 
         let tailer = LogTailer()
         logTailer = tailer
@@ -115,6 +106,33 @@ public final class AppLifecycleManager {
         }
 
         gatewayState = .running
+
+        // 前台跑不起来的时候（系统服务已经托管这个 profile，hermes 会拒绝
+        // 起第二个 dispatcher），退回去用服务命令。
+        try await Task.sleep(nanoseconds: 1_500_000_000)
+        if await proc.isHealthy() == false, let runner = commandRunner {
+            let service = try? await runner.run(.gatewayStart)
+            if service?.exitCode == 0 {
+                try? await proc.stop(timeout: 1.0)
+                hermesProcess = nil
+                gatewayState = .running
+                await startDashboard()
+                return
+            }
+            lastError = "消息网关起不来：\(service?.stderr ?? "")"
+        }
+
+        await startDashboard()
+    }
+
+    /// 把 dashboard 拉起来。已经在跑就用它的端口，没有就自己抢一个。
+    public func startDashboard() async {
+        guard let runner = commandRunner else { return }
+        do {
+            dashboardPort = try await runner.startDashboardAndAwaitPort()
+        } catch {
+            lastError = "dashboard 启动失败：\(error)"
+        }
     }
 
     public func stopGateway() async throws {
@@ -127,6 +145,7 @@ public final class AppLifecycleManager {
         logTailer = nil
         try await proc.stop(timeout: 3.0)
         hermesProcess = nil
+        await commandRunner?.stopDashboard()
         dashboardPort = nil
         gatewayState = .stopped
     }

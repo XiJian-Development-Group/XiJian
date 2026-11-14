@@ -13,15 +13,39 @@ public actor HermesCommandRunner {
         hermesPath: URL(fileURLWithPath: ("~/.hermes/hermes-agent/venv/bin/hermes" as NSString).expandingTildeInPath)
     )
 
+    /// Hermes CLI 的真实子命令。
+    ///
+    /// **一条条对着 `hermes --help` 核过。** 以前这里写的 `profile list` /
+    /// `profile use` / `skill install` —— Hermes 根本没有这三条命令，点了
+    /// 必然回一句「unrecognized arguments」。profile 是全局参数 `-p <名字>`，
+    /// 技能在 `hermes skills` 下面。
     public enum Command: String, Sendable {
+        // 消息网关
+        case gatewayRun = "gateway run"
         case gatewayStart = "gateway start"
         case gatewayStop = "gateway stop"
         case gatewayRestart = "gateway restart"
         case gatewayStatus = "gateway status"
-        case listProfiles = "profile list"
-        case switchProfile = "profile use"
-        case installSkill = "skill install"
-        case listSkills = "skill list"
+        case gatewayList = "gateway list"
+        // 体检与总状态
+        case doctor = "doctor"
+        case status = "status"
+        // 定时任务
+        case cronList = "cron list"
+        case cronDoctor = "cron doctor"
+        // 会话
+        case sessionsList = "sessions list"
+        // 记忆
+        case memoryStatus = "memory status"
+        // 技能
+        case skillsList = "skills list"
+        case skillsInstall = "skills install"
+        // 升级
+        case update = "update"
+        // 聊天（一条消息就退出）
+        case chat = "chat"
+        // dashboard（web 界面）
+        case dashboard = "dashboard"
     }
 
     public struct CommandResult: Sendable {
@@ -32,6 +56,8 @@ public actor HermesCommandRunner {
 
     private let hermesPath: URL
     private var workingDirectory: URL?
+    /// XiJian 自己拉起来的 dashboard 进程。停的时候要收掉。
+    private var dashboardProcess: Process?
 
     /// 要注入给子进程的环境变量。
     ///
@@ -60,8 +86,25 @@ public actor HermesCommandRunner {
     public func currentEnvironmentOverrides() -> [String: String] { environmentOverrides }
 
     /// 执行 hermes CLI 命令并返回结果。
-    public func run(_ command: Command, extraArguments: [String] = []) async throws -> CommandResult {
-        try await run(arguments: command.rawValue.split(separator: " ").map(String.init) + extraArguments)
+    ///
+    /// `profile` 是**全局**参数，得放在子命令前面：`hermes -p ops gateway run`。
+    /// 放到后面 hermes 不认。
+    public func run(_ command: Command, profile: String? = nil,
+                    extraArguments: [String] = []) async throws -> CommandResult {
+        try await run(arguments: Self.arguments(for: command, profile: profile,
+                                                extraArguments: extraArguments))
+    }
+
+    /// 拼一条命令的参数。单独拆出来是为了能离线测。
+    public static func arguments(for command: Command, profile: String? = nil,
+                                 extraArguments: [String] = []) -> [String] {
+        var arguments: [String] = []
+        if let profile, !profile.isEmpty {
+            arguments += ["-p", profile]
+        }
+        arguments += command.rawValue.split(separator: " ").map(String.init)
+        arguments += extraArguments
+        return arguments
     }
 
     /// 直接跑一串参数。
@@ -97,27 +140,90 @@ public actor HermesCommandRunner {
         )
     }
 
-    /// 启动 gateway 并返回它真正用的端口。
+    /// 启动 dashboard，返回它真正用的端口。
     ///
-    /// 端口不能写死：本机 9119 常年被别的进程占着，gateway 起不来，界面
-    /// 只能干等。先抢一个空端口，把它交给 hermes，再等它真的通。
-    public func startGatewayAndAwaitPort(timeout: TimeInterval = 10) async throws -> Int {
+    /// **9119 是 dashboard 的端口，不是消息网关的。** 消息网关（QQ／微信／
+    /// 钉钉）根本不占 HTTP 端口，dashboard 才是那个 web 界面。
+    ///
+    /// 已经在跑就直接用它的端口，不另起一个；没有就自己抢一个空端口。
+    public func startDashboardAndAwaitPort(timeout: TimeInterval = 20) async throws -> Int {
+        if let existing = await discoverDashboardPort() { return existing }
         let port = Self.findFreePort()
-        let result = try await run(arguments: Self.gatewayStartArguments(port: port))
-        if result.exitCode != 0 {
-            throw HermesCommandError.commandFailed(result.stderr.isEmpty ? result.stdout : result.stderr)
+        guard port > 0 else {
+            throw HermesCommandError.commandFailed("找不到空闲的端口")
         }
+        try spawnDashboard(port: port)
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
             if await checkDashboardReachable(port: port) { return port }
-            try await Task.sleep(nanoseconds: 200_000_000)
+            try await Task.sleep(nanoseconds: 300_000_000)
         }
         throw HermesCommandError.timeout(port)
     }
 
-    /// 启动 gateway 的那条命令。端口在前，子命令在后。
-    public static func gatewayStartArguments(port: Int) -> [String] {
-        ["cli", "--port", String(port), "gateway", "start"]
+    /// 已经在跑的 dashboard 用的是哪个端口。
+    public func discoverDashboardPort() async -> Int? {
+        guard let result = try? await run(.dashboard, extraArguments: ["--status"]) else {
+            return nil
+        }
+        return Self.parseDashboardPort(result.stdout)
+    }
+
+    /// 从 `hermes dashboard --status` 的输出里把端口抠出来。
+    ///
+    /// 输出长这样：
+    ///     PID 1456 [dashboard]: ... 'dashboard', '--port', '9119', ...
+    public static func parseDashboardPort(_ output: String) -> Int? {
+        for line in output.split(separator: "\n") {
+            guard line.contains("dashboard") else { continue }
+            let tokens = line.split(separator: " ").map { clean($0) }
+            guard let index = tokens.firstIndex(of: "--port"), index + 1 < tokens.count else {
+                continue
+            }
+            if let port = Int(tokens[index + 1]) { return port }
+        }
+        return nil
+    }
+
+    /// 把引号和逗号去掉。
+    private static func clean(_ token: Substring) -> String {
+        String(token).trimmingCharacters(in: CharacterSet(charactersIn: "'\","))
+    }
+
+    /// 启动 dashboard 的那条命令。--no-open 免得自己弹浏览器。
+    public static func dashboardStartArguments(port: Int) -> [String] {
+        ["dashboard", "--port", String(port), "--host", "127.0.0.1", "--no-open"]
+    }
+
+    /// 把 dashboard 拉起来，不等它退出。
+    ///
+    /// `hermes dashboard` 可能一直待在前台不退出，所以这里只管把它拉起来，
+    /// 端口通不通由调用方轮询。
+    @discardableResult
+    public func spawnDashboard(port: Int) throws -> Process {
+        let proc = Process()
+        proc.executableURL = hermesPath
+        proc.arguments = Self.dashboardStartArguments(port: port)
+        if let cwd = workingDirectory {
+            proc.currentDirectoryURL = cwd
+        }
+        if !environmentOverrides.isEmpty {
+            var environment = ProcessInfo.processInfo.environment
+            for (key, value) in environmentOverrides {
+                environment[key] = value
+            }
+            proc.environment = environment
+        }
+        try proc.run()
+        dashboardProcess = proc
+        return proc
+    }
+
+    /// 把 dashboard 停掉。
+    public func stopDashboard() {
+        guard let proc = dashboardProcess else { return }
+        proc.terminate()
+        dashboardProcess = nil
     }
 
     /// 找一个没人占着的端口。
@@ -159,9 +265,11 @@ public actor HermesCommandRunner {
         URL(string: "http://127.0.0.1:\(port)/")
     }
 
-    /// 启动指定 profile（spawn 一个新的 hermes 进程）。
+    /// 启动指定 profile 的消息网关。
+    ///
+    /// profile 是全局参数：`hermes -p ops gateway start`。
     public func startProfile(_ name: String) async throws {
-        let result = try await run(.gatewayStart, extraArguments: ["--profile", name])
+        let result = try await run(.gatewayStart, profile: name)
         if result.exitCode != 0 {
             throw CommandError.nonZeroExit(code: result.exitCode, stderr: result.stderr)
         }
@@ -169,25 +277,47 @@ public actor HermesCommandRunner {
 
     /// 停止指定 profile。
     public func stopProfile(_ name: String) async throws {
-        let result = try await run(.gatewayStop, extraArguments: ["--profile", name])
+        let result = try await run(.gatewayStop, profile: name)
         if result.exitCode != 0 {
             throw CommandError.nonZeroExit(code: result.exitCode, stderr: result.stderr)
         }
     }
 
     /// 给指定 profile 发送一条聊天消息（阻塞到收到回复）。
+    ///
+    /// 真实命令是 `hermes -p <profile> chat -q "..." --oneshot`。
     public func sendChatMessage(profile: String, message: String) async -> Bool {
         do {
-            let result = try await run(.gatewayStart, extraArguments: [
-                "--profile", profile,
-                "--message", message,
-                "--once",  // 单条消息后退出
-            ])
+            let result = try await run(.chat, profile: profile,
+                                       extraArguments: ["-q", message, "--oneshot"])
             return result.exitCode == 0
         } catch {
             return false
         }
     }
+
+    // -- 其它子系统 -----------------------------------------------------------
+
+    /// 体检：hermes doctor。
+    public func runDoctor() async throws -> CommandResult { try await run(.doctor) }
+
+    /// 定时任务列表。
+    public func cronJobs() async throws -> CommandResult { try await run(.cronList) }
+
+    /// 定时任务体检。
+    public func cronDoctor() async throws -> CommandResult { try await run(.cronDoctor) }
+
+    /// 会话列表。
+    public func sessions() async throws -> CommandResult { try await run(.sessionsList) }
+
+    /// 记忆提供方状态。
+    public func memoryStatus() async throws -> CommandResult { try await run(.memoryStatus) }
+
+    /// 技能列表。
+    public func skills() async throws -> CommandResult { try await run(.skillsList) }
+
+    /// 升级 Hermes（要联网，慢）。
+    public func updateHermes() async throws -> CommandResult { try await run(.update) }
 }
 
 public enum CommandError: Error, LocalizedError, Sendable {
