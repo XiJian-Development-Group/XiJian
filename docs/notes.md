@@ -1566,3 +1566,55 @@ new file:   core/tests/test_xijian_scene_interactions.py  (810 行)
 - **Touch Bar 在 `ChatView` 内的草稿输入同步（输入空时禁用「发送」）**：当前实现是「按了再说」，`send()` 内部 `text.isEmpty` 直接 `return`。理由：ChatViewModel 是 ContentView 的 `@State` 实例（非单例），把它提升到全局会让"一窗口多 ChatViewModel"语义塌陷；当前文案与 `AppKit` 控件能力不冲突（按钮不显灰但按下无害）。后续若要"按钮 enable 联动"再单独 refactor。
 - **macOS 14 部署目标**：本实现只用 `NSTouchBar`（10.12.2+）+ `withObservationTracking`（iOS 17 / macOS 14+）+ `NSSegmentedControl` 等老 API，不引入新部署目标。
 - **`Dev.md` 4.4.1 中「自建灵动岛」行未动**：本节聚焦 Touch Bar；灵动岛（自建 NSScreen 顶栏）是另一条独立路径，保持原状。
+
+## CN 网络加速：从「有个开关」变成「真的能用」
+
+这一节记的是 2026-11-14 这一轮改的东西，以及为什么。
+
+### 之前是什么样
+
+- `CNNetworkAdapter` 里的 `ghMirrors` 是四个手写的前缀，`githubURL()` 永远取
+  `first` —— 第一个不通，整条链就断。
+- `npmRegistry()` / `pypiIndexURL()` 的返回值**没有任何调用方**，只在界面上
+  显示成一行字。
+- 「跳过 TLS 验证」是个假开关：`configureRequest` 只是往请求里塞了个
+  `X-No-CA-Verify` 头，`HermesInstaller` 里的 `noCAVerify` 参数连注释都是
+  「WARNING」，**什么都没做**。界面却给了用户一个能勾的框。
+- 测速按钮测的是镜像首页的延迟，测完**不选任何一个源**。
+
+### 现在的样子
+
+- 候选表来自 [hermes-cn](https://github.com/Mofan2020/hermes-cn) 的实测结论：
+  PyPI 六个（清华 / 中科大 / 阿里云 / 腾讯云 / 北外 / 华为云）、Git 仓库镜像
+  五个、raw 代理两个。每条都带**探测地址**。
+- 探测**串行**做。并发抢带宽会把可用的源误判成不可用 —— 这是 hermes-cn
+  踩过的坑。
+- Git 源用 `git ls-remote` 判，**必须真的拿到 refs**。只看 HTTP 200 会把
+  「返回反爬挑战页」的代理判成可用，而 clone 只会得到一个空仓库。
+- 探测的是**目标资源本身**（hermes-agent 仓库），不是拿小样本仓库去探 ——
+  节点同步过小仓库不代表同步了 hermes-agent。
+- 选出来的源会真的用上：
+  - 安装 / 更新下载：先换成 github.com 的 archive 地址再套镜像
+    （国内镜像代理的是后者，套在 api.github.com 上取不到东西）；
+  - `hermes` 子进程：注入 `UV_INDEX_URL` / `PIP_INDEX_URL` /
+    `npm_config_registry` / `HERMES_RAW_BASE` 以及 git 的 `insteadOf`。
+- 假开关删掉了：模型、设置键、界面三处都不再有「跳过 TLS 校验」。
+  要改网络环境走代理，那条路是干净的。
+
+### 顺手修的两个
+
+- **三语 i18n 之前根本没生效。** `loc()` 读的是 `Bundle.xiJianManager`
+  （框架自己的 bundle），而 String Catalog 只在 App target 的 resources 里，
+  框架里找不到 → 所有 `loc()` 都返回中文原文。现在 catalog 同时进 Kit
+  target。
+- **`restart()` 之后进程状态是「崩了」。** 旧进程的退出通知故意延了 100
+  毫秒，等它到的时候新进程已经起来了、状态是 running，旧通知再把状态改成
+  crashed。现在终止通知带着进程本身来，只认当前那个进程。
+  这条测试之前一直红着（`HermesProcessTests.test_restart_preservesProcessIdentity`），
+  在干净 HEAD 上也红，这次是真 bug。
+
+### 还没做的
+
+- 代理（用户自己有梯子时的 `HTTP_PROXY` / `HTTPS_PROXY`）没进界面。
+- 探测到「全部不通」时没有提示，只是方案为空、全部直连。
+- hermes-cn 的 `doctor` 那种「整体体检」还没接。

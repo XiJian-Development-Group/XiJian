@@ -1,112 +1,107 @@
 import SwiftUI
 import XiJianManagerKit
 
-/// CN 网络设置视图：开关镜像 / 列出当前镜像 / 测速
+/// CN 网络设置视图：开关加速 / 探测候选源 / 看当前选中的源。
+///
+/// **这一页说的每一句都要是真的。** 以前这里有个「跳过 TLS 验证」的开关，
+/// 勾上以后什么也没发生（只是往请求里塞了个没用的头），却会让人以为证书
+/// 校验被关了；测速按钮测的是首页延迟，测完也不选任何一个源。现在：
+/// 测的就是候选源本身，测完按优先级选出能用的那几个。
 struct CNNetworkView: View {
     @State private var options = CNNetworkAdapter.Options()
-    @State private var latencies: [String: String] = [:]
+    @State private var results: [CNProbeResult] = []
+    @State private var plan = CNNetworkPlan()
     @State private var isTesting = false
-    @State private var error: String?
 
     var body: some View {
         Form {
-            Section("CN 镜像") {
-                Toggle("启用镜像（GitHub/npm/pypi）", isOn: Binding(
+            Section(loc("国内加速")) {
+                Toggle(loc("启用国内镜像"), isOn: Binding(
                     get: { options.mirrorCN },
                     set: { options.mirrorCN = $0 }
                 ))
-                Toggle("跳过 TLS 验证（不推荐）", isOn: Binding(
-                    get: { options.noCAVerify },
-                    set: { options.noCAVerify = $0 }
-                ))
+                Text(loc("开启后，安装和更新会走探测出来的镜像，Hermes 的子进程也会带上国内源的环境变量。"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
-            Section("GitHub 镜像") {
-                ForEach(CNNetworkAdapter.ghMirrors, id: \.self) { mirror in
-                    HStack {
-                        Text(mirror)
-                            .font(.callout.monospaced())
-                        Spacer()
-                        if let latency = latencies[mirror] {
-                            Text(latency)
+            Section(loc("候选源")) {
+                if results.isEmpty {
+                    Text(options.mirrorCN ? loc("还没测过") : loc("启用国内镜像后可以测试各个源"))
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(results) { result in
+                        HStack {
+                            Text(result.mirror.name)
+                            Text(kindName(result.mirror.kind))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text(statusText(result))
                                 .font(.caption.monospacedDigit())
-                                .foregroundStyle(latency == "失败" ? .red : .secondary)
+                                .foregroundStyle(result.reachable ? Color.green : Color.secondary)
                         }
                     }
                 }
                 Button(loc("测速")) {
-                    Task { await testLatency() }
+                    Task { await testAll() }
                 }
-                .disabled(isTesting)
+                .disabled(isTesting || !options.mirrorCN)
             }
 
-            Section("npm / pypi") {
-                LabeledContent("npm") {
-                    Text(options.mirrorCN ? "https://registry.npmmirror.com/" : "默认")
-                        .font(.callout.monospaced())
+            Section(loc("当前方案")) {
+                ForEach(plan.summary, id: \.self) { line in
+                    Text(line)
+                        .font(.caption.monospaced())
                 }
-                LabeledContent("pypi") {
-                    Text(options.mirrorCN ? "https://pypi.tuna.tsinghua.edu.cn/simple" : "默认")
-                        .font(.callout.monospaced())
-                }
-            }
-
-            Section {
-                Text(describe(options))
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.secondary)
             }
         }
         .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onAppear { loadOptions() }
-        .onChange(of: options) { _ in saveOptions() }
+        .onAppear { load() }
+        .onChange(of: options) { _ in save() }
     }
 
-    private func loadOptions() {
-        Task { options = await CNNetworkAdapter.shared.currentOptions() }
-    }
-
-    private func saveOptions() {
-        Task { await CNNetworkAdapter.shared.updateOptions(options) }
-    }
-
-    private func describe(_ o: CNNetworkAdapter.Options) -> String {
-        var lines: [String] = []
-        lines.append("CN mirror: \(o.mirrorCN)")
-        lines.append("CA verify: \(o.noCAVerify ? "skipped" : "enabled")")
-        if o.mirrorCN {
-            lines.append("npm registry: https://registry.npmmirror.com/")
-            lines.append("pypi index: https://pypi.tuna.tsinghua.edu.cn/simple")
+    private func kindName(_ kind: CNMirrorKind) -> String {
+        switch kind {
+        case .pypi: return "PyPI"
+        case .git: return "Git"
+        case .raw: return "raw"
         }
-        return lines.joined(separator: "\n")
     }
 
-    private func testLatency() async {
+    private func statusText(_ result: CNProbeResult) -> String {
+        if result.reachable {
+            if let ms = result.latencyMS {
+                return "\(ms) ms"
+            }
+            return loc("可用")
+        }
+        return result.detail.isEmpty ? loc("不可用") : result.detail
+    }
+
+    private func load() {
+        Task {
+            options = await CNNetworkAdapter.shared.currentOptions()
+            results = await CNNetworkAdapter.shared.currentProbeResults()
+            plan = await CNNetworkAdapter.shared.currentPlan()
+        }
+    }
+
+    private func save() {
+        Task {
+            await CNNetworkAdapter.shared.updateOptions(options)
+            if !options.mirrorCN {
+                results = []
+                plan = CNNetworkPlan()
+            }
+        }
+    }
+
+    private func testAll() async {
         isTesting = true
         defer { isTesting = false }
-        var results: [String: String] = [:]
-        for mirror in CNNetworkAdapter.ghMirrors {
-            let ms = await measureLatency(urlString: mirror)
-            results[mirror] = ms.map { "\($0) ms" } ?? "失败"
-        }
-        latencies = results
-    }
-
-    private func measureLatency(urlString: String) async -> Int? {
-        guard let url = URL(string: urlString) else { return nil }
-        let start = Date()
-        var request = URLRequest(url: url)
-        request.httpMethod = "HEAD"
-        request.timeoutInterval = 5
-        do {
-            let (_, response) = try await URLSession.shared.data(for: request)
-            if let http = response as? HTTPURLResponse, (200..<500).contains(http.statusCode) {
-                return Int(Date().timeIntervalSince(start) * 1000)
-            }
-            return nil
-        } catch {
-            return nil
-        }
+        results = await CNNetworkAdapter.shared.probeAll()
+        plan = await CNNetworkAdapter.shared.currentPlan()
     }
 }

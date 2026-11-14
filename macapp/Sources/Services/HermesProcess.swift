@@ -82,7 +82,11 @@ public actor HermesProcess {
             // 延时跑，给 stop() 优先写 state 的机会
             Task { [weak self] in
                 try? await Task.sleep(nanoseconds: 100_000_000)
-                await self?.handleTermination(exitCode: code)
+                // **把进程本身带上去。** 重启时旧进程的退出通知会晚到
+                // （这里还故意延了 100 毫秒），那时新进程已经起来了、
+                // 状态是 running；旧通知再把状态改成 crashed，新进程就被
+                // 说成崩了。
+                await self?.handleTermination(exitCode: code, of: p)
             }
         }
 
@@ -127,7 +131,12 @@ public actor HermesProcess {
         lastExitCode
     }
 
-    private func handleTermination(exitCode: Int32) {
+    private func handleTermination(exitCode: Int32, of finished: Process?) {
+        // **只认当前这个进程。** 别的进程（重启前的那个）退出时发来的通知
+        // 一律忽略，否则它会把新进程的状态搅乱。
+        if let finished, let current = process, finished !== current {
+            return
+        }
         // 仅在 stop() 未主动设置 state 时兜底更新
         guard state == .running || state == .starting else { return }
         lastExitCode = exitCode

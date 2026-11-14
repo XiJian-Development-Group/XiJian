@@ -11,8 +11,15 @@ import Foundation
 /// 6. `checkForUpdate()` 检查 GitHub releases latest
 /// 7. `update(toVersion:)` 下载新版本并替换
 ///
-/// 网络层：默认走 GitHub API + 直接下载。`noCAVerify`/`mirrorCN` 选项影响
-/// URLSession 配置（前者跳过 TLS 校验；后者替换为 gh-proxy.com 镜像）。
+/// 网络层：默认走 GitHub API + 直接下载。
+///
+/// **开了国内加速就走镜像。** 下载地址会先换成 GitHub 的 archive 地址，
+/// 再套上探测出来的镜像前缀 —— 之前这里写死 gh-proxy.com，那个源并不
+/// 一定通，现在由 `CNNetworkAdapter` 探测后决定。
+///
+/// **没有「跳过 TLS 校验」这个选项。** 以前有个开关，勾上以后既没有真的
+/// 跳过校验（只往请求里塞了个没用的头），又会让人以为证书校验被关了。
+/// 需要改网络环境请走代理，那条路是干净的。
 public actor HermesInstaller {
     public struct Status: Sendable, Equatable {
         public let installed: Bool
@@ -42,16 +49,11 @@ public actor HermesInstaller {
 
     public init(
         searchPaths: [String] = ["/usr/local/bin", "/opt/homebrew/bin", "~/.local/bin", "/usr/bin"],
-        fileManager: FileManager = .default,
-        noCAVerify: Bool = false
+        fileManager: FileManager = .default
     ) {
         self.searchPaths = searchPaths
         self.fileManager = fileManager
         let config = URLSessionConfiguration.default
-        if noCAVerify {
-            // WARNING: TLS 校验跳过仅限开发者/中国大陆代理环境
-            // 普通用户不要使用此选项
-        }
         self.urlSession = URLSession(configuration: config)
     }
 
@@ -211,11 +213,16 @@ public actor HermesInstaller {
     }
 
     private func downloadAndExtract(release: Release, to destination: URL) async throws {
-        // 下载 tarball
-        let (data, response) = try await urlSession.data(from: release.tarballURL)
+        // 下载 tarball。开了加速就套镜像。
+        //
+        // 先把 API 给的 tarball 地址换成 github.com 上的 archive 地址 ——
+        // 国内镜像代理的是后者，套在 api.github.com 上取不到东西。
+        let base = CNNetworkPlanner.archiveURL(fromTarball: release.tarballURL) ?? release.tarballURL
+        let target = await CNNetworkAdapter.shared.githubURL(base) ?? base
+        let (data, response) = try await urlSession.data(from: target)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             let code = (response as? HTTPURLResponse)?.statusCode ?? -1
-            throw InstallError.downloadFailed(url: release.tarballURL, statusCode: code)
+            throw InstallError.downloadFailed(url: target, statusCode: code)
         }
         // 写入临时文件
         let tmp = fileManager.temporaryDirectory.appendingPathComponent("hermes-\(UUID().uuidString).tar.gz")

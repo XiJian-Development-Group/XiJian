@@ -37,6 +37,11 @@ targets:
       - path: Sources
         excludes:
           - "**/App.swift"
+    resources:
+      # String Catalog 必须同时进框架 bundle：`loc()` 读的是
+      # `Bundle.xiJianManager`（框架自己的 bundle），只在 App target 里放一份
+      # 的话，框架里的文案查找全部落空，三语就只剩中文原文。
+      - path: Resources/Localizable.xcstrings
     settings:
       base:
         PRODUCT_NAME: XiJianManagerKit

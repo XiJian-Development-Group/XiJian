@@ -14,7 +14,6 @@ enum XJDefaultsKey {
 
     // MARK: Hermes 安装（Phase 1 任务 1.8 实现完整面板时使用）
     static let hermesInstallPath = "xijian.hermes.installPath"
-    static let hermesNoCAVerify = "xijian.hermes.noCAVerify"
     static let hermesMirrorCN = "xijian.hermes.mirrorCN"
     static let hermesLastBackup = "xijian.hermes.lastBackup"
 

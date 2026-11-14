@@ -26,11 +26,11 @@ macOS MVP（Phase 1-5 全部完成）：
 - Dashboard 一键开关
 - 内嵌终端（PTY → Hermes CLI 子进程）
 - 多 workspace profile 切换（SOUL.md / MEMORY.md / USER.md 编辑）
-- MCP server 管理 / SkillHub / Token 监控 / CN 网络适配 + 测速
+- MCP server 管理 / SkillHub / Token 监控 / CN 网络加速（挨个探测候选源，选出能用的那几个，安装与更新走镜像，Hermes 子进程带上国内源的环境变量）
 - 主题系统 / 模型管理 / cmd+滚轮调字号 / Dashboard 子页管理 / Web Search 切换
 - Agent 群聊（多 profile 并行）
 - 三语 i18n（zh-Hans / en / ja）
-- **77 个单元测试全过，Debug macOS BUILD SUCCEEDED**
+- **94 个单元测试全过，Debug macOS BUILD SUCCEEDED**
 
 ## 快速开始
 

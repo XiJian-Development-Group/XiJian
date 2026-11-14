@@ -33,10 +33,31 @@ public actor HermesCommandRunner {
     private let hermesPath: URL
     private var workingDirectory: URL?
 
-    public init(hermesPath: URL, workingDirectory: URL? = nil) {
+    /// 要注入给子进程的环境变量。
+    ///
+    /// **这是「网络加速」真正落地的地方。** `hermes update`、官方安装脚本
+    /// 都在子进程里跑，光在界面上显示选了哪个源，它们根本不知道 ——
+    /// 必须把 UV_INDEX_URL、npm registry、git insteadOf 这些变量真的塞进
+    /// 进程环境里。
+    private var environmentOverrides: [String: String]
+
+    public init(
+        hermesPath: URL,
+        workingDirectory: URL? = nil,
+        environmentOverrides: [String: String] = [:]
+    ) {
         self.hermesPath = hermesPath
         self.workingDirectory = workingDirectory
+        self.environmentOverrides = environmentOverrides
     }
+
+    /// 换上新的环境变量（探测完镜像之后调用）。
+    public func setEnvironmentOverrides(_ overrides: [String: String]) {
+        environmentOverrides = overrides
+    }
+
+    /// 当前会注入的环境变量。
+    public func currentEnvironmentOverrides() -> [String: String] { environmentOverrides }
 
     /// 执行 hermes CLI 命令并返回结果。
     public func run(_ command: Command, extraArguments: [String] = []) async throws -> CommandResult {
@@ -45,6 +66,13 @@ public actor HermesCommandRunner {
         proc.arguments = command.rawValue.split(separator: " ").map(String.init) + extraArguments
         if let cwd = workingDirectory {
             proc.currentDirectoryURL = cwd
+        }
+        if !environmentOverrides.isEmpty {
+            var environment = ProcessInfo.processInfo.environment
+            for (key, value) in environmentOverrides {
+                environment[key] = value
+            }
+            proc.environment = environment
         }
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()
