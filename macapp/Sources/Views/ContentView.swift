@@ -70,6 +70,8 @@ public struct ContentView: View {
             SettingsAdvancedView()
         case .agents:
             AgentGroupView()
+        case .ops:
+            HermesOpsView()
         case .settings:
             HermesSettingsView()
         }

@@ -1664,4 +1664,5 @@ hermes，dashboard 跟着这个端口走。`HermesCommandRunner.findFreePort()` 
 ### 还没做的
 
 - 代理（用户自己有梯子时的 `HTTP_PROXY` / `HTTPS_PROXY`）还没进界面。
-- 这批命令还没接到界面上（只有 runner 这一层），界面上得给每个命令一个入口。
+- 这批命令接到界面上了：侧边栏多了「运维」页，每条命令一个按钮，跑完把
+  输出摊开（可选中复制）。

@@ -48,7 +48,7 @@ public final class AppLifecycleManager {
 
     private let installer = HermesInstaller()
     private var hermesProcess: HermesProcess?
-    private var commandRunner: HermesCommandRunner?
+    public private(set) var commandRunner: HermesCommandRunner?
     private var logTailer: LogTailer?
     public private(set) var installedHermesPath: URL?
 
